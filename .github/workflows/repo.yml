@@ -94,6 +94,20 @@ jobs:
       - name: assert no workflow can apply terraform
         run: node scripts/assert-no-terraform-apply.mjs
 
+  workflows:
+    name: action references
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # A bad `uses:` ref fails a job during set-up, before any `if` runs, and the error
+      # names the action rather than the typo. Cheaper to catch here.
+      - run: node scripts/check-action-refs.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   docs:
     name: documentation links
     runs-on: ubuntu-latest

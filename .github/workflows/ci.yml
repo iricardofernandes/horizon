@@ -133,7 +133,7 @@ jobs:
 
       - name: scan image
         if: matrix.containerized
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: horizon/${{ matrix.name }}:ci
           format: table
