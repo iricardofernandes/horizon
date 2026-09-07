@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# test output
+coverage/
+.vitest/
+
+# environment — .env.example files are committed, real values never are
+.env
+.env.*
+!.env.example
+
+# key material — never committed (ADR 0018)
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+infra/keys/
+
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
+
+# local infrastructure state
+infra/data/
+infra/verdaccio/storage/
+
+# tooling
+.DS_Store
+*.log
+npm-debug.log*
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# claude code local settings
+.claude/settings.local.json

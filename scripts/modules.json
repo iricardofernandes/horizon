@@ -1,0 +1,15 @@
+{
+  "comment": "Declared project roots. The boundary check, CI matrix and git hooks all read this file, so they cannot drift. Adding a project means adding it here.",
+  "projects": [
+    { "path": "identity",              "kind": "service", "port": 3001 },
+    { "path": "catalog",               "kind": "service", "port": 3002 },
+    { "path": "inventory",             "kind": "service", "port": 3003 },
+    { "path": "sales",                 "kind": "service", "port": 3004 },
+    { "path": "webhooks",              "kind": "service", "port": 3005 },
+    { "path": "web",                   "kind": "frontend", "port": 3000 },
+    { "path": "contracts",             "kind": "package" },
+    { "path": "tooling/mcp-debugger",  "kind": "package" },
+    { "path": "gateway",               "kind": "config" },
+    { "path": "infra",                 "kind": "config" }
+  ]
+}

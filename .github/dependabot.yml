@@ -1,0 +1,56 @@
+version: 2
+
+# One entry per project: there is no workspace, so there is no shared lockfile to
+# update (ADR 0001). Ten dependency trees drifting is the accepted cost of the boundary.
+updates:
+  - package-ecosystem: npm
+    directory: /identity
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    commit-message: { prefix: 'chore(identity)' }
+  - package-ecosystem: npm
+    directory: /catalog
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    commit-message: { prefix: 'chore(catalog)' }
+  - package-ecosystem: npm
+    directory: /inventory
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    commit-message: { prefix: 'chore(inventory)' }
+  - package-ecosystem: npm
+    directory: /sales
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    commit-message: { prefix: 'chore(sales)' }
+  - package-ecosystem: npm
+    directory: /webhooks
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    commit-message: { prefix: 'chore(webhooks)' }
+  - package-ecosystem: npm
+    directory: /web
+    schedule: { interval: weekly }
+    commit-message: { prefix: 'chore(web)' }
+  - package-ecosystem: npm
+    directory: /contracts
+    schedule: { interval: weekly }
+    commit-message: { prefix: 'chore(contracts)' }
+  - package-ecosystem: npm
+    directory: /tooling/mcp-debugger
+    schedule: { interval: weekly }
+    commit-message: { prefix: 'chore(mcp-debugger)' }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    commit-message: { prefix: 'ci(repo)' }
+
+  - package-ecosystem: docker
+    directory: /identity
+    schedule: { interval: weekly }
+    commit-message: { prefix: 'chore(identity)' }
+  - package-ecosystem: docker
+    directory: /web
+    schedule: { interval: weekly }
+    commit-message: { prefix: 'chore(web)' }

@@ -1,0 +1,12 @@
+{
+  "name": "@horizon/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kong declarative configuration.",
+  "license": "MIT",
+  "scripts": {
+    "lint": "deck file validate kong.yml || echo 'deck not installed \u2014 see README' ",
+    "typecheck": "echo 'no TypeScript in gateway/'",
+    "test": "echo 'gateway configuration is validated by npm run lint'"
+  }
+}

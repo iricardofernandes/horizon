@@ -1,0 +1,105 @@
+name: repo
+
+# Checks that belong to the repository as a whole rather than to any one project.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: repo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boundaries:
+    name: module boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: node scripts/check-boundaries.mjs
+
+  commit-messages:
+    name: conventional commits
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: install commitlint
+        run: npm install --no-save @commitlint/cli@21 @commitlint/config-conventional@21
+      # A squash merge takes its message from the PR title, so the title is linted too.
+      - name: lint pull request title
+        run: echo "${{ github.event.pull_request.title }}" | npx commitlint
+      - name: lint commits in range
+        run: npx commitlint --from origin/${{ github.base_ref }} --to HEAD
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # Key material must never reach the repository (ADR 0018).
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source=/repo --redact --verbose --exit-code 1
+
+  gateway:
+    name: kong configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: install deck
+        run: |
+          curl -sL https://github.com/Kong/deck/releases/latest/download/deck_Linux_amd64.tar.gz \
+            | tar -xz -C /tmp deck
+          sudo mv /tmp/deck /usr/local/bin/
+      - name: validate kong.yml
+        run: deck file validate gateway/kong.yml
+
+  terraform:
+    name: terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: fmt
+        run: |
+          if [ -n "$(find infra/terraform -name '*.tf' -print -quit)" ]; then
+            terraform -chdir=infra/terraform fmt -check -recursive
+          else
+            echo "no terraform yet — phase 13"
+          fi
+
+      # Terraform is written and never applied (ADR 0034). This asserts it stays that
+      # way: no workflow in this repository may contain an apply.
+      - name: assert no apply exists in any workflow
+        run: |
+          if grep -rEn 'terraform[^\n]*apply' .github/workflows/ --include='*.yml' \
+             | grep -v 'assert no apply' | grep -v 'may contain an apply'; then
+            echo "::error::a workflow contains 'terraform apply' — see ADR 0034"
+            exit 1
+          fi
+          echo "no terraform apply in any workflow"
+
+  docs:
+    name: documentation links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: check relative links resolve
+        run: node scripts/check-doc-links.mjs

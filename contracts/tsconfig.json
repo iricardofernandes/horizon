@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "noImplicitOverride": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "noEmit": true,
+    "declaration": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+
+    "rootDir": "src",
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "test"]
+}

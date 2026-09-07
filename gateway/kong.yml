@@ -1,0 +1,29 @@
+_format_version: '3.0'
+_transform: true
+
+# Kong in DB-less mode (ADR 0008). This file is the only source of gateway
+# configuration: behaviour changes arrive as reviewable diffs and a rollback is a git
+# revert. There is no Admin API path that can change it at runtime.
+#
+# Phase 1 declares the shape and nothing more. Services, routes and the full plugin set
+# are filled in during phase 2, once the platform has been validated against a running
+# stack. `deck validate` runs against this file in CI from phase 1 onwards, so it can
+# never become syntactically invalid unnoticed.
+
+services: []
+
+routes: []
+
+upstreams: []
+
+consumers: []
+
+plugins:
+  # Applied globally in phase 2:
+  #   - jwt-signer / openid-connect  — validate EdDSA access tokens against identity's JWKS
+  #   - rate-limiting-advanced       — global, per-consumer and per-API-key tiers
+  #   - request-size-limiting        — reject oversized bodies at the edge
+  #   - correlation-id               — inject a request id, propagated to every service
+  #   - cors                         — the browser origins web/ is served from
+  #   - opentelemetry                — emit gateway spans to the Collector (ADR 0033)
+  []
