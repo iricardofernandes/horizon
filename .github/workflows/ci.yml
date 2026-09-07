@@ -117,7 +117,7 @@ jobs:
       # breaks the build, which is the intended feedback (ADR 0002).
       - name: build image
         if: matrix.containerized
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.path }}
           push: false
