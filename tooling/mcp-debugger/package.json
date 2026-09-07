@@ -1,0 +1,38 @@
+{
+  "name": "@horizon/mcp-debugger",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Read-only MCP server over the Horizon observability plane.",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "horizon-mcp-debugger": "./dist/main.js"
+  },
+  "scripts": {
+    "dev": "node --watch -r @swc-node/register src/main.ts",
+    "build": "rm -rf dist && swc src -d dist --strip-leading-paths --quiet",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "postgres": "^3.4.9",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
+    "@swc-node/register": "^1.12.1",
+    "@swc/cli": "^0.8.1",
+    "@swc/core": "^1.16.2",
+    "@types/node": "^26.5.0",
+    "typescript": "5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

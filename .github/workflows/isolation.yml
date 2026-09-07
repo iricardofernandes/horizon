@@ -1,0 +1,62 @@
+name: isolation
+
+# The strongest available test of ADR 0001: check out ONE project directory and nothing
+# else, then install, typecheck, lint and test it. If a module needs a sibling's source,
+# the sibling is not on disk and the job fails.
+#
+# Runs on main and on demand rather than on every pull request, because it deliberately
+# defeats every cache.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1'
+
+jobs:
+  sparse:
+    name: ${{ matrix.name }} alone
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: identity, path: identity }
+          - { name: catalog, path: catalog }
+          - { name: inventory, path: inventory }
+          - { name: sales, path: sales }
+          - { name: webhooks, path: webhooks }
+          - { name: contracts, path: contracts }
+          - { name: web, path: web }
+          - { name: mcp-debugger, path: tooling/mcp-debugger }
+    steps:
+      - name: checkout only ${{ matrix.path }}
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: ${{ matrix.path }}
+          sparse-checkout-cone-mode: false
+
+      - name: prove the siblings are absent
+        run: |
+          echo "repository contents:"
+          ls -A
+          for sibling in identity catalog inventory sales webhooks web contracts; do
+            if [ "$sibling" != "${{ matrix.path }}" ] && [ -d "$sibling" ]; then
+              echo "::error::$sibling is present — the sparse checkout did not isolate"
+              exit 1
+            fi
+          done
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: install, typecheck, lint, test, build
+        working-directory: ${{ matrix.path }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck --if-present
+          npm run lint --if-present
+          npm test --if-present
+          npm run build --if-present

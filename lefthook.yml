@@ -1,0 +1,27 @@
+# Git hooks — see docs/adr/0015-conventional-commits-lefthook-commitlint.md
+#
+# Hooks shorten the feedback loop; they are not the gate. CI runs the same checks
+# and is not bypassable. Anything slower than a few seconds belongs in CI, not here.
+
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      glob: '*.{ts,tsx,js,jsx,mjs,json,jsonc}'
+      run: node scripts/staged-by-project.mjs biome {staged_files}
+    boundaries:
+      glob: '*.{ts,tsx,js,mjs,json}'
+      run: node scripts/check-boundaries.mjs
+    typecheck:
+      glob: '*.{ts,tsx}'
+      run: node scripts/staged-by-project.mjs typecheck {staged_files}
+
+commit-msg:
+  commands:
+    commitlint:
+      run: npx --yes --package @commitlint/cli --package @commitlint/config-conventional -- commitlint --edit {1}
+
+pre-push:
+  commands:
+    unit-tests:
+      run: node scripts/affected.mjs test

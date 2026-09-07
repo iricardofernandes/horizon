@@ -1,0 +1,12 @@
+{
+  "name": "@horizon/infra",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local orchestration, observability configuration and Terraform.",
+  "license": "MIT",
+  "scripts": {
+    "lint": "echo 'infra is validated by make smoke and terraform validate'",
+    "typecheck": "echo 'no TypeScript in infra/'",
+    "test": "echo 'see make smoke (phase 2)'"
+  }
+}
