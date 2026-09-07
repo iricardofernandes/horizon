@@ -1,56 +1,177 @@
 version: 2
 
-# One entry per project: there is no workspace, so there is no shared lockfile to
-# update (ADR 0001). Ten dependency trees drifting is the accepted cost of the boundary.
+# One entry per project: there is no workspace, so there is no shared lockfile to update
+# (ADR 0001). Ten dependency trees drifting is the accepted cost of the boundary.
+#
+# Minor and patch updates are grouped into one pull request per project, because
+# ungrouped they produce roughly one PR per dependency per week across eight projects,
+# and a review queue nobody reads is worse than no review queue.
+#
+# Two pins are decisions rather than lag, and are held here so Dependabot does not
+# reopen them every week:
+#   - typescript major: TS 7 (the native compiler) typechecks this codebase correctly,
+#     but @swc-node/register still peers `typescript >= 4.3 < 7`, so the dev runner will
+#     not install. Revisit when that peer range moves (ADR 0005).
+#   - node major: the project targets Node 24 LTS deliberately (ADR 0005).
+
 updates:
+
   - package-ecosystem: npm
     directory: /identity
     schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message: { prefix: 'chore(identity)' }
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: npm
     directory: /catalog
     schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message: { prefix: 'chore(catalog)' }
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: npm
     directory: /inventory
     schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message: { prefix: 'chore(inventory)' }
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: npm
     directory: /sales
     schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message: { prefix: 'chore(sales)' }
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: npm
     directory: /webhooks
     schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message: { prefix: 'chore(webhooks)' }
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: npm
     directory: /web
     schedule: { interval: weekly }
+    open-pull-requests-limit: 3
     commit-message: { prefix: 'chore(web)' }
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: npm
     directory: /contracts
     schedule: { interval: weekly }
+    open-pull-requests-limit: 3
     commit-message: { prefix: 'chore(contracts)' }
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: npm
     directory: /tooling/mcp-debugger
     schedule: { interval: weekly }
+    open-pull-requests-limit: 3
     commit-message: { prefix: 'chore(mcp-debugger)' }
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
     commit-message: { prefix: 'ci(repo)' }
+    groups:
+      actions:
+        patterns: ['*']
 
   - package-ecosystem: docker
     directory: /identity
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
     commit-message: { prefix: 'chore(identity)' }
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker
+    directory: /catalog
+    schedule: { interval: monthly }
+    commit-message: { prefix: 'chore(catalog)' }
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker
+    directory: /inventory
+    schedule: { interval: monthly }
+    commit-message: { prefix: 'chore(inventory)' }
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker
+    directory: /sales
+    schedule: { interval: monthly }
+    commit-message: { prefix: 'chore(sales)' }
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker
+    directory: /webhooks
+    schedule: { interval: monthly }
+    commit-message: { prefix: 'chore(webhooks)' }
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: docker
     directory: /web
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
     commit-message: { prefix: 'chore(web)' }
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]

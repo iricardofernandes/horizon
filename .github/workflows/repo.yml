@@ -16,8 +16,8 @@ jobs:
     name: module boundaries
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - run: node scripts/check-boundaries.mjs
@@ -27,10 +27,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: install commitlint
@@ -45,7 +45,7 @@ jobs:
     name: secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # Key material must never reach the repository (ADR 0018).
@@ -58,12 +58,15 @@ jobs:
     name: kong configuration
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: install deck
         run: |
-          curl -sL https://github.com/Kong/deck/releases/latest/download/deck_Linux_amd64.tar.gz \
+          TAG=$(curl -fsSL https://api.github.com/repos/Kong/deck/releases/latest \
+            | grep -oP '"tag_name":\s*"\K[^"]+')
+          curl -fsSL "https://github.com/Kong/deck/releases/download/${TAG}/deck_${TAG#v}_linux_amd64.tar.gz" \
             | tar -xz -C /tmp deck
           sudo mv /tmp/deck /usr/local/bin/
+          deck version
       - name: validate kong.yml
         run: deck file validate gateway/kong.yml
 
@@ -71,8 +74,11 @@ jobs:
     name: terraform
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
 
       - name: fmt
         run: |
@@ -83,22 +89,17 @@ jobs:
           fi
 
       # Terraform is written and never applied (ADR 0034). This asserts it stays that
-      # way: no workflow in this repository may contain an apply.
-      - name: assert no apply exists in any workflow
-        run: |
-          if grep -rEn 'terraform[^\n]*apply' .github/workflows/ --include='*.yml' \
-             | grep -v 'assert no apply' | grep -v 'may contain an apply'; then
-            echo "::error::a workflow contains 'terraform apply' — see ADR 0034"
-            exit 1
-          fi
-          echo "no terraform apply in any workflow"
+      # way. The check lives in a script because an inline grep matches its own error
+      # message — which is exactly how the first version of it failed.
+      - name: assert no workflow can apply terraform
+        run: node scripts/assert-no-terraform-apply.mjs
 
   docs:
     name: documentation links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: check relative links resolve
