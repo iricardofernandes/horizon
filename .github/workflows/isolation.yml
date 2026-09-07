@@ -32,7 +32,7 @@ jobs:
           - { name: mcp-debugger, path: tooling/mcp-debugger }
     steps:
       - name: checkout only ${{ matrix.path }}
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           sparse-checkout: ${{ matrix.path }}
           sparse-checkout-cone-mode: false
