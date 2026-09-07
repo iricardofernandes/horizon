@@ -86,13 +86,16 @@ jobs:
         working-directory: ${{ matrix.path }}
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-node@v7
+        if: matrix.kind == 'service'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
       - name: install
+        if: matrix.kind == 'service'
         run: npm ci --no-audit --no-fund
 
       # Testcontainers starts its own PostgreSQL, Redis and RabbitMQ, so no service
@@ -111,7 +114,9 @@ jobs:
       matrix: ${{ fromJson(needs.matrix.outputs.projects) }}
     steps:
       - uses: actions/checkout@v7
+
       - uses: docker/setup-buildx-action@v3
+        if: matrix.containerized
 
       # The build context is the project directory alone. Needing a sibling's file
       # breaks the build, which is the intended feedback (ADR 0002).

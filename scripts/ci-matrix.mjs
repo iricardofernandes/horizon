@@ -15,7 +15,13 @@ import { ROOT, projects, projectOf } from './projects.mjs'
 
 const baseRef = process.argv[2]
 
-const runnable = projects.filter((project) => existsSync(join(ROOT, project.path, 'package.json')))
+// `config` projects (gateway/, infra/) carry a package.json only so the root Makefile
+// can call them uniformly. They have no dependencies, no lockfile and no npm tooling —
+// the repo workflow validates them with deck and terraform instead. Same filter as
+// scripts/for-each-project.mjs, so the two cannot disagree.
+const runnable = projects
+  .filter((project) => project.kind !== 'config')
+  .filter((project) => existsSync(join(ROOT, project.path, 'package.json')))
 
 function affected() {
   if (!baseRef) return runnable
