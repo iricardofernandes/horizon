@@ -31,11 +31,27 @@ jobs:
           - { name: web, path: web }
           - { name: mcp-debugger, path: tooling/mcp-debugger }
     steps:
-      - name: checkout only ${{ matrix.path }}
+      # The module, plus only what is needed to stand up a registry: contracts/ is
+      # published and then deleted before the module is installed, so a module that
+      # still builds has proven it resolves @horizon/contracts from a registry rather
+      # than from its sibling's source tree (ADR 0029).
+      - name: checkout only ${{ matrix.path }} and the registry inputs
         uses: actions/checkout@v7
         with:
-          sparse-checkout: ${{ matrix.path }}
+          sparse-checkout: |
+            ${{ matrix.path }}
+            contracts
+            scripts
+            infra/verdaccio
           sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: publish contracts, then delete its source
+        if: matrix.path != 'contracts'
+        run: scripts/ci-publish-contracts.sh --drop-source
 
       - name: prove the siblings are absent
         run: |
@@ -43,14 +59,10 @@ jobs:
           ls -A
           for sibling in identity catalog inventory sales webhooks web contracts; do
             if [ "$sibling" != "${{ matrix.path }}" ] && [ -d "$sibling" ]; then
-              echo "::error::$sibling is present — the sparse checkout did not isolate"
+              echo "::error::$sibling is present — the module is not isolated"
               exit 1
             fi
           done
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
 
       - name: install, typecheck, lint, test, build
         working-directory: ${{ matrix.path }}

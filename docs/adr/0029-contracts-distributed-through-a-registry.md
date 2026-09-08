@@ -36,11 +36,25 @@ running a registry. It is a fallback, not a preference, and taking it requires
 amending this ADR.
 
 **In CI**, where a module's job runs with a sparse checkout of only its own directory
-(ADR 0002), Verdaccio is not available as a developer's local container. The contracts
-package is published by a prior job to the workflow's registry — a Verdaccio service
-container seeded from the published artefact, or GitHub Packages — and module jobs
-install from there. The protocol is identical; only the host differs, so no module
-configuration changes between local and CI beyond a registry URL.
+(ADR 0002), a developer's local Verdaccio is not available. Resolved in phase 3 by giving
+**each job its own registry for the minute it needs one**:
+`scripts/ci-publish-contracts.sh` starts a Verdaccio container, publishes the package to
+it, and points npm at it through `npm_config_@horizon:registry`. No hosted registry, no
+tokens, no cross-job ordering, and it behaves identically on a pull request and on main.
+
+The isolation workflow passes `--drop-source`, which **deletes `contracts/` after
+publishing**. A module that then still installs and builds has proven it resolves the
+package from a registry rather than from its sibling's source tree — a stronger test than
+the sparse checkout alone, because the source was present and is demonstrably not being
+used.
+
+Two details cost a debugging round each and are recorded so they are not rediscovered.
+`npm publish` must be passed **`--@horizon:registry`**, not `--registry`: a scoped
+registry in `.npmrc` wins over the default one, so the package would otherwise go to
+whatever the committed file points at. And the environment variable npm reads is
+`npm_config_@horizon:registry`, whose name is not a valid shell identifier, so it can only
+be set through `$GITHUB_ENV` or `env`, never `export`.
+
 
 ## Consequences
 

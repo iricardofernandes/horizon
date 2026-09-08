@@ -4,7 +4,7 @@
     "enabled": false
   },
   "files": {
-    "includes": ["src/**", "test/**", "*.ts", "*.json", "*.mts"]
+    "includes": ["src/**", "test/**", "*.ts", "*.json", "*.mts", "!published-schemas.json"]
   },
   "formatter": {
     "enabled": true,

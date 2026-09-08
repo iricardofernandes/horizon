@@ -199,7 +199,29 @@ Turn Phase 0's findings into the committed, scripted, reproducible local stack.
 
 ---
 
-## Phase 3 — Contracts v0.1.0
+## Phase 3 — Contracts v0.1.0 — **complete**
+
+`@horizon/contracts@0.1.0` published, consumed by `identity/` at an exact pin, with the
+compatibility gate live in CI and `docs/events.md` generated from the schemas.
+
+**What it turned up:**
+
+- **The gate needed to be testable, so the analysis was split out.**
+  `scripts/lib/contract-diff.mjs` holds the pure diff and version rules;
+  `contract-diff.test.mjs` covers them with `node:test`. A gate whose whole job is to be
+  trustworthy should not itself be untested.
+- **Under 0.x the breaking position is `minor`, not `major`.** A caret range on 0.x admits
+  only patch releases, so treating 0.2.0 as compatible with 0.1.0 would be wrong. The rule
+  is encoded and tested.
+- **`.swcrc` was excluding spec files from the transform**, not just from the build output,
+  so Vitest could not compile a test the moment the first one existed. The exclusion moved
+  to the build command, where it belongs.
+- **A scoped registry in `.npmrc` beats `--registry` on the command line**, so publishing
+  needs `--@horizon:registry`. And `npm_config_@horizon:registry` is not a valid shell
+  identifier, so it can only be set through `$GITHUB_ENV` or `env`.
+- **The documentation link checker treated a regex in backticks as a link.** Generated
+  schema tables contain patterns like `(?:[01]\d|2[0-3])`, which is link-shaped. It now
+  masks code spans before scanning.
 
 **Deliverables**
 

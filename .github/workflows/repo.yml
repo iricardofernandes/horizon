@@ -94,6 +94,57 @@ jobs:
       - name: assert no workflow can apply terraform
         run: node scripts/assert-no-terraform-apply.mjs
 
+  contracts:
+    name: contract compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: install and build contracts
+        working-directory: contracts
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      # The gate is what turns the versioning policy into a guarantee, so it is itself
+      # tested. node:test, because the repository root has no dependencies by design.
+      - name: test the compatibility analysis
+        run: node --test 'scripts/**/*.test.mjs'
+
+      # Fails a breaking change to a published schema that is not accompanied by the
+      # right version bump (ADR 0030).
+      - name: compatibility gate
+        run: node scripts/check-contract-compat.mjs
+
+      # docs/events.md is generated. A hand-edit, or a schema change without a
+      # regeneration, leaves the catalogue lying to its readers.
+      - name: docs/events.md is up to date
+        run: |
+          cd contracts && npm run docs:events >/dev/null && cd ..
+          if ! git diff --quiet -- docs/events.md; then
+            echo "::error::docs/events.md is stale — run 'npm run docs:events' in contracts/"
+            git diff -- docs/events.md
+            exit 1
+          fi
+          echo "docs/events.md matches the schemas"
+
+      # The snapshot is the compatibility baseline. If it does not match the current
+      # schemas at the current version, the last release was published without it.
+      - name: published-schemas.json is up to date
+        run: |
+          cd contracts && npm run schemas:snapshot >/dev/null && cd ..
+          if ! git diff --quiet -- contracts/published-schemas.json; then
+            echo "::error::contracts/published-schemas.json is stale — run 'npm run release:prepare'"
+            git diff --stat -- contracts/published-schemas.json
+            exit 1
+          fi
+          echo "published-schemas.json matches the schemas"
+
   workflows:
     name: action references
     runs-on: ubuntu-latest

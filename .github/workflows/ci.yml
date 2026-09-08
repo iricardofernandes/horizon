@@ -55,6 +55,18 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
+      # A module depends on @horizon/contracts by version, never by path (ADR 0029), so
+      # `npm ci` needs a registry serving the pinned version. Each job runs its own for
+      # the minute it needs one — no hosted registry, no tokens, no cross-job ordering.
+      - name: publish contracts to a job-local registry
+        if: matrix.kind != 'package'
+        run: |
+          if grep -q '"@horizon/' "${{ matrix.path }}/package.json"; then
+            scripts/ci-publish-contracts.sh
+          else
+            echo "no @horizon/* dependency — skipping"
+          fi
+
       - name: install
         run: npm ci --no-audit --no-fund
 

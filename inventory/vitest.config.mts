@@ -9,7 +9,7 @@ export default defineConfig({
   test: {
     globals: true,
     passWithNoTests: true,
-    include: ['src/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/domain/**', 'src/application/**'],

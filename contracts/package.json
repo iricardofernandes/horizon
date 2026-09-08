@@ -1,6 +1,6 @@
 {
   "name": "@horizon/contracts",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Versioned Zod schemas for every published event and cross-module HTTP payload.",
   "license": "MIT",
   "type": "commonjs",
@@ -18,7 +18,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "published-schemas.json"
   ],
   "publishConfig": {
     "registry": "http://localhost:4873"
@@ -30,7 +31,9 @@
     "lint:fix": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "docs:events": "node scripts/generate-events-doc.mjs"
+    "schemas:snapshot": "npm run build && node scripts/snapshot.mjs",
+    "release:prepare": "npm run schemas:snapshot && npm run docs:events",
+    "docs:events": "npm run build && node scripts/generate-events-doc.mjs"
   },
   "peerDependencies": {
     "zod": "^4.0.0"

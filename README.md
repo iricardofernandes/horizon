@@ -15,13 +15,15 @@ English equivalent, which are defined in [`docs/glossary.md`](docs/glossary.md).
 
 ---
 
-> ### Current phase: **2 — platform**
+> ### Current phase: **3 — contracts**
 >
-> The local stack runs. `make up` brings up PostgreSQL, Redis, RabbitMQ, Kong, Verdaccio
-> and the full observability plane from cold in about 30 seconds; `make smoke` asserts 43
-> things about it — including that a trace, its log and a metric reach Jaeger, Loki and
-> Prometheus through the Collector with the trace id intact, and that the gateway rejects
-> a token signed by a key it has never seen.
+> `@horizon/contracts@0.1.0` is published and consumed by `identity/` at an exact pin.
+> The compatibility gate is live: `scripts/check-contract-compat.mjs` diffs every schema
+> against the last published snapshot and **fails a breaking change that is not
+> accompanied by the right version bump**. [`docs/events.md`](docs/events.md) is generated
+> from the schemas, and CI fails if it drifts.
+>
+> The platform behind it runs — `make up && make smoke` asserts 43 things about it.
 >
 > **There is still no domain code.** The services boot and answer 404. Identity is phase 4.
 >
@@ -244,6 +246,7 @@ Jaeger / Prometheus / Loki / Grafana · Docker · Terraform (never applied) · G
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
 | [`docs/adr/`](docs/adr/) | 35 decision records |
 | [`docs/patterns/`](docs/patterns/) | How to reimplement each cross-cutting pattern (phase 5) |
+| [`docs/events.md`](docs/events.md) | The event catalogue, generated from the schemas |
 | [`docs/privacy.md`](docs/privacy.md) | Lawful basis, retention, erasure |
 | [`docs/glossary.md`](docs/glossary.md) | Brazilian fiscal terms, in universal language |
 | [`docs/reference-analysis.md`](docs/reference-analysis.md) | Which writing conventions came from the reference project |

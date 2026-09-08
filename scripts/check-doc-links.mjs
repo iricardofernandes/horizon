@@ -25,8 +25,22 @@ function markdownFiles(dir, out = []) {
 
 const broken = []
 
+/**
+ * Blank out fenced blocks and inline code, keeping the byte offsets intact so reported
+ * line numbers stay accurate.
+ *
+ * Without this, anything link-shaped inside backticks is treated as a link — a regex
+ * such as `(?:[01]\d|2[0-3])` in a generated schema table reads as `[01]\d|2[0-3]`
+ * followed by a parenthesised target, and the checker fails on documentation that is
+ * perfectly correct.
+ */
+function maskCode(text) {
+  const blank = (match) => match.replace(/[^\n]/g, ' ')
+  return text.replace(/```[\s\S]*?```/g, blank).replace(/`[^`\n]*`/g, blank)
+}
+
 for (const file of markdownFiles(ROOT)) {
-  const text = readFileSync(file, 'utf8')
+  const text = maskCode(readFileSync(file, 'utf8'))
   const pattern = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
   let match
   while ((match = pattern.exec(text)) !== null) {
