@@ -111,6 +111,16 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
+      - name: publish contracts to a job-local registry
+        if: matrix.kind == 'service'
+        working-directory: ${{ github.workspace }}
+        run: |
+          if grep -q '"@horizon/' "${{ matrix.path }}/package.json"; then
+            scripts/ci-publish-contracts.sh
+          else
+            echo "no @horizon/* dependency — skipping"
+          fi
+
       - name: install
         if: matrix.kind == 'service'
         run: npm ci --no-audit --no-fund
@@ -134,6 +144,22 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
         if: matrix.containerized
+        with:
+          # The image build runs `npm ci` inside a container, where `localhost` is the
+          # container's own loopback — not the runner's. Host networking lets the build
+          # reach the job-local registry. In a real deployment the registry is a hosted
+          # URL reachable from anywhere and none of this is needed.
+          driver-opts: network=host
+          buildkitd-flags: --allow-insecure-entitlement network.host
+
+      - name: publish contracts to a job-local registry
+        if: matrix.containerized
+        run: |
+          if grep -q '"@horizon/' "${{ matrix.path }}/package.json"; then
+            scripts/ci-publish-contracts.sh
+          else
+            echo "no @horizon/* dependency — skipping"
+          fi
 
       # The build context is the project directory alone. Needing a sibling's file
       # breaks the build, which is the intended feedback (ADR 0002).
@@ -144,6 +170,8 @@ jobs:
           context: ${{ matrix.path }}
           push: false
           load: true
+          network: host
+          allow: network.host
           tags: horizon/${{ matrix.name }}:ci
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
