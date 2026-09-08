@@ -209,6 +209,10 @@ without a major bump.
 
 - Never commit key material. `.gitignore` covers `*.pem`, `*.key` and `infra/keys/`, and
   a Gitleaks job runs in CI. Development keys come from `make keys`.
+- Gitleaks scans **history**, not just the working tree, so removing a finding in a new
+  commit does not clear it. Accepted findings go in `.gitleaksignore` **by fingerprint**,
+  never by rule or path — allowlisting a rule outright would hide the next real one — and
+  each entry carries a comment saying what it is and why it is acceptable.
 - Never commit a real value into a `.env.example`.
 - Anything touching authentication, tenancy, RLS or the audit chain gets reviewed against
   [`docs/privacy.md`](docs/privacy.md) and the relevant ADR before merge.

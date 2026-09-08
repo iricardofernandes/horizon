@@ -33,6 +33,14 @@ ALLOY_PORT="${HORIZON_ALLOY_PORT:-12345}"
 GRAFANA_PORT="${HORIZON_GRAFANA_PORT:-3300}"
 KONG_PROXY_PORT="${HORIZON_KONG_PROXY_PORT:-8000}"
 
+# Platform credentials. Local-development defaults, matching docker-compose.yml.
+# Read from the environment rather than inlined so that changing a compose password does
+# not break this script, and so a literal `-u user:pass` never appears in the repository.
+RABBIT_USER="${HORIZON_RABBITMQ_USER:-horizon}"
+RABBIT_PASSWORD="${HORIZON_RABBITMQ_PASSWORD:-horizon}"
+GRAFANA_USER="${HORIZON_GRAFANA_USER:-admin}"
+GRAFANA_PASSWORD="${HORIZON_GRAFANA_PASSWORD:-admin}"
+
 PASS=0
 FAIL=0
 FAILURES=()
@@ -110,7 +118,7 @@ check "rabbitmq node is running" \
   docker exec horizon-rabbitmq rabbitmq-diagnostics -q check_running
 
 check "rabbitmq management api answers" bash -c \
-  "curl -sf -u horizon:horizon http://localhost:$RABBIT_UI_PORT/api/overview | grep -q rabbitmq_version"
+  "curl -sf -u \"$RABBIT_USER:$RABBIT_PASSWORD\" http://localhost:$RABBIT_UI_PORT/api/overview | grep -q rabbitmq_version"
 
 # --------------------------------------------------------------- registry
 section "registry"
@@ -225,10 +233,10 @@ check "alloy is shipping container logs to loki" retry 60 bash -c \
      --data-urlencode 'start=$(( $(date +%s) - 600 ))000000000' | grep -q '\"values\"'"
 
 check "grafana datasources provisioned from files" bash -c \
-  "curl -sf -u admin:admin http://localhost:$GRAFANA_PORT/api/datasources | grep -q prometheus"
+  "curl -sf -u \"$GRAFANA_USER:$GRAFANA_PASSWORD\" http://localhost:$GRAFANA_PORT/api/datasources | grep -q prometheus"
 
 check "grafana dashboard provisioned from files" bash -c \
-  "curl -sf -u admin:admin 'http://localhost:$GRAFANA_PORT/api/search?query=Horizon' | grep -q horizon-overview"
+  "curl -sf -u \"$GRAFANA_USER:$GRAFANA_PASSWORD\" 'http://localhost:$GRAFANA_PORT/api/search?query=Horizon' | grep -q horizon-overview"
 
 # --------------------------------------------------------------- gateway
 section "gateway"

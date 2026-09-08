@@ -1,0 +1,19 @@
+# Gitleaks findings that are accepted, by exact fingerprint.
+#
+# Fingerprints, not rules or paths: allowlisting the `curl-auth-user` rule outright would
+# hide a real credential the next time one appeared. These three entries cover exactly
+# the occurrences in one commit and nothing else.
+#
+# What they are: `horizon:horizon` (RabbitMQ management) and `admin:admin` (Grafana) as
+# literal `curl -u` arguments in the platform smoke test. Both are local-development
+# defaults that are also declared in plain sight in infra/docker-compose.yml, and neither
+# grants access to anything outside a developer's own machine.
+#
+# They were removed from the working tree in the commit after — smoke.sh now reads both
+# from the environment, which is better practice regardless and means no new occurrence
+# can appear. They survive here only because gitleaks scans history and rewriting a
+# published branch to scrub a non-secret is disproportionate.
+
+2529b62f3e0be161d396ff080d43bb73f3ef5135:infra/scripts/smoke.sh:curl-auth-user:113
+2529b62f3e0be161d396ff080d43bb73f3ef5135:infra/scripts/smoke.sh:curl-auth-user:223
+2529b62f3e0be161d396ff080d43bb73f3ef5135:infra/scripts/smoke.sh:curl-auth-user:231
