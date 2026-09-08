@@ -60,6 +60,11 @@ jobs:
       # the minute it needs one — no hosted registry, no tokens, no cross-job ordering.
       - name: publish contracts to a job-local registry
         if: matrix.kind != 'package'
+        # The job's default working-directory is the module, and this step operates on
+        # the repository. Without the override it silently took the "no dependency"
+        # branch, and the module then failed to install against a registry that had
+        # never been started.
+        working-directory: ${{ github.workspace }}
         run: |
           if grep -q '"@horizon/' "${{ matrix.path }}/package.json"; then
             scripts/ci-publish-contracts.sh
