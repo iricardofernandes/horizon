@@ -1,0 +1,288 @@
+# Host ports are overridable through infra/.env (see infra/.env.example). The defaults
+# are the conventional ones; a developer whose machine already runs a Postgres on 5432
+# changes one line instead of stopping their other work.
+#
+# The Horizon platform: everything the services run against, and nothing of Horizon
+# itself. Modules run from source (npm run dev) or from the docker-compose.apps.yml
+# overlay, so the platform can be up while a service is being rewritten.
+#
+#   make up      start and wait for health
+#   make smoke   prove it actually works
+#   make down    stop, keeping volumes
+#
+# The project name is fixed because Alloy filters container logs on the compose project
+# label; renaming it silently stops log collection.
+name: horizon
+
+x-restart: &restart
+  restart: unless-stopped
+
+networks:
+  horizon:
+    name: horizon
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  verdaccio-storage:
+  prometheus-data:
+  loki-data:
+  grafana-data:
+
+services:
+  # ---------------------------------------------------------------- data
+  postgres:
+    <<: *restart
+    image: postgres:17-alpine
+    container_name: horizon-postgres
+    networks: [horizon]
+    ports: ['${HORIZON_POSTGRES_PORT:-5432}:5432']
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      # Roles created by the init script. Local development values only.
+      HORIZON_OWNER_PASSWORD: horizon
+      HORIZON_APP_PASSWORD: horizon
+      HORIZON_DEBUG_PASSWORD: horizon
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      # Every query is bounded (ADR 0027). A statement that runs longer than this in
+      # local development is a bug worth seeing rather than waiting through.
+      - -c
+      - statement_timeout=30s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    <<: *restart
+    image: redis:7-alpine
+    container_name: horizon-redis
+    networks: [horizon]
+    ports: ['${HORIZON_REDIS_PORT:-6379}:6379']
+    command: ['redis-server', '--appendonly', 'yes', '--save', '60', '1']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    <<: *restart
+    image: rabbitmq:4-management-alpine
+    container_name: horizon-rabbitmq
+    networks: [horizon]
+    ports:
+      - '${HORIZON_RABBITMQ_PORT:-5672}:5672'
+      - '${HORIZON_RABBITMQ_UI_PORT:-15672}:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: horizon
+      RABBITMQ_DEFAULT_PASS: horizon
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_running']
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+
+  # ---------------------------------------------------------------- registry
+  verdaccio:
+    <<: *restart
+    image: verdaccio/verdaccio:6
+    container_name: horizon-verdaccio
+    networks: [horizon]
+    ports: ['${HORIZON_VERDACCIO_PORT:-4873}:4873']
+    volumes:
+      - verdaccio-storage:/verdaccio/storage
+      - ./verdaccio/config.yaml:/verdaccio/conf/config.yaml:ro
+    healthcheck:
+      # 127.0.0.1, not localhost: inside this image localhost resolves to ::1 first and
+      # Verdaccio binds IPv4 only, so the check fails while the service is fine. Every
+      # healthcheck here uses the literal address for the same reason.
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:4873/-/ping']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # ---------------------------------------------------------------- observability
+  # Distroless: no shell, no health subcommand, so no container healthcheck is
+  # expressible. Readiness is asserted from the host by infra/scripts/smoke.sh.
+  otel-collector:
+    <<: *restart
+    image: otel/opentelemetry-collector-contrib:0.140.0
+    container_name: horizon-otel-collector
+    networks: [horizon]
+    command: ['--config=/etc/otel/config.yaml']
+    ports:
+      - '${HORIZON_OTLP_GRPC_PORT:-4317}:4317'
+      - '${HORIZON_OTLP_HTTP_PORT:-4318}:4318'
+      - '${HORIZON_COLLECTOR_METRICS_PORT:-8889}:8889'
+      - '${HORIZON_COLLECTOR_HEALTH_PORT:-13133}:13133'
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otel/config.yaml:ro
+    depends_on:
+      jaeger:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+
+  jaeger:
+    <<: *restart
+    image: jaegertracing/jaeger:2.11.0
+    container_name: horizon-jaeger
+    networks: [horizon]
+    ports:
+      - '${HORIZON_JAEGER_PORT:-16686}:16686'
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:16686/']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  prometheus:
+    <<: *restart
+    image: prom/prometheus:v3.7.3
+    container_name: horizon-prometheus
+    networks: [horizon]
+    ports: ['${HORIZON_PROMETHEUS_PORT:-9090}:9090']
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:9090/-/healthy']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  loki:
+    <<: *restart
+    image: grafana/loki:3.5.7
+    container_name: horizon-loki
+    networks: [horizon]
+    ports: ['${HORIZON_LOKI_PORT:-3100}:3100']
+    command: ['-config.file=/etc/loki/config.yaml']
+    volumes:
+      - ./observability/loki.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    healthcheck:
+      test: ['CMD', '/busybox/wget', '--spider', '-q', 'http://127.0.0.1:3100/ready']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # Distroless, as with the Collector: asserted from the host in smoke.sh.
+  alloy:
+    <<: *restart
+    image: grafana/alloy:v1.12.1
+    container_name: horizon-alloy
+    networks: [horizon]
+    ports: ['${HORIZON_ALLOY_PORT:-12345}:12345']
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy.alloy:/etc/alloy/config.alloy:ro
+      # Read-only access to the socket: Alloy discovers containers and reads their logs.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  grafana:
+    <<: *restart
+    image: grafana/grafana:12.4.0
+    container_name: horizon-grafana
+    networks: [horizon]
+    # 3000-3005 belong to web/ and the five services, so Grafana moves out of the way.
+    ports: ['${HORIZON_GRAFANA_PORT:-3300}:3000']
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: dark
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+      GF_FEATURE_TOGGLES_ENABLE: traceToProfiles
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:3000/api/health']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # ---------------------------------------------------------------- gateway
+  kong:
+    <<: *restart
+    image: kong:3.9
+    container_name: horizon-kong
+    networks: [horizon]
+    ports:
+      - '${HORIZON_KONG_PROXY_PORT:-8000}:8000'
+      - '${HORIZON_KONG_ADMIN_PORT:-8001}:8001'
+    environment:
+      KONG_DATABASE: 'off'
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_ADMIN_GUI_LISTEN: 'off'
+      KONG_LOG_LEVEL: notice
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_PLUGINS: bundled
+      # Upstreams are resolved per request, so the gateway starts before the services
+      # exist and answers 503 for them until they do.
+      KONG_DNS_RESOLVER: 127.0.0.11
+    volumes:
+      # The rendered file, not gateway/kong.yml: Kong OSS has no JWKS plugin, so the
+      # public keys are injected by infra/scripts/render-kong-config.sh. See that script
+      # and the note at the top of gateway/kong.yml.
+      - ./generated/kong.generated.yml:/kong/kong.yml:ro
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ['CMD', 'kong', 'health']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s

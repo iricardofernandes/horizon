@@ -1,0 +1,158 @@
+# Overlay adding Horizon's own services to the platform.
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.apps.yml up -d
+#   make up-apps
+#
+# It is a separate file so the platform can run alone while a service is worked on from
+# source — which is the normal development loop. Each image is built from its own
+# directory as the sole context (ADR 0002); needing a sibling's file breaks the build.
+#
+# In phase 1 these services have no routes and answer 404. They are wired here now so
+# that the wiring is reviewed alongside the platform rather than invented later under
+# pressure.
+name: horizon
+
+x-service: &service
+  restart: unless-stopped
+  networks: [horizon]
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    otel-collector:
+      condition: service_started
+
+# Every service takes the same platform configuration. Values that differ per module —
+# its database, its port, its service name — are set on the service itself.
+x-env: &env
+  NODE_ENV: production
+  LOG_LEVEL: info
+  REDIS_URL: redis://redis:6379
+  RABBITMQ_URL: amqp://horizon:horizon@rabbitmq:5672
+  AMQP_PREFETCH: '20'
+  OUTBOX_POLL_INTERVAL_MS: '1000'
+  OUTBOX_BATCH_SIZE: '100'
+  INBOX_RETENTION_DAYS: '30'
+  IDEMPOTENCY_TTL_SECONDS: '86400'
+  DATABASE_POOL_MAX: '10'
+  DATABASE_STATEMENT_TIMEOUT_MS: '5000'
+  HTTP_CLIENT_TIMEOUT_MS: '5000'
+  CIRCUIT_BREAKER_ERROR_THRESHOLD_PERCENT: '50'
+  CIRCUIT_BREAKER_RESET_TIMEOUT_MS: '30000'
+  JWKS_URL: http://identity:3001/.well-known/jwks.json
+  # Each service re-verifies every token itself. The gateway is defence in depth, not
+  # the only check, so reaching a service's port directly grants nothing (ADR 0008).
+  TRUST_GATEWAY_JWT: 'false'
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_TRACES_SAMPLER_ARG: '1.0'
+  TENANT_ID_HASH_SALT: local-development-only
+
+services:
+  identity:
+    <<: *service
+    build:
+      context: ../identity
+    container_name: horizon-identity
+    environment:
+      <<: *env
+      PORT: '3001'
+      OTEL_SERVICE_NAME: identity
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_identity
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_identity
+      JWT_PRIVATE_KEY_PATH: /keys/ed25519-dev-1-private.pem
+      JWT_PUBLIC_KEYS_DIR: /keys/public
+      JWT_ACTIVE_KID: dev-1
+      ACCESS_TOKEN_TTL_SECONDS: '900'
+      REFRESH_TOKEN_ABSOLUTE_TTL_SECONDS: '2592000'
+      REFRESH_TOKEN_IDLE_TTL_SECONDS: '604800'
+      REFRESH_TOKEN_REUSE_GRACE_MS: '2000'
+      ARGON2_MEMORY_KIB: '19456'
+      ARGON2_TIME_COST: '2'
+      ARGON2_PARALLELISM: '1'
+      API_KEY_ENV: dev
+      DATA_SUBJECT_KEY_MODE: table
+      BLIND_INDEX_KEY_PATH: /keys/blind-index.key
+    volumes:
+      # Read-only, and gitignored on the host. In the Terraform definition these come
+      # from AWS Secrets Manager instead (ADR 0018).
+      - ./keys:/keys:ro
+
+  catalog:
+    <<: *service
+    build:
+      context: ../catalog
+    container_name: horizon-catalog
+    environment:
+      <<: *env
+      PORT: '3002'
+      OTEL_SERVICE_NAME: catalog
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_catalog
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_catalog
+
+  inventory:
+    <<: *service
+    build:
+      context: ../inventory
+    container_name: horizon-inventory
+    environment:
+      <<: *env
+      PORT: '3003'
+      OTEL_SERVICE_NAME: inventory
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_inventory
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_inventory
+      RESERVATION_TTL_SECONDS: '1800'
+      COST_METHOD: moving-average
+
+  sales:
+    <<: *service
+    build:
+      context: ../sales
+    container_name: horizon-sales
+    environment:
+      <<: *env
+      PORT: '3004'
+      OTEL_SERVICE_NAME: sales
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_sales
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_sales
+      QUOTE_DEFAULT_VALIDITY_DAYS: '15'
+      ORDER_CONFIRMATION_TIMEOUT_MS: '10000'
+
+  webhooks:
+    <<: *service
+    build:
+      context: ../webhooks
+    container_name: horizon-webhooks
+    environment:
+      <<: *env
+      PORT: '3005'
+      OTEL_SERVICE_NAME: webhooks
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_webhooks
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_webhooks
+      WEBHOOK_MAX_ATTEMPTS: '8'
+      WEBHOOK_BACKOFF_BASE_MS: '1000'
+      WEBHOOK_BACKOFF_MAX_MS: '3600000'
+      WEBHOOK_BACKOFF_JITTER_RATIO: '0.3'
+      WEBHOOK_DELIVERY_TIMEOUT_MS: '10000'
+      WEBHOOK_SIGNATURE_TOLERANCE_SECONDS: '300'
+      WEBHOOK_QUEUE_DEPTH_ALERT: '10000'
+
+  web:
+    restart: unless-stopped
+    networks: [horizon]
+    build:
+      context: ../web
+    container_name: horizon-web
+    ports: ['${HORIZON_WEB_PORT:-3000}:3000']
+    environment:
+      NODE_ENV: production
+      # The frontend addresses Kong, never a service directly (ADR 0008).
+      HORIZON_API_URL: http://kong:8000
+      NEXT_PUBLIC_HORIZON_API_URL: http://localhost:${HORIZON_KONG_PROXY_PORT:-8000}
+      NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:${HORIZON_OTLP_HTTP_PORT:-4318}
+      OTEL_SERVICE_NAME: web
+    depends_on:
+      kong:
+        condition: service_healthy

@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-09-07
+- Amended by: [0036](0036-kong-oss-has-no-jwks-so-the-gateway-config-is-rendered.md) — Kong OSS verifies EdDSA but cannot fetch a JWKS document, so the public keys are rendered into the declarative configuration
 
 ## Context
 

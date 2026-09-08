@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-09-07
+- See also: [0036](0036-kong-oss-has-no-jwks-so-the-gateway-config-is-rendered.md) — Kong OSS was confirmed to verify EdDSA, so this decision stands; how the gateway obtains the key changed
 
 ## Context
 

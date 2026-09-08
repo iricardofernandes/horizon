@@ -1,0 +1,44 @@
+# Verdaccio holds @horizon/contracts (ADR 0029). It exists so that a module depends on
+# a *version* of the contract package rather than on a path — a `file:` dependency has
+# no version and therefore cannot express a breaking change.
+
+storage: /verdaccio/storage/data
+
+auth:
+  htpasswd:
+    file: /verdaccio/storage/htpasswd
+    # Local development only. The registry is not exposed outside the compose network.
+    max_users: -1
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    timeout: 30s
+    maxage: 2m
+
+packages:
+  '@horizon/*':
+    # Published here, never proxied upstream: these packages do not exist on npmjs and
+    # an uplink lookup would just add latency and a failure mode.
+    access: $all
+    publish: $anonymous
+    unpublish: $anonymous
+
+  '**':
+    access: $all
+    publish: $anonymous
+    proxy: npmjs
+
+server:
+  keepAliveTimeout: 60
+
+middlewares:
+  audit:
+    enabled: true
+
+log: { type: stdout, format: pretty, level: warn }
+
+# Local registry, no accounts, no rate limits worth tuning.
+security:
+  api:
+    legacy: true

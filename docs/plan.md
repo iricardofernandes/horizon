@@ -20,18 +20,27 @@ scaffold contains `infra/docker-compose.yml`, `gateway/kong.yml`, the OTel Colle
 config and the Grafana provisioning tree, and freezing those before validation means
 committing configuration that has never started.
 
-Resolved by promoting the throwaway validation to an explicit **Phase 0**, run in a
-scratch directory outside the repository, producing findings rather than files.
-Phase 1 then writes platform configuration that is known to work. The numbered
-phases after that are unchanged from §14, shifted by one label only — Phase 2 is
-still "Platform", but it now *hardens and scripts* a stack that Phase 0 already
-proved rather than discovering it from zero.
+Resolved by promoting the throwaway validation to an explicit **Phase 0**, producing
+findings rather than files, so that platform configuration written later is known to
+work.
+
+**What actually happened.** Phase 1 turned out to freeze no platform configuration —
+`docker-compose.yml`, `kong.yml` and the observability tree are all Phase 2 deliverables,
+and Phase 1 shipped only a `kong.yml` skeleton. With nothing frozen, a throwaway
+directory would have been a copy of Phase 2's first hour, so Phase 0's validation was
+done directly in `infra/` and iterated there until `make smoke` passed. The findings it
+was meant to produce were recorded as they arrived — see Phase 2 below, and ADR 0036.
 
 This is the only ordering change. Everything else follows §14.
 
 ---
 
-## Phase 0 — Platform spike (throwaway)
+## Phase 0 — Platform spike — **absorbed into Phase 2**
+
+Intended as a throwaway spike whose findings would protect Phase 1's configuration.
+Phase 1 froze none, so the spike had nothing to protect and was done in place. Kept here
+for the record of what it was for; its exit criteria are folded into Phase 2's.
+
 
 Run entirely in a scratch directory. Nothing here is committed; the output is a
 findings note and a set of known-good config fragments to be transcribed in Phase 1.
@@ -132,7 +141,28 @@ At the root:
 
 ---
 
-## Phase 2 — Platform
+## Phase 2 — Platform — **complete**
+
+The committed, scripted, reproducible local stack. `make up` reaches all-healthy from
+cold in about 30 seconds; `make smoke` asserts 43 things about it and gates CI.
+
+**What the platform turned up, none of which was visible from the scaffold:**
+
+- **Kong OSS verifies EdDSA but cannot fetch a JWKS document.** `openid-connect` is
+  Enterprise-only. ADR 0018 survives; ADR 0008's "validates against JWKS" did not, and
+  the gateway configuration is now rendered from the public keys. See ADR 0036.
+- **`deck` requires a `secret` on a JWT credential** even for asymmetric algorithms that
+  ignore it. Rendered as a random value rather than a committed placeholder.
+- **`localhost` resolves to `::1` inside the Verdaccio image** while Verdaccio binds IPv4
+  only, so a `localhost` healthcheck fails against a healthy service. Every healthcheck
+  now uses `127.0.0.1`.
+- **The OTel Collector and Alloy are distroless** — no shell, no health subcommand — so
+  no container healthcheck is expressible. Their readiness is asserted from the host in
+  `smoke.sh` instead, and this is stated rather than quietly skipped.
+- **Verdaccio needs npm to send a token even for anonymous publish.**
+  `make publish-contracts` passes a meaningless local one; nothing is committed.
+- **Host port collisions are normal on a developer machine.** Every published port is
+  overridable through `infra/.env`.
 
 Turn Phase 0's findings into the committed, scripted, reproducible local stack.
 

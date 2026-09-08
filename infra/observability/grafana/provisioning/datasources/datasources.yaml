@@ -1,0 +1,48 @@
+# Provisioned as code (ADR 0033). Grafana starts with these already wired; nobody
+# clicks anything to set the stack up.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: jaeger
+
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # This is what turns a log line into a click through to its trace.
+      derivedFields:
+        - name: TraceID
+          matcherType: label
+          matcherRegex: traceId
+          url: '${__value.raw}'
+          datasourceUid: jaeger
+        - name: TraceIDFromJson
+          matcherRegex: '"traceId":"(\w+)"'
+          url: '${__value.raw}'
+          datasourceUid: jaeger
+
+  - name: Jaeger
+    type: jaeger
+    uid: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        filterByTraceID: true
+      tracesToMetrics:
+        datasourceUid: prometheus

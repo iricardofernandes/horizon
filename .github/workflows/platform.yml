@@ -1,0 +1,72 @@
+name: platform
+
+# Brings the whole local stack up on a runner and runs the smoke test against it.
+# "docker compose up" succeeding proves processes exist; this proves the platform works
+# — RLS-capable roles, the telemetry pipeline end to end, the registry round trip, and a
+# gateway that rejects a token it should reject.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - 'gateway/**'
+      - 'contracts/**'
+      - '.github/workflows/platform.yml'
+  pull_request:
+    paths:
+      - 'infra/**'
+      - 'gateway/**'
+      - 'contracts/**'
+      - '.github/workflows/platform.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: platform smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+
+      # The smoke test publishes @horizon/contracts to Verdaccio and installs it back,
+      # so the package has to be buildable.
+      - name: build contracts
+        working-directory: contracts
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: generate development keys
+        run: make keys
+
+      - name: start the platform
+        run: make up
+
+      - name: smoke
+        run: make smoke
+
+      - name: diagnostics on failure
+        if: failure()
+        run: |
+          docker compose -f infra/docker-compose.yml ps
+          for service in postgres redis rabbitmq verdaccio otel-collector jaeger \
+                         prometheus loki alloy grafana kong; do
+            echo "::group::$service"
+            docker logs "horizon-$service" 2>&1 | tail -60 || true
+            echo "::endgroup::"
+          done
+
+      - name: tear down
+        if: always()
+        run: make clean

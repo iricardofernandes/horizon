@@ -47,3 +47,6 @@ npm-debug.log*
 
 # claude code local settings
 .claude/settings.local.json
+
+# generated platform config (rendered from gateway/kong.yml + dev keys)
+infra/generated/

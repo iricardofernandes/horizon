@@ -15,11 +15,15 @@ English equivalent, which are defined in [`docs/glossary.md`](docs/glossary.md).
 
 ---
 
-> ### Current phase: **1 — scaffold**
+> ### Current phase: **2 — platform**
 >
-> Directory structure, real configuration and complete documentation. **No domain code
-> yet.** Every project installs, typechecks, lints and builds; the services boot and
-> serve 404s because they have no routes.
+> The local stack runs. `make up` brings up PostgreSQL, Redis, RabbitMQ, Kong, Verdaccio
+> and the full observability plane from cold in about 30 seconds; `make smoke` asserts 43
+> things about it — including that a trace, its log and a metric reach Jaeger, Loki and
+> Prometheus through the Collector with the trace id intact, and that the gateway rejects
+> a token signed by a key it has never seen.
+>
+> **There is still no domain code.** The services boot and answer 404. Identity is phase 4.
 >
 > What arrives when: [`docs/plan.md`](docs/plan.md).
 > What is declared but deliberately unbuilt: [`docs/roadmap.md`](docs/roadmap.md).
@@ -170,8 +174,16 @@ npm run test:e2e    # integration: real Postgres/Redis/RabbitMQ via Testcontaine
 npm run dev         # http://localhost:3004
 ```
 
-The local platform — PostgreSQL, Redis, RabbitMQ, Kong, Verdaccio and the observability
-plane — arrives in phase 2 behind `make up` and `make smoke`.
+Or bring up the platform:
+
+```bash
+make up        # eleven services, all-healthy from cold in ~30s
+make smoke     # 43 assertions that it actually works
+make down
+```
+
+Grafana is on http://localhost:3300 (admin/admin), datasources and dashboard already
+provisioned from files; Jaeger on http://localhost:16686.
 
 ### Verifying the isolation claim
 

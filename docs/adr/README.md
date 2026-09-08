@@ -19,6 +19,7 @@ one means writing a new ADR that supersedes it.
 | [0006](0006-nestjs-services-nextjs-frontend.md) | NestJS for services, Next.js for the frontend |
 | [0007](0007-drizzle-and-postgresql-17.md) | Drizzle and PostgreSQL 17 |
 | [0008](0008-kong-dbless-declarative-gateway.md) | Kong in DB-less declarative mode |
+| [0036](0036-kong-oss-has-no-jwks-so-the-gateway-config-is-rendered.md) | Kong OSS has no JWKS plugin, so the gateway configuration is rendered |
 | [0012](0012-biome-replaces-eslint-and-prettier.md) | Biome replaces ESLint and Prettier |
 | [0015](0015-conventional-commits-lefthook-commitlint.md) | Conventional Commits, lefthook, commitlint |
 

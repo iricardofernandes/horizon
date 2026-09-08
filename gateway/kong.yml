@@ -5,25 +5,168 @@ _transform: true
 # configuration: behaviour changes arrive as reviewable diffs and a rollback is a git
 # revert. There is no Admin API path that can change it at runtime.
 #
-# Phase 1 declares the shape and nothing more. Services, routes and the full plugin set
-# are filled in during phase 2, once the platform has been validated against a running
-# stack. `deck validate` runs against this file in CI from phase 1 onwards, so it can
-# never become syntactically invalid unnoticed.
+# NOTE ON JWT VALIDATION. Kong OSS verifies EdDSA (RFC 8037) in its `jwt` plugin, but it
+# has no plugin that fetches a JWKS document — `openid-connect` is Enterprise-only. The
+# public key therefore has to be present in the declarative configuration, and this file
+# is a template: `infra/scripts/render-kong-config.sh` injects the current Ed25519
+# public keys and writes infra/generated/kong.generated.yml, which is what the container
+# actually mounts. Rotation re-renders rather than hand-editing.
+#
+# This is defence in depth, not the only check: every service re-verifies the token
+# itself (TRUST_GATEWAY_JWT=false), so reaching a service's port directly grants nothing.
 
-services: []
+services:
+  - name: identity
+    url: http://identity:3001
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: identity-public
+        paths:
+          - /auth
+          - /.well-known
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 30
+              policy: local
+              limit_by: ip
+              fault_tolerant: true
+      - name: identity-api
+        paths:
+          - /identity
+        strip_path: true
 
-routes: []
+  - name: catalog
+    url: http://catalog:3002
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: catalog-api
+        paths:
+          - /catalog
+        strip_path: true
 
-upstreams: []
+  - name: inventory
+    url: http://inventory:3003
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: inventory-api
+        paths:
+          - /inventory
+        strip_path: true
 
-consumers: []
+  - name: sales
+    url: http://sales:3004
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: sales-api
+        paths:
+          - /sales
+        strip_path: true
+
+  - name: webhooks
+    url: http://webhooks:3005
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: webhooks-api
+        paths:
+          - /webhooks
+        strip_path: true
+
+  # The gateway's own verification endpoint. It has no upstream: request-termination
+  # answers directly, so this proves the gateway validates a token without any service
+  # existing behind it. infra/scripts/smoke.sh calls it with a valid token and with one
+  # signed by an unknown key, and expects 200 then 401.
+  - name: gateway-selftest
+    url: http://127.0.0.1:1
+    routes:
+      - name: gateway-verify
+        paths:
+          - /gateway/verify
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+              key_claim_name: iss
+              run_on_preflight: false
+          - name: request-termination
+            config:
+              status_code: 200
+              content_type: application/json
+              body: '{"gateway":"ok","token":"verified"}'
+
+# Consumers carry the Ed25519 public keys and are injected by
+# infra/scripts/render-kong-config.sh, because Kong OSS has no plugin that fetches a
+# JWKS document. The committed file deliberately declares none, so it is valid on its
+# own and `deck file validate` checks it in CI.
 
 plugins:
-  # Applied globally in phase 2:
-  #   - jwt-signer / openid-connect  — validate EdDSA access tokens against identity's JWKS
-  #   - rate-limiting-advanced       — global, per-consumer and per-API-key tiers
-  #   - request-size-limiting        — reject oversized bodies at the edge
-  #   - correlation-id               — inject a request id, propagated to every service
-  #   - cors                         — the browser origins web/ is served from
-  #   - opentelemetry                — emit gateway spans to the Collector (ADR 0033)
-  []
+  # Every response carries a correlation id, and it is the same value the services log
+  # and the Collector traces (ADR 0033).
+  - name: correlation-id
+    config:
+      header_name: X-Request-Id
+      generator: uuid
+      echo_downstream: true
+
+  # Reject oversized bodies at the edge rather than in five services.
+  - name: request-size-limiting
+    config:
+      allowed_payload_size: 8
+      size_unit: megabytes
+
+  - name: cors
+    config:
+      origins:
+        - http://localhost:3000
+      methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - Idempotency-Key
+        - X-Request-Id
+      exposed_headers:
+        - X-Request-Id
+      credentials: true
+      max_age: 3600
+
+  # A global ceiling. Per-consumer and per-API-key tiers are attached to consumers.
+  - name: rate-limiting
+    config:
+      minute: 600
+      policy: local
+      limit_by: ip
+      fault_tolerant: true
+
+  # Gateway spans join the same trace as the services behind it, so a flow is one trace
+  # from the edge inwards (ADR 0033).
+  - name: opentelemetry
+    config:
+      traces_endpoint: http://otel-collector:4318/v1/traces
+      resource_attributes:
+        service.name: gateway
+      header_type: w3c
+
+  - name: prometheus
+    config:
+      status_code_metrics: true
+      latency_metrics: true
+      per_consumer: false

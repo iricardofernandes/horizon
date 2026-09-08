@@ -2,9 +2,9 @@
 
 Kong's declarative configuration — the single public entry point to Horizon.
 
-**Status: phase 1 — scaffold.** `kong.yml` declares its shape and is validated in CI.
-Services, routes and the plugin set are filled in during phase 2, after the platform has
-been proven against a running stack.
+**Status: phase 2 — running.** Services, routes and the plugin set are declared and the
+gateway validates EdDSA access tokens. `make smoke` proves it rejects a token signed by a
+key it has never seen.
 
 ---
 
@@ -29,6 +29,32 @@ been proven against a running stack.
 - **State.** Kong runs DB-less. There is no gateway database to run, back up or migrate.
 
 ---
+
+## `kong.yml` is a template
+
+Kong OSS verifies EdDSA (RFC 8037) but has **no plugin that fetches a JWKS document** —
+`openid-connect` is Enterprise-only. The public key therefore has to be present in the
+declarative configuration.
+
+Rather than commit key material here and hand-edit it on every rotation, this file stays
+key-free and `infra/scripts/render-kong-config.sh` injects the current public keys into
+`infra/generated/kong.generated.yml`, which is what the container mounts. The full
+reasoning, and what was rejected, is in
+[ADR 0036](../docs/adr/0036-kong-oss-has-no-jwks-so-the-gateway-config-is-rendered.md).
+
+```bash
+make kong-config   # re-render after a key change
+```
+
+`identity/` still publishes `/.well-known/jwks.json` — it is the source of truth for
+every other verifier, and the render script is a Kong-shaped adapter over the same keys.
+
+## The `/gateway/verify` route
+
+A route with no upstream, answered directly by `request-termination`. It exists so the
+gateway's own token validation can be tested without any service running behind it:
+`make smoke` calls it with a valid token (expects 200), with a token signed by a freshly
+generated key (expects 401), and with no token at all (expects 401).
 
 ## Working on it
 
