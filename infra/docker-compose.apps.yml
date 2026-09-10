@@ -51,17 +51,36 @@ x-env: &env
   TENANT_ID_HASH_SALT: local-development-only
 
 services:
+  identity-migrate:
+    <<: *service
+    build:
+      context: ../identity
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_identity
+    command: ["npm", "run", "db:migrate"]
+
   identity:
     <<: *service
     build:
       context: ../identity
     container_name: horizon-identity
+    depends_on:
+      identity-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     environment:
       <<: *env
       PORT: '3001'
       OTEL_SERVICE_NAME: identity
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_identity
-      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_identity
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_identity
       JWT_PRIVATE_KEY_PATH: /keys/ed25519-dev-1-private.pem
       JWT_PUBLIC_KEYS_DIR: /keys/public
       JWT_ACTIVE_KID: dev-1
