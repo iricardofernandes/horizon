@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 
-import { type Either, right } from '@/core/either'
+import { type Either, left, right } from '@/core/either'
+import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { GENESIS_HASH } from '@/domain/audit/chain'
 import type { UnitOfWork } from '../ports/unit-of-work'
 
@@ -19,7 +20,7 @@ export interface AuditChainVerdict {
   readonly detail: string
 }
 
-export type VerifyAuditChainResponse = Either<never, AuditChainVerdict>
+export type VerifyAuditChainResponse = Either<InvalidInputError, AuditChainVerdict>
 
 /**
  * Walk a tenant's chain and report the **first broken link**, not a boolean (ADR 0025).
@@ -39,11 +40,20 @@ export type VerifyAuditChainResponse = Either<never, AuditChainVerdict>
 @Injectable()
 export class VerifyAuditChainUseCase {
   private static readonly DEFAULT_BATCH = 500
+  private static readonly MAX_BATCH = 1000
 
   constructor(private readonly unitOfWork: UnitOfWork) {}
 
   async execute(request: VerifyAuditChainRequest): Promise<VerifyAuditChainResponse> {
     const batchSize = request.batchSize ?? VerifyAuditChainUseCase.DEFAULT_BATCH
+    if (
+      !Number.isInteger(batchSize) ||
+      batchSize < 1 ||
+      batchSize > VerifyAuditChainUseCase.MAX_BATCH
+    )
+      return left(
+        new InvalidInputError('/batchSize', 'batch size must be an integer between 1 and 1000'),
+      )
 
     return this.unitOfWork.inTenant<VerifyAuditChainResponse>(request.tenantId, async (scope) => {
       let previousHash = GENESIS_HASH

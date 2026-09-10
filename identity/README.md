@@ -7,15 +7,23 @@ and its own lifecycle. It is reached through Kong, never directly, and it shares
 source with any other module (ADR 0001).
 
 **Status: phase 4 — in progress.** The tactical kernel, domain entities, application
-ports and use cases, and initial Drizzle schemas are implemented in the working tree.
+ports and use cases, and initial Drizzle schemas are implemented.
 Refresh-family unit tests cover rotation, grace, both expiry deadlines, termination
-and the reuse security event. Infrastructure and HTTP wiring remain pending, so these
+and the reuse security event. Application tests also cover refresh replay, tenant
+isolation in the in-memory family repository, disabled and missing users, and audit
+failure after revocation. Audit-verifier tests cover pagination, tampering, interior
+row removal and invalid batch sizes. Infrastructure and HTTP wiring remain pending, so these
 behaviours are not yet exposed by the running service.
+
+The current unit suite has 32 passing tests. `npm run test:cov` reports 27.54%
+line coverage across domain/application, below the required 80%; the coverage gate
+still fails and phase 4 is not complete.
 
 The next implementation steps are:
 
-- Add tenant-scoped repository fakes and application tests, including refresh replay,
-  disabled users, audit/outbox writes and failure paths; reach the 80% coverage gate.
+- Extend tenant-scoped repository fakes and application tests to the remaining use
+  cases; reach the 80% coverage gate. The session fake does not prove Redis TTL or
+  concurrency behaviour; those still require integration tests.
 - Implement Redis refresh-family storage with atomic rotation. The existing
   read-then-save port does not yet guarantee that concurrent refresh requests receive
   the same replacement. Preserve replay detection beyond the immediately previous token.

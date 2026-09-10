@@ -26,7 +26,7 @@ English equivalent, which are defined in [`docs/glossary.md`](docs/glossary.md).
 > The platform behind it runs — `make up && make smoke` asserts 43 things about it.
 >
 > **Identity domain and application code is in progress.** Its entities, use cases and
-> Drizzle schemas exist in the working tree, with initial refresh-family unit tests.
+> Drizzle schemas are committed, with refresh-family and application unit tests.
 > Infrastructure adapters and HTTP wiring are still pending; services still answer 404.
 >
 > What arrives when: [`docs/plan.md`](docs/plan.md).
