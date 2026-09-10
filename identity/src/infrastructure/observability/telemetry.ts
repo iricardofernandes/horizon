@@ -32,6 +32,9 @@ const sdk =
 // Imported before Nest, HTTP, Redis and AMQP so their modules can be instrumented.
 sdk?.start()
 
-export async function stopTelemetry(): Promise<void> {
-  await sdk?.shutdown()
+let shutdown: Promise<void> | undefined
+
+export function stopTelemetry(): Promise<void> {
+  shutdown ??= sdk?.shutdown() ?? Promise.resolve()
+  return shutdown
 }
