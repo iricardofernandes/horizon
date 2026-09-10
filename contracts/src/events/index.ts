@@ -1,3 +1,4 @@
+import { catalogItemCreated, catalogItemDeactivated, catalogPriceChanged } from './catalog'
 import type { EventDefinition } from './define'
 import {
   apiKeyRevoked,
@@ -8,6 +9,7 @@ import {
   userRegistered,
 } from './identity'
 
+export * from './catalog'
 export * from './define'
 export * from './identity'
 
@@ -25,6 +27,9 @@ export const EVENTS: readonly EventDefinition[] = [
   apiKeyRevoked,
   sessionReuseDetected,
   dataSubjectErased,
+  catalogItemCreated,
+  catalogItemDeactivated,
+  catalogPriceChanged,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */
