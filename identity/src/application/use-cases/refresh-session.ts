@@ -118,7 +118,11 @@ export class RefreshSessionUseCase {
     now: Date,
   ): Promise<RefreshSessionResponse> {
     const user = await this.loadActiveUser(request.tenantId, family.userId())
-    if (user === null) return left(new SessionExpiredError())
+    if (user === null) {
+      family.end('user-disabled')
+      await this.families.delete(request.tenantId, request.familyId)
+      return left(new SessionExpiredError())
+    }
 
     const minted = await this.sessions.mintAccessOnly(user, now)
     return right({ ...minted, refreshToken: replacement, familyId: request.familyId })
