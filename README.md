@@ -15,7 +15,7 @@ English equivalent, which are defined in [`docs/glossary.md`](docs/glossary.md).
 
 ---
 
-> ### Current phase: **3 — contracts**
+> ### Current phase: **4 — identity (in progress)**
 >
 > `@horizon/contracts@0.1.0` is published and consumed by `identity/` at an exact pin.
 > The compatibility gate is live: `scripts/check-contract-compat.mjs` diffs every schema
@@ -25,7 +25,9 @@ English equivalent, which are defined in [`docs/glossary.md`](docs/glossary.md).
 >
 > The platform behind it runs — `make up && make smoke` asserts 43 things about it.
 >
-> **There is still no domain code.** The services boot and answer 404. Identity is phase 4.
+> **Identity domain and application code is in progress.** Its entities, use cases and
+> Drizzle schemas exist in the working tree, with initial refresh-family unit tests.
+> Infrastructure adapters and HTTP wiring are still pending; services still answer 404.
 >
 > What arrives when: [`docs/plan.md`](docs/plan.md).
 > What is declared but deliberately unbuilt: [`docs/roadmap.md`](docs/roadmap.md).

@@ -1,6 +1,6 @@
 {
   "name": "@horizon/contracts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Versioned Zod schemas for every published event and cross-module HTTP payload.",
   "license": "MIT",
   "type": "commonjs",
@@ -38,7 +38,6 @@
   "peerDependencies": {
     "zod": "^4.0.0"
   },
-  "dependencies": {},
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
     "@types/node": "^26.5.0",

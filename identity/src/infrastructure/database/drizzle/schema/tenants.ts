@@ -1,0 +1,35 @@
+import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+
+/**
+ * The tenant row itself is tenant-scoped: its policy is `id = current_tenant`, the same
+ * shape every other table uses, with no exception carved out for the table that defines
+ * the concept. Creating a tenant opens the context on the id it just generated
+ * (see `CreateTenantUseCase`), so even the first write in a tenant's life goes through
+ * the same door as every write after it.
+ *
+ * RLS, policies, `FORCE`, grants and the append-only guards live in
+ * `migrations/0001_tenant_isolation.sql` rather than here: drizzle-kit generates DDL for
+ * table shape, and the isolation guarantees are not table shape.
+ */
+export const tenants = pgTable('tenants', {
+  id: uuid('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  timezone: text('timezone').notNull(),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+})
+
+/**
+ * Slug → tenant id, and **deliberately not tenant-scoped** (ADR 0037).
+ *
+ * Someone typing a workspace handle into a login form has no tenant context yet — this is
+ * the lookup that establishes it. So it is its own table holding two columns and nothing
+ * else, rather than an RLS exception on `tenants` that would silently also apply to the
+ * tenant's name, its timezone, and every column added to it later.
+ */
+export const tenantDirectory = pgTable('tenant_directory', {
+  slug: text('slug').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().unique(),
+})

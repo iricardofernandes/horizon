@@ -6,9 +6,25 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 1 — scaffold.** Configuration, tooling and documentation are real;
-there is no domain code yet. See [`docs/plan.md`](../docs/plan.md) for what arrives
-when.
+**Status: phase 4 — in progress.** The tactical kernel, domain entities, application
+ports and use cases, and initial Drizzle schemas are implemented in the working tree.
+Refresh-family unit tests cover rotation, grace, both expiry deadlines, termination
+and the reuse security event. Infrastructure and HTTP wiring remain pending, so these
+behaviours are not yet exposed by the running service.
+
+The next implementation steps are:
+
+- Add tenant-scoped repository fakes and application tests, including refresh replay,
+  disabled users, audit/outbox writes and failure paths; reach the 80% coverage gate.
+- Implement Redis refresh-family storage with atomic rotation. The existing
+  read-then-save port does not yet guarantee that concurrent refresh requests receive
+  the same replacement. Preserve replay detection beyond the immediately previous token.
+- Implement PostgreSQL migrations, forced RLS, tenant transactions, repositories,
+  audit chaining, encryption and outbox delivery, with Testcontainers isolation tests.
+- Implement cryptography and cache adapters, then Nest providers, HTTP controllers,
+  authentication guards, health probes and the remaining cross-cutting patterns.
+
+See [`docs/plan.md`](../docs/plan.md) for the complete phase exit criteria.
 
 ---
 
@@ -63,21 +79,21 @@ does not define its own wire shapes.
 
 ## Endpoints
 
-None yet — this module is a scaffold. Its HTTP surface arrives with its phase, and
+None yet — the phase 4 application layer is not wired to HTTP. Its HTTP surface arrives with its phase, and
 OpenAPI is generated from the controllers and Zod schemas at that point, aggregated at
 the gateway and published by CI.
 
 | Method | Path | Purpose |
 |---|---|---|
-| — | — | *(none in phase 1)* |
+| — | — | *(pending phase 4 wiring)* |
 
 ---
 
 ## Running it locally
 
-The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) is a phase 2
-deliverable. Until then this module runs standalone and serves 404s, which is enough to
-verify the toolchain.
+The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) is available
+through `make up` at the repository root. This module still serves 404s until its
+HTTP controllers and infrastructure providers are wired.
 
 ```bash
 npm install          # or npm ci

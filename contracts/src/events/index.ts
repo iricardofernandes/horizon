@@ -1,5 +1,12 @@
 import type { EventDefinition } from './define'
-import { tenantCreated } from './identity'
+import {
+  apiKeyRevoked,
+  dataSubjectErased,
+  sessionReuseDetected,
+  tenantCreated,
+  userDisabled,
+  userRegistered,
+} from './identity'
 
 export * from './define'
 export * from './identity'
@@ -11,7 +18,14 @@ export * from './identity'
  * and the compatibility gate walks it to compare each payload against the last published
  * version (ADR 0030).
  */
-export const EVENTS: readonly EventDefinition[] = [tenantCreated] as const
+export const EVENTS: readonly EventDefinition[] = [
+  tenantCreated,
+  userRegistered,
+  userDisabled,
+  apiKeyRevoked,
+  sessionReuseDetected,
+  dataSubjectErased,
+] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */
 export function findEvent(type: string, version: number): EventDefinition | undefined {
