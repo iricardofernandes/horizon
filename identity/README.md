@@ -6,33 +6,20 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 4 — in progress.** The tactical kernel, domain entities, application
-ports and use cases, and initial Drizzle schemas are implemented.
-Refresh-family unit tests cover rotation, grace, both expiry deadlines, termination
-and the reuse security event. Application tests also cover refresh replay, tenant
-isolation in the in-memory family repository, disabled and missing users, and audit
-failure after revocation. Audit-verifier tests cover pagination, tampering, interior
-row removal and invalid batch sizes. Infrastructure and HTTP wiring remain pending, so these
-behaviours are not yet exposed by the running service.
+**Status: reference implementation complete; phase 5 patterns extracted.** Identity
+has a working HTTP API, tenant-scoped PostgreSQL persistence, atomic Redis sessions,
+EdDSA/JWKS, API keys, encrypted personal data, an audit verifier and an outbox relay.
+The domain/application coverage gate passes above 99% of lines. Unit and real
+PostgreSQL/Redis/RabbitMQ integration suites exercise the failure paths described below.
 
-The current unit suite has 32 passing tests. `npm run test:cov` reports 27.54%
-line coverage across domain/application, below the required 80%; the coverage gate
-still fails and phase 4 is not complete.
+The implementation patterns and the checklist for Catalog are in
+[`docs/patterns/`](../docs/patterns/). The next business-module phase is Catalog.
 
-The next implementation steps are:
-
-- Extend tenant-scoped repository fakes and application tests to the remaining use
-  cases; reach the 80% coverage gate. The session fake does not prove Redis TTL or
-  concurrency behaviour; those still require integration tests.
-- Implement Redis refresh-family storage with atomic rotation. The existing
-  read-then-save port does not yet guarantee that concurrent refresh requests receive
-  the same replacement. Preserve replay detection beyond the immediately previous token.
-- Implement PostgreSQL migrations, forced RLS, tenant transactions, repositories,
-  audit chaining, encryption and outbox delivery, with Testcontainers isolation tests.
-- Implement cryptography and cache adapters, then Nest providers, HTTP controllers,
-  authentication guards, health probes and the remaining cross-cutting patterns.
-
-See [`docs/plan.md`](../docs/plan.md) for the complete phase exit criteria.
+Operational limits remain explicit: table-backed key erasure does not destroy old
+backups of the key table; KMS is not implemented. Identity consumes no business events
+and makes no cross-module HTTP calls, so consumer prefetch/DLQ and HTTP circuit breakers
+are requirements for the first consuming/calling module. There is no API-key acceptance
+cache: credentials and issuer permissions are checked on every authentication.
 
 ---
 
@@ -87,25 +74,56 @@ does not define its own wire shapes.
 
 ## Endpoints
 
-None yet — the phase 4 application layer is not wired to HTTP. Its HTTP surface arrives with its phase, and
-OpenAPI is generated from the controllers and Zod schemas at that point, aggregated at
-the gateway and published by CI.
+OpenAPI is served at `/docs` and `/docs-json`. Protected routes verify bearer tokens
+locally; a supplied tenant header never overrides the verified tenant. The gateway
+remains the normal external entry point.
 
 | Method | Path | Purpose |
 |---|---|---|
-| — | — | *(pending phase 4 wiring)* |
+| POST | `/auth/signup` | Create tenant and owner atomically. |
+| POST | `/auth/login` | Authenticate and open a refresh family. |
+| POST | `/auth/refresh` | Rotate, return the grace replacement, or revoke on replay. |
+| POST | `/auth/logout` | Revoke refresh family and presented access token. |
+| POST | `/auth/api-key` | Authenticate an API key and return its permitted claims. |
+| GET | `/.well-known/jwks.json` | Public Ed25519 verification keys. |
+| GET | `/me`, `/me/export` | Current user and personal-data export. |
+| GET, POST | `/users` | List/register tenant users with local permissions. |
+| GET | `/users/:userId` | Read a tenant user. |
+| PATCH | `/users/:userId/disable` | Disable and revoke sessions. |
+| POST | `/users/:userId/roles` | Assign an opaque module/role pair. |
+| POST | `/api-keys` | Issue a key; secret appears only in the issuance response. |
+| POST | `/api-keys/:apiKeyId/rotate` | Rotate with an explicit overlap. |
+| DELETE | `/api-keys/:apiKeyId` | Revoke a key. |
+| GET | `/data-subjects/:subjectId/export` | Administrative personal-data export. |
+| DELETE | `/data-subjects/:subjectId` | Destroy key material and revoke sessions. |
+| GET | `/audit/verify` | Verify the tenant audit chain; administrative access. |
+| GET | `/health/live`, `/health/ready` | Liveness and database/Redis readiness. |
+
+Only `/me` is explicitly allowed during a denylist outage. Writes and administrative
+reads fail closed. A confirmed refresh replay revokes all outstanding access tokens
+for that subject until the maximum access lifetime expires, affecting other devices too.
+
+Write endpoints accept optional `Idempotency-Key`. Same principal/tenant/endpoint/key
+and body replays the original status/body; a different body or in-flight request is
+409. Responses are encrypted in Redis for the configured TTL. Login, refresh and API-key
+authentication always re-evaluate credential state and deliberately skip this cache.
+Opting into idempotency fails closed during Redis outage. A completion failure after a
+domain commit leaves the claim pending until expiry; it does not permit immediate
+re-execution of an uncertain write.
 
 ---
 
 ## Running it locally
 
 The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) is available
-through `make up` at the repository root. This module still serves 404s until its
-HTTP controllers and infrastructure providers are wired.
+through `make up` at the repository root. Run migrations before starting the HTTP service.
 
 ```bash
-npm install          # or npm ci
+# At the repository root: make up (also generates development signing keys).
+cd identity
+npm ci
 cp .env.example .env # fill in; the process refuses to start on invalid config
+npm run db:migrate  # owner role; never the application connection
 
 npm run typecheck    # tsc --noEmit, strict plus the three extra flags
 npm run lint         # biome check
@@ -120,7 +138,7 @@ Redis and RabbitMQ via Testcontainers rather than using a shared instance (ADR 0
 npm run test:e2e
 ```
 
-Migrations, once this module has a schema:
+Migrations:
 
 ```bash
 npm run db:generate  # emit SQL from the Drizzle schema
@@ -141,15 +159,17 @@ and the Dockerfile runs both.
 
 ## Environment
 
-Every variable is required unless a default is shown in `.env.example`. Configuration
-is validated with Zod at boot, so a missing or malformed value stops the process
-immediately rather than surfacing as a failure on first use.
+Runtime values are validated by `src/main/environment.ts`. Defaults are declared there;
+SDK telemetry configuration is read by OpenTelemetry. Consumer and cross-module HTTP
+settings below are reserved for their first actual consumer/caller; Identity currently
+has neither. `DATA_SUBJECT_KEY_MODE=kms` and `TRUST_GATEWAY_JWT=true` are rejected.
 
 | `NODE_ENV` | — |
 | `PORT` | HTTP port. Behind Kong in every environment; exposed directly only in local development. |
 | `LOG_LEVEL` | pino level. `info` in production. |
 | `DATABASE_URL` | Application role. Holds neither SUPERUSER nor BYPASSRLS, so RLS applies to it (ADR 0017). |
 | `DATABASE_MIGRATION_URL` | Owner role, used only by `db:migrate`. The application never connects with it. |
+| `DATABASE_RELAY_URL` | Optional dedicated relay connection. Omit to disable the worker; never use the application or owner role here. |
 | `DATABASE_POOL_MAX` | Bulkhead: the pool this service may consume (ADR 0027). |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | No query waits without a bound. |
 | `REDIS_URL` | Denylist, idempotency records, rate counters. |
@@ -196,3 +216,27 @@ immediately rather than surfacing as a failure on first use.
   filter maps error classes to RFC 9457 `application/problem+json` (ADR 0032).
 - **Tests** — every test creates its own tenant, and every aggregate has a test that
   writes under tenant A and asserts tenant B cannot read it (ADR 0014).
+
+## Delivery and operational verification
+
+Provision `horizon_owner`, `horizon_app` and `horizon_relay` with the platform role script
+before applying migrations. Existing PostgreSQL volumes created before phase 4 need the
+relay role provisioned by a cluster administrator; rerunning `make up` does not rerun
+initialization scripts. Do not give the migration owner CREATEROLE to work around this.
+
+`DATABASE_RELAY_URL` enables the background relay. Subscribers must bind durable queues
+to `horizon.events`; a message with no matching queue remains pending. Delivery is at
+least once, including a possible duplicate after broker confirmation and before database
+commit. Monitor outbox lag and failures; the worker uses bounded batches and retry jitter.
+
+```bash
+npm run test:cov
+npm run test:e2e
+npm run build
+npm run audit:verify -- <tenant-uuid>
+```
+
+The e2e suite uses isolated containers, including a non-superuser migration owner and
+application role. It verifies RLS, concurrent mutations, inbox duplicate delivery,
+ciphertext-preserving erasure, the audit CLI, concurrent relays, unroutable publication,
+durable trace propagation, refresh CAS, idempotency and the HTTP authentication flow.

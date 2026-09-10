@@ -250,7 +250,7 @@ compatibility gate live in CI and `docs/events.md` generated from the schemas.
 
 ---
 
-## Phase 4 — Identity
+## Phase 4 — Identity — **complete**
 
 The reference module. Every cross-cutting pattern is invented here once and copied
 afterwards, so it is reviewed harder than anything else.
@@ -299,7 +299,7 @@ afterwards, so it is reviewed harder than anything else.
 
 ---
 
-## Phase 5 — Pattern extraction
+## Phase 5 — Pattern extraction — **complete**
 
 **Deliverables**
 

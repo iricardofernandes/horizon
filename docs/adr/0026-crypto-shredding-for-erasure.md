@@ -86,3 +86,10 @@ modification, so it breaks the chain exactly as deletion does, and it does not r
 backups.
 
 **Rely on retention expiry alone.** Rejected: erasure is on request, not on schedule.
+
+## Implementation qualification — 2026-09-10
+
+The phase 4 table-backed adapter proves erasure from live state and preservation of
+the ciphertext/audit chain. A backup of the key table can restore old key material;
+the backup guarantee above requires independently managed keys and destruction of
+their historical copies. KMS and production backup procedures are not implemented.

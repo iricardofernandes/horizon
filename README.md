@@ -15,22 +15,20 @@ English equivalent, which are defined in [`docs/glossary.md`](docs/glossary.md).
 
 ---
 
-> ### Current phase: **4 — identity (in progress)**
+> ### Next phase: **6 — catalog**
 >
-> `@horizon/contracts@0.1.0` is published and consumed by `identity/` at an exact pin.
-> The compatibility gate is live: `scripts/check-contract-compat.mjs` diffs every schema
-> against the last published snapshot and **fails a breaking change that is not
-> accompanied by the right version bump**. [`docs/events.md`](docs/events.md) is generated
-> from the schemas, and CI fails if it drifts.
+> Identity now has a working, tested API: tenants and users, EdDSA/JWKS, atomic Redis
+> sessions, API keys, forced PostgreSQL RLS, encrypted personal data, an append-only
+> audit chain and a transactional outbox. Domain/application coverage exceeds 99% of lines.
 >
-> The platform behind it runs — `make up && make smoke` asserts 43 things about it.
+> Phase 5's patterns are extracted in [`docs/patterns/`](docs/patterns/), with a concrete
+> checklist for **phase 6 — Catalog**. Each recipe links the implementation and its tests.
 >
-> **Identity domain and application code is in progress.** Its entities, use cases and
-> Drizzle schemas are committed, with refresh-family and application unit tests.
-> Infrastructure adapters and HTTP wiring are still pending; services still answer 404.
+> `@horizon/contracts@0.1.1` is consumed at an exact registry pin. The platform remains
+> independently runnable with `make up && make smoke`.
 >
-> What arrives when: [`docs/plan.md`](docs/plan.md).
-> What is declared but deliberately unbuilt: [`docs/roadmap.md`](docs/roadmap.md).
+> Scope and operational limits: [`identity/README.md`](identity/README.md).
+> What arrives next: [`docs/plan.md`](docs/plan.md).
 
 ---
 
@@ -203,7 +201,7 @@ but absent from that project's own `package.json`.
 
 ## Decisions
 
-Thirty-five records in [`docs/adr/`](docs/adr/), MADR format, each with the alternatives
+Thirty-seven records in [`docs/adr/`](docs/adr/), MADR format, each with the alternatives
 that were rejected. The ones a reviewer is most likely to question:
 
 | Decision | Why | ADR |
@@ -246,7 +244,7 @@ Jaeger / Prometheus / Loki / Grafana · Docker · Terraform (never applied) · G
 | [`docs/plan.md`](docs/plan.md) | Phases, deliverables, exit criteria, non-goals |
 | [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece is deferred |
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
-| [`docs/adr/`](docs/adr/) | 35 decision records |
+| [`docs/adr/`](docs/adr/) | 37 decision records |
 | [`docs/patterns/`](docs/patterns/) | How to reimplement each cross-cutting pattern (phase 5) |
 | [`docs/events.md`](docs/events.md) | The event catalogue, generated from the schemas |
 | [`docs/privacy.md`](docs/privacy.md) | Lawful basis, retention, erasure |

@@ -7,9 +7,9 @@ Horizon is designed against **LGPD** (Lei Geral de Proteção de Dados, Brazil) 
 **GDPR** (EU). The two are close enough in structure that one design satisfies both; where
 they differ, the stricter requirement is applied.
 
-> **Status.** This document describes the design that phases 4 onwards implement. It is
-> written now because the erasure mechanism constrains the schema, and retrofitting it
-> after tables exist is not possible. Nothing described here is running yet.
+> **Status.** Identity implements live subject-key destruction, encrypted personal
+> fields and a verifiable audit chain, covered by integration tests. Cross-module erasure
+> consumers, production key management and scheduled retention jobs remain future work.
 
 ---
 
@@ -97,10 +97,11 @@ Erasure requires exactly that. Both requirements are non-negotiable.
 What survives is the shape of history: that an entity existed, that an action occurred at
 a time, that a record changed. What does not survive is any way to know who it was about.
 
-**Backups are handled correctly, which a `DELETE` cannot manage.** A `DELETE` never reaches
-yesterday's backup, so restoring it resurrects the erased subject; a compliant deletion
-would require rewriting every backup. Under crypto-shredding, the backup contains
-ciphertext whose key exists nowhere in any live system, so a restore resurrects nothing.
+**Backup erasure requires a separate key lifecycle.** Deleting live key material
+cannot destroy a backup containing an earlier copy of that key. The table-backed
+development adapter proves live erasure only. Production must keep key backups outside
+ordinary data restores and enforce destruction there, or use an external key-management
+service. Restoring ciphertext alone cannot recover the plaintext; restoring its key can.
 
 **A propagating erasure.** Modules hold their own copies of personal data — `sales/` has
 customers, `identity/` has users. `identity/` publishes
