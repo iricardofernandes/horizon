@@ -48,7 +48,7 @@ export class SessionIssuer {
       now,
     })
 
-    await this.families.save(family, this.policy.session().absoluteTtlSeconds)
+    await this.families.create(family, this.policy.session().absoluteTtlSeconds)
     return this.mintFor(user, family.id.toString(), refreshToken, now)
   }
 
@@ -62,19 +62,17 @@ export class SessionIssuer {
     user: User,
     presentedToken: string,
     now: Date,
-  ): Promise<IssuedSession> {
+  ): Promise<IssuedSession | null> {
+    const expectedDigest = family.currentDigest()
     const refreshToken = this.secrets.token(REFRESH_TOKEN_BYTES)
 
-    family.rotateTo({
+    const rotated = family.rotateTo({
       digest: this.digest.digest(refreshToken),
       sealedReplacement: this.secretBox.seal(presentedToken, refreshToken),
       now,
     })
-
-    await this.families.save(
-      family,
-      family.remainingAbsoluteSeconds(now, this.policy.session().absoluteTtlSeconds),
-    )
+    if (rotated.isLeft()) return null
+    if (!(await this.families.saveIfCurrent(family, expectedDigest))) return null
     return this.mintFor(user, family.id.toString(), refreshToken, now)
   }
 

@@ -65,10 +65,16 @@ function walk(
       fields.push(path)
       continue
     }
-    output[key] = isPlainRecord(value) ? walk(value, path, fields) : value
+    output[key] = walkValue(value, path, fields)
   }
 
   return output
+}
+
+function walkValue(value: unknown, path: string, fields: string[]): unknown {
+  if (Array.isArray(value))
+    return value.map((item, index) => walkValue(item, `${path}.${index}`, fields))
+  return isPlainRecord(value) ? walk(value, path, fields) : value
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

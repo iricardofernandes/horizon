@@ -10,8 +10,15 @@ import type { RefreshTokenFamily } from '@/domain/entities/refresh-token-family'
 export abstract class RefreshTokenFamiliesRepository {
   abstract findById(tenantId: string, familyId: string): Promise<RefreshTokenFamily | null>
 
-  /** Written with a TTL equal to the family's remaining absolute lifetime. */
-  abstract save(family: RefreshTokenFamily, ttlSeconds: number): Promise<void>
+  /** Insert only; expires at createdAt + absoluteTtlSeconds. Existing IDs must fail. */
+  abstract create(family: RefreshTokenFamily, absoluteTtlSeconds: number): Promise<void>
+
+  /**
+   * Atomic compare-and-swap against the last observed current digest. A missing,
+   * expired, ended or concurrently rotated family returns false. Never recreates a
+   * deleted family and never moves its absolute expiration deadline.
+   */
+  abstract saveIfCurrent(family: RefreshTokenFamily, expectedDigest: string): Promise<boolean>
 
   abstract delete(tenantId: string, familyId: string): Promise<void>
 

@@ -10,6 +10,7 @@ import type { SecretBox } from '@/domain/services/secret-box'
 import type { TokenDigest } from '@/domain/services/token-digest'
 import type { Clock } from '../ports/clock'
 import type { IdentityPolicy } from '../ports/identity-policy'
+import type { TokenDenylist } from '../ports/token-denylist'
 import type { TenantScope, UnitOfWork } from '../ports/unit-of-work'
 import type { IssuedSession } from '../services/session-issuer'
 import { SessionIssuer } from '../services/session-issuer'
@@ -24,6 +25,9 @@ export interface RefreshSessionRequest {
 
 export type RefreshSessionResponse = Either<SessionExpiredError | SessionReusedError, IssuedSession>
 
+// Contention is bounded; exhausting retries fails closed without issuing credentials.
+const MAX_ROTATION_ATTEMPTS = 5
+
 /**
  * Exchange a refresh token for a new pair, and detect theft while doing it (ADR 0020).
  *
@@ -34,7 +38,7 @@ export type RefreshSessionResponse = Either<SessionExpiredError | SessionReusedE
  *     refresh; return the *same* replacement rather than a new one. It is sealed under
  *     the presented token itself, so the racing tab can open it and a compromised Redis
  *     cannot (see `SecretBox`).
- *   - **The immediately-previous token, outside the window.** A replay. Kill the family —
+ *   - **Any rotated token, outside the immediately-previous token's grace.** A replay. Kill the family —
  *     both the attacker's session and the legitimate user's — and emit the security
  *     event. A forced re-login is a far better outcome than an undetected persistent
  *     session.
@@ -49,6 +53,7 @@ export class RefreshSessionUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWork,
     private readonly families: RefreshTokenFamiliesRepository,
+    private readonly denylist: TokenDenylist,
     private readonly digest: TokenDigest,
     private readonly secretBox: SecretBox,
     private readonly sessions: SessionIssuer,
@@ -57,12 +62,22 @@ export class RefreshSessionUseCase {
   ) {}
 
   async execute(request: RefreshSessionRequest): Promise<RefreshSessionResponse> {
+    for (let attempt = 0; attempt < MAX_ROTATION_ATTEMPTS; attempt++) {
+      const result = await this.attempt(request)
+      if (result !== null) return result
+    }
+    return left(new SessionExpiredError())
+  }
+
+  /** A CAS conflict reloads the winner before applying grace or reuse detection. */
+  private async attempt(request: RefreshSessionRequest): Promise<RefreshSessionResponse | null> {
     const now = this.clock.now()
     const family = await this.families.findById(request.tenantId, request.familyId)
 
     if (family === null || !family.isActive()) return left(new SessionExpiredError())
     if (family.isExpiredAt(now, this.policy.session())) {
       family.end('expired')
+      if (!(await this.families.saveIfCurrent(family, family.currentDigest()))) return null
       await this.families.delete(request.tenantId, request.familyId)
       return left(new SessionExpiredError())
     }
@@ -77,7 +92,7 @@ export class RefreshSessionUseCase {
     family: RefreshTokenFamily,
     request: RefreshSessionRequest,
     now: Date,
-  ): Promise<RefreshSessionResponse> {
+  ): Promise<RefreshSessionResponse | null> {
     const user = await this.loadActiveUser(request.tenantId, family.userId())
     if (user === null) {
       family.end('user-disabled')
@@ -85,7 +100,8 @@ export class RefreshSessionUseCase {
       return left(new SessionExpiredError())
     }
 
-    return right(await this.sessions.rotate(family, user, request.refreshToken, now))
+    const session = await this.sessions.rotate(family, user, request.refreshToken, now)
+    return session === null ? null : right(session)
   }
 
   /** Either a benign race inside the grace window, or a theft. */
@@ -94,7 +110,7 @@ export class RefreshSessionUseCase {
     presented: string,
     request: RefreshSessionRequest,
     now: Date,
-  ): Promise<RefreshSessionResponse> {
+  ): Promise<RefreshSessionResponse | null> {
     if (!family.wasRotatedFrom(presented)) return left(new SessionExpiredError())
 
     const sealed = family.graceReplacementFor(presented, now, this.policy.session().reuseGraceMs)
@@ -116,7 +132,7 @@ export class RefreshSessionUseCase {
     request: RefreshSessionRequest,
     replacement: string,
     now: Date,
-  ): Promise<RefreshSessionResponse> {
+  ): Promise<RefreshSessionResponse | null> {
     const user = await this.loadActiveUser(request.tenantId, family.userId())
     if (user === null) {
       family.end('user-disabled')
@@ -124,6 +140,9 @@ export class RefreshSessionUseCase {
       return left(new SessionExpiredError())
     }
 
+    // Validate again after the user lookup: a concurrent rotation or revocation may
+    // have invalidated this grace snapshot. CAS preserves the absolute deadline.
+    if (!(await this.families.saveIfCurrent(family, family.currentDigest()))) return null
     const minted = await this.sessions.mintAccessOnly(user, now)
     return right({ ...minted, refreshToken: replacement, familyId: request.familyId })
   }
@@ -135,6 +154,13 @@ export class RefreshSessionUseCase {
   ): Promise<RefreshSessionResponse> {
     family.detectReuse(now)
     await this.families.delete(request.tenantId, request.familyId)
+    // Access tokens have no family claim. A confirmed replay therefore revokes all
+    // outstanding tokens for this subject, including other devices, for one token
+    // lifetime. Random guesses never reach this branch (ADR 0021).
+    await this.denylist.revokeSubject(
+      family.userId(),
+      new Date(now.getTime() + this.policy.accessTokenTtlSeconds() * 1000),
+    )
 
     await this.unitOfWork.inTenant(request.tenantId, async (scope: TenantScope) => {
       await scope.audit.append({

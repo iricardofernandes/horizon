@@ -5,6 +5,7 @@ import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import type { Actor } from '@/domain/audit/audit-entry'
 import { ApiKey } from '@/domain/entities/api-key'
+import { AccountDisabledError } from '@/domain/errors/account-disabled-error'
 import { ScopeBeyondIssuerError } from '@/domain/errors/scope-beyond-issuer-error'
 import type { PasswordHasher } from '@/domain/services/password-hasher'
 import { ApiKeyScopes } from '@/domain/value-objects/api-key-scopes'
@@ -25,7 +26,7 @@ export interface CreateApiKeyRequest {
 }
 
 export type CreateApiKeyResponse = Either<
-  InvalidInputError | ResourceNotFoundError | ScopeBeyondIssuerError,
+  InvalidInputError | ResourceNotFoundError | ScopeBeyondIssuerError | AccountDisabledError,
   {
     readonly apiKeyId: string
     readonly prefix: string
@@ -72,6 +73,7 @@ export class CreateApiKeyUseCase {
     return this.unitOfWork.inTenant(request.tenantId, async (scope) => {
       const issuer = await scope.users.findById(request.issuedBy)
       if (issuer === null) return left(new ResourceNotFoundError('user'))
+      if (!issuer.canAuthenticate()) return left(new AccountDisabledError())
 
       if (!issuer.canMint(scopes.value))
         return left(new ScopeBeyondIssuerError(issuer.scopesBeyondReach(scopes.value)))

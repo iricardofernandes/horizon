@@ -138,6 +138,10 @@ export class ApiKey extends AggregateRoot<ApiKeyProps> {
     return hasher.verify(this.props.secretHash, secret)
   }
 
+  belongsToEnvironment(environment: string): boolean {
+    return this.props.environment === environment
+  }
+
   permits(scope: string): boolean {
     return this.props.scopes.contains(scope)
   }
@@ -191,10 +195,12 @@ export class ApiKey extends AggregateRoot<ApiKeyProps> {
     until: Date
     now: Date
   }): Either<ConflictError, ApiKey> {
-    if (this.props.status === 'revoked')
-      return left(new ConflictError('a revoked key cannot be rotated'))
-    if (props.until <= props.now)
-      return left(new ConflictError('the rotation overlap must end in the future'))
+    if (!this.isUsableAt(props.now))
+      return left(new ConflictError('an unusable key cannot be rotated'))
+    if (this.props.supersededAt !== undefined)
+      return left(new ConflictError('a superseded key cannot be rotated again'))
+    if (!Number.isFinite(props.until.getTime()) || props.until < props.now)
+      return left(new ConflictError('the rotation overlap cannot end in the past'))
 
     this.props.supersededAt = props.until
 
@@ -206,6 +212,7 @@ export class ApiKey extends AggregateRoot<ApiKeyProps> {
         token: props.token,
         secretHash: props.secretHash,
         scopes: this.props.scopes,
+        ...(this.props.expiresAt === undefined ? {} : { expiresAt: this.props.expiresAt }),
         now: props.now,
       }),
     )

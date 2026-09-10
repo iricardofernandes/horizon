@@ -62,7 +62,11 @@ export class AuthenticateApiKeyUseCase {
 
     return this.unitOfWork.inTenant(request.tenantId, async (scope) => {
       const apiKey = await scope.apiKeys.findByPrefix(token.prefix)
-      if (apiKey === null || !apiKey.isUsableAt(now)) {
+      if (
+        apiKey === null ||
+        !apiKey.isUsableAt(now) ||
+        !apiKey.belongsToEnvironment(token.environment)
+      ) {
         await this.hasher.verifyDummy()
         return left(new InvalidCredentialsError())
       }

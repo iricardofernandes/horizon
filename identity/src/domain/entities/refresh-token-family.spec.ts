@@ -30,6 +30,9 @@ describe('RefreshTokenFamily', () => {
     family.rotateTo({ digest: 'third', sealedReplacement: 'second-sealed', now: timeAt(200) })
     expect(family.graceReplacementFor('initial-digest', timeAt(300), 1000)).toBeNull()
     expect(family.graceReplacementFor('second', timeAt(300), 1000)).toBe('second-sealed')
+    expect(family.wasRotatedFrom('initial-digest')).toBe(true)
+    expect(family.wasRotatedFrom('second')).toBe(true)
+    expect(family.wasRotatedFrom('unknown')).toBe(false)
   })
 
   it('expires exactly at the idle deadline', () => {

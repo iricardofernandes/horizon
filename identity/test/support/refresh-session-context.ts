@@ -1,10 +1,12 @@
 import { vi } from 'vitest'
+import type { TokenDenylist } from '@/application/ports/token-denylist'
 import type { TenantScope, UnitOfWork } from '@/application/ports/unit-of-work'
 import { SessionIssuer } from '@/application/services/session-issuer'
 import { RefreshSessionUseCase } from '@/application/use-cases/refresh-session'
 import type { User } from '@/domain/entities/user'
 import type { AuditLogRepository } from '@/domain/repositories/audit-log-repository'
 import type { OutboxRepository } from '@/domain/repositories/outbox-repository'
+import type { RefreshTokenFamiliesRepository } from '@/domain/repositories/refresh-token-families-repository'
 import { makeRefreshTokenFamily } from '../factories/make-refresh-token-family'
 import { makeUser } from '../factories/make-user'
 import { InMemoryRefreshTokenFamiliesRepository } from '../repositories/in-memory-refresh-token-families-repository'
@@ -13,21 +15,37 @@ function unused(): never {
   throw new Error('Unexpected repository operation')
 }
 
-export async function refreshSessionContext() {
+export async function refreshSessionContext(
+  options: {
+    families?: RefreshTokenFamiliesRepository
+    denylist?: TokenDenylist
+    createdAt?: Date
+  } = {},
+) {
   const user = makeUser()
   const tenantId = user.claims().tenantId
-  const createdAt = new Date('2026-09-10T12:00:00Z')
+  const createdAt = options.createdAt ?? new Date('2026-09-10T12:00:00Z')
   let now = createdAt
   let storedUser: User | null = user
   let tokenNumber = 0
-  const families = new InMemoryRefreshTokenFamiliesRepository()
+  const families = options.families ?? new InMemoryRefreshTokenFamiliesRepository()
+  const denylist = {
+    revoke: vi.fn<TokenDenylist['revoke']>(async (jti, expiresAt) => {
+      await options.denylist?.revoke(jti, expiresAt)
+    }),
+    revokeSubject: vi.fn<TokenDenylist['revokeSubject']>(async (subject, until) => {
+      await options.denylist?.revokeSubject(subject, until)
+    }),
+    check: async () => 'allowed' as const,
+    checkSubject: async () => 'allowed' as const,
+  }
   const family = makeRefreshTokenFamily({
     tenantId,
     userId: user.id.toString(),
     currentDigest: 'digest:initial',
     createdAt,
   })
-  await families.save(family, 60)
+  await families.create(family, 60)
   const audit = {
     append: vi.fn<AuditLogRepository['append']>(),
     walk: unused,
@@ -95,14 +113,22 @@ export async function refreshSessionContext() {
     identifier: unused,
   }
   const sessions = new SessionIssuer(signer, families, digest, secretBox, secrets, policy)
-  const sut = new RefreshSessionUseCase(unitOfWork, families, digest, secretBox, sessions, policy, {
-    now: () => now,
-  })
+  const sut = new RefreshSessionUseCase(
+    unitOfWork,
+    families,
+    denylist,
+    digest,
+    secretBox,
+    sessions,
+    policy,
+    { now: () => now },
+  )
   const request = { tenantId, familyId: family.id.toString(), refreshToken: 'initial' }
   return {
     sut,
     request,
     families,
+    denylist,
     family,
     user,
     audit,

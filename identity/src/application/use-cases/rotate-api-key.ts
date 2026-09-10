@@ -2,9 +2,10 @@ import { Injectable } from '@nestjs/common'
 
 import { type Either, left, right } from '@/core/either'
 import type { ConflictError } from '@/core/errors/errors/conflict-error'
-import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import type { Actor } from '@/domain/audit/audit-entry'
+import { AccountDisabledError } from '@/domain/errors/account-disabled-error'
 import { ScopeBeyondIssuerError } from '@/domain/errors/scope-beyond-issuer-error'
 import type { PasswordHasher } from '@/domain/services/password-hasher'
 import { ApiKeyToken } from '@/domain/value-objects/api-key-token'
@@ -23,7 +24,11 @@ export interface RotateApiKeyRequest {
 }
 
 export type RotateApiKeyResponse = Either<
-  ResourceNotFoundError | ConflictError | InvalidInputError | ScopeBeyondIssuerError,
+  | ResourceNotFoundError
+  | ConflictError
+  | InvalidInputError
+  | ScopeBeyondIssuerError
+  | AccountDisabledError,
   {
     readonly apiKeyId: string
     readonly prefix: string
@@ -55,14 +60,24 @@ export class RotateApiKeyUseCase {
   ) {}
 
   async execute(request: RotateApiKeyRequest): Promise<RotateApiKeyResponse> {
+    if (!Number.isSafeInteger(request.overlapSeconds) || request.overlapSeconds < 0)
+      return left(
+        new InvalidInputError('/overlapSeconds', 'overlap must be a non-negative integer'),
+      )
+
+    const now = this.clock.now()
+    const validUntil = new Date(now.getTime() + request.overlapSeconds * 1000)
+    if (!Number.isFinite(validUntil.getTime()))
+      return left(
+        new InvalidInputError('/overlapSeconds', 'overlap exceeds the supported date range'),
+      )
+
     const token = ApiKeyToken.create({
       environment: this.policy.apiKeyEnvironment(),
       prefix: this.secrets.alphanumeric(ApiKeyToken.PREFIX_LENGTH),
       secret: this.secrets.alphanumeric(ApiKeyToken.SECRET_LENGTH),
     })
     const secretHash = await this.hasher.hash(token.secret)
-    const now = this.clock.now()
-    const validUntil = new Date(now.getTime() + Math.max(1, request.overlapSeconds) * 1000)
 
     return this.unitOfWork.inTenant(request.tenantId, async (scope) => {
       const outgoing = await scope.apiKeys.findById(request.apiKeyId)
@@ -70,6 +85,7 @@ export class RotateApiKeyUseCase {
 
       const issuer = await scope.users.findById(outgoing.issuer())
       if (issuer === null) return left(new ResourceNotFoundError('user'))
+      if (!issuer.canAuthenticate()) return left(new AccountDisabledError())
 
       const scopes = outgoing.grantedScopes()
       if (!issuer.canMint(scopes))

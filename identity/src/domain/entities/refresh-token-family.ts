@@ -19,6 +19,8 @@ interface RefreshTokenFamilyProps {
   readonly userId: string
   currentDigest: string
   previousDigest?: string
+  /** Retained until absolute expiry so replay detection covers the entire chain. */
+  readonly rotatedDigests: string[]
   /** The replacement issued for `previousDigest`, sealed under that token (ADR 0020). */
   graceSealed?: string
   previousRotatedAt?: Date
@@ -34,6 +36,7 @@ export interface RefreshTokenFamilySnapshot {
   readonly userId: string
   readonly currentDigest: string
   readonly previousDigest: string | null
+  readonly rotatedDigests: readonly string[]
   readonly graceSealed: string | null
   readonly previousRotatedAt: Date | null
   readonly status: 'active' | 'ended'
@@ -61,6 +64,7 @@ export class RefreshTokenFamily extends AggregateRoot<RefreshTokenFamilyProps> {
       userId: string
       currentDigest: string
       previousDigest?: string
+      rotatedDigests?: readonly string[]
       graceSealed?: string
       previousRotatedAt?: Date
       status?: 'active' | 'ended'
@@ -76,6 +80,12 @@ export class RefreshTokenFamily extends AggregateRoot<RefreshTokenFamilyProps> {
         tenantId: props.tenantId,
         userId: props.userId,
         currentDigest: props.currentDigest,
+        rotatedDigests: [
+          ...new Set([
+            ...(props.rotatedDigests ?? []),
+            ...(props.previousDigest === undefined ? [] : [props.previousDigest]),
+          ]),
+        ],
         ...(props.previousDigest === undefined ? {} : { previousDigest: props.previousDigest }),
         ...(props.graceSealed === undefined ? {} : { graceSealed: props.graceSealed }),
         ...(props.previousRotatedAt === undefined
@@ -148,6 +158,11 @@ export class RefreshTokenFamily extends AggregateRoot<RefreshTokenFamilyProps> {
     return this.props.currentDigest === digest
   }
 
+  /** Optimistic concurrency marker; this is a one-way digest, never a credential. */
+  currentDigest(): string {
+    return this.props.currentDigest
+  }
+
   /**
    * The sealed replacement for a token presented inside the grace window, or `null`.
    *
@@ -163,7 +178,7 @@ export class RefreshTokenFamily extends AggregateRoot<RefreshTokenFamilyProps> {
   }
 
   wasRotatedFrom(digest: string): boolean {
-    return this.props.previousDigest === digest
+    return this.props.rotatedDigests.includes(digest)
   }
 
   // --- behaviour -------------------------------------------------------------
@@ -181,6 +196,7 @@ export class RefreshTokenFamily extends AggregateRoot<RefreshTokenFamilyProps> {
     if (this.props.status !== 'active')
       return left(new ConflictError('session family has already ended'))
 
+    this.props.rotatedDigests.push(this.props.currentDigest)
     this.props.previousDigest = this.props.currentDigest
     this.props.previousRotatedAt = props.now
     this.props.graceSealed = props.sealedReplacement
@@ -216,6 +232,7 @@ export class RefreshTokenFamily extends AggregateRoot<RefreshTokenFamilyProps> {
       userId: this.props.userId,
       currentDigest: this.props.currentDigest,
       previousDigest: this.props.previousDigest ?? null,
+      rotatedDigests: Object.freeze([...this.props.rotatedDigests]),
       graceSealed: this.props.graceSealed ?? null,
       previousRotatedAt: this.props.previousRotatedAt ?? null,
       status: this.props.status,
