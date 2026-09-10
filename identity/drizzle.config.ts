@@ -1,3 +1,5 @@
+import 'dotenv/config'
+
 import { defineConfig } from 'drizzle-kit'
 
 // Migrations run under the owner role; the application role never has DDL rights

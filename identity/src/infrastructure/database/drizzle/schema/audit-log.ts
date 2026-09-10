@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
+import { tenants } from './tenants'
 
 /**
  * Append-only, hash-chained per tenant (ADR 0025).
@@ -32,7 +33,9 @@ export const auditLog = pgTable(
   'audit_log',
   {
     id: uuid('id').primaryKey(),
-    tenantId: uuid('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     sequence: bigint('sequence', { mode: 'number' }).notNull(),
     actorType: text('actor_type').notNull(),
     actorId: uuid('actor_id'),

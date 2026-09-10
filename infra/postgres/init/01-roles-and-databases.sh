@@ -4,10 +4,11 @@
 # instance per module; module code never sees the difference, because it holds a
 # connection string and nothing else.
 #
-# Three roles, and the separation matters (ADR 0017):
+# Four roles, and the separation matters (ADR 0017):
 #   horizon_owner  — owns the schema, runs migrations. The application never uses it.
 #   horizon_app    — what the services connect as. NOSUPERUSER, NOBYPASSRLS, so
 #                    Row-Level Security actually applies to it.
+#   horizon_relay  — outbox delivery only; table grants come from module migrations.
 #   horizon_debug  — the MCP debugger. No privileges on business tables at all
 #                    (ADR 0035); it reads pg_catalog and pg_stat_statements.
 
@@ -20,6 +21,9 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<-SQL
     NOSUPERUSER NOCREATEROLE NOBYPASSRLS;
 
   CREATE ROLE horizon_app LOGIN PASSWORD '${HORIZON_APP_PASSWORD:-horizon}'
+    NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+
+  CREATE ROLE horizon_relay LOGIN PASSWORD '${HORIZON_RELAY_PASSWORD:-horizon}'
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
   CREATE ROLE horizon_debug LOGIN PASSWORD '${HORIZON_DEBUG_PASSWORD:-horizon}'
@@ -54,4 +58,4 @@ SQL
 SQL
 done
 
-echo "postgres init complete: ${#MODULES[@]} databases, 3 roles"
+echo "postgres init complete: ${#MODULES[@]} databases, 4 roles"

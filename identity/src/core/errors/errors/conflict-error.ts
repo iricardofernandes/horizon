@@ -7,6 +7,7 @@ export class ConflictError extends UseCaseError {
   readonly type = 'https://horizon.dev/problems/conflict'
   readonly title = 'Conflict'
 
+  // biome-ignore lint/complexity/noUselessConstructor: the protected base constructor must become public.
   constructor(detail: string) {
     super(detail)
   }

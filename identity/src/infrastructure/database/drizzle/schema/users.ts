@@ -1,5 +1,16 @@
 import { sql } from 'drizzle-orm'
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
+import { dataSubjectKeys } from './data-subject-keys'
+import { tenants } from './tenants'
 
 /**
  * Personal data is stored encrypted under the subject's own key (ADR 0026), which is why
@@ -21,7 +32,9 @@ export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey(),
-    tenantId: uuid('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     emailCiphertext: text('email_ciphertext').notNull(),
     emailIndex: text('email_index').notNull(),
     nameCiphertext: text('name_ciphertext').notNull(),
@@ -33,6 +46,12 @@ export const users = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (table) => [
+    uniqueIndex('users_tenant_id_key').on(table.tenantId, table.id),
+    foreignKey({
+      name: 'users_tenant_subject_key_fk',
+      columns: [table.tenantId, table.id],
+      foreignColumns: [dataSubjectKeys.tenantId, dataSubjectKeys.id],
+    }),
     // One address per tenant, not per system: the same person may hold accounts in two
     // tenants, and they are different users with different keys.
     uniqueIndex('users_tenant_email_index_key').on(table.tenantId, table.emailIndex),

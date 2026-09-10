@@ -45,6 +45,7 @@ services:
       # Roles created by the init script. Local development values only.
       HORIZON_OWNER_PASSWORD: horizon
       HORIZON_APP_PASSWORD: horizon
+      HORIZON_RELAY_PASSWORD: horizon
       HORIZON_DEBUG_PASSWORD: horizon
     command:
       - postgres

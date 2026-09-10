@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
-
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { RabbitMQContainer, type StartedRabbitMQContainer } from '@testcontainers/rabbitmq'
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis'
+import { drizzle } from 'drizzle-orm/postgres-js'
+import { migrate } from 'drizzle-orm/postgres-js/migrator'
+import postgresClient from 'postgres'
 import { afterAll, beforeAll } from 'vitest'
 
 /**
@@ -27,7 +29,7 @@ beforeAll(async () => {
   ;[postgres, redis, rabbitmq] = await Promise.all([
     new PostgreSqlContainer('postgres:17-alpine')
       .withDatabase('horizon_test')
-      .withUsername(OWNER_ROLE)
+      .withUsername('postgres')
       .withPassword('test')
       .start(),
     new RedisContainer('redis:7-alpine').start(),
@@ -40,26 +42,40 @@ beforeAll(async () => {
   await postgres.exec([
     'psql',
     '-U',
-    OWNER_ROLE,
+    'postgres',
     '-d',
     'horizon_test',
     '-v',
     'ON_ERROR_STOP=1',
     '-c',
-    `CREATE ROLE ${APP_ROLE} LOGIN PASSWORD '${APP_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`,
+    `CREATE ROLE ${OWNER_ROLE} LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+     CREATE ROLE ${APP_ROLE} LOGIN PASSWORD '${APP_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+     CREATE ROLE horizon_relay LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+     ALTER DATABASE horizon_test OWNER TO ${OWNER_ROLE};
+     REVOKE ALL ON SCHEMA public FROM PUBLIC;
+     GRANT USAGE ON SCHEMA public TO ${APP_ROLE}, horizon_relay;
+     ALTER DEFAULT PRIVILEGES FOR ROLE ${OWNER_ROLE} IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${APP_ROLE};
+     ALTER DEFAULT PRIVILEGES FOR ROLE ${OWNER_ROLE} IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ${APP_ROLE};`,
   ])
 
   const host = postgres.getHost()
   const port = postgres.getMappedPort(5432)
 
   process.env.DATABASE_URL = `postgres://${APP_ROLE}:${APP_PASSWORD}@${host}:${port}/horizon_test`
-  process.env.DATABASE_MIGRATION_URL = postgres.getConnectionUri()
+  process.env.ADMIN_DATABASE_URL = postgres.getConnectionUri()
+  process.env.DATABASE_MIGRATION_URL = `postgres://${OWNER_ROLE}:test@${host}:${port}/horizon_test`
   process.env.REDIS_URL = redis.getConnectionUrl()
   process.env.RABBITMQ_URL = rabbitmq.getAmqpUrl()
   process.env.TENANT_ID_HASH_SALT = randomUUID()
 
-  // Migrations are applied here once this module has a schema. Drizzle's migrator
-  // is imported lazily so the suite is runnable before the first migration exists.
+  const migrationClient = postgresClient(process.env.DATABASE_MIGRATION_URL, { max: 1 })
+  try {
+    await migrate(drizzle(migrationClient), {
+      migrationsFolder: './src/infrastructure/database/drizzle/migrations',
+    })
+  } finally {
+    await migrationClient.end()
+  }
 }, 180_000)
 
 afterAll(async () => {

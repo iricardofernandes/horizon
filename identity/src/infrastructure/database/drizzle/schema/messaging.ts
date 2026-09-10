@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
+import { tenants } from './tenants'
 
 /**
  * The transactional outbox (ADR 0024).
@@ -33,7 +34,9 @@ export const outbox = pgTable(
   'outbox',
   {
     id: uuid('id').primaryKey(),
-    tenantId: uuid('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     /** The envelope's `eventId`, and the consumer's deduplication key (ADR 0030). */
     eventId: uuid('event_id').notNull(),
     eventType: text('event_type').notNull(),
@@ -42,6 +45,7 @@ export const outbox = pgTable(
     occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'date' }).notNull(),
     /** W3C trace id, so the asynchronous hop stays inside one trace (ADR 0033). */
     traceId: text('trace_id').notNull(),
+    traceParent: text('trace_parent'),
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     dispatchedAt: timestamp('dispatched_at', { withTimezone: true, mode: 'date' }),
@@ -77,7 +81,9 @@ export const inbox = pgTable(
     sourceModule: text('source_module').notNull(),
     eventId: uuid('event_id').notNull(),
     eventType: text('event_type').notNull(),
-    tenantId: uuid('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     receivedAt: timestamp('received_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),

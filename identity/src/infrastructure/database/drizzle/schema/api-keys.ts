@@ -1,4 +1,15 @@
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
+import { tenants } from './tenants'
+import { users } from './users'
 
 /**
  * `hz_<env>_<prefix>_<secret>` (ADR 0022), stored in the only two halves that make sense:
@@ -17,7 +28,9 @@ export const apiKeys = pgTable(
   'api_keys',
   {
     id: uuid('id').primaryKey(),
-    tenantId: uuid('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     issuedBy: uuid('issued_by').notNull(),
     name: text('name').notNull(),
     environment: text('environment').notNull(),
@@ -32,6 +45,11 @@ export const apiKeys = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (table) => [
+    foreignKey({
+      name: 'api_keys_tenant_issuer_fk',
+      columns: [table.tenantId, table.issuedBy],
+      foreignColumns: [users.tenantId, users.id],
+    }),
     uniqueIndex('api_keys_prefix_key').on(table.prefix),
     index('api_keys_tenant_keyset_idx').on(table.tenantId, table.createdAt, table.id),
     index('api_keys_tenant_issuer_idx').on(table.tenantId, table.issuedBy),

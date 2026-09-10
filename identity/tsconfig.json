@@ -5,7 +5,6 @@
     "module": "preserve",
     "moduleResolution": "bundler",
     "types": ["node"],
-
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -13,19 +12,17 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
-
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-
     "noEmit": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-
     "rootDir": "src",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "esModuleInterop": true
   },
   "include": ["src"],
   "exclude": ["src/**/*.spec.ts"]

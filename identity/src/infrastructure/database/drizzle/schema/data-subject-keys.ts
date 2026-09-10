@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { tenants } from './tenants'
 
 /**
  * One key per data subject, and the subject's id **is** the primary key — so there is no
@@ -14,10 +15,16 @@ import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
  * This table has its own backup schedule and its own access audit, because losing a key
  * here is an unintentional, irreversible erasure.
  */
-export const dataSubjectKeys = pgTable('data_subject_keys', {
-  id: uuid('id').primaryKey(),
-  tenantId: uuid('tenant_id').notNull(),
-  material: text('material'),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
-  erasedAt: timestamp('erased_at', { withTimezone: true, mode: 'date' }),
-})
+export const dataSubjectKeys = pgTable(
+  'data_subject_keys',
+  {
+    id: uuid('id').primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    material: text('material'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+    erasedAt: timestamp('erased_at', { withTimezone: true, mode: 'date' }),
+  },
+  (table) => [uniqueIndex('data_subject_keys_tenant_id_key').on(table.tenantId, table.id)],
+)

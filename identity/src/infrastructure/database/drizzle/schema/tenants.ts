@@ -31,5 +31,8 @@ export const tenants = pgTable('tenants', {
  */
 export const tenantDirectory = pgTable('tenant_directory', {
   slug: text('slug').primaryKey(),
-  tenantId: uuid('tenant_id').notNull().unique(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .unique()
+    .references(() => tenants.id),
 })
