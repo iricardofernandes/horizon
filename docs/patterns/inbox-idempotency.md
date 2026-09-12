@@ -12,6 +12,16 @@ Identity has no business event consumer; its transaction helper exists to prove 
 pattern before other modules copy it. Consumers must separately validate the envelope
 and payload, configure bounded prefetch and own dead-letter handling.
 
+Catalog is the first consumer, and its failure policy is two-valued because "retry
+forever" and "discard" are both wrong. A message that can never be understood —
+malformed, or an event type and version the module holds no contract for — is
+dead-lettered on arrival: redelivering it produces the same verdict and holds up the
+queue behind it. A handler that throws gets exactly one immediate redelivery and is then
+dead-lettered, which absorbs a transient dependency failure without turning a persistent
+bug into an invisible loop. Acknowledge only after the transaction commits, and make the
+handler independently idempotent as well: the inbox protects against the broker, not
+against an operator running the same provisioning by hand.
+
 For an HTTP write carrying an optional Idempotency-Key, claim a Redis record before
 executing the handler. Include authenticated tenant, principal and endpoint in its
 scope. Store a request-body digest separately: reusing a key with another body is 409,

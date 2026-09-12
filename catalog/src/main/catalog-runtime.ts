@@ -9,6 +9,7 @@ import {
   ListUnitsUseCase,
 } from '@/application/use-cases/list-catalog'
 import { CreatePriceListUseCase, SetPriceUseCase } from '@/application/use-cases/manage-prices'
+import { ProvisionTenantCatalogUseCase } from '@/application/use-cases/provision-tenant-catalog'
 import { RedisTokenDenylist } from '@/infrastructure/cache/redis-token-denylist'
 import { JwksAccessTokenVerifier } from '@/infrastructure/cryptography/jwks-access-token-verifier'
 import { SystemClock } from '@/infrastructure/cryptography/system-clock'
@@ -29,6 +30,7 @@ export class CatalogRuntime implements OnModuleInit, OnModuleDestroy {
   readonly createPriceList: CreatePriceListUseCase
   readonly listPriceLists: ListPriceListsUseCase
   readonly setPrice: SetPriceUseCase
+  readonly provisionTenantCatalog: ProvisionTenantCatalogUseCase
 
   constructor(readonly config: CatalogEnvironment) {
     const clock = new SystemClock()
@@ -63,6 +65,9 @@ export class CatalogRuntime implements OnModuleInit, OnModuleDestroy {
     this.createPriceList = new CreatePriceListUseCase(db, clock)
     this.listPriceLists = new ListPriceListsUseCase(db)
     this.setPrice = new SetPriceUseCase(db, clock)
+    this.provisionTenantCatalog = new ProvisionTenantCatalogUseCase(db, clock, {
+      priceListCurrency: config.DEFAULT_PRICE_LIST_CURRENCY,
+    })
   }
 
   async onModuleInit(): Promise<void> {

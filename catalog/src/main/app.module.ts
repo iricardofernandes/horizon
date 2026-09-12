@@ -11,6 +11,7 @@ import { PriceListsController } from '@/infrastructure/http/price-lists.controll
 import { ProblemDetailsFilter } from '@/infrastructure/http/problem-details-filter'
 import { SystemController } from '@/infrastructure/http/system.controller'
 import { UnitsController } from '@/infrastructure/http/units.controller'
+import { RabbitMqEventConsumer } from '@/infrastructure/messaging/event-consumer'
 import { OutboxWorker } from '@/infrastructure/messaging/outbox-worker'
 import { CatalogRuntime } from './catalog-runtime'
 import type { CatalogEnvironment } from './environment'
@@ -40,6 +41,29 @@ export class AppModule {
           ),
       },
     ]
+    providers.push({
+      provide: RabbitMqEventConsumer,
+      inject: [CatalogRuntime],
+      useFactory: (runtime: CatalogRuntime) =>
+        new RabbitMqEventConsumer({
+          url: config.RABBITMQ_URL,
+          prefetch: config.AMQP_PREFETCH,
+          handlers: {
+            'identity.tenant.created': async (event) => {
+              const provisioned = await runtime.provisionTenantCatalog.execute({
+                tenantId: event.tenantId,
+                event: {
+                  sourceModule: 'identity',
+                  eventId: event.eventId,
+                  eventType: event.eventType,
+                },
+              })
+              // A throw is the signal the consumer reads; it decides retry or dead-letter.
+              if (provisioned.isLeft()) throw provisioned.value
+            },
+          },
+        }),
+    })
     // The relay is a separate role and therefore a separate connection string. Without
     // one, this process serves HTTP and something else delivers the outbox.
     if (config.DATABASE_RELAY_URL !== undefined)

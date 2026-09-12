@@ -3,11 +3,10 @@ import { z } from 'zod'
 const positive = z.coerce.number().int().positive()
 
 /**
- * Everything the process actually reads, and nothing it does not. Values reserved for
- * a consumer Catalog has not built yet — the AMQP consumer's prefetch, the inbox
- * retention sweep, the outbound HTTP client and its breaker — are documented in
- * `.env.example` and deliberately absent here: validating a setting nothing honours
- * would be a claim that it does something.
+ * Everything the process actually reads, and nothing it does not. Values reserved for a
+ * consumer Catalog has not built yet — the inbox retention sweep, the outbound HTTP
+ * client and its breaker — are documented in `.env.example` and deliberately absent
+ * here: validating a setting nothing honours would be a claim that it does something.
  */
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -22,6 +21,7 @@ const environmentSchema = z.object({
     .optional(),
   REDIS_URL: z.url().regex(/^rediss?:\/\//),
   RABBITMQ_URL: z.url().regex(/^amqps?:\/\//),
+  AMQP_PREFETCH: positive.max(1000).default(20),
   OUTBOX_POLL_INTERVAL_MS: positive.default(1000),
   OUTBOX_BATCH_SIZE: positive.max(1000).default(100),
   IDEMPOTENCY_TTL_SECONDS: positive.max(604_800).default(86_400),
@@ -32,6 +32,12 @@ const environmentSchema = z.object({
   /** Trusting the gateway's verification would make reaching the port a bypass. */
   TRUST_GATEWAY_JWT: z.enum(['false']).default('false'),
   TENANT_ID_HASH_SALT: z.string().min(16),
+  /** `identity.tenant.created` carries no currency; a new tenant base list needs one. */
+  DEFAULT_PRICE_LIST_CURRENCY: z
+    .string()
+    .length(3)
+    .regex(/^[A-Z]{3}$/)
+    .default('BRL'),
 })
 
 export type CatalogEnvironment = z.infer<typeof environmentSchema>

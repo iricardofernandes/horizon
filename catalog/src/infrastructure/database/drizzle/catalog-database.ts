@@ -5,7 +5,12 @@ import { and, asc, desc, eq, gt, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { type TenantScope, UnitOfWork } from '@/application/ports/unit-of-work'
+import {
+  type EventOutcome,
+  type ReceivedEvent,
+  type TenantScope,
+  UnitOfWork,
+} from '@/application/ports/unit-of-work'
 import type { Either } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
@@ -33,12 +38,6 @@ export interface CatalogDatabaseOptions {
   readonly url: string
   readonly poolMax?: number
   readonly statementTimeoutMs?: number
-}
-
-export interface ReceivedEvent {
-  readonly sourceModule: string
-  readonly eventId: string
-  readonly eventType: string
 }
 
 export class CatalogDatabase extends UnitOfWork {
@@ -77,7 +76,7 @@ export class CatalogDatabase extends UnitOfWork {
     tenantId: string,
     event: ReceivedEvent,
     work: (scope: TenantScope) => Promise<T>,
-  ): Promise<{ processed: false } | { processed: true; value: T }> {
+  ): Promise<EventOutcome<T>> {
     return this.inTenant(tenantId, async (scope) => {
       const current = this.#transactions.getStore()
       if (!current) throw new Error('Inbox processing requires a transaction')

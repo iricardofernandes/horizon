@@ -1,4 +1,4 @@
-import type { TenantScope } from '@/application/ports/unit-of-work'
+import type { EventOutcome, ReceivedEvent, TenantScope } from '@/application/ports/unit-of-work'
 import { UnitOfWork } from '@/application/ports/unit-of-work'
 import type { Page, PaginationParams } from '@/core/repositories/pagination-params'
 import { AuditEntry } from '@/domain/audit/audit-entry'
@@ -171,6 +171,28 @@ export class InMemoryCatalogUnitOfWork extends UnitOfWork {
   readonly items: CatalogItem[] = []
   readonly priceLists: PriceList[] = []
   readonly auditEntries: AuditEntry[] = []
+  readonly provisionedTenants = new Set<string>()
+  readonly consumedEvents = new Set<string>()
+
+  provisionTenant(tenantId: string): Promise<void> {
+    this.provisionedTenants.add(tenantId)
+    return Promise.resolve()
+  }
+
+  async processEvent<T>(
+    tenantId: string,
+    event: ReceivedEvent,
+    work: (scope: TenantScope) => Promise<T>,
+  ): Promise<EventOutcome<T>> {
+    const key = `${event.sourceModule}:${event.eventId}`
+    if (this.consumedEvents.has(key)) return { processed: false }
+    // Claimed only once the handler commits, mirroring a transaction that rolls the
+    // claim back with the work it failed to do.
+    const value = await this.inTenant(tenantId, work)
+    this.consumedEvents.add(key)
+    return { processed: true, value }
+  }
+
   inTenant<T>(tenantId: string, work: (scope: TenantScope) => Promise<T>): Promise<T> {
     return work({
       tenantId,

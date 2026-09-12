@@ -7,9 +7,10 @@ and its own lifecycle. It is reached through Kong, never directly, and it shares
 source with any other module (ADR 0001).
 
 **Status: phase 6 — in progress.** The domain, the use cases, the tenant-scoped
-persistence, the outbox relay, the authenticated HTTP surface and the audit chain are
-real and tested. Still outstanding: the AMQP consumer that feeds the inbox. See
-[`docs/plan.md`](../docs/plan.md) for what arrives when.
+persistence, the outbox relay, the AMQP consumer, the authenticated HTTP surface and the
+audit chain are real and tested. What remains of the phase is repository-level: the
+expand/contract migration recipe this module owes, and closing the phase in
+[`docs/plan.md`](../docs/plan.md).
 
 ---
 
@@ -46,7 +47,15 @@ refusals.
 
 | Event | Reaction |
 |---|---|
-| `identity.tenant.created` | Will create the tenant's default unit-of-measure set and an empty base price list. The inbox and its deduplication are implemented and tested; the AMQP consumer that feeds them is not wired yet. |
+| `identity.tenant.created` | Creates the tenant's default units — `UN`, `KG`, `L`, `H` — and an empty base price list in `DEFAULT_PRICE_LIST_CURRENCY`. |
+
+Consumption is bounded and explicit: a durable `catalog.events` queue, prefetch from
+`AMQP_PREFETCH`, and a dead-letter exchange behind it. A message this module cannot
+understand — malformed, or an event type and version it holds no contract for — is
+dead-lettered on arrival rather than redelivered into a loop. A handler that throws gets
+exactly one immediate retry and is then dead-lettered, which covers a database blip
+without hiding a persistent bug. `catalog.events.dlq` is the queue a human looks at;
+nothing is discarded.
 
 Every published event is written to the `outbox` table inside the same transaction as
 the state change it describes, and relayed by a poller using `FOR UPDATE SKIP LOCKED`
@@ -183,12 +192,12 @@ Every variable is required unless a default is shown in `.env.example`. Configur
 is validated with Zod at boot, so a missing or malformed value stops the process
 immediately rather than surfacing as a failure on first use.
 
-Several settings below are reserved for a consumer Catalog has not built yet —
-`AMQP_PREFETCH` and `INBOX_RETENTION_DAYS` wait for the AMQP consumer,
-`HTTP_CLIENT_TIMEOUT_MS` and the two `CIRCUIT_BREAKER_*` values for the first outbound
-call — and are deliberately not validated at boot, because validating a setting nothing
-honours would be a claim that it does something. `TRUST_GATEWAY_JWT=true` is rejected.
-`DATABASE_RELAY_URL` is optional: without it this process serves HTTP and does not relay.
+Some settings below are reserved for something Catalog has not built yet —
+`INBOX_RETENTION_DAYS` waits for the retention sweep, `HTTP_CLIENT_TIMEOUT_MS` and the two
+`CIRCUIT_BREAKER_*` values for the first outbound call — and are deliberately not
+validated at boot, because validating a setting nothing honours would be a claim that it
+does something. `TRUST_GATEWAY_JWT=true` is rejected. `DATABASE_RELAY_URL` is optional:
+without it this process serves HTTP and does not relay.
 
 | `NODE_ENV` | — |
 | `PORT` | HTTP port. Behind Kong in every environment; exposed directly only in local development. |
@@ -201,6 +210,7 @@ honours would be a claim that it does something. `TRUST_GATEWAY_JWT=true` is rej
 | `REDIS_URL` | Denylist, idempotency records, rate counters. |
 | `RABBITMQ_URL` | — |
 | `AMQP_PREFETCH` | Bounded consumer concurrency (ADR 0027). |
+| `DEFAULT_PRICE_LIST_CURRENCY` | The currency a new tenant's base price list is created in. |
 | `OUTBOX_POLL_INTERVAL_MS` | Relay poll interval; the floor on publish latency (ADR 0024). |
 | `OUTBOX_BATCH_SIZE` | Rows claimed per poll with FOR UPDATE SKIP LOCKED. |
 | `INBOX_RETENTION_DAYS` | Must exceed the maximum possible redelivery window. |
