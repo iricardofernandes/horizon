@@ -17,6 +17,7 @@ const telemetry = new NodeSDK({
   metricReaders: [],
 })
 const clock = { now: () => new Date() }
+const actor = { type: 'user', id: randomUUID() } as const
 let database: CatalogDatabase
 let owner: ReturnType<typeof postgres>
 let first: OutboxRelay
@@ -62,6 +63,7 @@ async function enqueue(count: number) {
   const tenantId = randomUUID()
   await database.provisionTenant(tenantId)
   const unit = await new CreateUnitUseCase(database, clock).execute({
+    actor,
     tenantId,
     code: 'UN',
     name: 'Unit',
@@ -70,6 +72,7 @@ async function enqueue(count: number) {
   if (unit.isLeft()) throw unit.value
   for (let index = 0; index < count; index++) {
     const item = await new CreateCatalogItemUseCase(database, clock).execute({
+      actor,
       tenantId,
       kind: 'product',
       sku: `SKU-${index}-${randomBytes(4).toString('hex')}`,

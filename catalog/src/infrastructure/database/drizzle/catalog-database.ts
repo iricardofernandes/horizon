@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, asc, eq, gt, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
@@ -10,9 +10,12 @@ import type { Either } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
 import type { Page } from '@/core/repositories/pagination-params'
+import type { AuditEntry } from '@/domain/audit/audit-entry'
+import { AuditEntry as AuditLink } from '@/domain/audit/audit-entry'
 import { CatalogItem } from '@/domain/entities/catalog-item'
 import { PriceList } from '@/domain/entities/price-list'
 import { UnitOfMeasure } from '@/domain/entities/unit-of-measure'
+import type { AuditRecord } from '@/domain/repositories/audit-log-repository'
 import {
   CatalogName,
   Currency,
@@ -211,6 +214,67 @@ async function publish(
   }
 }
 
+/**
+ * The sequence and the previous hash are read and written inside the caller's
+ * transaction, under a per-tenant lock. Two concurrent appends therefore serialize:
+ * without the lock they would read the same predecessor and produce two rows claiming
+ * it, which the primary key would reject as a lost write rather than a forked chain —
+ * the lock turns a failure into a queue.
+ *
+ * Identity takes that lock on the tenant row. Catalog cannot: its application role holds
+ * SELECT and INSERT on `tenants` and nothing more, and `SELECT ... FOR NO KEY UPDATE`
+ * needs UPDATE. Granting UPDATE on a table this module only mirrors, purely to take a
+ * lock, would trade a real privilege for a synchronisation primitive. A transaction-scoped
+ * advisory lock is the primitive, and it is released by commit or rollback either way.
+ */
+async function appendAudit(
+  tx: Transaction,
+  tenantId: string,
+  record: AuditRecord,
+): Promise<AuditEntry> {
+  const lockKey = `catalog.audit:${tenantId}`
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`)
+  const known = await tx
+    .select({ id: schema.tenants.id })
+    .from(schema.tenants)
+    .where(eq(schema.tenants.id, tenantId))
+  if (known.length === 0) throw new Error('Audit tenant does not exist')
+  const [last] = await tx
+    .select()
+    .from(schema.auditLog)
+    .orderBy(desc(schema.auditLog.sequence))
+    .limit(1)
+  const entry = AuditLink.append({
+    payload: {
+      tenantId,
+      sequence: (last?.sequence ?? 0) + 1,
+      actorType: record.actor.type,
+      actorId: record.actor.id,
+      subjectType: record.subjectType,
+      subjectId: record.subjectId,
+      action: record.action,
+      occurredAt: record.occurredAt,
+      requestId: record.requestId ?? null,
+      traceId: record.traceId ?? null,
+      sourceIp: record.sourceIp ?? null,
+      before: record.before ?? null,
+      after: record.after ?? null,
+      // A catalogue holds no credentials, so nothing is removed before hashing. The
+      // member is hashed regardless, so redaction can begin later without changing the
+      // format of a chain that already exists.
+      redacted: [],
+    },
+    ...(last ? { previousHash: last.hash } : {}),
+  })
+  const snapshot = entry.toSnapshot()
+  await tx.insert(schema.auditLog).values({ ...snapshot, redacted: [...snapshot.redacted] })
+  return entry
+}
+
+function mapAudit(row: typeof schema.auditLog.$inferSelect): AuditEntry {
+  return AuditLink.rehydrate(row, new UniqueEntityID(row.id))
+}
+
 function makeScope(tx: Transaction, tenantId: string): TenantScope {
   const assertTenant = (actual: string) => {
     if (actual !== tenantId) throw new Error('Aggregate tenant does not match transaction')
@@ -389,5 +453,25 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
       return page(lists, params.limit, (list) => encodeCursor(list.toSnapshot()))
     },
   }
-  return { tenantId, units, items, priceLists }
+  const audit: TenantScope['audit'] = {
+    append: (record) => appendAudit(tx, tenantId, record),
+    walk: async (fromSequence, limit) => {
+      const rows = await tx
+        .select()
+        .from(schema.auditLog)
+        .where(gt(schema.auditLog.sequence, fromSequence))
+        .orderBy(asc(schema.auditLog.sequence))
+        .limit(limit)
+      return rows.map(mapAudit)
+    },
+    lastSequence: async () =>
+      (
+        await tx
+          .select({ sequence: schema.auditLog.sequence })
+          .from(schema.auditLog)
+          .orderBy(desc(schema.auditLog.sequence))
+          .limit(1)
+      )[0]?.sequence ?? 0,
+  }
+  return { tenantId, units, items, priceLists, audit }
 }

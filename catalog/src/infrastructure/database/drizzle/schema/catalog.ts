@@ -155,24 +155,46 @@ export const inbox = pgTable(
   (table) => [uniqueIndex('inbox_source_event_key').on(table.sourceModule, table.eventId)],
 )
 
+/**
+ * Append-only, hash-chained per tenant (ADR 0025).
+ *
+ * Append-only is enforced twice: \`REVOKE UPDATE, DELETE\` from the application role and a
+ * trigger that raises on UPDATE, DELETE or TRUNCATE. The second exists so that if the
+ * privileges are ever restored by mistake — a careless \`GRANT ALL\`, a restored dump —
+ * the prohibition still holds.
+ *
+ * \`sequence\` is per tenant and gapless, so the verifier can walk a chain in order and
+ * name the first broken link; the primary key on \`(tenant_id, sequence)\` is what makes
+ * two concurrent writers claiming the same predecessor a failed transaction rather than a
+ * forked chain.
+ */
 export const auditLog = pgTable(
   'audit_log',
   {
+    id: uuid('id').notNull(),
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id),
-    sequence: bigint('sequence', { mode: 'bigint' }).notNull(),
+    sequence: bigint('sequence', { mode: 'number' }).notNull(),
+    actorType: text('actor_type').notNull(),
     actorId: uuid('actor_id'),
     action: text('action').notNull(),
     subjectType: text('subject_type').notNull(),
     subjectId: uuid('subject_id').notNull(),
     requestId: text('request_id'),
     traceId: text('trace_id'),
+    sourceIp: text('source_ip'),
     before: jsonb('before').$type<Record<string, unknown> | null>(),
     after: jsonb('after').$type<Record<string, unknown> | null>(),
+    /** Which members were removed before hashing — and it is inside the hash (ADR 0025). */
+    redacted: jsonb('redacted').$type<string[]>().notNull().default([]),
     previousHash: text('previous_hash').notNull(),
     hash: text('hash').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
-  (table) => [primaryKey({ columns: [table.tenantId, table.sequence] })],
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.sequence] }),
+    uniqueIndex('audit_log_id_key').on(table.id),
+    index('audit_log_tenant_subject_idx').on(table.tenantId, table.subjectType, table.subjectId),
+  ],
 )

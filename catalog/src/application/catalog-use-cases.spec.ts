@@ -12,9 +12,12 @@ import {
 import { CreatePriceListUseCase, SetPriceUseCase } from './use-cases/manage-prices'
 
 const clock = { now: () => new Date('2026-01-01T00:00:00Z') }
+/** Every write names who performed it; the audit chain has no anonymous entries. */
+const actor = { type: 'user', id: randomUUID() } as const
 
 async function seed(tenantId: string, unitOfWork = new InMemoryCatalogUnitOfWork()) {
   const unit = await new CreateUnitUseCase(unitOfWork, clock).execute({
+    actor,
     tenantId,
     code: 'UN',
     name: 'Unit',
@@ -22,6 +25,7 @@ async function seed(tenantId: string, unitOfWork = new InMemoryCatalogUnitOfWork
   })
   if (unit.isLeft()) throw unit.value
   const item = await new CreateCatalogItemUseCase(unitOfWork, clock).execute({
+    actor,
     tenantId,
     kind: 'product',
     sku: 'COFFEE-1',
@@ -39,16 +43,24 @@ describe('catalog use cases', () => {
     const unitOfWork = new InMemoryCatalogUnitOfWork()
     const useCase = new CreateUnitUseCase(unitOfWork, clock)
     expect(
-      (await useCase.execute({ tenantId, code: '?', name: 'Unit', decimalPlaces: 0 })).isLeft(),
+      (
+        await useCase.execute({ actor, tenantId, code: '?', name: 'Unit', decimalPlaces: 0 })
+      ).isLeft(),
     ).toBe(true)
     expect(
-      (await useCase.execute({ tenantId, code: 'UN', name: 'Unit', decimalPlaces: 9 })).isLeft(),
+      (
+        await useCase.execute({ actor, tenantId, code: 'UN', name: 'Unit', decimalPlaces: 9 })
+      ).isLeft(),
     ).toBe(true)
     expect(
-      (await useCase.execute({ tenantId, code: 'UN', name: 'Unit', decimalPlaces: 0 })).isRight(),
+      (
+        await useCase.execute({ actor, tenantId, code: 'UN', name: 'Unit', decimalPlaces: 0 })
+      ).isRight(),
     ).toBe(true)
     expect(
-      (await useCase.execute({ tenantId, code: 'un', name: 'Other', decimalPlaces: 0 })).isLeft(),
+      (
+        await useCase.execute({ actor, tenantId, code: 'un', name: 'Other', decimalPlaces: 0 })
+      ).isLeft(),
     ).toBe(true)
   })
 
@@ -59,12 +71,20 @@ describe('catalog use cases', () => {
     const useCase = new CreateCatalogItemUseCase(unitOfWork, clock)
     expect(
       (
-        await useCase.execute({ tenantId: tenantB, kind: 'product', sku: 'X', name: 'X', unitId })
+        await useCase.execute({
+          actor,
+          tenantId: tenantB,
+          kind: 'product',
+          sku: 'X',
+          name: 'X',
+          unitId,
+        })
       ).isLeft(),
     ).toBe(true)
     expect(
       (
         await useCase.execute({
+          actor,
           tenantId: tenantA,
           kind: 'product',
           sku: 'COFFEE-1',
@@ -76,6 +96,7 @@ describe('catalog use cases', () => {
     expect(
       (
         await useCase.execute({
+          actor,
           tenantId: tenantA,
           kind: 'service',
           sku: 'SERVICE',
@@ -93,6 +114,7 @@ describe('catalog use cases', () => {
     const listing = await new ListCatalogItemsUseCase(unitOfWork).execute({ tenantId: tenantB })
     expect(listing.value.items).toHaveLength(0)
     const deactivated = await new DeactivateCatalogItemUseCase(unitOfWork, clock).execute({
+      actor,
       tenantId: tenantB,
       itemId,
     })
@@ -103,6 +125,7 @@ describe('catalog use cases', () => {
     const tenantId = randomUUID()
     const { unitOfWork } = await seed(tenantId)
     const priceList = await new CreatePriceListUseCase(unitOfWork, clock).execute({
+      actor,
       tenantId,
       name: 'Base',
       currency: 'BRL',
@@ -124,6 +147,7 @@ describe('catalog use cases', () => {
     const tenantId = randomUUID()
     const { unitOfWork, itemId } = await seed(tenantId)
     const created = await new CreatePriceListUseCase(unitOfWork, clock).execute({
+      actor,
       tenantId,
       name: 'Base',
       currency: 'BRL',
@@ -132,6 +156,7 @@ describe('catalog use cases', () => {
     expect(
       (
         await new CreatePriceListUseCase(unitOfWork, clock).execute({
+          actor,
           tenantId,
           name: 'Base',
           currency: 'BRL',
@@ -142,6 +167,7 @@ describe('catalog use cases', () => {
     expect(
       (
         await setPrice.execute({
+          actor,
           tenantId,
           priceListId: created.value.priceListId,
           itemId,
@@ -153,6 +179,7 @@ describe('catalog use cases', () => {
     expect(
       (
         await setPrice.execute({
+          actor,
           tenantId,
           priceListId: created.value.priceListId,
           itemId,
@@ -169,12 +196,17 @@ describe('catalog use cases', () => {
     const tenantId = randomUUID()
     const { unitOfWork, itemId } = await seed(tenantId)
     const create = new CreatePriceListUseCase(unitOfWork, clock)
-    expect((await create.execute({ tenantId, name: '', currency: 'BRL' })).isLeft()).toBe(true)
-    expect((await create.execute({ tenantId, name: 'Base', currency: 'real' })).isLeft()).toBe(true)
+    expect((await create.execute({ actor, tenantId, name: '', currency: 'BRL' })).isLeft()).toBe(
+      true,
+    )
+    expect(
+      (await create.execute({ actor, tenantId, name: 'Base', currency: 'real' })).isLeft(),
+    ).toBe(true)
     const setPrice = new SetPriceUseCase(unitOfWork, clock)
     expect(
       (
         await setPrice.execute({
+          actor,
           tenantId,
           priceListId: randomUUID(),
           itemId,
@@ -183,11 +215,12 @@ describe('catalog use cases', () => {
         })
       ).isLeft(),
     ).toBe(true)
-    const created = await create.execute({ tenantId, name: 'Base', currency: 'BRL' })
+    const created = await create.execute({ actor, tenantId, name: 'Base', currency: 'BRL' })
     if (created.isLeft()) throw created.value
     expect(
       (
         await setPrice.execute({
+          actor,
           tenantId,
           priceListId: created.value.priceListId,
           itemId: randomUUID(),
@@ -199,6 +232,7 @@ describe('catalog use cases', () => {
     expect(
       (
         await setPrice.execute({
+          actor,
           tenantId,
           priceListId: created.value.priceListId,
           itemId,
@@ -213,7 +247,7 @@ describe('catalog use cases', () => {
     const tenantId = randomUUID()
     const { unitOfWork, itemId } = await seed(tenantId)
     const useCase = new DeactivateCatalogItemUseCase(unitOfWork, clock)
-    expect((await useCase.execute({ tenantId, itemId })).isRight()).toBe(true)
-    expect((await useCase.execute({ tenantId, itemId })).isLeft()).toBe(true)
+    expect((await useCase.execute({ actor, tenantId, itemId })).isRight()).toBe(true)
+    expect((await useCase.execute({ actor, tenantId, itemId })).isLeft()).toBe(true)
   })
 })

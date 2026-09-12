@@ -15,7 +15,7 @@ import { z } from 'zod'
 import { CatalogRuntime } from '@/main/catalog-runtime'
 import { RequestSchema } from './api-schema'
 import { ReadDuringDenylistOutage, RequirePermission } from './authorization'
-import { type CatalogHttpRequest, tenantOf } from './http-context'
+import { auditOf, type CatalogHttpRequest, tenantOf } from './http-context'
 import { presentPage, presentPriceList, unwrap } from './presenters'
 import { listRequest } from './query'
 
@@ -58,7 +58,11 @@ export class PriceListsController {
   async create(@Body() body: unknown, @Req() request: CatalogHttpRequest) {
     const input = createPriceList.parse(body)
     return unwrap(
-      await this.runtime.createPriceList.execute({ ...input, tenantId: tenantOf(request) }),
+      await this.runtime.createPriceList.execute({
+        ...input,
+        tenantId: tenantOf(request),
+        ...auditOf(request),
+      }),
     )
   }
 
@@ -77,6 +81,7 @@ export class PriceListsController {
       await this.runtime.setPrice.execute({
         ...input,
         tenantId: tenantOf(request),
+        ...auditOf(request),
         priceListId: z.uuid().parse(priceListId),
         itemId: z.uuid().parse(itemId),
       }),

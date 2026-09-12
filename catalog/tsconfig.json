@@ -25,7 +25,11 @@
     "rootDir": "src",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+
+    // The CLI entry points run through @swc-node/register, which honours this when it
+    // transforms a default import of a CommonJS package such as `postgres`.
+    "esModuleInterop": true
   },
   "include": ["src"],
   "exclude": ["src/**/*.spec.ts"]

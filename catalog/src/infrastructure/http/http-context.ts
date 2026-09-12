@@ -1,3 +1,5 @@
+import { context as activeContext, trace } from '@opentelemetry/api'
+import type { Actor } from '@/domain/audit/audit-entry'
 import type { VerifiedAccessToken } from '@/infrastructure/cryptography/jwks-access-token-verifier'
 
 export interface CatalogHttpRequest {
@@ -21,4 +23,24 @@ export function principal(request: CatalogHttpRequest): VerifiedAccessToken {
 
 export function tenantOf(request: CatalogHttpRequest): string {
   return principal(request).tenantId
+}
+
+/**
+ * Catalog authenticates bearer tokens only. Identity mints them for a person, including
+ * when an API key was exchanged for one, so the actor recorded here is that person —
+ * which is the identity an auditor needs. A module that later authenticates a key
+ * directly owes the 'api-key' actor type at that point.
+ */
+export function actor(request: CatalogHttpRequest): Actor {
+  return { type: 'user', id: principal(request).subject }
+}
+
+/** The actor plus what ties the entry to a log line, a trace and a caller. */
+export function auditOf(request: CatalogHttpRequest) {
+  return {
+    actor: actor(request),
+    requestId: request.id ?? null,
+    traceId: trace.getSpan(activeContext.active())?.spanContext().traceId ?? null,
+    sourceIp: request.ip ?? null,
+  }
 }

@@ -22,7 +22,19 @@ nonzero on a broken link, naming the first failing sequence. Batch sizes are bou
 and must be positive integers. The HTTP administrative endpoint invokes the same use case.
 
 For another module, change the action vocabulary, sensitive fields and subject-key
-ownership; retain canonical serialization byte for byte. A chain detects modification
+ownership; retain canonical serialization byte for byte. Where the module stores no
+personal data, say so and keep the diffs in the clear — but keep the redacted-path list
+inside the hashed payload regardless, or introducing redaction later changes the format
+of a chain that already exists.
+
+**The lock is a per-module decision.** Identity serializes appends on the tenant row, which
+needs `UPDATE` on `tenants`. Catalog's application role holds only `SELECT` and `INSERT`
+there, because it mirrors tenants rather than owning them, and `SELECT … FOR NO KEY UPDATE`
+requires `UPDATE`. Granting a write privilege to obtain a lock trades something real for a
+synchronisation primitive; a transaction-scoped advisory lock keyed by tenant is the
+primitive, and it is released by commit or rollback either way. Whichever is used, prove it
+with concurrent appends against PostgreSQL — consecutive sequence numbers, no gap and no
+duplicate. A chain detects modification
 and interior removal relative to retained links. Detecting a privileged deletion of
 the entire tail also needs an independently stored checkpoint; the local verifier
 does not promise that property. Test concurrent appends, tampering, privilege mistakes

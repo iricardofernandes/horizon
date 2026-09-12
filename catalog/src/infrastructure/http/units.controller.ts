@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { CatalogRuntime } from '@/main/catalog-runtime'
 import { RequestSchema } from './api-schema'
 import { ReadDuringDenylistOutage, RequirePermission } from './authorization'
-import { type CatalogHttpRequest, tenantOf } from './http-context'
+import { auditOf, type CatalogHttpRequest, tenantOf } from './http-context'
 import { presentPage, presentUnit, unwrap } from './presenters'
 import { listRequest } from './query'
 
@@ -32,6 +32,12 @@ export class UnitsController {
   @RequirePermission('manage', 'Units')
   async create(@Body() body: unknown, @Req() request: CatalogHttpRequest) {
     const input = createUnit.parse(body)
-    return unwrap(await this.runtime.createUnit.execute({ ...input, tenantId: tenantOf(request) }))
+    return unwrap(
+      await this.runtime.createUnit.execute({
+        ...input,
+        tenantId: tenantOf(request),
+        ...auditOf(request),
+      }),
+    )
   }
 }

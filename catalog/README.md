@@ -7,8 +7,8 @@ and its own lifecycle. It is reached through Kong, never directly, and it shares
 source with any other module (ADR 0001).
 
 **Status: phase 6 — in progress.** The domain, the use cases, the tenant-scoped
-persistence, the outbox relay and the authenticated HTTP surface are real and tested.
-Still outstanding: the AMQP consumer that feeds the inbox, and audit chaining. See
+persistence, the outbox relay, the authenticated HTTP surface and the audit chain are
+real and tested. Still outstanding: the AMQP consumer that feeds the inbox. See
 [`docs/plan.md`](../docs/plan.md) for what arrives when.
 
 ---
@@ -101,6 +101,37 @@ it is daily work.
 Revocation is checked against the denylist Identity writes (ADR 0021). While that store is
 unreachable, list endpoints — and only those, declared per handler and visible in OpenAPI
 as `x-revocation-store-outage` — continue to answer; every write is refused with `503`.
+
+---
+
+## Audit
+
+Every write appends a link to the tenant's hash chain in the same transaction as the
+change itself (ADR 0025), recording who acted, on what, before and after, and the request
+and trace identifiers that tie the entry to a log line and to a span.
+
+```bash
+DATABASE_URL=… npm run audit:verify -- <tenant-uuid>
+```
+
+The command walks the chain in bounded batches and prints a verdict; it exits non-zero and
+names the **first** sequence that does not match, because "the log is invalid" is not an
+actionable answer while "intact through 40,912; entry 40,913 does not match" is. Editing a
+row or removing one from the middle both break it — the successor's `previous_hash` stops
+matching its predecessor.
+
+Append-only is enforced twice in the database: the application role holds no `UPDATE` or
+`DELETE` on the table, and a trigger raises on `UPDATE`, `DELETE` and `TRUNCATE` so the
+prohibition survives a careless `GRANT`. Appends serialize on a per-tenant advisory lock,
+so eight concurrent writers produce eight consecutive links rather than a fork.
+
+**What it does not promise.** A privileged operator who deletes the entire tail leaves a
+shorter chain that still verifies. Detecting that needs a checkpoint stored where this
+database cannot reach; Catalog does not have one, and says so rather than implying the
+chain is proof against its own administrator. Catalog also stores no personal data, so
+unlike Identity nothing here is encrypted under a data-subject key or redacted before
+hashing — the `redacted` member is part of the hashed payload anyway, so that redaction
+can begin later without changing the format of a chain that already exists.
 
 ---
 

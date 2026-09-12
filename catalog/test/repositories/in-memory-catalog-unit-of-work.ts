@@ -1,9 +1,11 @@
 import type { TenantScope } from '@/application/ports/unit-of-work'
 import { UnitOfWork } from '@/application/ports/unit-of-work'
 import type { Page, PaginationParams } from '@/core/repositories/pagination-params'
+import { AuditEntry } from '@/domain/audit/audit-entry'
 import type { CatalogItem } from '@/domain/entities/catalog-item'
 import type { PriceList } from '@/domain/entities/price-list'
 import type { UnitOfMeasure } from '@/domain/entities/unit-of-measure'
+import type { AuditLogRepository, AuditRecord } from '@/domain/repositories/audit-log-repository'
 import {
   CatalogItemsRepository,
   PriceListsRepository,
@@ -119,16 +121,63 @@ class InMemoryPriceListsRepository
   }
 }
 
+/** Chains for real, so a use-case test can assert the chain and not merely the call. */
+class InMemoryAuditLogRepository implements AuditLogRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly entries: AuditEntry[],
+  ) {}
+  private visible(): AuditEntry[] {
+    return this.entries.filter((entry) => entry.toSnapshot().tenantId === this.tenantId)
+  }
+  append(record: AuditRecord): Promise<AuditEntry> {
+    const last = this.visible().at(-1)
+    const entry = AuditEntry.append({
+      payload: {
+        tenantId: this.tenantId,
+        sequence: (last?.sequenceNumber() ?? 0) + 1,
+        actorType: record.actor.type,
+        actorId: record.actor.id,
+        subjectType: record.subjectType,
+        subjectId: record.subjectId,
+        action: record.action,
+        occurredAt: record.occurredAt,
+        requestId: record.requestId ?? null,
+        traceId: record.traceId ?? null,
+        sourceIp: record.sourceIp ?? null,
+        before: record.before ?? null,
+        after: record.after ?? null,
+        redacted: [],
+      },
+      ...(last ? { previousHash: last.hashValue() } : {}),
+    })
+    this.entries.push(entry)
+    return Promise.resolve(entry)
+  }
+  walk(fromSequence: number, limit: number): Promise<readonly AuditEntry[]> {
+    return Promise.resolve(
+      this.visible()
+        .filter((entry) => entry.sequenceNumber() > fromSequence)
+        .slice(0, limit),
+    )
+  }
+  lastSequence(): Promise<number> {
+    return Promise.resolve(this.visible().at(-1)?.sequenceNumber() ?? 0)
+  }
+}
+
 export class InMemoryCatalogUnitOfWork extends UnitOfWork {
   readonly units: UnitOfMeasure[] = []
   readonly items: CatalogItem[] = []
   readonly priceLists: PriceList[] = []
+  readonly auditEntries: AuditEntry[] = []
   inTenant<T>(tenantId: string, work: (scope: TenantScope) => Promise<T>): Promise<T> {
     return work({
       tenantId,
       units: new InMemoryUnitsRepository(tenantId, this.units),
       items: new InMemoryItemsRepository(tenantId, this.items),
       priceLists: new InMemoryPriceListsRepository(tenantId, this.priceLists),
+      audit: new InMemoryAuditLogRepository(tenantId, this.auditEntries),
     })
   }
 }

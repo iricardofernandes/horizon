@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:e2e": "vitest run --config vitest.config.e2e.mts",
+    "audit:verify": "node --enable-source-maps dist/infrastructure/cli/verify-audit.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs"
   },

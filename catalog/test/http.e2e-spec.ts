@@ -2,6 +2,8 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import type { INestApplication } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { Test } from '@nestjs/testing'
+import { trace } from '@opentelemetry/api'
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node'
 import request from 'supertest'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -11,11 +13,19 @@ import { CatalogRuntime } from '@/main/catalog-runtime'
 import { readEnvironment } from '@/main/environment'
 import { FakeIdentity, type TestRoleAssignment } from './support/access-tokens'
 
+// Started for its context manager: without one there is no active span for an audit
+// entry to borrow a trace id from, and the correlation assertion below would be vacuous.
+const telemetry = new NodeSDK({
+  spanProcessors: [new tracing.SimpleSpanProcessor(new tracing.InMemorySpanExporter())],
+  logRecordProcessors: [],
+  metricReaders: [],
+})
 let app: INestApplication
 let runtime: CatalogRuntime
 let identity: FakeIdentity
 
 beforeAll(async () => {
+  telemetry.start()
   identity = await FakeIdentity.start()
   const config = readEnvironment({
     ...process.env,
@@ -36,6 +46,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close()
   await identity?.stop()
+  await telemetry.shutdown()
 })
 
 async function tenant(
@@ -248,6 +259,46 @@ it('creates, lists, pages and deactivates through the published surface', async 
   expect(deactivated.body.data.find((entry: { id: string }) => entry.id === first).active).toBe(
     false,
   )
+})
+
+it('records the authenticated principal as the actor behind every write', async () => {
+  const admin = await tenant()
+  let requestTraceId = ''
+  const created = await trace
+    .getTracer('catalog.test')
+    .startActiveSpan('test.request', async (span) => {
+      requestTraceId = span.spanContext().traceId
+      try {
+        return await request(app.getHttpServer())
+          .post('/units')
+          .set(authorized(admin.token))
+          .set('x-request-id', 'audit-correlation')
+          .send({
+            code: `A${randomBytes(2).toString('hex').toUpperCase()}`,
+            name: 'Audited',
+            decimalPlaces: 0,
+          })
+          .expect(201)
+      } finally {
+        span.end()
+      }
+    })
+
+  const entries = await runtime.database.inTenant(admin.tenantId, (scope) =>
+    scope.audit.walk(0, 10),
+  )
+  expect(entries).toHaveLength(1)
+  expect(entries[0]?.toSnapshot()).toMatchObject({
+    action: 'catalog.unit.created',
+    actorType: 'user',
+    actorId: admin.subject,
+    subjectType: 'UnitOfMeasure',
+    subjectId: z.object({ unitId: z.uuid() }).parse(created.body).unitId,
+    // The same correlation id the client sent, the response echoed and the logs carry.
+    requestId: 'audit-correlation',
+  })
+  // One trace from the caller's span to the audit row that records what it did.
+  expect(entries[0]?.toSnapshot().traceId).toBe(requestTraceId)
 })
 
 it('maps every expected failure to its problem type without echoing the request', async () => {

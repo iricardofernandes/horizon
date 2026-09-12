@@ -15,7 +15,7 @@ import { z } from 'zod'
 import { CatalogRuntime } from '@/main/catalog-runtime'
 import { RequestSchema } from './api-schema'
 import { ReadDuringDenylistOutage, RequirePermission } from './authorization'
-import { type CatalogHttpRequest, tenantOf } from './http-context'
+import { auditOf, type CatalogHttpRequest, tenantOf } from './http-context'
 import { presentItem, presentPage, unwrap } from './presenters'
 import { listRequest } from './query'
 
@@ -54,6 +54,7 @@ export class ItemsController {
     return unwrap(
       await this.runtime.createItem.execute({
         tenantId: tenantOf(request),
+        ...auditOf(request),
         kind: input.kind,
         sku: input.sku,
         name: input.name,
@@ -71,6 +72,7 @@ export class ItemsController {
     unwrap(
       await this.runtime.deactivateItem.execute({
         tenantId: tenantOf(request),
+        ...auditOf(request),
         itemId: z.uuid().parse(itemId),
       }),
     )

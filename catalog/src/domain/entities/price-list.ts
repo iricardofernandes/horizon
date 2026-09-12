@@ -71,6 +71,9 @@ export class PriceList extends AggregateRoot<PriceListProps> {
     )
     return right(undefined)
   }
+  priceOf(itemId: string): bigint | null {
+    return this.props.prices.get(itemId) ?? null
+  }
   belongsTo(tenantId: string): boolean {
     return this.props.tenantId === tenantId
   }

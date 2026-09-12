@@ -1,12 +1,15 @@
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { CreateCatalogItemUseCase } from '@/application/use-cases/create-catalog-item'
 import { CreateUnitUseCase } from '@/application/use-cases/create-unit'
 import { CreatePriceListUseCase, SetPriceUseCase } from '@/application/use-cases/manage-prices'
+import { VerifyAuditChainUseCase } from '@/application/use-cases/verify-audit-chain'
 import { CatalogDatabase } from '@/infrastructure/database/drizzle/catalog-database'
 
 const clock = { now: () => new Date() }
+const actor = { type: 'user', id: randomUUID() } as const
 let database: CatalogDatabase
 let application: ReturnType<typeof postgres>
 let owner: ReturnType<typeof postgres>
@@ -24,6 +27,7 @@ afterAll(async () => {
 async function seed(tenantId = randomUUID()) {
   await database.provisionTenant(tenantId)
   const unit = await new CreateUnitUseCase(database, clock).execute({
+    actor,
     tenantId,
     code: 'UN',
     name: 'Unit',
@@ -31,6 +35,7 @@ async function seed(tenantId = randomUUID()) {
   })
   if (unit.isLeft()) throw unit.value
   const item = await new CreateCatalogItemUseCase(database, clock).execute({
+    actor,
     tenantId,
     kind: 'product',
     sku: 'COFFEE-1',
@@ -40,6 +45,7 @@ async function seed(tenantId = randomUUID()) {
   })
   if (item.isLeft()) throw item.value
   const list = await new CreatePriceListUseCase(database, clock).execute({
+    actor,
     tenantId,
     name: 'Base',
     currency: 'BRL',
@@ -56,6 +62,7 @@ async function seed(tenantId = randomUUID()) {
 it('persists every aggregate and its outbox event atomically', async () => {
   const fixture = await seed()
   const changed = await new SetPriceUseCase(database, clock).execute({
+    actor,
     tenantId: fixture.tenantId,
     priceListId: fixture.listId,
     itemId: fixture.itemId,
@@ -150,3 +157,103 @@ it('uses unprivileged roles and keeps audit records append-only', async () => {
   expect(privileges[0]).toEqual({ item_delete: false, outbox_update: false })
   await expect(owner`truncate audit_log`).rejects.toThrow('append-only')
 })
+
+it('chains an audit entry for every catalog change, naming the actor', async () => {
+  const fixture = await seed()
+  const changed = await new SetPriceUseCase(database, clock).execute({
+    actor,
+    tenantId: fixture.tenantId,
+    priceListId: fixture.listId,
+    itemId: fixture.itemId,
+    amount: '3990',
+    currency: 'BRL',
+    requestId: 'audit-e2e',
+  })
+  expect(changed.isRight()).toBe(true)
+
+  const rows =
+    await owner`select * from audit_log where tenant_id = ${fixture.tenantId} order by sequence`
+  expect(rows.map((row) => row.action)).toEqual([
+    'catalog.unit.created',
+    'catalog.item.created',
+    'catalog.price-list.created',
+    'catalog.price.changed',
+  ])
+  expect(rows[0]).toMatchObject({ sequence: '1', actor_type: 'user', actor_id: actor.id })
+  expect(rows[0]?.previous_hash).toBe('0'.repeat(64))
+  expect(rows[3]).toMatchObject({ request_id: 'audit-e2e' })
+  expect(rows[3]?.previous_hash).toBe(rows[2]?.hash)
+
+  const verdict = await new VerifyAuditChainUseCase(database).execute({
+    tenantId: fixture.tenantId,
+  })
+  if (verdict.isLeft()) throw verdict.value
+  expect(verdict.value).toMatchObject({ intact: true, verifiedThrough: 4, brokenAt: null })
+})
+
+it('serializes concurrent appends and names the first link a forgery breaks', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  await Promise.all(
+    Array.from({ length: 8 }, () =>
+      database.inTenant(tenantId, (scope) =>
+        scope.audit.append({
+          actor: { type: 'system', id: null },
+          subjectType: 'Catalog',
+          subjectId: tenantId,
+          action: 'catalog.checked',
+          occurredAt: new Date(),
+        }),
+      ),
+    ),
+  )
+  const sequences = (
+    await owner`select sequence from audit_log where tenant_id = ${tenantId} order by sequence`
+  ).map((row) => Number(row.sequence))
+  // Eight writers, eight consecutive links: the tenant row lock turned a race into a
+  // queue rather than into a failed transaction or a forked chain.
+  expect(sequences).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+
+  const verifier = new VerifyAuditChainUseCase(database)
+  const before = await verifier.execute({ tenantId })
+  if (before.isLeft()) throw before.value
+  expect(before.value.intact).toBe(true)
+
+  // Only the table owner can even attempt this, and only by disabling the trigger the
+  // migration installed. The point of the chain is that doing so is still detectable.
+  await owner.begin(async (tx) => {
+    await tx`alter table audit_log disable trigger audit_append_only`
+    await tx`update audit_log set action = 'catalog.forged' where tenant_id = ${tenantId} and sequence = 3`
+    await tx`alter table audit_log enable trigger audit_append_only`
+  })
+  const after = await verifier.execute({ tenantId })
+  if (after.isLeft()) throw after.value
+  expect(after.value).toMatchObject({ intact: false, verifiedThrough: 2, brokenAt: 3 })
+
+  const cli = await runAuditCli(tenantId)
+  expect(cli.stderr).toBe('')
+  expect(cli.code).toBe(1)
+  expect(JSON.parse(cli.stdout)).toMatchObject({ intact: false, verifiedThrough: 2, brokenAt: 3 })
+})
+
+async function runAuditCli(
+  tenantId: string,
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['-r', '@swc-node/register', 'src/infrastructure/cli/verify-audit.ts', tenantId],
+      { env: process.env, timeout: 20000, stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString()
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+    child.on('error', reject)
+    child.on('close', (code) => resolve({ code, stdout, stderr }))
+  })
+}
