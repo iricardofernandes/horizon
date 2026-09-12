@@ -6,9 +6,10 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 1 — scaffold.** Configuration, tooling and documentation are real;
-there is no domain code yet. See [`docs/plan.md`](../docs/plan.md) for what arrives
-when.
+**Status: phase 6 — in progress.** The domain, the use cases, the tenant-scoped
+persistence and the outbox relay are real and tested; the HTTP surface has not landed
+yet, so the endpoints table below is still empty. See
+[`docs/plan.md`](../docs/plan.md) for what arrives when.
 
 ---
 
@@ -37,16 +38,15 @@ refusals.
 
 | Event | Meaning |
 |---|---|
-| `catalog.product.created` | A new item exists and may be ordered or stocked. |
-| `catalog.product.updated` | Descriptive attributes changed. Consumers holding projections should refresh. |
-| `catalog.product.discontinued` | The item may no longer be added to new orders; existing orders are unaffected. |
-| `catalog.price-list.published` | A price list version became effective. |
+| `catalog.item.created` | A product or service exists and may be ordered or stocked. |
+| `catalog.item.deactivated` | The item may no longer be added to new documents; existing ones are unaffected. |
+| `catalog.price.changed` | The current amount for an item in a price list changed; order snapshots are unaffected. |
 
 ### Consumed
 
 | Event | Reaction |
 |---|---|
-| `identity.tenant.created` | Creates the tenant's default unit-of-measure set and an empty base price list. |
+| `identity.tenant.created` | Will create the tenant's default unit-of-measure set and an empty base price list. The inbox and its deduplication are implemented and tested; the AMQP consumer that feeds them is not wired yet. |
 
 Every published event is written to the `outbox` table inside the same transaction as
 the state change it describes, and relayed by a poller using `FOR UPDATE SKIP LOCKED`
@@ -60,21 +60,21 @@ does not define its own wire shapes.
 
 ## Endpoints
 
-None yet — this module is a scaffold. Its HTTP surface arrives with its phase, and
-OpenAPI is generated from the controllers and Zod schemas at that point, aggregated at
-the gateway and published by CI.
+None yet. The use cases exist and are tested, but nothing exposes them over HTTP; the
+controllers, their Zod schemas and the OpenAPI document generated from both are the next
+step of phase 6.
 
 | Method | Path | Purpose |
 |---|---|---|
-| — | — | *(none in phase 1)* |
+| — | — | *(no HTTP surface yet)* |
 
 ---
 
 ## Running it locally
 
-The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) is a phase 2
-deliverable. Until then this module runs standalone and serves 404s, which is enough to
-verify the toolchain.
+The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) comes up with
+`make up` at the repository root. This module has no HTTP routes yet, so running it
+serves 404s; its behaviour is exercised through the test suites below.
 
 ```bash
 npm install          # or npm ci
@@ -93,7 +93,7 @@ Redis and RabbitMQ via Testcontainers rather than using a shared instance (ADR 0
 npm run test:e2e
 ```
 
-Migrations, once this module has a schema:
+Migrations:
 
 ```bash
 npm run db:generate  # emit SQL from the Drizzle schema
@@ -124,6 +124,7 @@ immediately rather than surfacing as a failure on first use.
 | `DATABASE_URL` | Application role. Holds neither SUPERUSER nor BYPASSRLS, so RLS applies to it (ADR 0017). |
 | `DATABASE_MIGRATION_URL` | Owner role, used only by `db:migrate`. The application never connects with it. |
 | `DATABASE_POOL_MAX` | Bulkhead: the pool this service may consume (ADR 0027). |
+| `DATABASE_RELAY_URL` | Separate relay role, granted access only to `outbox`. Omit to disable the local relay. |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | No query waits without a bound. |
 | `REDIS_URL` | Denylist, idempotency records, rate counters. |
 | `RABBITMQ_URL` | — |

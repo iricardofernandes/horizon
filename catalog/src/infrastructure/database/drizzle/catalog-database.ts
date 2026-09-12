@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { randomBytes, randomUUID } from 'node:crypto'
-import { context, trace } from '@opentelemetry/api'
+import { randomBytes } from 'node:crypto'
+import { context, propagation, trace } from '@opentelemetry/api'
 import { and, asc, eq, gt, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
@@ -191,19 +191,22 @@ async function publish(
 ): Promise<void> {
   for (const event of events) {
     if (event.tenantId !== tenantId) throw new Error('Event tenant does not match transaction')
-    const span = trace.getSpan(context.active())?.spanContext()
+    // The outbox row id doubles as the eventId: one UUIDv7 (ADR 0009) that consumers
+    // deduplicate on, preserved across every relay retry.
+    const id = new UniqueEntityID().toString()
+    const carrier: Record<string, string> = {}
+    propagation.inject(context.active(), carrier)
     await tx.insert(schema.outbox).values({
-      id: randomUUID(),
-      eventId: randomUUID(),
+      id,
+      eventId: id,
       tenantId,
       eventType: event.eventType,
       eventVersion: event.eventVersion,
       occurredAt: event.occurredAt,
-      traceId: span?.traceId ?? randomBytes(16).toString('hex'),
-      traceParent: span
-        ? `00-${span.traceId}-${span.spanId}-${span.traceFlags.toString(16).padStart(2, '0')}`
-        : null,
-      payload: event.payloadOf(),
+      traceId:
+        trace.getSpan(context.active())?.spanContext().traceId ?? randomBytes(16).toString('hex'),
+      traceParent: carrier.traceparent ?? null,
+      payload: { ...event.payloadOf() },
     })
   }
 }

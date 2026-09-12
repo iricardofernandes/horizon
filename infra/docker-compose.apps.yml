@@ -99,17 +99,37 @@ services:
       # from AWS Secrets Manager instead (ADR 0018).
       - ./keys:/keys:ro
 
+  catalog-migrate:
+    <<: *service
+    build:
+      context: ../catalog
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_catalog
+    command: ["npm", "run", "db:migrate"]
+
   catalog:
     <<: *service
     build:
       context: ../catalog
     container_name: horizon-catalog
+    depends_on:
+      catalog-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     environment:
       <<: *env
       PORT: '3002'
       OTEL_SERVICE_NAME: catalog
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_catalog
       DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_catalog
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_catalog
 
   inventory:
     <<: *service
