@@ -23,3 +23,17 @@ For another module, replace the ability map and resource subjects. Keep signatur
 revocation verification; receiving a role name does not grant its semantics until the
 local map says so. Test another module's role, another tenant's resource identifiers,
 expired keys, revocation and both sides of the Redis outage policy.
+
+A module that does not own the signing keys verifies against the published JWKS document
+instead. Three facts are then a cross-module contract rather than Identity's private
+business, and Catalog is where that first mattered:
+
+- **The issuer is `horizon-identity-<kid>`** — one issuer per signing key, because Kong
+  OSS selects a credential by `iss` (ADR 0036). Bind the claim to the verified header's
+  `kid`, or a token signed by a retired key replays under the active key's issuer.
+- **The denylist keys are `identity:denylist:jti:<base64url>` and
+  `identity:denylist:subject:<base64url>`.** Identity revokes, every module checks
+  (ADR 0021). Copy the key builders; renaming them is a breaking change for every reader.
+- **An unreachable key set is an outage, not a forgery.** An unknown `kid` is 401; a JWKS
+  document that never arrived is 503, or a key-server incident reads as every token in the
+  system being rejected as invalid.

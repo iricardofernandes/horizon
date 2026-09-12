@@ -10,7 +10,10 @@ call the use case and unwrap its result; the global filter selects HTTP status a
 formats `application/problem+json`. A new expected error needs a stable problem type,
 a concise title and an explicit filter mapping.
 
-Validation problems identify the JSON pointer without returning the request body.
+Validation problems identify the JSON pointer without returning the request body. An
+issue that carries no path of its own still needs one: a rejected unknown member is
+reported against the object, so expand it into a pointer per key rather than returning a
+bare `/`.
 Unexpected failures return a generic message and log only safe diagnostic metadata.
 Never serialize an Error cause, database query or environment wholesale: these can
 contain passwords, encrypted values or credentials. Presenters enumerate allowed

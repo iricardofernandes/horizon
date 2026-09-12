@@ -18,6 +18,9 @@
       "quoteStyle": "single",
       "trailingCommas": "all",
       "arrowParentheses": "always"
+    },
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
     }
   },
   "linter": {

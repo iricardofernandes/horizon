@@ -7,9 +7,9 @@
 # source — which is the normal development loop. Each image is built from its own
 # directory as the sole context (ADR 0002); needing a sibling's file breaks the build.
 #
-# In phase 1 these services have no routes and answer 404. They are wired here now so
-# that the wiring is reviewed alongside the platform rather than invented later under
-# pressure.
+# A service whose phase has not begun has no routes and answers 404. Every service is
+# wired here from the start so that the wiring is reviewed alongside the platform rather
+# than invented later under pressure.
 name: horizon
 
 x-service: &service
@@ -130,6 +130,7 @@ services:
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_catalog
       DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_catalog
       DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_catalog
+      IDEMPOTENCY_SECRET: local-development-only-idempotency-secret
 
   inventory:
     <<: *service

@@ -7,8 +7,8 @@ and its own lifecycle. It is reached through Kong, never directly, and it shares
 source with any other module (ADR 0001).
 
 **Status: phase 6 — in progress.** The domain, the use cases, the tenant-scoped
-persistence and the outbox relay are real and tested; the HTTP surface has not landed
-yet, so the endpoints table below is still empty. See
+persistence, the outbox relay and the authenticated HTTP surface are real and tested.
+Still outstanding: the AMQP consumer that feeds the inbox, and audit chaining. See
 [`docs/plan.md`](../docs/plan.md) for what arrives when.
 
 ---
@@ -60,21 +60,55 @@ does not define its own wire shapes.
 
 ## Endpoints
 
-None yet. The use cases exist and are tested, but nothing exposes them over HTTP; the
-controllers, their Zod schemas and the OpenAPI document generated from both are the next
-step of phase 6.
+Reached through Kong, never directly. OpenAPI is generated from the controllers and the
+same Zod schemas that validate the request, and served at `/docs`.
 
-| Method | Path | Purpose |
-|---|---|---|
-| — | — | *(no HTTP surface yet)* |
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| `GET` | `/units` | `read:Units` | List units of measure, keyset-paginated. |
+| `POST` | `/units` | `manage:Units` | Define a unit of measure. |
+| `GET` | `/items` | `read:Items` | List products and services, keyset-paginated. |
+| `POST` | `/items` | `manage:Items` | Add a product or service. |
+| `PATCH` | `/items/{itemId}/deactivate` | `manage:Items` | Stop the item being added to new documents. Existing references stay valid. |
+| `GET` | `/price-lists` | `read:PriceLists` | List price lists with their current prices. |
+| `POST` | `/price-lists` | `manage:PriceLists` | Create a price list in one currency. |
+| `PUT` | `/price-lists/{priceListId}/prices/{itemId}` | `manage:Prices` | Set the current price of an item. |
+| `GET` | `/health/live` | public | Is the process running. |
+| `GET` | `/health/ready` | public | Are PostgreSQL and Redis reachable. |
+
+Writes accept an optional `Idempotency-Key` (ADR 0028): a repeat of the same request
+replays the stored response, and the same key with a different body is a `409`.
+
+### Authorization
+
+The bearer token is verified here against Identity's published keys — `EdDSA` only, the
+issuer bound to the token's own `kid` — so reaching this service's port directly grants
+nothing (ADR 0008). **The tenant comes from the `tenant_id` claim; a request header that
+says otherwise is ignored.**
+
+Identity stores `{ module, role }` pairs and cannot expand them. What a role *means* is
+decided here (ADR 0023), so an `identity` owner or a `sales` admin has no access at all:
+
+| Role | May |
+|---|---|
+| `viewer` | Read units, items and price lists. |
+| `editor` | Everything `viewer` may, plus add and deactivate items and set prices. |
+| `admin` | Everything, including defining units of measure and creating price lists. |
+
+The split is structure versus contents: reshaping the catalogue is administrative, filling
+it is daily work.
+
+Revocation is checked against the denylist Identity writes (ADR 0021). While that store is
+unreachable, list endpoints — and only those, declared per handler and visible in OpenAPI
+as `x-revocation-store-outage` — continue to answer; every write is refused with `503`.
 
 ---
 
 ## Running it locally
 
 The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) comes up with
-`make up` at the repository root. This module has no HTTP routes yet, so running it
-serves 404s; its behaviour is exercised through the test suites below.
+`make up` at the repository root. Through the gateway this module lives under `/catalog`;
+reaching its port directly still requires a valid token.
 
 ```bash
 npm install          # or npm ci
@@ -83,7 +117,7 @@ cp .env.example .env # fill in; the process refuses to start on invalid config
 npm run typecheck    # tsc --noEmit, strict plus the three extra flags
 npm run lint         # biome check
 npm test             # unit tests: no I/O, in-memory fakes
-npm run dev          # http://localhost:3002
+npm run dev          # http://localhost:3002, OpenAPI at /docs
 ```
 
 Integration and e2e tests need a Docker socket — they start their own PostgreSQL,
@@ -118,6 +152,13 @@ Every variable is required unless a default is shown in `.env.example`. Configur
 is validated with Zod at boot, so a missing or malformed value stops the process
 immediately rather than surfacing as a failure on first use.
 
+Several settings below are reserved for a consumer Catalog has not built yet —
+`AMQP_PREFETCH` and `INBOX_RETENTION_DAYS` wait for the AMQP consumer,
+`HTTP_CLIENT_TIMEOUT_MS` and the two `CIRCUIT_BREAKER_*` values for the first outbound
+call — and are deliberately not validated at boot, because validating a setting nothing
+honours would be a claim that it does something. `TRUST_GATEWAY_JWT=true` is rejected.
+`DATABASE_RELAY_URL` is optional: without it this process serves HTTP and does not relay.
+
 | `NODE_ENV` | — |
 | `PORT` | HTTP port. Behind Kong in every environment; exposed directly only in local development. |
 | `LOG_LEVEL` | pino level. `info` in production. |
@@ -133,10 +174,12 @@ immediately rather than surfacing as a failure on first use.
 | `OUTBOX_BATCH_SIZE` | Rows claimed per poll with FOR UPDATE SKIP LOCKED. |
 | `INBOX_RETENTION_DAYS` | Must exceed the maximum possible redelivery window. |
 | `IDEMPOTENCY_TTL_SECONDS` | 24 hours (ADR 0028). |
+| `IDEMPOTENCY_SECRET` | Keys the idempotency record scope and encrypts its cached response body. At least 32 characters. |
 | `HTTP_CLIENT_TIMEOUT_MS` | Every outbound HTTP call. There is no unbounded wait anywhere. |
 | `CIRCUIT_BREAKER_ERROR_THRESHOLD_PERCENT` | — |
 | `CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | How long the breaker stays open before half-open probing. |
 | `JWKS_URL` | Identity's public keys, for local token re-verification. |
+| `ACCESS_TOKEN_MAX_AGE_SECONDS` | The oldest token this service accepts, independent of the lifetime Identity issues. |
 | `TRUST_GATEWAY_JWT` | When false the service re-verifies every token itself, so reaching its port directly grants nothing (ADR 0008). |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | The Collector. Nothing talks to a backend directly (ADR 0033). |
 | `OTEL_SERVICE_NAME` | — |
