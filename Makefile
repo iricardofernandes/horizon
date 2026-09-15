@@ -64,6 +64,8 @@ keys: ## Generate Ed25519 development keys into a gitignored path
 
 # --- platform ----------------------------------------------------------------
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file infra/.env
+HORIZON_RUNTIME_UID := $(shell id -u)
+HORIZON_RUNTIME_GID := $(shell id -g)
 
 infra/.env:
 	@cp infra/.env.example infra/.env
@@ -90,8 +92,10 @@ up: infra/.env infra/keys/public kong-config ## Start the local platform and wai
 
 .PHONY: up-apps
 up-apps: infra/.env infra/keys/public kong-config ## Start the platform plus Horizon's own services
-	@$(COMPOSE) -f infra/docker-compose.apps.yml up -d --build --wait
-	@$(COMPOSE) -f infra/docker-compose.apps.yml restart kong
+	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
+		$(COMPOSE) -f infra/docker-compose.apps.yml up -d --build --wait
+	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
+		$(COMPOSE) -f infra/docker-compose.apps.yml restart kong
 	@for attempt in $$(seq 1 30); do \
 		curl -fsS "http://localhost:$${HORIZON_KONG_ADMIN_PORT:-8001}/status" >/dev/null && exit 0; \
 		sleep 1; \

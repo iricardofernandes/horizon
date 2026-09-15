@@ -67,6 +67,9 @@ services:
     build:
       context: ../identity
       network: host
+    # The development keys stay mode 0600. Matching their host owner keeps them
+    # readable on Linux hosts and CI runners without making private material global.
+    user: '${HORIZON_RUNTIME_UID:-1000}:${HORIZON_RUNTIME_GID:-1000}'
     container_name: horizon-identity
     depends_on:
       identity-migrate:
