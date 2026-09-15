@@ -48,13 +48,13 @@ jobs:
           else
             echo "no private package dependency"
           fi
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_RELEASE_ROLE_ARN }}
           aws-region: us-east-1
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
         with:
           driver-opts: network=host
           buildkitd-flags: --allow-insecure-entitlement network.host
@@ -78,7 +78,7 @@ jobs:
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.16.2
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
           aws-region: us-east-1
@@ -94,7 +94,7 @@ jobs:
             -out=/tmp/horizon.tfplan
       - name: render plan for review
         run: terraform -chdir=infra/terraform show -no-color /tmp/horizon.tfplan > /tmp/horizon-plan.txt
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: terraform-plan-${{ inputs.environment }}-${{ inputs.image_tag }}
           path: /tmp/horizon-plan.txt
