@@ -182,8 +182,14 @@ local hash-chained audit log.
 
 ### 4. Money, dates and fiscal precision
 
-- Persist money as decimal amount plus ISO 4217 currency; never use floating point.
-- Persist instants in UTC and business dates as date-only values.
+- Keep money as an integer count of minor units with an explicit currency, through the
+  `Money` value object (ADR 0010). Finance does not introduce a second money
+  representation, and no monetary path uses floating point.
+- Amounts stay non-negative; direction is an explicit property of the entry, not a sign.
+- Values that need more precision than a minor unit — unit prices, tax rates, interest and
+  penalty rates — use scaled integers with a declared scale, as `Quantity` already does.
+- Persist instants as `timestamptz` in UTC (ADR 0011) and business dates — issue,
+  competence, due, value and posting dates — as date-only columns.
 - Store workspace timezone, legal country, base currency and fiscal regime separately
   from a user's display locale.
 - Define rounding per operation and snapshot it on posted documents.
@@ -271,7 +277,7 @@ before the code that assumes them, each as its own record and each added to the
 | 0040 | A shared party registry, with role-fed projections per consuming context |
 | 0041 | Financial, treasury and ledger are three boundaries, not one finance service |
 | 0042 | Posted records are reversed, never edited or deleted |
-| 0043 | Decimal money with explicit currency, UTC instants, date-only business dates and per-operation rounding |
+| 0043 | Precision beyond the minor unit: scaled rates, date-only business dates and rounding snapshots |
 | 0044 | Localization stops at the presentation boundary; API, event, enum, permission and audit names stay English |
 | 0045 | A routed frontend shell with a permission-driven navigation registry |
 | 0046 | Reconciliation suggests and a human confirms; suggestions never post by themselves |

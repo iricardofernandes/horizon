@@ -271,7 +271,7 @@ Jaeger / Prometheus / Loki / Grafana · Docker · Terraform (never applied) · G
 | [`docs/erp-expansion-plan.md`](docs/erp-expansion-plan.md) | Dependency-ordered plan for finance, purchasing, fiscal, CRM, localization and broader ERP coverage |
 | [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece is deferred |
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
-| [`docs/adr/`](docs/adr/) | 39 decision records |
+| [`docs/adr/`](docs/adr/) | 47 decision records |
 | [`docs/patterns/`](docs/patterns/) | How to reimplement each cross-cutting pattern (phase 5) |
 | [`docs/events.md`](docs/events.md) | The event catalogue, generated from the schemas |
 | [`docs/privacy.md`](docs/privacy.md) | Lawful basis, retention, erasure |

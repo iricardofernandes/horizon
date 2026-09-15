@@ -30,6 +30,7 @@ one means writing a new ADR that supersedes it.
 | [0009](0009-uuidv7-public-identifiers.md) | UUIDv7 for all public identifiers |
 | [0010](0010-money-as-integer-minor-units.md) | Money as integer minor units with explicit currency |
 | [0011](0011-timestamptz-utc-storage.md) | `timestamptz`, UTC in storage, tenant timezone at presentation |
+| [0043](0043-precision-beyond-the-minor-unit.md) | Precision beyond the minor unit: scaled rates, business dates and rounding snapshots |
 
 ## Tenancy and persistence
 
@@ -60,6 +61,7 @@ one means writing a new ADR that supersedes it.
 | [0026](0026-crypto-shredding-for-erasure.md) | Crypto-shredding for LGPD/GDPR erasure |
 | [0027](0027-resilience-policy-for-outbound-calls.md) | Resilience policy for every outbound call |
 | [0028](0028-idempotency-key-on-public-writes.md) | `Idempotency-Key` on public write endpoints |
+| [0042](0042-posted-records-are-reversed.md) | Posted records are reversed, never edited |
 
 ## Contracts and code structure
 
@@ -70,11 +72,22 @@ one means writing a new ADR that supersedes it.
 | [0031](0031-layering-and-object-calisthenics.md) | Clean Architecture layering, and which Object Calisthenics rules apply |
 | [0032](0032-either-for-expected-failures-rfc9457-at-the-boundary.md) | `Either` for expected failures, RFC 9457 at the boundary |
 
+## Business contexts
+
+| # | Decision |
+|---|---|
+| [0040](0040-shared-party-registry.md) | A shared party registry, with role-fed projections |
+| [0041](0041-financial-treasury-ledger-boundaries.md) | Financial, treasury and ledger are three boundaries |
+| [0046](0046-reconciliation-suggests-a-human-confirms.md) | Reconciliation suggests, a human confirms |
+| [0047](0047-reporting-projections-never-write-back.md) | Reporting projections never write back |
+
 ## Frontend
 
 | # | Decision |
 |---|---|
 | [0039](0039-frontend-design-system-foundation.md) | Inter, Phosphor, Base UI and Radix Colors as the frontend foundation |
+| [0044](0044-localization-stops-at-the-presentation-boundary.md) | Localization stops at the presentation boundary |
+| [0045](0045-routed-shell-with-permission-navigation-registry.md) | A routed frontend shell with a permission-driven navigation registry |
 
 ## Testing, observability and operations
 
