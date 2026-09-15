@@ -31,6 +31,8 @@ WORKDIR /app
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/src/infrastructure/database/drizzle/migrations ./src/infrastructure/database/drizzle/migrations
 COPY package.json ./
 
 # non-root; node:alpine ships an unprivileged `node` user

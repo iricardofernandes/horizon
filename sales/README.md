@@ -6,9 +6,13 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 1 — scaffold.** Configuration, tooling and documentation are real;
-there is no domain code yet. See [`docs/plan.md`](../docs/plan.md) for what arrives
-when.
+**Status: phase 7 — complete.** The versioned choreography with Inventory is defined in
+`@horizon/contracts@0.3.0`. The domain owns customers, expiring quotes, monotonic order
+transitions and immutable commercial snapshots with exact monetary arithmetic. Customer
+PII is authenticated-encrypted per subject and exact tax-id lookup uses a blind index;
+erasure destroys the subject key. Forced-RLS PostgreSQL persistence, inbox/outbox,
+RabbitMQ transport, bounded retry, circuit breaker, metrics and cross-service tracing
+are all exercised by the phase 7 E2E flow.
 
 ---
 
@@ -47,7 +51,9 @@ refusals.
 
 | Event | Reaction |
 |---|---|
-| `catalog.product.updated` | Refreshes the local product projection used for order entry. |
+| `catalog.item.created` | Creates the local product or service projection used for order entry. |
+| `catalog.item.deactivated` | Prevents the item from being added to new orders. |
+| `catalog.price.changed` | Refreshes the current price projection; confirmed order snapshots never change. |
 | `inventory.stock.reserved` | Advances the order to confirmed. |
 | `inventory.stock.reservation-rejected` | Fails the order with the reported shortfall. |
 
@@ -59,17 +65,21 @@ the state change it describes, and relayed by a poller using `FOR UPDATE SKIP LO
 Schemas live in `@horizon/contracts` and are versioned there (ADR 0030); this module
 does not define its own wire shapes.
 
+Every order transition increments a monotonic `orderVersion`. Inventory echoes the
+version it handled, so a late reservation outcome cannot move a newer or cancelled order
+backward.
+
 ---
 
 ## Endpoints
 
-None yet — this module is a scaffold. Its HTTP surface arrives with its phase, and
-OpenAPI is generated from the controllers and Zod schemas at that point, aggregated at
-the gateway and published by CI.
+Sales exposes its application commands internally in phase 7 and consumes Catalog and
+Inventory facts through RabbitMQ. The phase 8 golden-path entry point and seed command
+are the next public surface.
 
 | Method | Path | Purpose |
 |---|---|---|
-| — | — | *(none in phase 1)* |
+| — | — | *(application commands and event consumers only in phase 7)* |
 
 ---
 
@@ -96,7 +106,7 @@ Redis and RabbitMQ via Testcontainers rather than using a shared instance (ADR 0
 npm run test:e2e
 ```
 
-Migrations, once this module has a schema:
+Migrations:
 
 ```bash
 npm run db:generate  # emit SQL from the Drizzle schema
@@ -126,6 +136,7 @@ immediately rather than surfacing as a failure on first use.
 | `LOG_LEVEL` | pino level. `info` in production. |
 | `DATABASE_URL` | Application role. Holds neither SUPERUSER nor BYPASSRLS, so RLS applies to it (ADR 0017). |
 | `DATABASE_MIGRATION_URL` | Owner role, used only by `db:migrate`. The application never connects with it. |
+| `DATABASE_RELAY_URL` | Optional relay-only role. When present, the service runs its embedded outbox worker. |
 | `DATABASE_POOL_MAX` | Bulkhead: the pool this service may consume (ADR 0027). |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | No query waits without a bound. |
 | `REDIS_URL` | Denylist, idempotency records, rate counters. |
@@ -145,6 +156,7 @@ immediately rather than surfacing as a failure on first use.
 | `OTEL_TRACES_SAMPLER_ARG` | Full sampling locally; errors are always sampled. |
 | `TENANT_ID_HASH_SALT` | Tenant ids are hashed before appearing in logs and metrics (ADR 0033). |
 | `QUOTE_DEFAULT_VALIDITY_DAYS` | Default expiry applied to a new quote. |
+| `CUSTOMER_BLIND_INDEX_KEY` | 32-byte lowercase hex key for exact customer tax-id lookup without plaintext indexes. |
 | `ORDER_CONFIRMATION_TIMEOUT_MS` | How long an order waits for a reservation outcome before failing (ADR 0027). |
 
 ---
