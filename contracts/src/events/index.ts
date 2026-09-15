@@ -8,10 +8,24 @@ import {
   userDisabled,
   userRegistered,
 } from './identity'
+import {
+  inventoryStockMoved,
+  inventoryStockReleased,
+  inventoryStockReservationRejected,
+  inventoryStockReserved,
+} from './inventory'
+import {
+  salesInvoicingRequested,
+  salesOrderCancelled,
+  salesOrderConfirmed,
+  salesOrderPlaced,
+} from './sales'
 
 export * from './catalog'
 export * from './define'
 export * from './identity'
+export * from './inventory'
+export * from './sales'
 
 /**
  * Every event Horizon publishes.
@@ -30,6 +44,14 @@ export const EVENTS: readonly EventDefinition[] = [
   catalogItemCreated,
   catalogItemDeactivated,
   catalogPriceChanged,
+  salesOrderPlaced,
+  inventoryStockReserved,
+  inventoryStockReservationRejected,
+  salesOrderConfirmed,
+  salesOrderCancelled,
+  inventoryStockReleased,
+  inventoryStockMoved,
+  salesInvoicingRequested,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */
