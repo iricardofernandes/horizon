@@ -4,7 +4,7 @@
   "private": true,
   "description": "Read-only MCP server over the Horizon observability plane.",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "engines": {
     "node": ">=24"
   },
@@ -12,7 +12,7 @@
     "horizon-mcp-debugger": "./dist/main.js"
   },
   "scripts": {
-    "dev": "node --watch -r @swc-node/register src/main.ts",
+    "dev": "node --env-file-if-exists=.env --watch --import @swc-node/register/esm-register src/main.ts",
     "build": "rm -rf dist && swc src -d dist --strip-leading-paths --quiet --ignore '**/*.spec.ts,**/*.e2e-spec.ts'",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
@@ -23,6 +23,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.2.1",
+    "pgsql-ast-parser": "^12.0.2",
     "postgres": "^3.4.9",
     "zod": "^4.5.4"
   },
@@ -31,6 +33,7 @@
     "@swc-node/register": "^1.12.1",
     "@swc/cli": "^0.8.1",
     "@swc/core": "^1.16.2",
+    "@types/express": "^5.0.6",
     "@types/node": "^26.5.0",
     "typescript": "5.9.3",
     "vitest": "^5.0.0"

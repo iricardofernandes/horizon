@@ -29,6 +29,7 @@ volumes:
   prometheus-data:
   loki-data:
   grafana-data:
+  mcp-debugger-audit:
 
 services:
   # ---------------------------------------------------------------- data
@@ -249,6 +250,56 @@ services:
       retries: 20
       start_period: 15s
 
+  # Opt-in operator tool: `docker compose --profile debugger up -d mcp-debugger`.
+  # It is absent from the default runtime and binds only to the host loopback address.
+  mcp-debugger:
+    <<: *restart
+    profiles: [debugger]
+    build:
+      context: ../tooling/mcp-debugger
+    container_name: horizon-mcp-debugger
+    networks: [horizon]
+    ports: ['127.0.0.1:${HORIZON_MCP_DEBUGGER_PORT:-7801}:7801']
+    environment:
+      HORIZON_MCP_DEBUGGER_ENABLED: 'true'
+      MCP_TRANSPORT: http
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: 7801
+      MCP_ALLOWED_HOSTS: 127.0.0.1,localhost,horizon-mcp-debugger
+      MCP_BEARER_TOKEN: '${HORIZON_MCP_BEARER_TOKEN:-horizon-local-debugger-token-change-me}'
+      LOKI_URL: http://loki:3100
+      JAEGER_URL: http://jaeger:16686
+      PROMETHEUS_URL: http://prometheus:9090
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      RABBITMQ_MANAGEMENT_USER: horizon
+      RABBITMQ_MANAGEMENT_PASSWORD: horizon
+      DEBUG_DATABASE_URLS: identity=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_identity,catalog=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_catalog,inventory=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_inventory,sales=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_sales,webhooks=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_webhooks
+      TENANT_ID_HASH_SALT: '${HORIZON_TENANT_HASH_SALT:-horizon-local-tenant-hash-salt}'
+      PII_MASK_FIELDS: email,cpf,cnpj,phone,address,name,ip
+      MAX_RESULT_ROWS: 500
+      MAX_RESULT_BYTES: 262144
+      RATE_LIMIT_PER_TOOL_PER_MINUTE: 30
+      AUDIT_LOG_PATH: /var/log/horizon/mcp-debugger-audit.log
+    volumes:
+      - mcp-debugger-audit:/var/log/horizon
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:7801/mcp').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   # ---------------------------------------------------------------- gateway
   kong:
     <<: *restart
@@ -265,6 +316,8 @@ services:
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
       KONG_ADMIN_GUI_LISTEN: 'off'
       KONG_LOG_LEVEL: notice
+      KONG_TRACING_INSTRUMENTATIONS: all
+      KONG_TRACING_SAMPLING_RATE: '1.0'
       KONG_PROXY_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_ADMIN_ACCESS_LOG: /dev/stdout

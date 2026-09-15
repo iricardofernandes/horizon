@@ -4,13 +4,15 @@
 # instance per module; module code never sees the difference, because it holds a
 # connection string and nothing else.
 #
-# Four roles, and the separation matters (ADR 0017):
+# Five roles, and the separation matters (ADR 0017):
 #   horizon_owner  — owns the schema, runs migrations. The application never uses it.
 #   horizon_app    — what the services connect as. NOSUPERUSER, NOBYPASSRLS, so
 #                    Row-Level Security actually applies to it.
 #   horizon_relay  — outbox delivery only; table grants come from module migrations.
 #   horizon_debug  — the MCP debugger. No privileges on business tables at all
 #                    (ADR 0035); it reads pg_catalog and pg_stat_statements.
+#   horizon_explain — NOLOGIN owner of the narrow SECURITY DEFINER wrappers. It has
+#                     SELECT-only access and cannot be assumed by horizon_debug.
 
 set -euo pipefail
 
@@ -27,6 +29,9 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<-SQL
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
   CREATE ROLE horizon_debug LOGIN PASSWORD '${HORIZON_DEBUG_PASSWORD:-horizon}'
+    NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+
+  CREATE ROLE horizon_explain NOLOGIN
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
   -- Statistics access, not data access. Without this pg_stat_statements shows the
@@ -48,6 +53,7 @@ SQL
     REVOKE ALL ON SCHEMA public FROM PUBLIC;
     GRANT USAGE ON SCHEMA public TO horizon_app;
     GRANT USAGE ON SCHEMA public TO horizon_debug;
+    GRANT USAGE ON SCHEMA public TO horizon_explain;
 
     -- Whatever the owner creates later, the application role can read and write —
     -- subject to RLS, which it cannot bypass.
@@ -58,4 +64,4 @@ SQL
 SQL
 done
 
-echo "postgres init complete: ${#MODULES[@]} databases, 4 roles"
+echo "postgres init complete: ${#MODULES[@]} databases, 5 roles"

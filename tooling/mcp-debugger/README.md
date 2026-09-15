@@ -2,8 +2,9 @@
 
 A read-only MCP server exposing the Horizon observability plane to an AI agent.
 
-**Status: phase 1 — scaffold.** Deliberately the last thing built (phase 12): the tools
-have nothing to read until logs, traces and metrics flow.
+**Status: phase 12 — complete.** The server has stdio and authenticated streamable-HTTP
+transports, ten bounded read-only tools, redaction, an audit trail, and a database role
+whose denied privileges are exercised by `make test-phase12`.
 
 ---
 
@@ -57,7 +58,7 @@ logging API.
 | `describe_schema` | `pg_catalog` | Tables, columns, indexes, constraints and RLS policies for one module |
 | `explain_query` | PostgreSQL | `EXPLAIN (ANALYZE false)` only, for a single validated `SELECT` |
 | `get_slow_queries` | `pg_stat_statements` | Top statements by total and mean time, normalized |
-| `list_dlq_messages` | RabbitMQ management API | Dead-lettered messages per queue, with headers and death counts |
+| `list_dlq_messages` | RabbitMQ management API | DLQ names, depth, consumers and state, without dequeuing |
 | `get_outbox_backlog` | PostgreSQL | Undispatched outbox rows per module, oldest age |
 | `get_service_health` | Prometheus | Error rate, latency and saturation per service over a window |
 
@@ -83,11 +84,31 @@ impossible, so the mechanism is specified rather than improvised (ADR 0035):
 parser is tested against multi-statement input, CTEs containing `INSERT`/`UPDATE`/
 `DELETE`, and `SELECT` calling a volatile function.
 
+The RabbitMQ management endpoint for fetching message bodies is intentionally absent.
+Despite its “ack/requeue” mode, that endpoint dequeues and requeues a message, changing
+delivery metadata and potentially ordering. `list_dlq_messages` therefore reports only
+queue metadata obtainable through `GET /api/queues`. The tool keeps the roadmap name so
+clients have a stable contract, and returns `messageBodiesAvailable: false` explicitly.
+Headers and death counts require a future observer copy written at dead-letter time;
+sampling the live queue would violate the defining read-only constraint.
+
 ---
 
 ## Running it
 
+First install the three narrow database wrappers. This is idempotent and does not grant
+the login role access to any business table:
+
 ```bash
+make setup-phase12
+make test-phase12
+```
+
+For stdio, fill `.env` and start the process. No Anthropic key (or any model key) is
+read by this server:
+
+```bash
+cd tooling/mcp-debugger
 npm install
 cp .env.example .env
 
@@ -97,6 +118,34 @@ npm test
 npm run dev
 ```
 
-For local Claude Code, register the stdio transport; for a remote operator, set
-`MCP_TRANSPORT=http` and provide `MCP_BEARER_TOKEN` — the server refuses to start on the
-HTTP transport without one, and binds to localhost unless told otherwise.
+For a remote-capable operator endpoint, set `MCP_TRANSPORT=http` and a bearer token of at
+least 32 characters. The server refuses HTTP without the token and binds to
+`127.0.0.1:7801` by default. A packaged local instance is also available as an explicit
+Compose profile:
+
+```bash
+make setup-phase12
+docker compose -f infra/docker-compose.yml --env-file infra/.env \
+  --profile debugger up -d --build mcp-debugger
+```
+
+The host mapping remains loopback-only even though the container listens on its private
+network interface. Change the development token in `infra/.env` before sharing access.
+
+## Invocation boundary
+
+Every registered MCP tool carries `readOnlyHint: true` and passes through one executor:
+
+1. rate-limit the caller/tool pair;
+2. invoke only a fixed source operation;
+3. recursively hash tenant identifiers and mask configured PII plus common email,
+   CPF and CNPJ patterns;
+4. cap rows and serialized bytes, reporting `truncated` explicitly;
+5. append a JSON audit record with caller, redacted arguments, outcome, duration and
+   result size.
+
+`explain_query` has two independent gates. `pgsql-ast-parser` accepts exactly one
+`SELECT` (including read-only CTEs) before any database client method is called. The
+database wrapper then applies a second conservative check and executes only
+`EXPLAIN (ANALYZE FALSE, FORMAT JSON)`. Its owner is the NOLOGIN `horizon_explain` role;
+the `horizon_debug` login is not a member and has no table or sequence grants.
