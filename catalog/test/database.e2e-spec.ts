@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { CreateCatalogItemUseCase } from '@/application/use-cases/create-catalog-item'
@@ -235,6 +236,82 @@ it('serializes concurrent appends and names the first link a forgery breaks', as
   expect(cli.code).toBe(1)
   expect(JSON.parse(cli.stdout)).toMatchObject({ intact: false, verifiedThrough: 2, brokenAt: 3 })
 })
+
+it('proves expand/contract compatibility before removing the old column', async () => {
+  await applyMigrationFixture('0000_before.sql')
+  await applyMigrationFixture('0001_expand.sql')
+
+  // One old process and one new process may be live during a rolling deployment. The
+  // compatibility trigger dual-writes for either shape, including updates.
+  await owner`insert into migration_price_lists (id, tenant_id, name)
+    values ('00000000-0000-7000-8000-000000000002',
+            '00000000-0000-7000-8000-000000000010', 'Old writer')`
+  await owner`insert into migration_price_lists (id, tenant_id, display_name)
+    values ('00000000-0000-7000-8000-000000000003',
+            '00000000-0000-7000-8000-000000000010', 'New writer')`
+  await owner`update migration_price_lists set name = 'Old writer updated'
+    where id = '00000000-0000-7000-8000-000000000002'`
+  await owner`update migration_price_lists set display_name = 'New writer updated'
+    where id = '00000000-0000-7000-8000-000000000003'`
+  await owner`update migration_price_lists set active = false
+    where id = '00000000-0000-7000-8000-000000000004'`
+
+  // The backfill is bounded, resumable and safe for multiple workers. A crash after any
+  // batch leaves completed rows complete and the next run selects only remaining rows.
+  let backfilled = 0
+  for (;;) {
+    const rows = await owner`with batch as (
+        select id from migration_price_lists
+        where display_name is null order by id for update skip locked limit 1
+      )
+      update migration_price_lists as target set display_name = target.name
+      from batch where target.id = batch.id returning target.id`
+    if (rows.length === 0) break
+    backfilled += rows.length
+  }
+  expect(backfilled).toBe(1)
+
+  const overlap = await owner`select name, display_name from migration_price_lists order by id`
+  expect(overlap).toEqual([
+    { name: 'Legacy', display_name: 'Legacy' },
+    { name: 'Old writer updated', display_name: 'Old writer updated' },
+    { name: 'New writer updated', display_name: 'New writer updated' },
+    { name: 'Touched legacy', display_name: 'Touched legacy' },
+  ])
+
+  await applyMigrationFixture('0002_cutover.sql')
+  const cutover = await owner`select display_name as name from migration_price_lists order by id`
+  expect(cutover.map((row) => row.name)).toEqual([
+    'Legacy',
+    'Old writer updated',
+    'New writer updated',
+    'Touched legacy',
+  ])
+
+  await applyMigrationFixture('0003_contract.sql')
+  const columns = await owner`select column_name from information_schema.columns
+    where table_schema like 'pg_temp_%' and table_name = 'migration_price_lists'
+    order by ordinal_position`
+  expect(columns.map((row) => row.column_name)).toEqual([
+    'id',
+    'tenant_id',
+    'active',
+    'display_name',
+  ])
+  await expect(owner`select name from migration_price_lists`).rejects.toThrow(
+    'column "name" does not exist',
+  )
+})
+
+async function applyMigrationFixture(name: string): Promise<void> {
+  const url = new URL(`./fixtures/migrations/price-list-name/${name}`, import.meta.url)
+  const source = await readFile(url, 'utf8')
+  const statements = source
+    .split('--> statement-breakpoint')
+    .map((statement) => statement.trim())
+    .filter(Boolean)
+  for (const statement of statements) await owner.unsafe(statement)
+}
 
 async function runAuditCli(
   tenantId: string,

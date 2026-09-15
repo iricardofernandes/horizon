@@ -163,7 +163,10 @@ plugins:
       traces_endpoint: http://otel-collector:4318/v1/traces
       resource_attributes:
         service.name: gateway
-      header_type: w3c
+      propagation:
+        extract: [w3c]
+        inject: [preserve]
+        default_format: w3c
 
   - name: prometheus
     config:

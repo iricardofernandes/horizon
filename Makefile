@@ -32,6 +32,25 @@ test: ## Run unit tests in every project
 test-e2e: ## Run integration and e2e tests (needs a Docker socket)
 	@node scripts/for-each-project.mjs "npm run test:e2e" --kinds service
 
+.PHONY: test-phase7
+test-phase7: ## Run the Inventory/Sales choreography against isolated infrastructure
+	@cd inventory && npm run build
+	@cd sales && npm run build
+	@node scripts/phase7-e2e.mjs
+
+.PHONY: test-phase10
+test-phase10: ## Complete the golden path in Chromium and verify its joined trace
+	@cd web && npm run test:browser
+
+.PHONY: setup-phase12
+setup-phase12: ## Install the MCP debugger's least-privilege PostgreSQL wrappers
+	@bash infra/scripts/install-mcp-debugger-db.sh
+
+.PHONY: test-phase12
+test-phase12: setup-phase12 ## Prove the MCP debugger role cannot read or write business data
+	@cd tooling/mcp-debugger && npm run build && npm test
+	@bash infra/scripts/verify-mcp-debugger-readonly.sh
+
 .PHONY: boundaries
 boundaries: ## Verify module isolation
 	@node scripts/check-boundaries.mjs
@@ -72,6 +91,11 @@ up: infra/.env infra/keys/public kong-config ## Start the local platform and wai
 .PHONY: up-apps
 up-apps: infra/.env infra/keys/public kong-config ## Start the platform plus Horizon's own services
 	@$(COMPOSE) -f infra/docker-compose.apps.yml up -d --build --wait
+	@$(COMPOSE) -f infra/docker-compose.apps.yml restart kong
+	@for attempt in $$(seq 1 30); do \
+		curl -fsS "http://localhost:$${HORIZON_KONG_ADMIN_PORT:-8001}/status" >/dev/null && exit 0; \
+		sleep 1; \
+	done; exit 1
 
 .PHONY: down
 down: ## Stop the platform, keeping data
@@ -102,4 +126,13 @@ publish-contracts: ## Build and publish @horizon/contracts to the local registry
 # --- phase 8 -----------------------------------------------------------------
 .PHONY: demo
 demo: ## Seed a tenant and run the golden path (phase 8)
-	@echo "not yet implemented — phase 8 (see docs/plan.md)" && exit 1
+	@cd identity && npm run build
+	@cd catalog && npm run build
+	@cd inventory && npm run build
+	@cd sales && npm run build
+	@cd webhooks && npm run build
+	@node scripts/demo.mjs
+
+.PHONY: benchmark-golden-path
+benchmark-golden-path: demo ## Measure the golden path with staged k6 arrival rates
+	@bash infra/scripts/benchmark-golden-path.sh

@@ -27,5 +27,6 @@ when phase 6 implements Catalog; fix gaps here rather than silently improvising 
     bulkheads, metrics and a breaker for every actual cross-module dependency.
 11. Run boundaries, lint, types, unit coverage (all gates at least 80%), build and e2e.
     Update endpoints, configuration and operational instructions from the tested code.
-12. Record remaining scope honestly. Expand/contract migration evidence belongs to
-    phase 6; do not mark a placeholder migration recipe as demonstrated.
+12. Record remaining scope honestly. For a populated-table change, follow
+    [zero-downtime-migration.md](zero-downtime-migration.md) and preserve executable
+    evidence for the compatibility window, bounded backfill, cutover and contraction.

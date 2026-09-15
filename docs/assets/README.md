@@ -2,7 +2,7 @@
 
 Screenshots and diagrams referenced from documentation.
 
-`golden-path-trace.png` — the Jaeger view of a single trace crossing `sales`,
-`inventory`, RabbitMQ and `webhooks` — lands here in **phase 8**, together with the CI
-job that reruns the flow on every push. The job exists so the screenshot cannot become
-a lie.
+`golden-path-jaeger.png` is the Jaeger view produced by `make demo`: one trace crossing
+`sales`, `inventory`, RabbitMQ and the temporary `webhooks` callback receiver. The
+always-on golden-path workflow reruns the flow twice on every push, so this capture has
+an executable regression gate behind it.

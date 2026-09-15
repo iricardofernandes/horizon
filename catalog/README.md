@@ -6,11 +6,10 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 6 — in progress.** The domain, the use cases, the tenant-scoped
-persistence, the outbox relay, the AMQP consumer, the authenticated HTTP surface and the
-audit chain are real and tested. What remains of the phase is repository-level: the
-expand/contract migration recipe this module owes, and closing the phase in
-[`docs/plan.md`](../docs/plan.md).
+**Status: phase 6 — complete.** The domain, use cases, tenant-scoped persistence, outbox
+relay, AMQP consumer, authenticated HTTP surface and audit chain are real and tested. A
+PostgreSQL e2e exercise also proves the complete expand/contract sequence that this module
+adds to the reusable [pattern set](../docs/patterns/zero-downtime-migration.md).
 
 ---
 
@@ -173,6 +172,12 @@ Migrations:
 npm run db:generate  # emit SQL from the Drizzle schema
 npm run db:migrate   # apply, using DATABASE_MIGRATION_URL (owner role)
 ```
+
+Schema changes to populated tables follow the expand/contract recipe rather than making a
+rename or new invariant atomic with an application deploy. The executable price-list
+exercise covers an old and a new writer in the same compatibility window, bounded
+backfill, validated cutover and removal of the old column; see
+[`zero-downtime-migration.md`](../docs/patterns/zero-downtime-migration.md).
 
 ### Build
 

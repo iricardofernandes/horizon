@@ -28,7 +28,7 @@ No shared runtime library is introduced.
 | [authorization.md](authorization.md) | Identity implementation and tests | CASL ability construction, the guard/use-case split for condition-level rules |
 | [testing-strategy.md](testing-strategy.md) | Identity implementation and tests | Factories, tenant-scoped in-memory repositories, the mandatory cross-tenant test |
 | [new-module-checklist.md](new-module-checklist.md) | phase 5 | The literal sequence for standing up a module, followed verbatim in phase 6 |
-| `zero-downtime-migration.md` (not yet written) | phase 6 | Expand/contract demonstrated end to end: add, backfill, dual-write, cut over, drop |
+| [zero-downtime-migration.md](zero-downtime-migration.md) | Catalog implementation and PostgreSQL e2e test | Expand/contract demonstrated end to end: add, dual-write, backfill, cut over, drop |
 
 Phase 6 (`catalog/`) is the test of these documents: it is built by following the
 checklist, and every gap found is fixed **here** rather than worked around in the module.

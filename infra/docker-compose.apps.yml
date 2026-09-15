@@ -55,6 +55,7 @@ services:
     <<: *service
     build:
       context: ../identity
+      network: host
     restart: "no"
     environment:
       <<: *env
@@ -65,6 +66,7 @@ services:
     <<: *service
     build:
       context: ../identity
+      network: host
     container_name: horizon-identity
     depends_on:
       identity-migrate:
@@ -103,6 +105,7 @@ services:
     <<: *service
     build:
       context: ../catalog
+      network: host
     restart: "no"
     environment:
       <<: *env
@@ -113,6 +116,7 @@ services:
     <<: *service
     build:
       context: ../catalog
+      network: host
     container_name: horizon-catalog
     depends_on:
       catalog-migrate:
@@ -132,45 +136,101 @@ services:
       DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_catalog
       IDEMPOTENCY_SECRET: local-development-only-idempotency-secret
 
+  inventory-migrate:
+    <<: *service
+    build:
+      context: ../inventory
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_inventory
+    command: ["npm", "run", "db:migrate"]
+
   inventory:
     <<: *service
     build:
       context: ../inventory
+      network: host
     container_name: horizon-inventory
+    depends_on:
+      inventory-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     environment:
       <<: *env
       PORT: '3003'
       OTEL_SERVICE_NAME: inventory
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_inventory
       DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_inventory
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_inventory
       RESERVATION_TTL_SECONDS: '1800'
       COST_METHOD: moving-average
+
+  sales-migrate:
+    <<: *service
+    build:
+      context: ../sales
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_sales
+    command: ["npm", "run", "db:migrate"]
 
   sales:
     <<: *service
     build:
       context: ../sales
+      network: host
     container_name: horizon-sales
+    depends_on:
+      sales-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     environment:
       <<: *env
       PORT: '3004'
       OTEL_SERVICE_NAME: sales
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_sales
       DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_sales
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_sales
       QUOTE_DEFAULT_VALIDITY_DAYS: '15'
       ORDER_CONFIRMATION_TIMEOUT_MS: '10000'
+      CUSTOMER_BLIND_INDEX_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+
+  webhooks-migrate:
+    <<: *service
+    build:
+      context: ../webhooks
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_webhooks
+    command: ["npm", "run", "db:migrate"]
 
   webhooks:
     <<: *service
     build:
       context: ../webhooks
+      network: host
     container_name: horizon-webhooks
+    depends_on:
+      webhooks-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     environment:
       <<: *env
       PORT: '3005'
       OTEL_SERVICE_NAME: webhooks
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_webhooks
       DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_webhooks
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_webhooks
+      WEBHOOK_SECRET_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
       WEBHOOK_MAX_ATTEMPTS: '8'
       WEBHOOK_BACKOFF_BASE_MS: '1000'
       WEBHOOK_BACKOFF_MAX_MS: '3600000'
@@ -190,6 +250,7 @@ services:
       NODE_ENV: production
       # The frontend addresses Kong, never a service directly (ADR 0008).
       HORIZON_API_URL: http://kong:8000
+      HORIZON_COOKIE_SECURE: 'false'
       NEXT_PUBLIC_HORIZON_API_URL: http://localhost:${HORIZON_KONG_PROXY_PORT:-8000}
       NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:${HORIZON_OTLP_HTTP_PORT:-4318}
       OTEL_SERVICE_NAME: web
