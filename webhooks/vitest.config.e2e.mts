@@ -8,12 +8,12 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     globals: true,
-    passWithNoTests: true,
-    include: ['test/**/*.e2e-spec.ts'],
+    passWithNoTests: false,
     setupFiles: ['./test/setup-e2e.ts'],
-    hookTimeout: 120_000,
+    hookTimeout: 180_000,
     testTimeout: 60_000,
     pool: 'forks',
+    include: ['test/**/*.e2e-spec.ts'],
   },
   plugins: [swc.vite({ module: { type: 'es6' } })],
 })

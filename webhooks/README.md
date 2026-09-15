@@ -1,164 +1,114 @@
 # `webhooks/`
 
-Developer-facing subscriptions, HMAC-signed delivery, retry, DLQ and replay.
+Developer-facing subscriptions, HMAC-signed delivery, bounded retry, dead-letter and
+replay. This is an independently deployable NestJS service with its own PostgreSQL
+database and lifecycle.
 
-An independently deployable NestJS service with its own database, its own container
-and its own lifecycle. It is reached through Kong, never directly, and it shares no
-source with any other module (ADR 0001).
+**Status: phase 9 complete.** The domain, persistence, RabbitMQ consumer, delivery worker,
+authenticated HTTP surface and end-to-end tests are implemented. See
+[`docs/plan.md`](../docs/plan.md).
 
-**Status: phase 1 — scaffold.** Configuration, tooling and documentation are real;
-there is no domain code yet. See [`docs/plan.md`](../docs/plan.md) for what arrives
-when.
+## Ownership and guarantees
 
----
+The module owns subscriptions, encrypted signing secrets, the durable delivery queue and
+append-only attempt history. It consumes versioned contracts from `@horizon/contracts`;
+currently only `sales.order.confirmed` is bound. It does not own source events or identity.
 
-## What this context owns
+Delivery is at least once. Receivers must deduplicate on `X-Horizon-Event-Id`. A malformed
+or unsupported broker message is retried once and then routed to the RabbitMQ consumer
+DLQ. A callback that exhausts its configured attempts enters the database-backed
+`dead-letter` state and remains available for operator replay.
 
-- **Subscriptions** — a tenant's registered endpoint, the event types it wants, and its signing secret.
-- **Delivery attempts** — every attempt, with status, response code, duration and error.
-- **Signing** — HMAC-SHA256 over a timestamped payload, with the verification recipe published in the API documentation.
-- **Retry policy** — exponential backoff with jitter, bounded attempts (ADR 0027).
-- **The dead-letter queue** and the replay endpoint that drains it.
+All business rows carry `tenant_id` and use forced PostgreSQL RLS. API calls derive the
+tenant exclusively from a locally verified Identity access token. `viewer` can read;
+`admin` can read, manage subscriptions and replay work.
 
-## What it explicitly does not own
+## HTTP API
 
-This list matters more than the one above — a bounded context is defined by its
-refusals.
-
-- **The events.** Each module publishes its own; this module is a subscriber that forwards them outward. It never invents an event.
-- **Identity.** Subscriptions are scoped by tenant, resolved from the token like everywhere else.
-- **Delivery guarantees beyond at-least-once.** A receiver must be idempotent, and the documentation says so with the event id to deduplicate on.
-- **Retry semantics of other modules.** An inter-module event failing is the outbox's problem, not this module's.
-
----
-
-## Events
-
-### Published
-
-| Event | Meaning |
-|---|---|
-| `webhooks.subscription.created` | A tenant registered an endpoint. |
-| `webhooks.delivery.failed` | An endpoint exhausted its attempts and the message was dead-lettered. Emitted so the tenant can be alerted. |
-
-### Consumed
-
-| Event | Reaction |
-|---|---|
-| `*` | Every event published by any module, filtered per subscription. Bindings are declared per event type rather than by wildcard, so adding an event does not silently start delivering it. |
-
-Every published event is written to the `outbox` table inside the same transaction as
-the state change it describes, and relayed by a poller using `FOR UPDATE SKIP LOCKED`
-(ADR 0024). Delivery is at-least-once, so every consumer deduplicates against an
-`inbox` table keyed on `(source_module, event_id)`.
-
-Schemas live in `@horizon/contracts` and are versioned there (ADR 0030); this module
-does not define its own wire shapes.
-
----
-
-## Endpoints
-
-None yet — this module is a scaffold. Its HTTP surface arrives with its phase, and
-OpenAPI is generated from the controllers and Zod schemas at that point, aggregated at
-the gateway and published by CI.
+Paths are service-relative and are intended to be reached through Kong.
 
 | Method | Path | Purpose |
 |---|---|---|
-| — | — | *(none in phase 1)* |
+| `GET` | `/health/live` | Process liveness. |
+| `GET` | `/health/ready` | Database-backed readiness. |
+| `GET` | `/webhook-subscriptions` | List the tenant's subscriptions without secrets. |
+| `POST` | `/webhook-subscriptions` | Create a subscription; returns its secret once. |
+| `DELETE` | `/webhook-subscriptions/:id` | Deactivate a subscription. |
+| `GET` | `/webhook-deliveries` | List recent delivery state and last outcome. |
+| `GET` | `/webhook-deliveries/:id/attempts` | Read the append-only attempt log. |
+| `POST` | `/webhook-deliveries/:id/replay` | Reset a dead letter for delivery. |
 
----
+Creation accepts:
 
-## Running it locally
-
-The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) is a phase 2
-deliverable. Until then this module runs standalone and serves 404s, which is enough to
-verify the toolchain.
-
-```bash
-npm install          # or npm ci
-cp .env.example .env # fill in; the process refuses to start on invalid config
-
-npm run typecheck    # tsc --noEmit, strict plus the three extra flags
-npm run lint         # biome check
-npm test             # unit tests: no I/O, in-memory fakes
-npm run dev          # http://localhost:3005
+```json
+{
+  "endpointUrl": "https://integrator.example/horizon",
+  "eventTypes": ["sales.order.confirmed"]
+}
 ```
 
-Integration and e2e tests need a Docker socket — they start their own PostgreSQL,
-Redis and RabbitMQ via Testcontainers rather than using a shared instance (ADR 0013):
+Plain HTTP is rejected except for loopback development endpoints. Userinfo in endpoint
+URLs is rejected. Subscription secrets are random 32-byte values and are encrypted with
+AES-256-GCM before storage.
+
+## Signature verification
+
+Each request contains the exact event envelope as JSON plus:
+
+- `X-Horizon-Event-Id`: stable idempotency key;
+- `X-Horizon-Signature`: `t=<unix-seconds>,v1=<lowercase-hex-hmac>`.
+
+The signed bytes are `timestamp + "." + rawRequestBody`. Do not parse and reserialize the
+body before verification. Reject timestamps outside your allowed skew and compare the
+digest in constant time. A minimal Node.js verifier is:
+
+```js
+import { createHmac, timingSafeEqual } from 'node:crypto'
+
+export function verify(secret, rawBody, signature, now = Math.floor(Date.now() / 1000)) {
+  const fields = Object.fromEntries(signature.split(',').map((part) => part.trim().split('=', 2)))
+  const timestamp = Number(fields.t)
+  if (!Number.isSafeInteger(timestamp) || Math.abs(now - timestamp) > 300) return false
+  const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest()
+  const actual = Buffer.from(fields.v1 ?? '', 'hex')
+  return actual.length === expected.length && timingSafeEqual(actual, expected)
+}
+```
+
+Return any `2xx` response to acknowledge delivery. Redirects are not followed. Other
+statuses, network errors and timeouts are failures.
+
+## Retry and backpressure policy
+
+Failed attempts use exponential backoff capped by `WEBHOOK_BACKOFF_MAX_MS`, with bounded
+jitter and at most `WEBHOOK_MAX_ATTEMPTS`. Each attempt records its number, timestamp,
+duration, response status and bounded error text in an append-only table. Replay is only
+valid from `dead-letter` and resets the attempt counter without deleting history.
+
+Backpressure never silently drops a valid event. The RabbitMQ consumer is bounded by
+`AMQP_PREFETCH`; once accepted, delivery work is durable in PostgreSQL. Each worker poll
+claims at most `OUTBOX_BATCH_SIZE` due rows using `FOR UPDATE SKIP LOCKED`. When pending
+plus delivering rows exceed `WEBHOOK_QUEUE_DEPTH_ALERT`, the worker emits the explicit
+`webhook.queue-depth-exceeded` error signal and continues draining bounded batches. The
+E2E suite forces the threshold crossing and asserts this behavior.
+
+## Local development
 
 ```bash
+npm ci
+cp .env.example .env
+npm run db:migrate
+npm run typecheck
+npm run lint
+npm test
 npm run test:e2e
-```
-
-Migrations, once this module has a schema:
-
-```bash
-npm run db:generate  # emit SQL from the Drizzle schema
-npm run db:migrate   # apply, using DATABASE_MIGRATION_URL (owner role)
-```
-
-### Build
-
-```bash
-npm run build        # SWC → dist/, rewriting the @/* alias
+npm run build
 npm start
 ```
 
-`tsc` typechecks but does not emit; SWC emits but does not typecheck. Both run in CI,
-and the Dockerfile runs both.
+The E2E suite starts isolated PostgreSQL 17 and RabbitMQ 4 containers. `make demo` at the
+repository root proves the real Sales → Inventory → Webhooks path and a signed callback.
 
----
-
-## Environment
-
-Every variable is required unless a default is shown in `.env.example`. Configuration
-is validated with Zod at boot, so a missing or malformed value stops the process
-immediately rather than surfacing as a failure on first use.
-
-| `NODE_ENV` | — |
-| `PORT` | HTTP port. Behind Kong in every environment; exposed directly only in local development. |
-| `LOG_LEVEL` | pino level. `info` in production. |
-| `DATABASE_URL` | Application role. Holds neither SUPERUSER nor BYPASSRLS, so RLS applies to it (ADR 0017). |
-| `DATABASE_MIGRATION_URL` | Owner role, used only by `db:migrate`. The application never connects with it. |
-| `DATABASE_POOL_MAX` | Bulkhead: the pool this service may consume (ADR 0027). |
-| `DATABASE_STATEMENT_TIMEOUT_MS` | No query waits without a bound. |
-| `REDIS_URL` | Denylist, idempotency records, rate counters. |
-| `RABBITMQ_URL` | — |
-| `AMQP_PREFETCH` | Bounded consumer concurrency (ADR 0027). |
-| `OUTBOX_POLL_INTERVAL_MS` | Relay poll interval; the floor on publish latency (ADR 0024). |
-| `OUTBOX_BATCH_SIZE` | Rows claimed per poll with FOR UPDATE SKIP LOCKED. |
-| `INBOX_RETENTION_DAYS` | Must exceed the maximum possible redelivery window. |
-| `IDEMPOTENCY_TTL_SECONDS` | 24 hours (ADR 0028). |
-| `HTTP_CLIENT_TIMEOUT_MS` | Every outbound HTTP call. There is no unbounded wait anywhere. |
-| `CIRCUIT_BREAKER_ERROR_THRESHOLD_PERCENT` | — |
-| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | How long the breaker stays open before half-open probing. |
-| `JWKS_URL` | Identity's public keys, for local token re-verification. |
-| `TRUST_GATEWAY_JWT` | When false the service re-verifies every token itself, so reaching its port directly grants nothing (ADR 0008). |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | The Collector. Nothing talks to a backend directly (ADR 0033). |
-| `OTEL_SERVICE_NAME` | — |
-| `OTEL_TRACES_SAMPLER_ARG` | Full sampling locally; errors are always sampled. |
-| `TENANT_ID_HASH_SALT` | Tenant ids are hashed before appearing in logs and metrics (ADR 0033). |
-| `WEBHOOK_MAX_ATTEMPTS` | After this many failures the message is dead-lettered. |
-| `WEBHOOK_BACKOFF_BASE_MS` | First retry delay; doubles per attempt. |
-| `WEBHOOK_BACKOFF_MAX_MS` | Backoff ceiling of one hour. |
-| `WEBHOOK_BACKOFF_JITTER_RATIO` | Randomisation applied to each delay so failed deliveries do not retry in lockstep (ADR 0027). |
-| `WEBHOOK_DELIVERY_TIMEOUT_MS` | Per-attempt timeout against the tenant's endpoint. |
-| `WEBHOOK_SIGNATURE_TOLERANCE_SECONDS` | How much clock skew a receiver may have before a signature is rejected as stale. |
-| `WEBHOOK_QUEUE_DEPTH_ALERT` | Backpressure threshold; past this the documented policy applies. |
-
----
-
-## Conventions this module follows
-
-- **Layering** — `src/domain/`, `src/application/`, `src/infrastructure/`, `src/main/`,
-  dependencies pointing inward only. `domain/` imports no framework, no ORM and no Zod;
-  `scripts/check-boundaries.mjs` enforces it (ADR 0031, ADR 0002).
-- **Tenancy** — every business table carries `tenant_id` with forced RLS, and every
-  query runs inside a `TenantAwareTransaction` that issues `SET LOCAL
-  app.current_tenant` first. No repository can obtain a raw connection (ADR 0017).
-- **Errors** — use cases return `Either<Error, Value>` for expected failures; a global
-  filter maps error classes to RFC 9457 `application/problem+json` (ADR 0032).
-- **Tests** — every test creates its own tenant, and every aggregate has a test that
-  writes under tenant A and asserts tenant B cannot read it (ADR 0014).
+Important runtime controls are documented inline in [`.env.example`](.env.example):
+database application/worker URLs, the 32-byte hex encryption key, JWKS URL, AMQP prefetch,
+delivery timeout, retry/backoff values, claim batch, poll interval and queue-depth alert.
