@@ -17,6 +17,20 @@ export const tenants = pgTable('tenants', {
   slug: text('slug').notNull(),
   timezone: text('timezone').notNull(),
   status: text('status').notNull().default('active'),
+  // Who the workspace legally is. Filled in after creation, so every column is nullable
+  // except the currency it reports in, which has a default rather than a guess.
+  legalName: text('legal_name'),
+  tradeName: text('trade_name'),
+  taxId: text('tax_id'),
+  stateRegistration: text('state_registration'),
+  municipalRegistration: text('municipal_registration'),
+  addressLine: text('address_line'),
+  addressCity: text('address_city'),
+  addressState: text('address_state'),
+  addressPostalCode: text('address_postal_code'),
+  addressCountry: text('address_country').notNull().default('BR'),
+  baseCurrency: text('base_currency').notNull().default('BRL'),
+  fiscalRegime: text('fiscal_regime').notNull().default('not-declared'),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
 })

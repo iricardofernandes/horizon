@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { isLocale, localeCookie } from '@/i18n/locale'
 import {
   beginHostedDemoLogin,
   clearHostedDemoSession,
@@ -97,8 +98,25 @@ async function sessionUser() {
     if (response.status === 401) await clearSession()
     return NextResponse.json({ message: 'No active session.' }, { status: response.status })
   }
+  const user = (await response.json()) as { preferredLocale?: unknown }
+  await adoptStoredLocale(user.preferredLocale)
   return NextResponse.json(
-    { ...(await response.json()), workspace: await activeWorkspace() },
+    { ...user, workspace: await activeWorkspace() },
     { headers: { 'cache-control': 'no-store' } },
   )
+}
+
+/**
+ * The account's stored choice outranks this device's cookie (ADR 0044), so a language
+ * chosen on one machine is the language the next one opens in.
+ */
+async function adoptStoredLocale(preferred: unknown): Promise<void> {
+  if (typeof preferred !== 'string' || !isLocale(preferred)) return
+  const jar = await cookies()
+  if (jar.get(localeCookie)?.value === preferred) return
+  jar.set(localeCookie, preferred, {
+    path: '/',
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 365,
+  })
 }

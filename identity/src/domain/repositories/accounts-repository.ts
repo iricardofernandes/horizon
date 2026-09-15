@@ -19,6 +19,7 @@ export interface LegacyMembership {
 
 /** Global authentication index plus the account-to-workspace selection surface. */
 export abstract class AccountsRepository {
+  abstract findById(accountId: string): Promise<Account | null>
   abstract findByEmail(email: Email): Promise<Account | null>
   abstract findLegacyMemberships(email: Email): Promise<readonly LegacyMembership[]>
   abstract provisionFromLegacy(email: Email, membership: LegacyMembership): Promise<Account>

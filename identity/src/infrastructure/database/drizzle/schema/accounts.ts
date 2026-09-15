@@ -6,6 +6,8 @@ export const accounts = pgTable('accounts', {
   id: uuid('id').primaryKey(),
   passwordHash: text('password_hash').notNull(),
   status: text('status').notNull().default('active'),
+  /** The reader's language, which belongs to the person and not to a workspace. */
+  preferredLocale: text('preferred_locale'),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true, mode: 'date' }),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),

@@ -1,6 +1,8 @@
 import type { Either } from '@/core/either'
 import type { UseCaseError } from '@/core/errors/use-case-error'
+import type { Account } from '@/domain/entities/account'
 import type { ApiKey } from '@/domain/entities/api-key'
+import type { Tenant } from '@/domain/entities/tenant'
 import type { User } from '@/domain/entities/user'
 
 export function unwrap<L extends UseCaseError, R>(result: Either<L, R>): R {
@@ -36,5 +38,26 @@ export function presentApiKey(key: ApiKey) {
     expiresAt: snapshot.expiresAt,
     lastUsedAt: snapshot.lastUsedAt,
     createdAt: snapshot.createdAt,
+  }
+}
+
+/** The signed-in person, plus the language they read in. */
+export function presentSelf(user: User, account: Account | null) {
+  return { ...presentUser(user), preferredLocale: account?.toSnapshot().preferredLocale ?? null }
+}
+
+/** The workspace as a company: what it is called, where it is, and what it reports in. */
+export function presentWorkspace(tenant: Tenant) {
+  const snapshot = tenant.toSnapshot()
+  return {
+    id: snapshot.id,
+    name: snapshot.name,
+    slug: snapshot.slug,
+    timezone: snapshot.timezone,
+    status: snapshot.status,
+    baseCurrency: tenant.baseCurrency(),
+    company: snapshot.company,
+    createdAt: snapshot.createdAt,
+    updatedAt: snapshot.updatedAt,
   }
 }

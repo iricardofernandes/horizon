@@ -26,6 +26,10 @@ class MemoryAccounts extends AccountsRepository {
     super()
   }
 
+  async findById(accountId: string) {
+    return this.account?.id.toString() === accountId ? this.account : null
+  }
+
   async findByEmail(_email: Email) {
     return this.account
   }

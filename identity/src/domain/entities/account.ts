@@ -1,6 +1,7 @@
 import { Entity } from '@/core/entities/entity'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { PasswordHasher } from '@/domain/services/password-hasher'
+import type { Locale } from '@/domain/value-objects/locale'
 import type { Argon2Policy, PasswordHash } from '@/domain/value-objects/password-hash'
 
 export type AccountStatus = 'active' | 'disabled'
@@ -8,6 +9,7 @@ export type AccountStatus = 'active' | 'disabled'
 interface AccountProps {
   passwordHash: PasswordHash
   status: AccountStatus
+  preferredLocale?: Locale
   lastLoginAt?: Date
   readonly createdAt: Date
   updatedAt: Date
@@ -23,6 +25,7 @@ export class Account extends Entity<AccountProps> {
     props: {
       passwordHash: PasswordHash
       status?: AccountStatus
+      preferredLocale?: Locale
       lastLoginAt?: Date
       createdAt?: Date
       updatedAt?: Date
@@ -34,6 +37,7 @@ export class Account extends Entity<AccountProps> {
       {
         passwordHash: props.passwordHash,
         status: props.status ?? 'active',
+        ...(props.preferredLocale === undefined ? {} : { preferredLocale: props.preferredLocale }),
         ...(props.lastLoginAt === undefined ? {} : { lastLoginAt: props.lastLoginAt }),
         createdAt: now,
         updatedAt: props.updatedAt ?? now,
@@ -64,10 +68,17 @@ export class Account extends Entity<AccountProps> {
     this.props.updatedAt = now
   }
 
+  /** The language this person reads in, in every workspace they belong to. */
+  choosePreferredLocale(locale: Locale, now: Date): void {
+    this.props.preferredLocale = locale
+    this.props.updatedAt = now
+  }
+
   toSnapshot(): Readonly<{
     id: string
     passwordHash: string
     status: AccountStatus
+    preferredLocale: string | null
     lastLoginAt: Date | null
     createdAt: Date
     updatedAt: Date
@@ -76,6 +87,7 @@ export class Account extends Entity<AccountProps> {
       id: this.id.toString(),
       passwordHash: this.props.passwordHash.encoded,
       status: this.props.status,
+      preferredLocale: this.props.preferredLocale?.value ?? null,
       lastLoginAt: this.props.lastLoginAt ?? null,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,

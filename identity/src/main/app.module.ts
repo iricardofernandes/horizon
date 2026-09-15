@@ -14,6 +14,7 @@ import { IdempotencyStore } from '@/infrastructure/http/idempotency-store'
 import { ProblemDetailsFilter } from '@/infrastructure/http/problem-details-filter'
 import { SystemController } from '@/infrastructure/http/system.controller'
 import { UsersController } from '@/infrastructure/http/users.controller'
+import { WorkspaceController } from '@/infrastructure/http/workspace.controller'
 import { OutboxWorker } from '@/infrastructure/messaging/outbox-worker'
 import type { IdentityEnvironment } from './environment'
 import { IdentityRuntime } from './identity-runtime'
@@ -86,7 +87,13 @@ export class AppModule {
           },
         }),
       ],
-      controllers: [AuthController, UsersController, AdministrationController, SystemController],
+      controllers: [
+        AuthController,
+        UsersController,
+        WorkspaceController,
+        AdministrationController,
+        SystemController,
+      ],
       providers,
       exports: [IdentityRuntime],
     }

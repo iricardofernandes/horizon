@@ -3,6 +3,7 @@ import { AggregateRoot } from '@/core/entities/aggregate-root'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { TenantCreatedEvent } from '@/domain/events/tenant-created-event'
+import type { CompanyProfile, CompanyProfileProps } from '@/domain/value-objects/company-profile'
 import type { TenantName } from '@/domain/value-objects/tenant-name'
 import type { TenantSlug } from '@/domain/value-objects/tenant-slug'
 import type { Timezone } from '@/domain/value-objects/timezone'
@@ -15,6 +16,7 @@ interface TenantProps {
   slug: TenantSlug
   timezone: Timezone
   status: TenantStatus
+  company: CompanyProfile | null
   readonly createdAt: Date
   updatedAt: Date
 }
@@ -26,6 +28,7 @@ export interface TenantSnapshot {
   readonly slug: string
   readonly timezone: string
   readonly status: TenantStatus
+  readonly company: Readonly<CompanyProfileProps> | null
   readonly createdAt: Date
   readonly updatedAt: Date
 }
@@ -45,6 +48,7 @@ export class Tenant extends AggregateRoot<TenantProps> {
       slug: TenantSlug
       timezone: Timezone
       status?: TenantStatus
+      company?: CompanyProfile | null
       createdAt?: Date
       updatedAt?: Date
     },
@@ -57,6 +61,7 @@ export class Tenant extends AggregateRoot<TenantProps> {
         slug: props.slug,
         timezone: props.timezone,
         status: props.status ?? 'active',
+        company: props.company ?? null,
         createdAt: now,
         updatedAt: props.updatedAt ?? now,
       },
@@ -96,6 +101,20 @@ export class Tenant extends AggregateRoot<TenantProps> {
     this.props.updatedAt = now
   }
 
+  /**
+   * Record who this workspace legally is. Separate from the reader's language: this is
+   * what Finance and Fiscal will calculate from (ADR 0043, ADR 0044).
+   */
+  describeCompany(company: CompanyProfile, now: Date): void {
+    this.props.company = company
+    this.props.updatedAt = now
+  }
+
+  /** The currency this workspace reports in, before a company profile exists. */
+  baseCurrency(): string {
+    return this.props.company?.baseCurrency ?? 'BRL'
+  }
+
   suspend(now: Date): Either<ConflictError, void> {
     if (this.props.status === 'suspended')
       return left(new ConflictError('tenant is already suspended'))
@@ -118,6 +137,7 @@ export class Tenant extends AggregateRoot<TenantProps> {
       slug: this.props.slug.value,
       timezone: this.props.timezone.value,
       status: this.props.status,
+      company: this.props.company?.details ?? null,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,
     })

@@ -591,6 +591,20 @@ select:focus-visible,
   display: grid;
   font-size: 12px;
 }
+.company-readout {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 4px 0 12px;
+}
+.company-readout dt {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.company-readout dd {
+  margin: 2px 0 0;
+  font-weight: 650;
+}
 .language-switcher {
   gap: 7px;
   width: auto;

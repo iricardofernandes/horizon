@@ -9,8 +9,13 @@ import { AssignRoleUseCase } from '@/application/use-cases/assign-role'
 import { AuthenticateAccountUseCase } from '@/application/use-cases/authenticate-account'
 import { AuthenticateApiKeyUseCase } from '@/application/use-cases/authenticate-api-key'
 import { AuthenticateUserUseCase } from '@/application/use-cases/authenticate-user'
+import { ChoosePreferredLocaleUseCase } from '@/application/use-cases/choose-preferred-locale'
 import { CreateApiKeyUseCase } from '@/application/use-cases/create-api-key'
 import { CreateTenantUseCase } from '@/application/use-cases/create-tenant'
+import {
+  DescribeCompanyUseCase,
+  ReadWorkspaceUseCase,
+} from '@/application/use-cases/describe-company'
 import { DisableUserUseCase } from '@/application/use-cases/disable-user'
 import { EraseDataSubjectUseCase } from '@/application/use-cases/erase-data-subject'
 import { ExportDataSubjectUseCase } from '@/application/use-cases/export-data-subject'
@@ -89,6 +94,9 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
   readonly exportDataSubject: ExportDataSubjectUseCase
   readonly eraseDataSubject: EraseDataSubjectUseCase
   readonly verifyAuditChain: VerifyAuditChainUseCase
+  readonly choosePreferredLocale: ChoosePreferredLocaleUseCase
+  readonly describeCompany: DescribeCompanyUseCase
+  readonly readWorkspace: ReadWorkspaceUseCase
 
   constructor(readonly config: IdentityEnvironment) {
     const hexKey = readFileSync(config.BLIND_INDEX_KEY_PATH, 'utf8').trim()
@@ -183,6 +191,15 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
     this.exportDataSubject = new ExportDataSubjectUseCase(db)
     this.eraseDataSubject = new EraseDataSubjectUseCase(db, families, this.denylist, policy, clock)
     this.verifyAuditChain = new VerifyAuditChainUseCase(db)
+    this.choosePreferredLocale = new ChoosePreferredLocaleUseCase(db.accounts, db, clock)
+    this.describeCompany = new DescribeCompanyUseCase(db, clock)
+    this.readWorkspace = new ReadWorkspaceUseCase(db)
+  }
+
+  /** The global account a workspace membership belongs to, when one has been linked. */
+  async accountOf(tenantId: string, userId: string) {
+    const accountId = await this.database.accounts.findAccountIdByMembership(tenantId, userId)
+    return accountId === null ? null : this.database.accounts.findById(accountId)
   }
 
   async onModuleInit(): Promise<void> {

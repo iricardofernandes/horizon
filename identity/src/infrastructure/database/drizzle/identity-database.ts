@@ -27,10 +27,11 @@ import type { AuditRecord } from '@/domain/repositories/audit-log-repository'
 import type { TenantDirectory } from '@/domain/repositories/tenant-directory'
 import type { SecretBox } from '@/domain/services/secret-box'
 import { Email } from '@/domain/value-objects/email'
+import { Locale } from '@/domain/value-objects/locale'
 import { PasswordHash } from '@/domain/value-objects/password-hash'
 import { PersonName } from '@/domain/value-objects/person-name'
 import { RoleAssignments } from '@/domain/value-objects/role-assignments'
-import { mapApiKey, mapDataSubjectKey, mapTenant, restored } from './mappers'
+import { mapApiKey, mapDataSubjectKey, mapTenant, restored, tenantRow } from './mappers'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
@@ -88,6 +89,7 @@ export class IdentityDatabase extends UnitOfWork {
       },
     }
     this.accounts = {
+      findById: (accountId) => this.findAccountById(accountId),
       findByEmail: (email) => this.findAccountByEmail(email.value),
       findLegacyMemberships: (email) => this.legacyMemberships(email.value),
       provisionFromLegacy: (email, membership) =>
@@ -141,6 +143,19 @@ export class IdentityDatabase extends UnitOfWork {
 
   private globalEmailIndex(email: string): string {
     return createHmac('sha256', this.#options.blindIndexKey).update(email).digest('hex')
+  }
+
+  /** Reading an account opens its own account context; RLS refuses every other row. */
+  private async findAccountById(accountId: string): Promise<Account | null> {
+    return this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_account', ${accountId}, true)`)
+      const [row] = await tx
+        .select()
+        .from(schema.accounts)
+        .where(eq(schema.accounts.id, accountId))
+        .limit(1)
+      return row ? mapAccount(row) : null
+    })
   }
 
   private async findAccountByEmail(email: string): Promise<Account | null> {
@@ -303,6 +318,7 @@ export class IdentityDatabase extends UnitOfWork {
         .set({
           passwordHash: row.passwordHash,
           status: row.status,
+          preferredLocale: row.preferredLocale,
           lastLoginAt: row.lastLoginAt,
           updatedAt: row.updatedAt,
         })
@@ -320,6 +336,9 @@ function mapAccount(row: typeof schema.accounts.$inferSelect): Account {
       status: row.status,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      ...(row.preferredLocale === null
+        ? {}
+        : { preferredLocale: restored(Locale.create(row.preferredLocale)) }),
       ...(row.lastLoginAt === null ? {} : { lastLoginAt: row.lastLoginAt }),
     },
     new UniqueEntityID(row.id),
@@ -447,13 +466,13 @@ function makeScope(
       },
       create: async (tenant) => {
         assertTenant(tenant.id.toString())
-        await tx.insert(schema.tenants).values(tenant.toSnapshot())
+        await tx.insert(schema.tenants).values(tenantRow(tenant))
         await publish(tenant.pullDomainEvents())
       },
       save: async (tenant) => {
-        const row = tenant.toSnapshot()
-        assertTenant(row.id)
-        await tx.update(schema.tenants).set(row).where(eq(schema.tenants.id, row.id))
+        const row = tenantRow(tenant)
+        assertTenant(tenant.id.toString())
+        await tx.update(schema.tenants).set(row).where(eq(schema.tenants.id, tenant.id.toString()))
         await publish(tenant.pullDomainEvents())
       },
       list: async (params) =>

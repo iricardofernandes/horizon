@@ -19,7 +19,7 @@ import { IdentityRuntime } from '@/main/identity-runtime'
 import { RequestSchema } from './api-schema'
 import { ReadDuringDenylistOutage, RequirePermission } from './authorization'
 import { actor, type IdentityHttpRequest, principal, requestMetadata } from './http-context'
-import { presentApiKey, presentUser, unwrap } from './presenters'
+import { presentApiKey, presentSelf, presentUser, unwrap } from './presenters'
 
 const cursor = z
   .string()
@@ -46,6 +46,7 @@ const assignRole = z.strictObject({
   assignment: roleAssignmentSchema,
   operation: z.enum(['grant', 'revoke']),
 })
+const choosePreferences = z.strictObject({ preferredLocale: z.string().trim().min(2).max(35) })
 
 @Controller()
 @ApiBearerAuth()
@@ -64,7 +65,25 @@ export class UsersController {
         subjectId: claims.subject,
       }),
     )
-    return presentUser(result.user)
+    return presentSelf(result.user, await this.runtime.accountOf(claims.tenantId, claims.subject))
+  }
+
+  /** The reader's language, stored on the global account rather than this membership. */
+  @Patch('me/preferences')
+  @RequestSchema(choosePreferences)
+  @Header('Cache-Control', 'no-store')
+  async choosePreferences(@Body() body: unknown, @Req() request: IdentityHttpRequest) {
+    const input = choosePreferences.parse(body)
+    const claims = principal(request)
+    return unwrap(
+      await this.runtime.choosePreferredLocale.execute({
+        tenantId: claims.tenantId,
+        userId: claims.subject,
+        locale: input.preferredLocale,
+        actor: actor(request),
+        ...requestMetadata(request),
+      }),
+    )
   }
 
   @Get('me/export')

@@ -2,7 +2,9 @@ import { TEST_HASH, valid } from 'test/support/identity-context'
 import { describe, expect, it } from 'vitest'
 import { ApiKeyScopes } from './api-key-scopes'
 import { ApiKeyToken } from './api-key-token'
+import { CompanyProfile } from './company-profile'
 import { Email } from './email'
+import { Locale } from './locale'
 import { PasswordHash } from './password-hash'
 import { PersonName } from './person-name'
 import { RoleAssignments } from './role-assignments'
@@ -113,5 +115,49 @@ describe('identity value validation', () => {
     expect(roles.has('identity', 'owner')).toBe(true)
     expect(RoleAssignments.empty().isEmpty).toBe(true)
     expect(RoleAssignments.empty().grant(owner).isEmpty).toBe(false)
+  })
+})
+
+describe('locale', () => {
+  it('canonicalises a BCP 47 tag', () => {
+    expect(valid(Locale.create(' pt-br ')).value).toBe('pt-BR')
+    expect(valid(Locale.create('EN')).value).toBe('en')
+  })
+  it.each(['', '   ', 'not a locale', 'x'.repeat(40)])('rejects %s', (raw) => {
+    expect(Locale.create(raw).isLeft()).toBe(true)
+  })
+})
+
+describe('company profile', () => {
+  const base = {
+    legalName: '  Horizon Comércio LTDA ',
+    baseCurrency: 'brl',
+    fiscalRegime: 'simples-nacional' as const,
+  }
+
+  it('normalises the legal name, currency and country', () => {
+    const profile = valid(CompanyProfile.create(base)).details
+    expect(profile.legalName).toBe('Horizon Comércio LTDA')
+    expect(profile.baseCurrency).toBe('BRL')
+    expect(profile.address.country).toBe('BR')
+  })
+
+  it('keeps registrations comparable by discarding their punctuation', () => {
+    const profile = valid(CompanyProfile.create({ ...base, taxId: '12.345.678/0001-95' }))
+    expect(profile.details.taxId).toBe('12345678000195')
+  })
+
+  it('treats blank optional fields as absent rather than empty', () => {
+    const profile = valid(CompanyProfile.create({ ...base, tradeName: '   ' })).details
+    expect(profile.tradeName).toBeNull()
+  })
+
+  it.each([
+    { ...base, legalName: 'A' },
+    { ...base, baseCurrency: 'REAIS' },
+    { ...base, addressCountry: 'BRA' },
+    { ...base, fiscalRegime: 'lucro-imaginario' as never },
+  ])('rejects an invalid profile', (input) => {
+    expect(CompanyProfile.create(input).isLeft()).toBe(true)
   })
 })
