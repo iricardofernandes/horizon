@@ -6,9 +6,12 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 1 — scaffold.** Configuration, tooling and documentation are real;
-there is no domain code yet. See [`docs/plan.md`](../docs/plan.md) for what arrives
-when.
+**Status: phase 7 — complete.** The versioned choreography with Sales is defined in
+`@horizon/contracts@0.3.0`. Forced-RLS PostgreSQL persistence locks every requested
+balance and either holds all lines or publishes one complete rejection; confirmation
+atomically converts holds into append-only shipment movements. Its inbox, outbox relay,
+RabbitMQ consumer, bounded retry, circuit breaker, metrics and trace propagation are
+exercised both independently and by `make test-phase7`.
 
 ---
 
@@ -47,8 +50,9 @@ refusals.
 
 | Event | Reaction |
 |---|---|
-| `catalog.product.created` | Makes the item stockable and creates zero balances where required. |
-| `catalog.product.discontinued` | Blocks new reservations for the item. |
+| `catalog.item.created` | Projects products as stockable; services are deliberately ignored. |
+| `catalog.item.deactivated` | Blocks new reservations for the item. |
+| `sales.order.placed` | Attempts one atomic reservation for every order line and publishes either reserved or rejected. |
 | `sales.order.confirmed` | Converts the order's reservation into an outbound movement. |
 | `sales.order.cancelled` | Releases the order's reservation. |
 
@@ -60,17 +64,21 @@ the state change it describes, and relayed by a poller using `FOR UPDATE SKIP LO
 Schemas live in `@horizon/contracts` and are versioned there (ADR 0030); this module
 does not define its own wire shapes.
 
+Every order event carries a monotonic `orderVersion`, echoed by reservation outcomes.
+Inventory may receive messages out of order and must ignore an older version rather than
+assuming RabbitMQ preserves aggregate ordering across retries and consumers.
+
 ---
 
 ## Endpoints
 
-None yet — this module is a scaffold. Its HTTP surface arrives with its phase, and
-OpenAPI is generated from the controllers and Zod schemas at that point, aggregated at
-the gateway and published by CI.
+Inventory is event-driven in phase 7: order commands arrive as versioned Sales events.
+The operator-facing stock bootstrap used by the phase 8 seed flow remains the next HTTP
+surface.
 
 | Method | Path | Purpose |
 |---|---|---|
-| — | — | *(none in phase 1)* |
+| — | — | *(event consumers only in phase 7)* |
 
 ---
 
@@ -97,7 +105,7 @@ Redis and RabbitMQ via Testcontainers rather than using a shared instance (ADR 0
 npm run test:e2e
 ```
 
-Migrations, once this module has a schema:
+Migrations:
 
 ```bash
 npm run db:generate  # emit SQL from the Drizzle schema
@@ -127,6 +135,7 @@ immediately rather than surfacing as a failure on first use.
 | `LOG_LEVEL` | pino level. `info` in production. |
 | `DATABASE_URL` | Application role. Holds neither SUPERUSER nor BYPASSRLS, so RLS applies to it (ADR 0017). |
 | `DATABASE_MIGRATION_URL` | Owner role, used only by `db:migrate`. The application never connects with it. |
+| `DATABASE_RELAY_URL` | Optional relay-only role. When present, the service runs its embedded outbox worker. |
 | `DATABASE_POOL_MAX` | Bulkhead: the pool this service may consume (ADR 0027). |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | No query waits without a bound. |
 | `REDIS_URL` | Denylist, idempotency records, rate counters. |
