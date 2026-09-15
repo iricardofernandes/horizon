@@ -15,19 +15,31 @@ English equivalent, which are defined in [`docs/glossary.md`](docs/glossary.md).
 
 ---
 
-> ### Next phase: **6 — catalog**
+> ### Current phase: **11 — live deployment**
 >
-> Identity now has a working, tested API: tenants and users, EdDSA/JWKS, atomic Redis
-> sessions, API keys, forced PostgreSQL RLS, encrypted personal data, an append-only
-> audit chain and a transactional outbox. Domain/application coverage exceeds 99% of lines.
+> Engineering phases 7–10 and 12–13 are complete; phase 11 remains at its account-linked
+> deployment gate. Inventory and Sales execute the durable RabbitMQ order
+> choreography with forced PostgreSQL RLS and transactional inbox/outbox boundaries.
+> Webhooks now owns tenant-scoped subscriptions, encrypted signing secrets, HMAC delivery,
+> append-only attempt logs, bounded retry, a durable dead-letter state and replay.
 >
-> Phase 5's patterns are extracted in [`docs/patterns/`](docs/patterns/), with a concrete
-> checklist for **phase 6 — Catalog**. Each recipe links the implementation and its tests.
+> The Next.js portal provides an HttpOnly rotating session, catalog and inventory views,
+> order creation with asynchronous confirmation, and webhook subscription management.
+> `make test-phase10` completes that path in Chromium at desktop and mobile widths and
+> requires one Jaeger trace across web, gateway, Sales, Inventory and Webhooks.
+> The opt-in MCP debugger now composes that observability plane through ten bounded,
+> audited read-only tools; `make test-phase12` proves its database role cannot read or
+> write business data.
+> The AWS Terraform is also complete and provider-validated for both environments, but
+> has intentionally never been applied. Its estimated cost and exact limits are in
+> [`infra/terraform/README.md`](infra/terraform/README.md).
 >
-> `@horizon/contracts@0.1.1` is consumed at an exact registry pin. The platform remains
-> independently runnable with `make up && make smoke`.
+> `@horizon/contracts@0.3.0` defines that choreography. Consumers remain exact-pinned to
+> the contract version they implement. The platform remains independently runnable with
+> `make up && make smoke`.
 >
-> Scope and operational limits: [`identity/README.md`](identity/README.md).
+> Scope and operational limits: [`inventory/README.md`](inventory/README.md),
+> [`sales/README.md`](sales/README.md) and [`webhooks/README.md`](webhooks/README.md).
 > What arrives next: [`docs/plan.md`](docs/plan.md).
 
 ---
@@ -45,8 +57,12 @@ and RabbitMQ, and executes as a CI job on every push — so the screenshot below
 become a lie. Load-test results with measured throughput and p95 are committed to
 `docs/benchmarks/`.
 
-<!-- Phase 8. See docs/assets/README.md. -->
-> _Trace screenshot lands here in phase 8._
+![Golden-path trace in Jaeger: one trace, three services](docs/assets/golden-path-jaeger.png)
+
+The committed capture is evidence from `make demo`, not a hand-built diagram: Jaeger
+reports 3 services and 12 spans under the same trace. The always-on
+[`golden path` workflow](.github/workflows/golden-path.yml) executes the seed and flow
+twice so both first-run behavior and seed idempotency are gates.
 
 ---
 
@@ -159,7 +175,15 @@ git clone <this repository> && cd horizon
 
 make install     # npm ci in every project
 make check       # boundaries + lint + typecheck + unit tests, everywhere
+make up          # start the platform dependencies
+make demo        # idempotent seed plus signed callback golden path
+make up-apps     # then start all five services and web at http://localhost:3000
+make test-phase10 # repeat the human flow in Chromium and verify its joined trace
+make test-phase12 # prove the MCP debugger's parse and database privilege boundaries
 ```
+
+The local workspace is `horizon-demo`; sign in as `demo@horizon.local` with
+`Horizon-demo-2026!` after running `make demo`.
 
 Or work on one module, which is the normal case:
 
@@ -180,7 +204,8 @@ Or bring up the platform:
 
 ```bash
 make up        # eleven services, all-healthy from cold in ~30s
-make smoke     # 43 assertions that it actually works
+make smoke     # 43 assertions that the platform works
+make demo      # idempotent seed + traced Sales/Inventory/callback golden path
 make down
 ```
 

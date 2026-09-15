@@ -322,9 +322,23 @@ strategy, module bootstrap checklist.
 
 ---
 
-## Phase 6 — Catalog
+## Phase 6 — Catalog — **complete**
 
 The simplest business module. It exists to prove the template is followable.
+
+**What following the template turned up:**
+
+- **A database rename is a release sequence, not one migration.** The executable
+  PostgreSQL exercise keeps old and new writers compatible, backfills in resumable
+  batches, validates the cutover and only then drops the old column. The resulting
+  [recipe](patterns/zero-downtime-migration.md) is now part of the checklist.
+- **Forced RLS changes how backfills run.** A migration owner is not an excuse for a
+  cross-tenant connection. The recipe requires tenant transactions or a temporary,
+  explicitly reviewed maintenance policy instead of `BYPASSRLS`.
+- **The reusable patterns had real gaps.** Catalog forced the recipes to specify the
+  issuer-to-`kid` binding, denylist key ownership, broker poison-message policy and the
+  shutdown order for AMQP channels. Those fixes live in `docs/patterns/`, not as private
+  Catalog workarounds.
 
 **Deliverables**
 
@@ -350,6 +364,21 @@ The simplest business module. It exists to prove the template is followable.
 ## Phase 7 — Inventory and Sales
 
 First real choreography across module and database boundaries.
+
+**Completed.** `@horizon/contracts@0.3.0` fixes the order/reservation wire protocol.
+Inventory derives availability and moving-average cost from its append-only movement
+ledger, holds every order line atomically and serializes competing reservations with row
+locks. Sales owns customers, expiring quotes, monotonic order transitions and immutable
+commercial snapshots; customer PII uses per-subject authenticated encryption and blind
+indexes so erasure can crypto-shred the key without rewriting history. Both modules use
+forced RLS, transactional inbox/outbox adapters, durable RabbitMQ topology, bounded
+redelivery, publisher confirms, timeouts, circuit breakers and messaging metrics.
+
+`make test-phase7` starts two isolated PostgreSQL databases and RabbitMQ and proves the
+whole choreography. It deliberately crashes a relay after broker confirmation, restarts
+it, observes one inbox effect from the duplicate, completes the shipment and verifies
+one trace id across both services. The per-module E2E suites separately prove RLS,
+rollback, append-only movements, quote persistence and live crypto-shredding.
 
 **Deliverables**
 
@@ -379,14 +408,20 @@ First real choreography across module and database boundaries.
 
 The highest-priority deliverable in the repository. Once green, it stays green.
 
+**Status: complete.** `make demo` owns migration, an idempotent tenant/user/catalog/stock
+seed, the RabbitMQ order choreography, an HMAC-verifying callback receiver and a hard Jaeger
+assertion for one trace containing Sales, Inventory and Webhooks. The always-on
+`golden-path.yml` workflow runs it twice. The committed k6 run identifies 160 orders/s as
+the local saturation point (80/s as the highest no-drop rate), records the optimization
+made in response and retains its raw summary. The Jaeger capture near the top of the root
+README reports three services and twelve spans.
+
 **Deliverables**
 
 - Seed script: a tenant with users, roles, products and stock.
 - `make demo`: create sales order → reserve stock → confirm order → emit
   `sales.order.confirmed` → `webhooks` delivers a signed callback to a local
-  receiver. (Ordering note: `webhooks` is Phase 9; until then the demo terminates at
-  the published event and a stub receiver, and the phase is re-run to completion
-  after Phase 9.)
+  receiver through its real RabbitMQ consumer, database and delivery worker.
 - A CI job running the full flow on every push.
 - k6 load test against the flow, results committed to `docs/benchmarks/`:
   throughput, p95, the saturation point, and what was changed in response.
@@ -409,6 +444,13 @@ The highest-priority deliverable in the repository. Once green, it stays green.
 ---
 
 ## Phase 9 — Webhooks
+
+**Status: complete.** The module exposes tenant-scoped subscription and delivery APIs,
+encrypts signing secrets at rest, consumes the versioned confirmed-order contract and
+persists an idempotent delivery per matching subscription. Its bounded worker signs the
+exact body, records every attempt append-only, retries with exponential backoff and jitter,
+and moves exhausted work to a replayable durable dead-letter state. `make demo` and the
+committed load envelope both exercise this real path.
 
 **Deliverables**
 
@@ -433,7 +475,13 @@ The highest-priority deliverable in the repository. Once green, it stays green.
 
 ---
 
-## Phase 10 — Web
+## Phase 10 — Web — **complete**
+
+**Status: complete.** The browser surface uses an HttpOnly BFF session and an allowlisted
+Kong proxy. Catalog, stock, orders and webhook subscriptions are live views over their
+own services; no service is addressed directly. `make test-phase10` completes the order
+flow in system Chromium, verifies the 390 px responsive baseline, and requires Jaeger to
+show `web`, `gateway`, `sales`, `inventory` and `webhooks` in the same trace.
 
 **Deliverables**
 
@@ -458,6 +506,14 @@ The highest-priority deliverable in the repository. Once green, it stays green.
 
 ## Phase 11 — Live deployment
 
+**Current increment.** Package the smallest honest public deployment, document which
+containers it includes, and keep platform secrets outside the repository.
+
+**Progress.** `web/` now has a Vercel configuration and an opt-in hosted profile backed
+by Neon's serverless driver. Its signed HttpOnly session and seeded Catalog path are kept
+separate from the full local BFF. Provisioning and the topology disclosure live in
+`docs/deployments/vercel-neon.md`; the remaining gate is an account-linked production URL.
+
 **Deliverables**
 
 - `web/` plus a minimal backend deployed to a free tier (Vercel / Fly.io / Railway,
@@ -481,6 +537,15 @@ The highest-priority deliverable in the repository. Once green, it stays green.
 ## Phase 12 — MCP debugger
 
 Deliberately late: it has no value until logs, traces and metrics actually flow.
+
+**Complete.** The standalone server exposes all ten tools over stdio and authenticated
+streamable HTTP, with per-caller/tool limits, byte/row caps, tenant hashing, PII masking
+and JSON invocation auditing. `make test-phase12` installs the NOLOGIN-owned wrappers
+idempotently and proves over an authenticated PostgreSQL connection that the debug role
+cannot read or write a business table or route unsafe SQL through `explain_query`.
+The RabbitMQ tool deliberately reports non-mutating DLQ metadata only: the management
+API's message-sampling operation performs dequeue/requeue and is incompatible with ADR
+0035; this limitation is explicit in the tool result and debugger README.
 
 **Deliverables**
 
@@ -511,6 +576,15 @@ Deliberately late: it has no value until logs, traces and metrics actually flow.
 ---
 
 ## Phase 13 — Terraform and release workflows
+
+**Complete, and deliberately unapplied.** A single shared root composes the eight
+modules below for both variable sets. Terraform 1.16.2 with AWS provider 6.x passes
+`fmt`, `validate`, and provider-mocked plans for both `dev` and `prod`. Remote S3 state
+and DynamoDB locking are partial configuration with placeholder resources and have
+never been initialized. The manual release workflow can build immutable ECR images and
+render a speculative plan only; `scripts/assert-no-terraform-apply.mjs` keeps an apply
+command out of every workflow. The cost and bootstrap boundaries are stated in
+`infra/terraform/README.md`.
 
 **Deliverables**
 
