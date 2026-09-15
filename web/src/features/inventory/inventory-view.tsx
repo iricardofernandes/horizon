@@ -3,6 +3,7 @@
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Dialog } from '@base-ui/react/dialog'
 import { Buildings, Cube, Package, Plus, Prohibit, Warning, X } from '@phosphor-icons/react'
+import { useTranslations } from 'next-intl'
 import { type FormEvent, type ReactNode, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,9 @@ import { TextField } from '@/components/ui/text-field'
 import type { CatalogItem } from '@/features/catalog/catalog-view'
 import { minorUnits } from '@/lib/format'
 import { jsonHeaders } from '@/lib/http'
+import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
+import { useQuantity } from '@/lib/use-format'
 
 export type Warehouse = {
   id: string
@@ -31,6 +34,9 @@ export function InventoryView({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('inventory')
+  const statusLabel = useStatusLabel()
+  const quantity = useQuantity()
   const [warehouseId, setWarehouseId] = useState('all')
   const [query, setQuery] = useState('')
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
@@ -76,11 +82,9 @@ export function InventoryView({
     <section>
       <header className="page-heading page-heading-with-actions">
         <div>
-          <p className="eyebrow">Stock control</p>
-          <h1>Inventory</h1>
-          <p className="catalog-page-copy">
-            Track physical stock, reservations and availability across warehouses.
-          </p>
+          <p className="eyebrow">{t('eyebrow')}</p>
+          <h1>{t('title')}</h1>
+          <p className="catalog-page-copy">{t('copy')}</p>
         </div>
         <div className="page-actions">
           <ReceiveStockDialog
@@ -96,25 +100,27 @@ export function InventoryView({
       <div className="inventory-stats">
         <InventoryStat
           icon={<Buildings size={19} />}
-          label="Warehouses"
+          label={t('warehouses')}
           value={warehouses.length}
         />
-        <InventoryStat icon={<Cube size={19} />} label="On hand" value={totals.onHand} />
-        <InventoryStat icon={<Package size={19} />} label="Reserved" value={totals.reserved} />
+        <InventoryStat icon={<Cube size={19} />} label={t('onHand')} value={totals.onHand} />
+        <InventoryStat icon={<Package size={19} />} label={t('reserved')} value={totals.reserved} />
         <InventoryStat
           icon={<Warning size={19} />}
-          label="Unavailable items"
+          label={t('unavailableItems')}
           value={rows.filter((row) => row.onHand - row.reserved <= 0).length}
           warning
         />
       </div>
 
       <div className="inventory-layout">
-        <aside className="panel warehouse-list" aria-label="Warehouses">
+        <aside className="panel warehouse-list" aria-label={t('warehouses')}>
           <header>
-            <h2>Warehouses</h2>
+            <h2>{t('warehouses')}</h2>
             <span className="warehouse-count">
-              {warehouses.filter((warehouse) => warehouse.active).length} active
+              {t('activeWarehouses', {
+                count: warehouses.filter((warehouse) => warehouse.active).length,
+              })}
             </span>
           </header>
           <Button
@@ -126,8 +132,8 @@ export function InventoryView({
               <Buildings aria-hidden="true" size={17} />
             </span>
             <span>
-              <strong>All locations</strong>
-              <small>Consolidated stock</small>
+              <strong>{t('allLocations')}</strong>
+              <small>{t('allLocationsCopy')}</small>
             </span>
           </Button>
           {warehouses.map((warehouse) => (
@@ -144,10 +150,13 @@ export function InventoryView({
                 </span>
                 <span>
                   <strong>{warehouse.name}</strong>
-                  <small>{warehouse.balances.length} stocked items</small>
+                  <small>{t('stockedItems', { count: warehouse.balances.length })}</small>
                 </span>
                 <span className="warehouse-status">
-                  <Badge status={warehouse.active ? 'active' : 'inactive'} />
+                  <Badge
+                    status={warehouse.active ? 'active' : 'inactive'}
+                    label={statusLabel(warehouse.active ? 'active' : 'inactive')}
+                  />
                 </span>
               </Button>
               {warehouse.active ? (
@@ -164,18 +173,18 @@ export function InventoryView({
         <section className="panel table-panel inventory-table-panel">
           <header className="inventory-table-heading">
             <div>
-              <h2>Stock balances</h2>
+              <h2>{t('stockBalances')}</h2>
               <p className="inventory-table-copy">
                 {warehouseId === 'all'
-                  ? 'All warehouse locations'
+                  ? t('allWarehouses')
                   : warehouses.find((row) => row.id === warehouseId)?.name}
               </p>
             </div>
             <input
-              aria-label="Search stock"
+              aria-label={t('search')}
               className="ui-input"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search item or SKU…"
+              placeholder={t('searchPlaceholder')}
               type="search"
               value={query}
             />
@@ -184,11 +193,11 @@ export function InventoryView({
             <table>
               <thead>
                 <tr>
-                  <th>Item</th>
-                  <th>Location</th>
-                  <th>On hand</th>
-                  <th>Reserved</th>
-                  <th>Available</th>
+                  <th>{t('item')}</th>
+                  <th>{t('location')}</th>
+                  <th>{t('onHand')}</th>
+                  <th>{t('reserved')}</th>
+                  <th>{t('available')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -202,7 +211,7 @@ export function InventoryView({
                             <Package aria-hidden="true" size={17} />
                           </span>
                           <span>
-                            <strong>{item?.name ?? 'Unknown item'}</strong>
+                            <strong>{item?.name ?? t('unknownItem')}</strong>
                             <small>{item?.sku ?? row.itemId}</small>
                           </span>
                         </div>
@@ -221,8 +230,8 @@ export function InventoryView({
           </div>
           {!rows.length ? (
             <div className="catalog-empty">
-              <strong>No stock found</strong>
-              <p>Adjust the location or item search.</p>
+              <strong>{t('emptyTitle')}</strong>
+              <p>{t('emptyCopy')}</p>
             </div>
           ) : null}
         </section>
@@ -232,6 +241,8 @@ export function InventoryView({
 }
 
 function CreateWarehouseDialog({ onChanged, setNotice }: MutationProps) {
+  const t = useTranslations('inventory')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -252,12 +263,12 @@ function CreateWarehouseDialog({ onChanged, setNotice }: MutationProps) {
       },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The warehouse could not be created.'))
+      setError(await apiError(response, t('createWarehouseFailed')))
       setBusy(false)
       return
     }
     form.reset()
-    setNotice('Warehouse created successfully.')
+    setNotice(t('warehouseCreated'))
     await onChanged()
     setOpen(false)
     setBusy(false)
@@ -266,27 +277,27 @@ function CreateWarehouseDialog({ onChanged, setNotice }: MutationProps) {
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger className="ui-button ui-button-primary">
-        <Plus aria-hidden="true" size={17} /> New warehouse
+        <Plus aria-hidden="true" size={17} /> {t('createWarehouse')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup">
           <DialogHeading
-            title="Create warehouse"
-            description="Add a physical location for stock balances and reservations."
+            title={t('createWarehouseTitle')}
+            description={t('createWarehouseDescription')}
           />
-          <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
           <form className="dialog-form" onSubmit={submit}>
             <TextField
-              label="Warehouse name"
+              label={t('warehouseName')}
               maxLength={120}
               name="name"
-              placeholder="Distribution center"
+              placeholder={t('warehouseNamePlaceholder')}
               required
             />
-            <FormActions busy={busy} error={error} label="Create warehouse" />
+            <FormActions busy={busy} error={error} label={t('createWarehouseSubmit')} />
           </form>
         </Dialog.Popup>
       </Dialog.Portal>
@@ -303,6 +314,8 @@ function ReceiveStockDialog({
   items: CatalogItem[]
   warehouses: Warehouse[]
 } & MutationProps) {
+  const t = useTranslations('inventory')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -315,7 +328,7 @@ function ReceiveStockDialog({
     const data = new FormData(form)
     const unitCost = minorUnits(String(data.get('unitCost') ?? ''))
     if (!unitCost) {
-      setError('Enter a valid non-negative unit cost with up to two decimal places.')
+      setError(t('unitCostInvalid'))
       setBusy(false)
       return
     }
@@ -335,12 +348,12 @@ function ReceiveStockDialog({
       },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The stock receipt could not be posted.'))
+      setError(await apiError(response, t('receiveStockFailed')))
       setBusy(false)
       return
     }
     form.reset()
-    setNotice('Stock receipt posted successfully.')
+    setNotice(t('received'))
     await onChanged()
     setOpen(false)
     setBusy(false)
@@ -352,21 +365,18 @@ function ReceiveStockDialog({
         className="ui-button ui-button-secondary"
         disabled={!items.length || !warehouses.some((warehouse) => warehouse.active)}
       >
-        <Cube aria-hidden="true" size={17} /> Receive stock
+        <Cube aria-hidden="true" size={17} /> {t('receiveStock')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup">
-          <DialogHeading
-            title="Receive stock"
-            description="Increase on-hand quantity and recalculate the weighted average cost."
-          />
-          <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+          <DialogHeading title={t('receiveStock')} description={t('receiveStockDescription')} />
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
           <form className="dialog-form" onSubmit={submit}>
             <SelectField
-              label="Warehouse"
+              label={t('warehouse')}
               name="warehouseId"
               options={warehouses
                 .filter((warehouse) => warehouse.active)
@@ -374,7 +384,7 @@ function ReceiveStockDialog({
               required
             />
             <SelectField
-              label="Item"
+              label={t('item')}
               name="itemId"
               options={items
                 .filter((item) => item.active && item.kind === 'product')
@@ -385,14 +395,14 @@ function ReceiveStockDialog({
               <TextField
                 defaultValue="1"
                 inputMode="decimal"
-                label="Quantity"
+                label={t('quantity')}
                 name="quantity"
                 pattern="[0-9]+([.][0-9]{1,6})?"
                 required
               />
               <TextField
                 inputMode="decimal"
-                label="Unit cost"
+                label={t('unitCost')}
                 name="unitCost"
                 pattern="[0-9]+([.,][0-9]{1,2})?"
                 placeholder="0.00"
@@ -401,14 +411,14 @@ function ReceiveStockDialog({
             </div>
             <TextField
               defaultValue="BRL"
-              label="Currency"
+              label={t('currency')}
               maxLength={3}
               minLength={3}
               name="currency"
               pattern="[A-Za-z]{3}"
               required
             />
-            <FormActions busy={busy} error={error} label="Post receipt" />
+            <FormActions busy={busy} error={error} label={t('postReceipt')} />
           </form>
         </Dialog.Popup>
       </Dialog.Portal>
@@ -421,6 +431,8 @@ function DeactivateWarehouseDialog({
   onChanged,
   setNotice,
 }: { warehouse: Warehouse } & MutationProps) {
+  const t = useTranslations('inventory')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -434,11 +446,11 @@ function DeactivateWarehouseDialog({
       { method: 'PATCH' },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The warehouse could not be deactivated.'))
+      setError(await apiError(response, t('deactivateFailed')))
       setBusy(false)
       return
     }
-    setNotice(`${warehouse.name} was deactivated.`)
+    setNotice(t('deactivated', { name: warehouse.name }))
     await onChanged()
     setOpen(false)
     setBusy(false)
@@ -447,7 +459,7 @@ function DeactivateWarehouseDialog({
   return (
     <AlertDialog.Root onOpenChange={setOpen} open={open}>
       <AlertDialog.Trigger
-        aria-label={`Deactivate ${warehouse.name}`}
+        aria-label={t('deactivateLabel', { name: warehouse.name })}
         className="ui-button ui-button-ghost warehouse-deactivate"
       >
         <Prohibit aria-hidden="true" size={14} />
@@ -456,10 +468,9 @@ function DeactivateWarehouseDialog({
         <AlertDialog.Backdrop className="ui-dialog-backdrop" />
         <AlertDialog.Popup className="ui-dialog-popup ui-alert-popup">
           <div className="dialog-heading">
-            <AlertDialog.Title>Deactivate {warehouse.name}?</AlertDialog.Title>
+            <AlertDialog.Title>{t('deactivateTitle', { name: warehouse.name })}</AlertDialog.Title>
             <AlertDialog.Description className="dialog-description">
-              The location remains in historical records but cannot receive stock or fulfill new
-              orders.
+              {t('deactivateWarning')}
             </AlertDialog.Description>
           </div>
           {error ? (
@@ -468,9 +479,11 @@ function DeactivateWarehouseDialog({
             </p>
           ) : null}
           <div className="dialog-actions">
-            <AlertDialog.Close className="ui-button ui-button-secondary">Cancel</AlertDialog.Close>
+            <AlertDialog.Close className="ui-button ui-button-secondary">
+              {common('cancel')}
+            </AlertDialog.Close>
             <Button disabled={busy} onClick={deactivate} type="button" variant="danger">
-              {busy ? 'Deactivating…' : 'Deactivate warehouse'}
+              {busy ? t('deactivating') : t('deactivateSubmit')}
             </Button>
           </div>
         </AlertDialog.Popup>
@@ -491,6 +504,8 @@ function DialogHeading({ title, description }: { title: string; description: str
 }
 
 function FormActions({ busy, error, label }: { busy: boolean; error: string; label: string }) {
+  const t = useTranslations('inventory')
+  const common = useTranslations('common')
   return (
     <>
       {error ? (
@@ -499,9 +514,9 @@ function FormActions({ busy, error, label }: { busy: boolean; error: string; lab
         </p>
       ) : null}
       <div className="dialog-actions">
-        <Dialog.Close className="ui-button ui-button-secondary">Cancel</Dialog.Close>
+        <Dialog.Close className="ui-button ui-button-secondary">{common('cancel')}</Dialog.Close>
         <Button disabled={busy} type="submit" variant="primary">
-          {busy ? 'Saving…' : label}
+          {busy ? t('saving') : label}
         </Button>
       </div>
     </>
@@ -528,6 +543,7 @@ function InventoryStat({
   value: number
   warning?: boolean
 }) {
+  const quantity = useQuantity()
   return (
     <article className={warning ? 'inventory-stat warning' : 'inventory-stat'}>
       <span className="resource-icon">{icon}</span>
@@ -535,8 +551,4 @@ function InventoryStat({
       <strong>{quantity(value)}</strong>
     </article>
   )
-}
-
-function quantity(value: number) {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 }).format(value)
 }

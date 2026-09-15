@@ -587,9 +587,18 @@ select:focus-visible,
   align-items: center;
   gap: 10px;
 }
-.user-menu > span:nth-child(2) {
+.user-identity {
   display: grid;
   font-size: 12px;
+}
+.language-switcher {
+  gap: 7px;
+  width: auto;
+  min-height: 36px;
+  padding: 0 10px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 650;
 }
 .user-menu small {
   color: var(--color-text-muted);

@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { PageHeading } from '@/components/ui/headings'
 
 type SessionUser = { id: string; name: string; email: string }
@@ -11,34 +12,31 @@ export function WorkspaceView({
   user: SessionUser | null
   workspaceName: string
 }) {
+  const t = useTranslations('workspaceSettings')
   return (
     <section>
-      <PageHeading
-        eyebrow="Workspace administration"
-        title="Workspace"
-        copy="The company context every document, permission and report belongs to."
-      />
+      <PageHeading eyebrow={t('eyebrow')} title={t('title')} copy={t('copy')} />
       <div className="settings-layout">
         <section className="panel workspace-settings-card">
           <header>
             <div className="brand-mark">{workspaceName.slice(0, 1).toUpperCase()}</div>
             <div>
               <h2>{workspaceName}</h2>
-              <p className="settings-card-caption">Current workspace</p>
+              <p className="settings-card-caption">{t('currentWorkspace')}</p>
             </div>
           </header>
           <dl>
             <div>
-              <dt>Signed in as</dt>
-              <dd>{user?.name ?? '—'}</dd>
+              <dt>{t('signedInAs')}</dt>
+              <dd>{user?.name ?? t('none')}</dd>
             </div>
             <div>
-              <dt>Account</dt>
-              <dd>{user?.email ?? '—'}</dd>
+              <dt>{t('account')}</dt>
+              <dd>{user?.email ?? t('none')}</dd>
             </div>
           </dl>
           <a className="ui-button ui-button-secondary settings-link" href="/workspaces">
-            Switch workspace
+            {t('switchWorkspace')}
           </a>
         </section>
       </div>

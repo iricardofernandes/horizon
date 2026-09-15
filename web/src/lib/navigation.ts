@@ -17,7 +17,8 @@ export type RoleAssignment = { module: string; role: string }
 
 export type NavigationEntry = {
   href: string
-  label: string
+  /** Key inside the `navigation.items` namespace; never display copy (ADR 0044). */
+  labelKey: string
   icon: Icon
   /**
    * The module a user must hold any role in to see this entry, or null when the screen
@@ -29,33 +30,45 @@ export type NavigationEntry = {
   demo: boolean
 }
 
-export type NavigationGroup = { label: string; entries: readonly NavigationEntry[] }
+export type NavigationGroup = { labelKey: string; entries: readonly NavigationEntry[] }
 
 export const navigation: readonly NavigationGroup[] = [
   {
-    label: 'Overview',
-    entries: [{ href: '/app', label: 'Overview', icon: ChartBar, module: null, demo: true }],
+    labelKey: 'overview',
+    entries: [{ href: '/app', labelKey: 'overview', icon: ChartBar, module: null, demo: true }],
   },
   {
-    label: 'Catalog',
+    labelKey: 'catalog',
     entries: [
-      { href: '/app/catalog/items', label: 'Items', icon: Package, module: 'catalog', demo: true },
+      {
+        href: '/app/catalog/items',
+        labelKey: 'items',
+        icon: Package,
+        module: 'catalog',
+        demo: true,
+      },
     ],
   },
   {
-    label: 'Sales',
+    labelKey: 'sales',
     entries: [
       {
         href: '/app/sales/customers',
-        label: 'Customers',
+        labelKey: 'customers',
         icon: UsersThree,
         module: 'sales',
         demo: false,
       },
-      { href: '/app/sales/quotes', label: 'Quotes', icon: FileText, module: 'sales', demo: false },
+      {
+        href: '/app/sales/quotes',
+        labelKey: 'quotes',
+        icon: FileText,
+        module: 'sales',
+        demo: false,
+      },
       {
         href: '/app/sales/orders',
-        label: 'Orders',
+        labelKey: 'orders',
         icon: ShoppingCart,
         module: 'sales',
         demo: false,
@@ -63,11 +76,11 @@ export const navigation: readonly NavigationGroup[] = [
     ],
   },
   {
-    label: 'Inventory',
+    labelKey: 'inventory',
     entries: [
       {
         href: '/app/inventory/balances',
-        label: 'Balances',
+        labelKey: 'balances',
         icon: Warehouse,
         module: 'inventory',
         demo: false,
@@ -75,25 +88,25 @@ export const navigation: readonly NavigationGroup[] = [
     ],
   },
   {
-    label: 'Developers',
+    labelKey: 'developers',
     entries: [
       {
         href: '/app/developers/api-keys',
-        label: 'API keys',
+        labelKey: 'apiKeys',
         icon: Key,
         module: 'identity',
         demo: false,
       },
       {
         href: '/app/developers/webhooks',
-        label: 'Webhooks',
+        labelKey: 'webhooks',
         icon: WebhooksLogo,
         module: 'webhooks',
         demo: false,
       },
       {
         href: '/app/developers/deliveries',
-        label: 'Delivery logs',
+        labelKey: 'deliveries',
         icon: PaperPlaneTilt,
         module: 'webhooks',
         demo: false,
@@ -101,18 +114,18 @@ export const navigation: readonly NavigationGroup[] = [
     ],
   },
   {
-    label: 'Administration',
+    labelKey: 'administration',
     entries: [
       {
         href: '/app/administration/people',
-        label: 'People and access',
+        labelKey: 'people',
         icon: ShieldCheck,
         module: 'identity',
         demo: false,
       },
       {
         href: '/app/administration/workspace',
-        label: 'Workspace',
+        labelKey: 'workspace',
         icon: Gear,
         module: null,
         demo: true,
@@ -144,7 +157,7 @@ export function visibleNavigation(
 ): NavigationGroup[] {
   return navigation
     .map((group) => ({
-      label: group.label,
+      labelKey: group.labelKey,
       entries: group.entries.filter((entry) => isEntryVisible(entry, roles, hostedDemo)),
     }))
     .filter((group) => group.entries.length > 0)

@@ -2,6 +2,8 @@
 
 import { SidebarSimple, SignOut } from '@phosphor-icons/react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import { LanguageSwitcher } from '@/components/shell/language-switcher'
 import type { SessionUser } from '@/components/shell/workspace-context'
 import { Button } from '@/components/ui/button'
 import { tracedFetch } from '@/lib/telemetry'
@@ -19,8 +21,9 @@ export function WorkspaceTopbar({
   collapsed: boolean
   onToggleSidebar: () => void
 }) {
+  const t = useTranslations('shell')
   const router = useRouter()
-  const control = collapsed ? 'Expand sidebar' : 'Collapse sidebar'
+  const control = collapsed ? t('expandSidebar') : t('collapseSidebar')
 
   async function logout() {
     await tracedFetch('session.logout', '/api/session', { method: 'DELETE' })
@@ -48,14 +51,15 @@ export function WorkspaceTopbar({
         </div>
       </div>
       <div className="user-menu">
+        <LanguageSwitcher />
         <span className="avatar">{session?.name?.slice(0, 1) ?? 'H'}</span>
-        <span>
-          <strong>{session?.name ?? 'Loading…'}</strong>
+        <span className="user-identity">
+          <strong>{session?.name ?? t('loadingUser')}</strong>
           <small>{session?.email ?? ''}</small>
         </span>
-        <Button aria-label="Sign out" className="signout-button" onClick={logout} type="button">
+        <Button aria-label={t('signOut')} className="signout-button" onClick={logout} type="button">
           <SignOut aria-hidden="true" size={16} />
-          <span>Sign out</span>
+          <span>{t('signOut')}</span>
         </Button>
       </div>
     </header>

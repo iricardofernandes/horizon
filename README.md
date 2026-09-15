@@ -24,9 +24,12 @@ English equivalent, which are defined in [`docs/glossary.md`](docs/glossary.md).
 > append-only attempt logs, bounded retry, a durable dead-letter state and replay.
 >
 > The Next.js portal provides an HttpOnly rotating session, catalog and inventory views,
-> order creation with asynchronous confirmation, and webhook subscription management.
-> `make test-phase10` completes that path in Chromium at desktop and mobile widths and
-> requires one Jaeger trace across web, gateway, Sales, Inventory and Webhooks.
+> order creation with asynchronous confirmation, and webhook subscription management,
+> across bookmarkable routes whose navigation follows the signed-in user's module roles.
+> Its interface reads in Brazilian Portuguese and English, chosen by the reader and not by
+> the URL. `make test-phase10` completes that path in Chromium at desktop and mobile
+> widths, in both languages, and requires one Jaeger trace across web, gateway, Sales,
+> Inventory and Webhooks.
 > The opt-in MCP debugger now composes that observability plane through ten bounded,
 > audited read-only tools; `make test-phase12` proves its database role cannot read or
 > write business data.
@@ -150,7 +153,7 @@ vendored side by side, and a cross-module import cannot resolve.
 | [`inventory/`](inventory/) | Stock balances, movements, warehouses, reservations, cost method | 3003 | 7 |
 | [`sales/`](sales/) | Customers, quotes, sales orders, invoicing trigger | 3004 | 7 |
 | [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, retry, DLQ, replay | 3005 | 9 |
-| [`web/`](web/) | Next.js frontend | 3000 | 10 |
+| [`web/`](web/) | Next.js frontend, routed and bilingual | 3000 | 10, 14 |
 | [`contracts/`](contracts/) | Published package: versioned Zod event and API schemas | — | 3 |
 | [`gateway/`](gateway/) | Kong declarative configuration | 8000 | 2 |
 | [`infra/`](infra/) | Compose, observability configuration, Terraform | — | 2, 13 |

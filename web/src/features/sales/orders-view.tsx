@@ -2,6 +2,7 @@
 
 import { Dialog } from '@base-ui/react/dialog'
 import { Eye, Plus, Trash, X } from '@phosphor-icons/react'
+import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,9 +13,11 @@ import { TextField } from '@/components/ui/text-field'
 import type { CatalogItem } from '@/features/catalog/catalog-view'
 import type { Warehouse } from '@/features/inventory/inventory-view'
 import type { Customer } from '@/features/sales/customers-view'
-import { dateOf, dateTimeOf, money, short } from '@/lib/format'
+import { short } from '@/lib/format'
 import { idempotentJsonHeaders } from '@/lib/http'
+import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
+import { useDate, useDateTime, useMoney } from '@/lib/use-format'
 
 export type Order = {
   id: string
@@ -48,6 +51,7 @@ export function OrdersView({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('orders')
   const [busy, setBusy] = useState(false)
   const [lines, setLines] = useState([0])
   const [nextLine, setNextLine] = useState(1)
@@ -59,18 +63,18 @@ export function OrdersView({
     const data = new FormData(event.currentTarget)
     const created = await createOrder(data)
     if (!created) {
-      setNotice('The order could not be placed. Verify stock and permissions.')
+      setNotice(t('createFailed'))
       setBusy(false)
       return
     }
-    setNotice(`Order ${short(created.orderId)} was placed. Waiting for Inventory confirmation…`)
+    setNotice(t('orderPlaced', { id: short(created.orderId) }))
     const status = await waitForOrder(created.orderId)
     setNotice(
       status === 'confirmed'
-        ? 'Order confirmed and stock committed.'
+        ? t('orderConfirmed')
         : status === 'rejected'
-          ? 'Order rejected because stock was unavailable.'
-          : 'The order is still processing. Its status will remain visible here.',
+          ? t('orderRejected')
+          : t('orderProcessing'),
     )
     await onChanged()
     setLines([0])
@@ -85,16 +89,12 @@ export function OrdersView({
 
   return (
     <section>
-      <PageHeading
-        eyebrow="Sales workspace"
-        title="Orders"
-        copy="Place an order and watch the asynchronous stock decision arrive."
-      />
+      <PageHeading eyebrow={t('eyebrow')} title={t('title')} copy={t('copy')} />
       <div className="split-grid order-layout">
         <form className="panel form-panel" onSubmit={submit}>
-          <PanelHeading title="New order" copy="One line is enough for the golden path" />
+          <PanelHeading title={t('newOrder')} copy={t('newOrderCopy')} />
           <SelectField
-            label="Customer"
+            label={t('customer')}
             name="customerId"
             options={customers
               .filter((row) => row.status === 'active')
@@ -102,7 +102,7 @@ export function OrdersView({
             required
           />
           <SelectField
-            label="Warehouse"
+            label={t('warehouse')}
             name="warehouseId"
             options={warehouses
               .filter((row) => row.active)
@@ -110,21 +110,21 @@ export function OrdersView({
             required
           />
           <div className="order-lines-heading">
-            <strong>Order lines</strong>
+            <strong>{t('orderLines')}</strong>
             <Button
               disabled={lines.length >= 100}
               onClick={addLine}
               type="button"
               variant="secondary"
             >
-              <Plus aria-hidden="true" size={15} /> Add line
+              <Plus aria-hidden="true" size={15} /> {t('addLine')}
             </Button>
           </div>
           <div className="order-lines">
             {lines.map((line, index) => (
               <div className="order-line" key={line}>
                 <SelectField
-                  label={`Item ${index + 1}`}
+                  label={t('item', { index: index + 1 })}
                   name="itemId"
                   options={items
                     .filter((row) => row.active)
@@ -134,13 +134,13 @@ export function OrdersView({
                 <TextField
                   defaultValue="1"
                   inputMode="decimal"
-                  label="Quantity"
+                  label={t('quantity')}
                   name="quantity"
                   pattern="[0-9]+([.][0-9]{1,6})?"
                   required
                 />
                 <Button
-                  aria-label={`Remove item ${index + 1}`}
+                  aria-label={t('removeItem', { index: index + 1 })}
                   className="remove-order-line"
                   disabled={lines.length === 1}
                   onClick={() => setLines((current) => current.filter((value) => value !== line))}
@@ -157,11 +157,11 @@ export function OrdersView({
             type="submit"
             variant="primary"
           >
-            {busy ? 'Following the flow…' : 'Place order'}
+            {busy ? t('placing') : t('placeOrder')}
           </Button>
         </form>
         <section className="panel">
-          <PanelHeading title="Order history" copy={`${orders.length} most recent`} />
+          <PanelHeading title={t('history')} copy={t('historyCopy', { count: orders.length })} />
           <OrderTable orders={orders} customers={customers} warehouses={warehouses} />
         </section>
       </div>
@@ -178,16 +178,21 @@ export function OrderTable({
   customers?: Customer[]
   warehouses?: Warehouse[]
 }) {
+  const t = useTranslations('orders')
+  const common = useTranslations('common')
+  const statusLabel = useStatusLabel()
+  const money = useMoney()
+  const date = useDate()
   return (
     <div className="table-scroll">
       <table>
         <thead>
           <tr>
-            <th>Order</th>
-            <th>Status</th>
-            <th>Total</th>
-            <th>Placed</th>
-            <th aria-label="Actions" />
+            <th>{t('order')}</th>
+            <th>{t('status')}</th>
+            <th>{t('total')}</th>
+            <th>{t('placedAt')}</th>
+            <th aria-label={common('actions')} />
           </tr>
         </thead>
         <tbody>
@@ -197,10 +202,10 @@ export function OrderTable({
                 <code className="table-code">{short(row.id)}</code>
               </td>
               <td>
-                <Badge status={row.status} />
+                <Badge status={row.status} label={statusLabel(row.status)} />
               </td>
-              <td>{row.total ? money(row.total.amount, row.total.currency) : 'Pending'}</td>
-              <td>{dateOf(row.createdAt)}</td>
+              <td>{row.total ? money(row.total.amount, row.total.currency) : common('pending')}</td>
+              <td>{date(row.createdAt)}</td>
               <td>
                 <OrderDetailsDialog
                   customer={customers.find((customer) => customer.id === row.customerId)}
@@ -214,7 +219,7 @@ export function OrderTable({
           ))}
         </tbody>
       </table>
-      {!orders.length ? <Empty copy="No orders yet. Place the first one from Orders." /> : null}
+      {!orders.length ? <Empty copy={t('empty')} /> : null}
     </div>
   )
 }
@@ -228,63 +233,74 @@ function OrderDetailsDialog({
   customer: Customer | undefined
   warehouse: Warehouse | undefined
 }) {
+  const t = useTranslations('orders')
+  const common = useTranslations('common')
+  const statusLabel = useStatusLabel()
+  const money = useMoney()
+  const dateTime = useDateTime()
   const lines = order.confirmedLines.length ? order.confirmedLines : order.requestedLines
   return (
     <Dialog.Root>
       <Dialog.Trigger className="ui-button ui-button-ghost row-action-button">
-        <Eye aria-hidden="true" size={16} /> Details
+        <Eye aria-hidden="true" size={16} /> {t('details')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup order-detail-dialog">
           <div className="dialog-heading">
-            <Dialog.Title>Order {short(order.id)}</Dialog.Title>
+            <Dialog.Title>{t('detailTitle', { id: short(order.id) })}</Dialog.Title>
             <Dialog.Description className="dialog-description">
-              Created {dateTimeOf(order.createdAt)}.
+              {t('createdAt', { date: dateTime(order.createdAt) })}
             </Dialog.Description>
           </div>
-          <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
           <div className="order-detail-summary">
             <div>
-              <span className="summary-label">Status</span>
-              <Badge status={order.status} />
+              <span className="summary-label">{t('status')}</span>
+              <Badge status={order.status} label={statusLabel(order.status)} />
             </div>
             <div>
-              <span className="summary-label">Customer</span>
+              <span className="summary-label">{t('customer')}</span>
               <strong>{customer?.name ?? short(order.customerId)}</strong>
             </div>
             <div>
-              <span className="summary-label">Warehouse</span>
+              <span className="summary-label">{t('warehouse')}</span>
               <strong>{warehouse?.name ?? short(order.fulfillmentWarehouseId)}</strong>
             </div>
             <div>
-              <span className="summary-label">Total</span>
+              <span className="summary-label">{t('total')}</span>
               <strong>
-                {order.total ? money(order.total.amount, order.total.currency) : 'Pending'}
+                {order.total ? money(order.total.amount, order.total.currency) : common('pending')}
               </strong>
             </div>
           </div>
           <div className="order-detail-lines">
-            <h3>Lines</h3>
+            <h3>{t('lines')}</h3>
             {lines.map((line) => {
               const confirmed = isConfirmedOrderLine(line)
               return (
                 <div key={line.lineId}>
                   <span>
-                    <strong>{confirmed ? line.description : `Item ${short(line.itemId)}`}</strong>
-                    <small className="detail-line-meta">Quantity {line.quantity}</small>
+                    <strong>
+                      {confirmed ? line.description : t('itemFallback', { id: short(line.itemId) })}
+                    </strong>
+                    <small className="detail-line-meta">
+                      {t('quantityLabel', { quantity: line.quantity })}
+                    </small>
                   </span>
                   <strong>
-                    {confirmed ? money(line.lineTotal.amount, line.lineTotal.currency) : 'Pending'}
+                    {confirmed
+                      ? money(line.lineTotal.amount, line.lineTotal.currency)
+                      : common('pending')}
                   </strong>
                 </div>
               )
             })}
           </div>
           <div className="dialog-actions">
-            <Dialog.Close className="ui-button ui-button-secondary">Close</Dialog.Close>
+            <Dialog.Close className="ui-button ui-button-secondary">{common('close')}</Dialog.Close>
           </div>
         </Dialog.Popup>
       </Dialog.Portal>

@@ -612,6 +612,49 @@ command out of every workflow. The cost and bootstrap boundaries are stated in
 
 ---
 
+## Phase 14 — Routed shell and bilingual frontend
+
+**Complete.** The first slice of the
+[operational ERP expansion plan](erp-expansion-plan.md) (phase A). The authenticated
+product moved from one 1,200-line client component holding a nine-value `view` union to
+nested App Router segments behind a shared shell, and every user-visible string now comes
+from a message catalogue. Decisions 0040–0047 were recorded before the code that assumes
+them.
+
+**Deliverables**
+
+- Route segments under `/app` for every screen, a shared layout owning the sidebar,
+  topbar, session and notice region, and per-screen loading and error surfaces.
+- `web/src/lib/navigation.ts`: a registry carrying route, message key, icon and the
+  module role a user must hold. Visibility only; each service still enforces the role,
+  and a route reached by URL renders a permission-denied state (ADR 0045).
+- Developers area — API keys, webhooks and delivery logs — moved out of Settings and
+  Operations; workspace settings separated from credentials.
+- A shared frontend layer: a typed fetch client with session-expiry handling, a loader
+  hook with one loading and error surface, and shared badge, heading, empty-state, money,
+  quantity and date helpers that five feature views each had their own copy of.
+- `next-intl` with key-identical `messages/pt-BR.json` and `messages/en.json`, locale
+  resolved from the reader's stored choice, then the browser, then `pt-BR`, and a
+  user-menu switcher that changes language without leaving the current resource
+  (ADR 0044).
+- `scripts/check-ui-copy.mjs`, wired into `npm run lint`, failing on any user-visible
+  string written inline in a component.
+
+**Exit criteria**
+
+- Login, workspace selection and every ERP screen read correctly in both locales, and a
+  catalogue test fails on a missing key, an empty translation or a placeholder that does
+  not survive translation.
+- The browser golden path negotiates Portuguese from the browser, switches to English
+  mid-session, completes through the new routes, and still produces one joined trace.
+
+**Non-goals**
+
+- The signed-in user's stored locale preference and the workspace's legal country,
+  timezone and base currency; both belong to phase B of the expansion plan.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

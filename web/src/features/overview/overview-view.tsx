@@ -1,11 +1,11 @@
 'use client'
 
+import { useFormatter, useTranslations } from 'next-intl'
 import { PageHeading, PanelHeading, Stat } from '@/components/ui/headings'
 import type { CatalogItem } from '@/features/catalog/catalog-view'
 import type { Delivery } from '@/features/developers/deliveries-view'
 import type { Warehouse } from '@/features/inventory/inventory-view'
 import { type Order, OrderTable } from '@/features/sales/orders-view'
-import { compact } from '@/lib/format'
 
 export function OverviewView({
   items,
@@ -18,63 +18,75 @@ export function OverviewView({
   deliveries: Delivery[]
   warehouses: Warehouse[]
 }) {
+  const t = useTranslations('overview')
+  const format = useFormatter()
   const stock = warehouses
     .flatMap((warehouse) => warehouse.balances)
     .reduce((sum, row) => sum + Number(row.onHand), 0)
   return (
     <section>
       <PageHeading
-        eyebrow="Monday, September 14"
-        title="Good afternoon"
-        copy="Here is the shape of your operation right now."
+        eyebrow={format.dateTime(new Date(), {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+        })}
+        title={t('title')}
+        copy={t('copy')}
       />
       <div className="stat-grid">
         <Stat
-          label="Active items"
-          value={String(items.filter((item) => item.active).length)}
-          note="Ready to sell"
+          label={t('activeItems')}
+          value={format.number(items.filter((item) => item.active).length)}
+          note={t('readyToSell')}
         />
         <Stat
-          label="Orders"
-          value={String(orders.length)}
-          note={`${orders.filter((order) => order.status === 'confirmed').length} confirmed`}
+          label={t('orders')}
+          value={format.number(orders.length)}
+          note={t('confirmedOrders', {
+            count: orders.filter((order) => order.status === 'confirmed').length,
+          })}
         />
-        <Stat label="On-hand units" value={compact(stock)} note="Across all warehouses" />
         <Stat
-          label="Webhook health"
+          label={t('onHandUnits')}
+          value={format.number(stock, { notation: 'compact', maximumFractionDigits: 1 })}
+          note={t('acrossWarehouses')}
+        />
+        <Stat
+          label={t('webhookHealth')}
           value={
-            deliveries.some((row) => row.status === 'dead-letter') ? 'Needs review' : 'Healthy'
+            deliveries.some((row) => row.status === 'dead-letter') ? t('needsReview') : t('healthy')
           }
-          note={`${deliveries.length} recent deliveries`}
+          note={t('recentDeliveries', { count: deliveries.length })}
         />
       </div>
       <div className="split-grid">
         <section className="panel">
-          <PanelHeading title="Recent orders" copy="Live from Sales" />{' '}
+          <PanelHeading title={t('recentOrders')} copy={t('liveFromSales')} />{' '}
           <OrderTable orders={orders.slice(0, 5)} />
         </section>
         <section className="panel quiet-panel">
-          <PanelHeading title="Operational rhythm" copy="The flow behind every order" />
+          <PanelHeading title={t('rhythm')} copy={t('rhythmCopy')} />
           <ol className="flow-list">
             <li>
               <span>01</span>
               <div className="flow-copy">
-                <strong>Order placed</strong>
-                <small>Sales snapshots the request</small>
+                <strong>{t('flowOrderTitle')}</strong>
+                <small>{t('flowOrderCopy')}</small>
               </div>
             </li>
             <li>
               <span>02</span>
               <div className="flow-copy">
-                <strong>Stock reserved</strong>
-                <small>Inventory confirms availability</small>
+                <strong>{t('flowStockTitle')}</strong>
+                <small>{t('flowStockCopy')}</small>
               </div>
             </li>
             <li>
               <span>03</span>
               <div className="flow-copy">
-                <strong>Callback signed</strong>
-                <small>Webhooks notifies your system</small>
+                <strong>{t('flowCallbackTitle')}</strong>
+                <small>{t('flowCallbackCopy')}</small>
               </div>
             </li>
           </ol>

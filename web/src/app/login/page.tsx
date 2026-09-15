@@ -1,12 +1,14 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/ui/text-field'
 import { tracedFetch } from '@/lib/telemetry'
 
 export default function LoginPage() {
+  const t = useTranslations('login')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -26,7 +28,7 @@ export default function LoginPage() {
     }).catch(() => null)
     setBusy(false)
     if (!response?.ok) {
-      setError('We could not sign you in. Check your email and password.')
+      setError(t('error'))
       return
     }
     router.replace('/workspaces')
@@ -34,43 +36,41 @@ export default function LoginPage() {
 
   return (
     <main className="login-shell">
-      <section className="login-story" aria-label="Product introduction">
+      <section className="login-story" aria-label={t('intro')}>
         <a className="brand brand-on-dark" href="/">
           <span className="brand-mark">H</span>
           <span>Horizon</span>
         </a>
         <div>
-          <p className="eyebrow eyebrow-light">A calmer operating system</p>
-          <h1>One account. Every operation in reach.</h1>
-          <p className="login-lead">
-            Every workspace for the daily decisions that keep your operation moving.
-          </p>
+          <p className="eyebrow eyebrow-light">{t('eyebrow')}</p>
+          <h1>{t('headline')}</h1>
+          <p className="login-lead">{t('lead')}</p>
         </div>
         <div className="signal-row">
-          <span>Live inventory</span>
-          <span>Traceable orders</span>
-          <span>Signed events</span>
+          <span>{t('signalInventory')}</span>
+          <span>{t('signalOrders')}</span>
+          <span>{t('signalEvents')}</span>
         </div>
       </section>
 
       <section className="login-panel">
         <form className="login-card" onSubmit={submit}>
           <div>
-            <p className="eyebrow">Welcome back</p>
-            <h2>Sign in to Horizon</h2>
-            <p className="muted">Your workspaces will appear after you sign in.</p>
+            <p className="eyebrow">{t('welcome')}</p>
+            <h2>{t('title')}</h2>
+            <p className="muted">{t('subtitle')}</p>
           </div>
           <TextField
             autoComplete="email"
             defaultValue="demo@horizon.local"
-            label="Email"
+            label={t('email')}
             name="email"
             required
             type="email"
           />
           <TextField
             autoComplete="current-password"
-            label="Password"
+            label={t('password')}
             name="password"
             required
             type="password"
@@ -87,10 +87,10 @@ export default function LoginPage() {
             type="submit"
             variant="primary"
           >
-            {busy ? 'Signing in…' : 'Continue'}
+            {busy ? t('submitting') : t('submit')}
           </Button>
           <p className="demo-note">
-            Local demo password: <code>Horizon-demo-2026!</code>
+            {t('demoNote')} <code>Horizon-demo-2026!</code>
           </p>
         </form>
       </section>

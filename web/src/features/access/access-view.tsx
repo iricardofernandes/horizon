@@ -3,13 +3,16 @@
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Dialog } from '@base-ui/react/dialog'
 import { Key, Plus, ShieldCheck, UserMinus, UserPlus, X } from '@phosphor-icons/react'
+import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
 import { jsonHeaders } from '@/lib/http'
+import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
+import { useDateTime } from '@/lib/use-format'
 
 type ModuleName = 'identity' | 'catalog' | 'inventory' | 'sales' | 'webhooks'
 type RoleAssignment = { module: ModuleName; role: string }
@@ -63,6 +66,12 @@ export function AccessView({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('access')
+  const common = useTranslations('common')
+  const moduleName = useTranslations('modules')
+  const roleName = useTranslations('roles')
+  const statusLabel = useStatusLabel()
+  const dateTime = useDateTime()
   const [query, setQuery] = useState('')
   const normalized = query.trim().toLocaleLowerCase()
   const filtered = users.filter(
@@ -76,11 +85,9 @@ export function AccessView({
     <section>
       <header className="page-heading page-heading-with-actions">
         <div>
-          <p className="eyebrow">Workspace administration</p>
-          <h1>People & access</h1>
-          <p className="catalog-page-copy">
-            Invite operators and control their permissions independently in each module.
-          </p>
+          <p className="eyebrow">{t('eyebrow')}</p>
+          <h1>{t('title')}</h1>
+          <p className="catalog-page-copy">{t('copy')}</p>
         </div>
         <div className="page-actions">
           <CreateUserDialog onChanged={onChanged} setNotice={setNotice} />
@@ -90,13 +97,13 @@ export function AccessView({
       <div className="access-toolbar">
         <div>
           <strong>{users.filter((user) => user.status === 'active').length}</strong>
-          <span className="access-count-label">active members</span>
+          <span className="access-count-label">{t('activeMembers')}</span>
         </div>
         <input
-          aria-label="Search workspace users"
+          aria-label={t('search')}
           className="ui-input"
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search name or email…"
+          placeholder={t('searchPlaceholder')}
           type="search"
           value={query}
         />
@@ -107,11 +114,11 @@ export function AccessView({
           <table>
             <thead>
               <tr>
-                <th>Member</th>
-                <th>Roles</th>
-                <th>Last login</th>
-                <th>Status</th>
-                <th aria-label="Actions" />
+                <th>{t('member')}</th>
+                <th>{t('roles')}</th>
+                <th>{t('lastLogin')}</th>
+                <th>{t('status')}</th>
+                <th aria-label={common('actions')} />
               </tr>
             </thead>
             <tbody>
@@ -124,7 +131,7 @@ export function AccessView({
                         <strong>{user.name}</strong>
                         <small>
                           {user.email}
-                          {user.id === currentUserId ? ' · You' : ''}
+                          {user.id === currentUserId ? t('you') : ''}
                         </small>
                       </span>
                     </div>
@@ -133,16 +140,14 @@ export function AccessView({
                     <div className="role-list">
                       {user.roles.map((role) => (
                         <span className="role-chip" key={`${role.module}:${role.role}`}>
-                          {role.module}: {role.role}
+                          {moduleName(role.module)}: {roleName(role.role)}
                         </span>
                       ))}
                     </div>
                   </td>
+                  <td>{user.lastLoginAt ? dateTime(user.lastLoginAt) : t('never')}</td>
                   <td>
-                    {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never'}
-                  </td>
-                  <td>
-                    <Badge status={user.status} />
+                    <Badge status={user.status} label={statusLabel(user.status)} />
                   </td>
                   <td>
                     <div className="row-actions">
@@ -163,8 +168,8 @@ export function AccessView({
         </div>
         {!filtered.length ? (
           <div className="catalog-empty">
-            <strong>No members found</strong>
-            <p>Invite a member or adjust your search.</p>
+            <strong>{t('emptyTitle')}</strong>
+            <p>{t('emptyCopy')}</p>
           </div>
         ) : null}
       </div>
@@ -173,6 +178,8 @@ export function AccessView({
 }
 
 function CreateUserDialog({ onChanged, setNotice }: MutationProps) {
+  const t = useTranslations('access')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -195,13 +202,13 @@ function CreateUserDialog({ onChanged, setNotice }: MutationProps) {
       }),
     })
     if (!response.ok) {
-      setError(await apiError(response, 'The user could not be created.'))
+      setError(await apiError(response, t('createFailed')))
       setBusy(false)
       return
     }
     form.reset()
     setOpen(false)
-    setNotice('Workspace member created successfully.')
+    setNotice(t('created'))
     await onChanged()
     setBusy(false)
   }
@@ -210,40 +217,37 @@ function CreateUserDialog({ onChanged, setNotice }: MutationProps) {
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger className="ui-button ui-button-primary">
         <UserPlus aria-hidden="true" size={17} />
-        Add member
+        {t('create')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup">
-          <DialogHeading
-            title="Add workspace member"
-            description="Create credentials and an initial permission profile."
-          />
-          <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+          <DialogHeading title={t('createTitle')} description={t('createDescription')} />
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
           <form className="dialog-form" onSubmit={submit}>
-            <TextField label="Name" name="name" maxLength={200} required />
-            <TextField label="Email" name="email" maxLength={254} required type="email" />
+            <TextField label={t('name')} name="name" maxLength={200} required />
+            <TextField label={t('email')} name="email" maxLength={254} required type="email" />
             <TextField
-              description="At least 12 characters."
-              label="Temporary password"
+              description={t('passwordHelp')}
+              label={t('password')}
               name="password"
               minLength={12}
               required
               type="password"
             />
             <SelectField
-              label="Access profile"
+              label={t('profile')}
               name="profile"
               options={[
-                { label: 'Operator · manage daily operations', value: 'operator' },
-                { label: 'Viewer · read-only access', value: 'viewer' },
-                { label: 'Administrator · full module access', value: 'admin' },
+                { label: t('profileOperator'), value: 'operator' },
+                { label: t('profileViewer'), value: 'viewer' },
+                { label: t('profileAdmin'), value: 'admin' },
               ]}
               required
             />
-            <FormActions busy={busy} error={error} label="Add member" />
+            <FormActions busy={busy} error={error} label={t('create')} />
           </form>
         </Dialog.Popup>
       </Dialog.Portal>
@@ -256,6 +260,10 @@ function ManageRolesDialog({
   onChanged,
   setNotice,
 }: MutationProps & { user: WorkspaceUser }) {
+  const t = useTranslations('access')
+  const common = useTranslations('common')
+  const moduleName = useTranslations('modules')
+  const roleName = useTranslations('roles')
   const [open, setOpen] = useState(false)
   const [module, setModule] = useState<ModuleName>('catalog')
   const [role, setRole] = useState(roleOptions.catalog[0] ?? 'admin')
@@ -271,12 +279,14 @@ function ManageRolesDialog({
       { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ assignment, operation }) },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The role could not be changed.'))
+      setError(await apiError(response, t('roleChangeFailed')))
       setBusy(false)
       return
     }
     setNotice(
-      `${assignment.module}:${assignment.role} ${operation === 'grant' ? 'granted' : 'revoked'}.`,
+      operation === 'grant'
+        ? t('roleGranted', { module: assignment.module, role: assignment.role })
+        : t('roleRevoked', { module: assignment.module, role: assignment.role }),
     )
     await onChanged()
     setBusy(false)
@@ -286,16 +296,16 @@ function ManageRolesDialog({
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger className="ui-button ui-button-ghost row-action-button">
         <ShieldCheck aria-hidden="true" size={16} />
-        Roles
+        {t('roles')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup">
           <DialogHeading
-            title={`Roles for ${user.name}`}
-            description="Roles are independent per bounded context."
+            title={t('rolesTitle', { name: user.name })}
+            description={t('rolesDescription')}
           />
-          <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
           <div className="assigned-role-list">
@@ -303,32 +313,32 @@ function ManageRolesDialog({
               <div key={`${assignment.module}:${assignment.role}`}>
                 <span>
                   <Key aria-hidden="true" size={15} />
-                  <strong>{assignment.module}</strong>
-                  <small>{assignment.role}</small>
+                  <strong>{moduleName(assignment.module)}</strong>
+                  <small>{roleName(assignment.role)}</small>
                 </span>
                 <Button disabled={busy} onClick={() => change(assignment, 'revoke')} type="button">
-                  Revoke
+                  {t('revoke')}
                 </Button>
               </div>
             ))}
           </div>
           <div className="role-grant-form">
             <SelectField
-              label="Module"
+              label={t('module')}
               name="module"
               onValueChange={(value) => {
                 const next = (value ?? 'catalog') as ModuleName
                 setModule(next)
                 setRole(roleOptions[next][0] ?? 'admin')
               }}
-              options={modules.map((value) => ({ label: capitalize(value), value }))}
+              options={modules.map((value) => ({ label: moduleName(value), value }))}
               value={module}
             />
             <SelectField
-              label="Role"
+              label={t('role')}
               name="role"
               onValueChange={(value) => setRole(value ?? roleOptions[module][0] ?? 'admin')}
-              options={roleOptions[module].map((value) => ({ label: capitalize(value), value }))}
+              options={roleOptions[module].map((value) => ({ label: roleName(value), value }))}
               value={role}
             />
             <Button
@@ -338,7 +348,7 @@ function ManageRolesDialog({
               variant="secondary"
             >
               <Plus aria-hidden="true" size={16} />
-              Grant role
+              {t('grantRole')}
             </Button>
           </div>
           {error ? (
@@ -357,6 +367,8 @@ function DisableUserDialog({
   onChanged,
   setNotice,
 }: MutationProps & { user: WorkspaceUser }) {
+  const t = useTranslations('access')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -370,11 +382,11 @@ function DisableUserDialog({
       { method: 'PATCH' },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The member could not be disabled.'))
+      setError(await apiError(response, t('disableFailed')))
       setBusy(false)
       return
     }
-    setNotice(`${user.name} was disabled.`)
+    setNotice(t('disabled', { name: user.name }))
     await onChanged()
     setOpen(false)
     setBusy(false)
@@ -384,15 +396,15 @@ function DisableUserDialog({
     <AlertDialog.Root onOpenChange={setOpen} open={open}>
       <AlertDialog.Trigger className="ui-button ui-button-ghost row-action-button danger-action">
         <UserMinus aria-hidden="true" size={16} />
-        Disable
+        {t('disable')}
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Backdrop className="ui-dialog-backdrop" />
         <AlertDialog.Popup className="ui-dialog-popup ui-alert-popup">
           <div className="dialog-heading">
-            <AlertDialog.Title>Disable {user.name}?</AlertDialog.Title>
+            <AlertDialog.Title>{t('disableTitle', { name: user.name })}</AlertDialog.Title>
             <AlertDialog.Description className="dialog-description">
-              Their active sessions will be revoked and they will no longer be able to sign in.
+              {t('disableDescription')}
             </AlertDialog.Description>
           </div>
           {error ? (
@@ -401,9 +413,11 @@ function DisableUserDialog({
             </p>
           ) : null}
           <div className="dialog-actions">
-            <AlertDialog.Close className="ui-button ui-button-secondary">Cancel</AlertDialog.Close>
+            <AlertDialog.Close className="ui-button ui-button-secondary">
+              {common('cancel')}
+            </AlertDialog.Close>
             <Button disabled={busy} onClick={disable} type="button" variant="danger">
-              {busy ? 'Disabling…' : 'Disable member'}
+              {busy ? t('disabling') : t('disableSubmit')}
             </Button>
           </div>
         </AlertDialog.Popup>
@@ -424,6 +438,8 @@ function DialogHeading({ title, description }: { title: string; description: str
 }
 
 function FormActions({ busy, error, label }: { busy: boolean; error: string; label: string }) {
+  const t = useTranslations('access')
+  const common = useTranslations('common')
   return (
     <>
       {error ? (
@@ -432,9 +448,9 @@ function FormActions({ busy, error, label }: { busy: boolean; error: string; lab
         </p>
       ) : null}
       <div className="dialog-actions">
-        <Dialog.Close className="ui-button ui-button-secondary">Cancel</Dialog.Close>
+        <Dialog.Close className="ui-button ui-button-secondary">{common('cancel')}</Dialog.Close>
         <Button disabled={busy} type="submit" variant="primary">
-          {busy ? 'Saving…' : label}
+          {busy ? t('saving') : label}
         </Button>
       </div>
     </>
@@ -449,8 +465,4 @@ async function apiError(response: Response, fallback: string): Promise<string> {
     if (typeof message === 'string' && message.trim()) return message
   } catch {}
   return fallback
-}
-
-function capitalize(value: string) {
-  return value.slice(0, 1).toUpperCase() + value.slice(1)
 }

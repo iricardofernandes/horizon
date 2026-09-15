@@ -2,13 +2,16 @@
 
 import { Dialog } from '@base-ui/react/dialog'
 import { ArrowClockwise, Eye, X } from '@phosphor-icons/react'
+import { useFormatter, useTranslations } from 'next-intl'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeading, PanelHeading } from '@/components/ui/headings'
 import { Empty } from '@/components/ui/state'
-import { dateTimeOf, short } from '@/lib/format'
+import { short } from '@/lib/format'
+import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
+import { useDateTime } from '@/lib/use-format'
 
 export type Delivery = {
   id: string
@@ -42,24 +45,24 @@ export function DeliveriesView({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('deliveries')
+  const common = useTranslations('common')
+  const statusLabel = useStatusLabel()
+  const dateTime = useDateTime()
   return (
     <section>
-      <PageHeading
-        eyebrow="Developer operations"
-        title="Delivery logs"
-        copy="Every attempt the durable queue has made, with its response and its retries."
-      />
+      <PageHeading eyebrow={t('eyebrow')} title={t('title')} copy={t('copy')} />
       <section className="panel delivery-panel">
-        <PanelHeading title="Recent deliveries" copy="Attempt status from the durable queue" />
+        <PanelHeading title={t('panelTitle')} copy={t('panelCopy')} />
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
-                <th>Event</th>
-                <th>Status</th>
-                <th>Attempts</th>
-                <th>Updated</th>
-                <th aria-label="Actions" />
+                <th>{t('event')}</th>
+                <th>{t('status')}</th>
+                <th>{t('attemptsColumn')}</th>
+                <th>{t('updated')}</th>
+                <th aria-label={common('actions')} />
               </tr>
             </thead>
             <tbody>
@@ -69,10 +72,10 @@ export function DeliveriesView({
                     <code className="table-code">{row.eventType}</code>
                   </td>
                   <td>
-                    <Badge status={row.status} />
+                    <Badge status={row.status} label={statusLabel(row.status)} />
                   </td>
                   <td>{row.attemptCount}</td>
-                  <td>{dateTimeOf(row.updatedAt)}</td>
+                  <td>{dateTime(row.updatedAt)}</td>
                   <td>
                     <div className="row-actions">
                       <DeliveryDetailsDialog delivery={row} />
@@ -89,7 +92,7 @@ export function DeliveriesView({
               ))}
             </tbody>
           </table>
-          {!deliveries.length ? <Empty copy="Deliveries appear after a confirmed order." /> : null}
+          {!deliveries.length ? <Empty copy={t('empty')} /> : null}
         </div>
       </section>
     </section>
@@ -97,6 +100,11 @@ export function DeliveriesView({
 }
 
 function DeliveryDetailsDialog({ delivery }: { delivery: Delivery }) {
+  const t = useTranslations('deliveries')
+  const common = useTranslations('common')
+  const statusLabel = useStatusLabel()
+  const dateTime = useDateTime()
+  const format = useFormatter()
   const [attempts, setAttempts] = useState<DeliveryAttempt[]>([])
   const [loading, setLoading] = useState(false)
   async function changed(open: boolean) {
@@ -112,31 +120,34 @@ function DeliveryDetailsDialog({ delivery }: { delivery: Delivery }) {
   return (
     <Dialog.Root onOpenChange={changed}>
       <Dialog.Trigger className="ui-button ui-button-ghost row-action-button">
-        <Eye aria-hidden="true" size={15} /> Attempts
+        <Eye aria-hidden="true" size={15} /> {t('viewAttempts')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup order-detail-dialog">
           <div className="dialog-heading">
-            <Dialog.Title>Delivery attempts</Dialog.Title>
+            <Dialog.Title>{t('dialogTitle')}</Dialog.Title>
             <Dialog.Description className="dialog-description">
-              {delivery.eventType} · event {short(delivery.eventId)}
+              {t('dialogDescription', {
+                eventType: delivery.eventType,
+                eventId: short(delivery.eventId),
+              })}
             </Dialog.Description>
           </div>
-          <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
           <div className="delivery-summary">
             <div>
-              <span className="summary-label">Status</span>
-              <Badge status={delivery.status} />
+              <span className="summary-label">{t('status')}</span>
+              <Badge status={delivery.status} label={statusLabel(delivery.status)} />
             </div>
             <div>
-              <span className="summary-label">Last HTTP status</span>
+              <span className="summary-label">{t('lastHttpStatus')}</span>
               <strong>{delivery.lastResponseStatus ?? '—'}</strong>
             </div>
             <div>
-              <span className="summary-label">Attempts</span>
+              <span className="summary-label">{t('attempts')}</span>
               <strong>{delivery.attemptCount}</strong>
             </div>
           </div>
@@ -146,23 +157,26 @@ function DeliveryDetailsDialog({ delivery }: { delivery: Delivery }) {
                 <span className="attempt-number">#{attempt.attemptNumber}</span>
                 <span>
                   <strong>
-                    {attempt.responseStatus ? `HTTP ${attempt.responseStatus}` : 'Connection error'}
+                    {attempt.responseStatus
+                      ? t('httpStatus', { status: attempt.responseStatus })
+                      : t('connectionError')}
                   </strong>
                   <small>
-                    {dateTimeOf(attempt.attemptedAt)} · {attempt.durationMs} ms
+                    {dateTime(attempt.attemptedAt)} · {format.number(attempt.durationMs)} ms
                   </small>
                 </span>
-                <Badge status={attempt.error ? 'rejected' : 'succeeded'} />
+                <Badge
+                  status={attempt.error ? 'rejected' : 'succeeded'}
+                  label={statusLabel(attempt.error ? 'rejected' : 'succeeded')}
+                />
                 {attempt.error ? <p>{attempt.error}</p> : null}
               </article>
             ))}
-            {loading ? <p className="empty">Loading attempts…</p> : null}
-            {!loading && !attempts.length ? (
-              <p className="empty">No delivery attempt has run yet.</p>
-            ) : null}
+            {loading ? <p className="empty">{t('loadingAttempts')}</p> : null}
+            {!loading && !attempts.length ? <p className="empty">{t('noAttempts')}</p> : null}
           </div>
           <div className="dialog-actions">
-            <Dialog.Close className="ui-button ui-button-secondary">Close</Dialog.Close>
+            <Dialog.Close className="ui-button ui-button-secondary">{common('close')}</Dialog.Close>
           </div>
         </Dialog.Popup>
       </Dialog.Portal>
@@ -179,6 +193,7 @@ function ReplayDeliveryButton({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('deliveries')
   const [busy, setBusy] = useState(false)
   async function replay() {
     setBusy(true)
@@ -187,13 +202,13 @@ function ReplayDeliveryButton({
       `/api/horizon/webhooks/webhook-deliveries/${delivery.id}/replay`,
       { method: 'POST' },
     )
-    setNotice(response.ok ? 'Delivery queued for replay.' : 'The delivery could not be replayed.')
+    setNotice(response.ok ? t('replayQueued') : t('replayFailed'))
     if (response.ok) await onChanged()
     setBusy(false)
   }
   return (
     <Button disabled={busy} onClick={replay} type="button">
-      <ArrowClockwise aria-hidden="true" size={15} /> {busy ? 'Replaying…' : 'Replay'}
+      <ArrowClockwise aria-hidden="true" size={15} /> {busy ? t('replaying') : t('replay')}
     </Button>
   )
 }

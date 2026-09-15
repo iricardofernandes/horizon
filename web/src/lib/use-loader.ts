@@ -7,7 +7,8 @@ import { SessionExpiredError } from '@/lib/api'
 export type LoaderState<T> = {
   data: T | null
   loading: boolean
-  error: string
+  /** True when the screen's data could not be read; the message belongs to the view. */
+  failed: boolean
   reload: () => Promise<void>
 }
 
@@ -19,18 +20,18 @@ export function useLoader<T>(load: () => Promise<T>): LoaderState<T> {
   const router = useRouter()
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [failed, setFailed] = useState(false)
 
   const run = useCallback(async () => {
     try {
       setData(await load())
-      setError('')
+      setFailed(false)
     } catch (cause) {
       if (cause instanceof SessionExpiredError) {
         router.replace('/login')
         return
       }
-      setError('This screen could not be loaded. Check that the application services are running.')
+      setFailed(true)
     } finally {
       setLoading(false)
     }
@@ -40,5 +41,5 @@ export function useLoader<T>(load: () => Promise<T>): LoaderState<T> {
     void run()
   }, [run])
 
-  return { data, loading, error, reload: run }
+  return { data, loading, failed, reload: run }
 }

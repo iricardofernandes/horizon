@@ -1,6 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { type ReactNode, useCallback, useState } from 'react'
 import { NoticeProvider, SessionProvider } from '@/components/shell/workspace-context'
 import { WorkspaceNavigation } from '@/components/shell/workspace-navigation'
@@ -10,12 +11,10 @@ import { entryForPath, isEntryVisible, visibleNavigation } from '@/lib/navigatio
 import { useWorkspaceSession } from '@/lib/use-session'
 
 const hostedDemo = process.env.NEXT_PUBLIC_HORIZON_HOSTED_DEMO === 'true'
-const demoNotice =
-  'Public demo profile: live session and Catalog on Neon. The asynchronous order choreography remains available in the full local stack.'
-const unavailableNotice =
-  'The workspace could not be loaded. Check that the application services are running.'
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
+  const t = useTranslations('shell')
+  const navigationLabels = useTranslations('navigation')
   const pathname = usePathname()
   const { session, failed } = useWorkspaceSession()
   const [notice, setNotice] = useState('')
@@ -23,7 +22,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const publish = useCallback((value: string) => setNotice(value), [])
   const toggleSidebar = useCallback(() => setCollapsed((value) => !value), [])
 
-  const workspaceName = session?.workspace?.name ?? 'Workspace'
+  const workspaceName = session?.workspace?.name ?? t('workspace')
   const entry = entryForPath(pathname)
   const roles = session?.roles ?? []
 
@@ -33,14 +32,14 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         <div className={collapsed ? 'workspace-shell sidebar-collapsed' : 'workspace-shell'}>
           <aside className="sidebar" id="workspace-sidebar">
             <a
-              aria-label={`${workspaceName} workspace`}
+              aria-label={t('workspaceLabel', { name: workspaceName })}
               className="workspace-control"
               href="/workspaces"
             >
               <span className="brand-mark">{workspaceName.slice(0, 1).toUpperCase()}</span>
               <span className="workspace-control-copy">
                 <strong>{workspaceName}</strong>
-                <small>Switch workspace</small>
+                <small>{t('switchWorkspace')}</small>
               </span>
             </a>
             <WorkspaceNavigation groups={visibleNavigation(roles, hostedDemo)} />
@@ -51,13 +50,13 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
               collapsed={collapsed}
               onToggleSidebar={toggleSidebar}
               session={session}
-              title={entry?.label ?? 'Overview'}
+              title={navigationLabels(`items.${entry?.labelKey ?? 'overview'}`)}
               workspaceName={workspaceName}
             />
             <div className="content">
-              {hostedDemo ? <Notice copy={demoNotice} /> : null}
+              {hostedDemo ? <Notice copy={t('demoNotice')} /> : null}
               {notice ? <Notice copy={notice} /> : null}
-              {failed ? <Notice copy={unavailableNotice} /> : null}
+              {failed ? <Notice copy={t('unavailableNotice')} /> : null}
               <ShellContent
                 permitted={!entry || isEntryVisible(entry, roles, hostedDemo)}
                 ready={Boolean(session)}
@@ -91,12 +90,13 @@ function ShellContent({
 }
 
 function PermissionDenied() {
+  const t = useTranslations('shell')
   return (
     <section>
       <header className="page-heading">
-        <p className="eyebrow">Not available</p>
-        <h1>You do not have access to this screen</h1>
-        <p>Ask a workspace administrator to grant you a role in the module that owns it.</p>
+        <p className="eyebrow">{t('permissionDeniedEyebrow')}</p>
+        <h1>{t('permissionDeniedTitle')}</h1>
+        <p>{t('permissionDeniedCopy')}</p>
       </header>
     </section>
   )

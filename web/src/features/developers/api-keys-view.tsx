@@ -4,15 +4,17 @@ import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Checkbox } from '@base-ui/react/checkbox'
 import { Dialog } from '@base-ui/react/dialog'
 import { ArrowClockwise, Check, Copy, Key, Plus, Trash, X } from '@phosphor-icons/react'
+import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeading } from '@/components/ui/headings'
 import { TextField } from '@/components/ui/text-field'
 import { apiError } from '@/lib/api'
-import { dateOf } from '@/lib/format'
 import { jsonHeaders } from '@/lib/http'
+import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
+import { useDate } from '@/lib/use-format'
 
 export type ApiKeyRecord = {
   id: string
@@ -44,20 +46,17 @@ export function ApiKeysView({
   onChanged,
   setNotice,
 }: { apiKeys: ApiKeyRecord[] } & MutationProps) {
+  const t = useTranslations('apiKeys')
+  const statusLabel = useStatusLabel()
+  const date = useDate()
   return (
     <section>
-      <PageHeading
-        eyebrow="Developer operations"
-        title="API keys"
-        copy="Machine credentials inherit only the scopes you explicitly grant."
-      />
+      <PageHeading eyebrow={t('eyebrow')} title={t('title')} copy={t('copy')} />
       <section className="panel api-key-panel">
         <header className="settings-section-heading">
           <div>
-            <h2>Keys</h2>
-            <p className="settings-card-caption">
-              A key can never hold a scope beyond the roles of the person who issued it.
-            </p>
+            <h2>{t('keys')}</h2>
+            <p className="settings-card-caption">{t('keysCopy')}</p>
           </div>
           <CreateApiKeyDialog onChanged={onChanged} />
         </header>
@@ -73,9 +72,11 @@ export function ApiKeysView({
                 <small>{apiKey.scopes.join(', ')}</small>
               </div>
               <div className="api-key-meta">
-                <Badge status={apiKey.status} />
+                <Badge status={apiKey.status} label={statusLabel(apiKey.status)} />
                 <small>
-                  {apiKey.lastUsedAt ? `Used ${dateOf(apiKey.lastUsedAt)}` : 'Never used'}
+                  {apiKey.lastUsedAt
+                    ? t('usedOn', { date: date(apiKey.lastUsedAt) })
+                    : t('neverUsed')}
                 </small>
               </div>
               {apiKey.status === 'active' ? (
@@ -88,8 +89,8 @@ export function ApiKeysView({
           ))}
           {!apiKeys.length ? (
             <div className="catalog-empty">
-              <strong>No API keys</strong>
-              <p>Create a scoped credential for an integration.</p>
+              <strong>{t('emptyTitle')}</strong>
+              <p>{t('emptyCopy')}</p>
             </div>
           ) : null}
         </div>
@@ -99,6 +100,8 @@ export function ApiKeysView({
 }
 
 function CreateApiKeyDialog({ onChanged }: Pick<MutationProps, 'onChanged'>) {
+  const t = useTranslations('apiKeys')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -111,7 +114,7 @@ function CreateApiKeyDialog({ onChanged }: Pick<MutationProps, 'onChanged'>) {
     const data = new FormData(event.currentTarget)
     const scopes = data.getAll('scopes')
     if (!scopes.length) {
-      setError('Select at least one scope.')
+      setError(t('selectScope'))
       setBusy(false)
       return
     }
@@ -130,7 +133,7 @@ function CreateApiKeyDialog({ onChanged }: Pick<MutationProps, 'onChanged'>) {
       },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The API key could not be created.'))
+      setError(await apiError(response, t('createFailed')))
       setBusy(false)
       return
     }
@@ -150,18 +153,18 @@ function CreateApiKeyDialog({ onChanged }: Pick<MutationProps, 'onChanged'>) {
     >
       <Dialog.Trigger className="ui-button ui-button-primary">
         <Plus aria-hidden="true" size={16} />
-        New API key
+        {t('create')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup api-key-dialog">
           <div className="dialog-heading">
-            <Dialog.Title>Create API key</Dialog.Title>
+            <Dialog.Title>{t('createTitle')}</Dialog.Title>
             <Dialog.Description className="dialog-description">
-              The complete token is shown once and cannot be recovered.
+              {t('createDescription')}
             </Dialog.Description>
           </div>
-          <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
           {token ? (
@@ -169,20 +172,20 @@ function CreateApiKeyDialog({ onChanged }: Pick<MutationProps, 'onChanged'>) {
           ) : (
             <form className="dialog-form" onSubmit={submit}>
               <TextField
-                label="Key name"
+                label={t('name')}
                 maxLength={200}
                 name="name"
-                placeholder="Store integration"
+                placeholder={t('namePlaceholder')}
                 required
               />
               <TextField
-                description="Optional. The key remains active until revoked when left blank."
-                label="Expires at"
+                description={t('expiresAtHelp')}
+                label={t('expiresAt')}
                 name="expiresAt"
                 type="datetime-local"
               />
               <fieldset className="scope-fieldset">
-                <legend>Scopes</legend>
+                <legend>{t('scopes')}</legend>
                 <div className="scope-grid">
                   {scopeOptions.map((scope) => (
                     <label htmlFor={`scope-${scope}`} key={scope}>
@@ -207,9 +210,11 @@ function CreateApiKeyDialog({ onChanged }: Pick<MutationProps, 'onChanged'>) {
                 </p>
               ) : null}
               <div className="dialog-actions">
-                <Dialog.Close className="ui-button ui-button-secondary">Cancel</Dialog.Close>
+                <Dialog.Close className="ui-button ui-button-secondary">
+                  {common('cancel')}
+                </Dialog.Close>
                 <Button disabled={busy} type="submit" variant="primary">
-                  {busy ? 'Creating…' : 'Create API key'}
+                  {busy ? t('creating') : t('createSubmit')}
                 </Button>
               </div>
             </form>
@@ -224,6 +229,8 @@ function RotateApiKeyDialog({
   apiKey,
   onChanged,
 }: { apiKey: ApiKeyRecord } & Pick<MutationProps, 'onChanged'>) {
+  const t = useTranslations('apiKeys')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -243,7 +250,7 @@ function RotateApiKeyDialog({
       },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The API key could not be rotated.'))
+      setError(await apiError(response, t('rotateFailed')))
       setBusy(false)
       return
     }
@@ -262,18 +269,18 @@ function RotateApiKeyDialog({
     >
       <Dialog.Trigger className="ui-button ui-button-ghost row-action-button">
         <ArrowClockwise aria-hidden="true" size={15} />
-        Rotate
+        {t('rotate')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup">
           <div className="dialog-heading">
-            <Dialog.Title>Rotate {apiKey.name}</Dialog.Title>
+            <Dialog.Title>{t('rotateTitle', { name: apiKey.name })}</Dialog.Title>
             <Dialog.Description className="dialog-description">
-              Create a replacement token and keep the previous one valid for a short overlap.
+              {t('rotateDescription')}
             </Dialog.Description>
           </div>
-          <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
           {token ? (
@@ -282,8 +289,8 @@ function RotateApiKeyDialog({
             <form className="dialog-form" onSubmit={submit}>
               <TextField
                 defaultValue="300"
-                description="Between 0 and 604800 seconds."
-                label="Overlap seconds"
+                description={t('overlapHelp')}
+                label={t('overlapSeconds')}
                 max="604800"
                 min="0"
                 name="overlapSeconds"
@@ -296,9 +303,11 @@ function RotateApiKeyDialog({
                 </p>
               ) : null}
               <div className="dialog-actions">
-                <Dialog.Close className="ui-button ui-button-secondary">Cancel</Dialog.Close>
+                <Dialog.Close className="ui-button ui-button-secondary">
+                  {common('cancel')}
+                </Dialog.Close>
                 <Button disabled={busy} type="submit" variant="primary">
-                  {busy ? 'Rotating…' : 'Rotate key'}
+                  {busy ? t('rotating') : t('rotateSubmit')}
                 </Button>
               </div>
             </form>
@@ -314,6 +323,8 @@ function RevokeApiKeyDialog({
   onChanged,
   setNotice,
 }: { apiKey: ApiKeyRecord } & MutationProps) {
+  const t = useTranslations('apiKeys')
+  const common = useTranslations('common')
   const [busy, setBusy] = useState(false)
   async function revoke() {
     setBusy(true)
@@ -322,14 +333,14 @@ function RevokeApiKeyDialog({
       `/api/horizon/identity/api-keys/${apiKey.id}`,
       { method: 'DELETE' },
     )
-    setNotice(response.ok ? `${apiKey.name} was revoked.` : 'The API key could not be revoked.')
+    setNotice(response.ok ? t('revoked', { name: apiKey.name }) : t('revokeFailed'))
     if (response.ok) await onChanged()
     setBusy(false)
   }
   return (
     <AlertDialog.Root>
       <AlertDialog.Trigger
-        aria-label={`Revoke ${apiKey.name}`}
+        aria-label={t('revokeLabel', { name: apiKey.name })}
         className="ui-button ui-button-ghost icon-action danger-action"
       >
         <Trash aria-hidden="true" size={15} />
@@ -338,19 +349,21 @@ function RevokeApiKeyDialog({
         <AlertDialog.Backdrop className="ui-dialog-backdrop" />
         <AlertDialog.Popup className="ui-dialog-popup ui-alert-popup">
           <div className="dialog-heading">
-            <AlertDialog.Title>Revoke {apiKey.name}?</AlertDialog.Title>
+            <AlertDialog.Title>{t('revokeTitle', { name: apiKey.name })}</AlertDialog.Title>
             <AlertDialog.Description className="dialog-description">
-              Requests using this credential will stop working immediately.
+              {t('revokeDescription')}
             </AlertDialog.Description>
           </div>
           <div className="dialog-actions">
-            <AlertDialog.Close className="ui-button ui-button-secondary">Cancel</AlertDialog.Close>
+            <AlertDialog.Close className="ui-button ui-button-secondary">
+              {common('cancel')}
+            </AlertDialog.Close>
             <AlertDialog.Close
               className="ui-button ui-button-danger"
               disabled={busy}
               onClick={revoke}
             >
-              {busy ? 'Revoking…' : 'Revoke key'}
+              {busy ? t('revoking') : t('revokeSubmit')}
             </AlertDialog.Close>
           </div>
         </AlertDialog.Popup>
@@ -360,6 +373,7 @@ function RevokeApiKeyDialog({
 }
 
 function OneTimeToken({ token }: { token: string }) {
+  const t = useTranslations('apiKeys')
   const [copied, setCopied] = useState(false)
   async function copy() {
     await navigator.clipboard.writeText(token)
@@ -367,12 +381,12 @@ function OneTimeToken({ token }: { token: string }) {
   }
   return (
     <div className="one-time-token">
-      <strong>Copy this token now</strong>
-      <p className="one-time-token-caption">It will not be shown again after this dialog closes.</p>
+      <strong>{t('oneTimeTitle')}</strong>
+      <p className="one-time-token-caption">{t('oneTimeCopy')}</p>
       <code>{token}</code>
       <Button onClick={copy} type="button" variant="secondary">
         <Copy aria-hidden="true" size={16} />
-        {copied ? 'Copied' : 'Copy token'}
+        {copied ? t('copied') : t('copyToken')}
       </Button>
     </div>
   )

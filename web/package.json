@@ -12,7 +12,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check .",
+    "lint": "biome check . && node scripts/check-ui-copy.mjs",
     "lint:fix": "biome check --write .",
     "test": "vitest run",
     "test:browser": "node scripts/golden-path.e2e.mjs",
@@ -31,6 +31,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "@radix-ui/colors": "^3.0.0",
     "next": "^16.3.4",
+    "next-intl": "^4.14.5",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^4.5.4"

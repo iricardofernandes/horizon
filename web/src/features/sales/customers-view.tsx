@@ -3,10 +3,12 @@
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Dialog } from '@base-ui/react/dialog'
 import { Envelope, IdentificationCard, Plus, Trash, User, X } from '@phosphor-icons/react'
+import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/ui/text-field'
+import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 
 export type Customer = {
@@ -29,6 +31,9 @@ export function CustomersView({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('customers')
+  const common = useTranslations('common')
+  const statusLabel = useStatusLabel()
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const filtered = customers.filter(
@@ -43,11 +48,9 @@ export function CustomersView({
     <section>
       <header className="page-heading page-heading-with-actions">
         <div>
-          <p className="eyebrow">Sales directory</p>
-          <h1>Customers</h1>
-          <p className="catalog-page-copy">
-            Keep the people and companies behind every commercial relationship organized.
-          </p>
+          <p className="eyebrow">{t('eyebrow')}</p>
+          <h1>{t('title')}</h1>
+          <p className="catalog-page-copy">{t('copy')}</p>
         </div>
         <div className="page-actions">
           <CreateCustomerDialog onChanged={onChanged} setNotice={setNotice} />
@@ -56,20 +59,20 @@ export function CustomersView({
 
       <div className="customer-summary-grid">
         <article className="customer-summary-card">
-          <span>Active customers</span>
+          <span>{t('activeCustomers')}</span>
           <strong>{customers.filter((customer) => customer.status === 'active').length}</strong>
         </article>
         <article className="customer-summary-card">
-          <span>Protected records</span>
+          <span>{t('protectedRecords')}</span>
           <strong>{customers.filter((customer) => customer.status === 'erased').length}</strong>
         </article>
         <label className="customer-search">
-          <span className="sr-only">Search customers</span>
+          <span className="sr-only">{t('search')}</span>
           <input
-            aria-label="Search customers"
+            aria-label={t('search')}
             className="ui-input"
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search name, email or tax ID…"
+            placeholder={t('searchPlaceholder')}
             type="search"
             value={query}
           />
@@ -81,12 +84,12 @@ export function CustomersView({
           <table>
             <thead>
               <tr>
-                <th>Customer</th>
-                <th>Tax ID</th>
-                <th>Phone</th>
-                <th>Address</th>
-                <th>Status</th>
-                <th aria-label="Actions" />
+                <th>{t('customer')}</th>
+                <th>{t('taxId')}</th>
+                <th>{t('phone')}</th>
+                <th>{t('address')}</th>
+                <th>{t('status')}</th>
+                <th aria-label={common('actions')} />
               </tr>
             </thead>
             <tbody>
@@ -114,7 +117,7 @@ export function CustomersView({
                   <td>{customer.phone}</td>
                   <td className="customer-address">{customer.address}</td>
                   <td>
-                    <Badge status={customer.status} />
+                    <Badge status={customer.status} label={statusLabel(customer.status)} />
                   </td>
                   <td>
                     {customer.status === 'active' ? (
@@ -132,8 +135,8 @@ export function CustomersView({
         </div>
         {!filtered.length ? (
           <div className="catalog-empty">
-            <strong>No customers found</strong>
-            <p>Create a customer or adjust your search.</p>
+            <strong>{t('emptyTitle')}</strong>
+            <p>{t('emptyCopy')}</p>
           </div>
         ) : null}
       </div>
@@ -148,6 +151,8 @@ function CreateCustomerDialog({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('customers')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -170,13 +175,13 @@ function CreateCustomerDialog({
       }),
     })
     if (!response.ok) {
-      setError(await apiError(response, 'The customer could not be created.'))
+      setError(await apiError(response, t('createFailed')))
       setBusy(false)
       return
     }
     form.reset()
     setOpen(false)
-    setNotice('Customer created successfully.')
+    setNotice(t('created'))
     await onChanged()
     setBusy(false)
   }
@@ -185,37 +190,37 @@ function CreateCustomerDialog({
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger className="ui-button ui-button-primary">
         <Plus aria-hidden="true" size={17} weight="bold" />
-        New customer
+        {t('create')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup customer-dialog">
           <div className="dialog-heading">
-            <Dialog.Title>Create customer</Dialog.Title>
+            <Dialog.Title>{t('createTitle')}</Dialog.Title>
             <Dialog.Description className="dialog-description">
-              Personal data is encrypted per customer and isolated to this workspace.
+              {t('createDescription')}
             </Dialog.Description>
           </div>
-          <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} weight="bold" />
           </Dialog.Close>
           <form className="dialog-form" onSubmit={submit}>
-            <TextField label="Name" maxLength={160} minLength={2} name="name" required />
+            <TextField label={t('name')} maxLength={160} minLength={2} name="name" required />
             <div className="form-grid two-columns">
               <TextField
-                description="CPF or CNPJ. Formatting is optional."
-                label="Tax ID"
+                description={t('taxIdHelp')}
+                label={t('taxId')}
                 maxLength={18}
                 minLength={11}
                 name="taxId"
                 placeholder="000.000.000-00"
                 required
               />
-              <TextField label="Email" maxLength={254} name="email" required type="email" />
+              <TextField label={t('email')} maxLength={254} name="email" required type="email" />
             </div>
             <TextField
-              description="8 to 15 digits, optionally prefixed with +."
-              label="Phone"
+              description={t('phoneHelp')}
+              label={t('phone')}
               maxLength={24}
               minLength={8}
               name="phone"
@@ -224,11 +229,11 @@ function CreateCustomerDialog({
               type="tel"
             />
             <TextField
-              label="Address"
+              label={t('address')}
               maxLength={500}
               minLength={5}
               name="address"
-              placeholder="Street, number, city and state"
+              placeholder={t('addressPlaceholder')}
               required
             />
             {error ? (
@@ -237,9 +242,11 @@ function CreateCustomerDialog({
               </p>
             ) : null}
             <div className="dialog-actions">
-              <Dialog.Close className="ui-button ui-button-secondary">Cancel</Dialog.Close>
+              <Dialog.Close className="ui-button ui-button-secondary">
+                {common('cancel')}
+              </Dialog.Close>
               <Button disabled={busy} type="submit" variant="primary">
-                {busy ? 'Saving…' : 'Create customer'}
+                {busy ? t('saving') : t('createSubmit')}
               </Button>
             </div>
           </form>
@@ -258,6 +265,8 @@ function EraseCustomerDialog({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('customers')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -271,11 +280,11 @@ function EraseCustomerDialog({
       { method: 'DELETE' },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The customer data could not be erased.'))
+      setError(await apiError(response, t('eraseFailed')))
       setBusy(false)
       return
     }
-    setNotice(`${customer.name}'s personal data was permanently erased.`)
+    setNotice(t('erased', { name: customer.name }))
     await onChanged()
     setOpen(false)
     setBusy(false)
@@ -285,16 +294,15 @@ function EraseCustomerDialog({
     <AlertDialog.Root onOpenChange={setOpen} open={open}>
       <AlertDialog.Trigger className="ui-button ui-button-ghost row-action-button danger-action">
         <Trash aria-hidden="true" size={16} />
-        Erase data
+        {t('erase')}
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Backdrop className="ui-dialog-backdrop" />
         <AlertDialog.Popup className="ui-dialog-popup ui-alert-popup">
           <div className="dialog-heading">
-            <AlertDialog.Title>Erase {customer.name}&apos;s personal data?</AlertDialog.Title>
+            <AlertDialog.Title>{t('eraseTitle', { name: customer.name })}</AlertDialog.Title>
             <AlertDialog.Description className="dialog-description">
-              This crypto-shredding operation is permanent. Historical documents retain an anonymous
-              reference, and this customer cannot be used in new orders.
+              {t('eraseDescription')}
             </AlertDialog.Description>
           </div>
           {error ? (
@@ -303,9 +311,11 @@ function EraseCustomerDialog({
             </p>
           ) : null}
           <div className="dialog-actions">
-            <AlertDialog.Close className="ui-button ui-button-secondary">Cancel</AlertDialog.Close>
+            <AlertDialog.Close className="ui-button ui-button-secondary">
+              {common('cancel')}
+            </AlertDialog.Close>
             <Button disabled={busy} onClick={erase} type="button" variant="danger">
-              {busy ? 'Erasing…' : 'Erase personal data'}
+              {busy ? t('erasing') : t('eraseSubmit')}
             </Button>
           </div>
         </AlertDialog.Popup>

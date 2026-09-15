@@ -2,15 +2,18 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import type { NavigationGroup } from '@/lib/navigation'
 
 export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGroup[] }) {
+  const t = useTranslations('navigation')
+  const shell = useTranslations('shell')
   const pathname = usePathname()
   return (
-    <nav aria-label="Workspace navigation">
+    <nav aria-label={shell('navigationLabel')}>
       {groups.map((group) => (
-        <div key={group.label}>
-          <p className="sidebar-section-label">{group.label}</p>
+        <div key={group.labelKey}>
+          <p className="sidebar-section-label">{t(`groups.${group.labelKey}`)}</p>
           {group.entries.map((entry) => {
             const NavigationIcon = entry.icon
             const active = pathname === entry.href
@@ -24,7 +27,7 @@ export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGro
                 <span className="nav-glyph" aria-hidden="true">
                   <NavigationIcon size={18} weight={active ? 'fill' : 'regular'} />
                 </span>
-                <span className="nav-label">{entry.label}</span>
+                <span className="nav-label">{t(`items.${entry.labelKey}`)}</span>
               </Link>
             )
           })}

@@ -4,14 +4,17 @@ import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Dialog } from '@base-ui/react/dialog'
 import { Tabs } from '@base-ui/react/tabs'
 import { CurrencyCircleDollar, Package, Plus, Prohibit, Ruler, X } from '@phosphor-icons/react'
+import { useTranslations } from 'next-intl'
 import { type FormEvent, type ReactNode, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
-import { minorUnits, money } from '@/lib/format'
+import { minorUnits } from '@/lib/format'
 import { jsonHeaders } from '@/lib/http'
+import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
+import { useMoney, useQuantity } from '@/lib/use-format'
 
 export type CatalogItem = {
   id: string
@@ -64,6 +67,7 @@ export function CatalogView({
   onChanged,
   setNotice,
 }: CatalogViewProps) {
+  const t = useTranslations('catalog')
   const [section, setSection] = useState<CatalogSection>('items')
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -88,7 +92,7 @@ export function CatalogView({
       <PageHeader
         actions={
           readOnly ? (
-            <span className="read-only-badge">View only</span>
+            <span className="read-only-badge">{t('viewOnly')}</span>
           ) : section === 'items' ? (
             <CreateItemDialog units={units} onChanged={onChanged} setNotice={setNotice} />
           ) : section === 'units' ? (
@@ -108,24 +112,24 @@ export function CatalogView({
         value={section}
       >
         <div className="catalog-toolbar">
-          <Tabs.List aria-label="Catalog sections" className="ui-tabs-list">
+          <Tabs.List aria-label={t('sections')} className="ui-tabs-list">
             <Tabs.Tab className="ui-tab" value="items">
-              Items <span className="tab-count">{items.length}</span>
+              {t('item')} <span className="tab-count">{items.length}</span>
             </Tabs.Tab>
             <Tabs.Tab className="ui-tab" value="units">
-              Units <span className="tab-count">{units.length}</span>
+              {t('units')} <span className="tab-count">{units.length}</span>
             </Tabs.Tab>
             <Tabs.Tab className="ui-tab" value="prices">
-              Price lists <span className="tab-count">{priceLists.length}</span>
+              {t('prices')} <span className="tab-count">{priceLists.length}</span>
             </Tabs.Tab>
           </Tabs.List>
           <label className="catalog-search">
-            <span className="sr-only">Search catalog</span>
+            <span className="sr-only">{t('search')}</span>
             <input
-              aria-label="Search catalog"
+              aria-label={t('search')}
               className="ui-input"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={`Search ${section === 'prices' ? 'price lists' : section}…`}
+              placeholder={searchPlaceholder(t, section)}
               type="search"
               value={query}
             />
@@ -155,14 +159,13 @@ export function CatalogView({
 }
 
 function PageHeader({ actions }: { actions: ReactNode }) {
+  const t = useTranslations('catalog')
   return (
     <header className="page-heading page-heading-with-actions">
       <div>
-        <p className="eyebrow">Commercial foundation</p>
-        <h1>Catalog</h1>
-        <p className="catalog-page-copy">
-          Manage items, units of measure and the prices used by Sales.
-        </p>
+        <p className="eyebrow">{t('eyebrow')}</p>
+        <h1>{t('title')}</h1>
+        <p className="catalog-page-copy">{t('copy')}</p>
       </div>
       <div className="page-actions">{actions}</div>
     </header>
@@ -186,6 +189,8 @@ function ItemsTable({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('catalog')
+  const common = useTranslations('common')
   const unitById = useMemo(() => new Map(units.map((unit) => [unit.id, unit])), [units])
   const priceByItem = useMemo(
     () =>
@@ -211,86 +216,120 @@ function ItemsTable({
         <table>
           <thead>
             <tr>
-              <th>Item</th>
-              <th>SKU</th>
-              <th>Type</th>
-              <th>Unit</th>
-              <th>Price</th>
-              <th>Available</th>
-              <th>Status</th>
-              {!readOnly ? <th aria-label="Actions" /> : null}
+              <th>{t('item')}</th>
+              <th>{t('sku')}</th>
+              <th>{t('type')}</th>
+              <th>{t('unit')}</th>
+              <th>{t('price')}</th>
+              <th>{t('available')}</th>
+              <th>{t('status')}</th>
+              {!readOnly ? <th aria-label={common('actions')} /> : null}
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => {
-              const price = priceByItem.get(item.id)
-              const unit = item.unitId ? unitById.get(item.unitId) : undefined
-              return (
-                <tr key={item.id}>
-                  <td>
-                    <div className="resource-name">
-                      <span className="resource-icon" aria-hidden="true">
-                        <Package size={17} />
-                      </span>
-                      <span>
-                        <strong>{item.name}</strong>
-                        {item.ncm ? <small>NCM {item.ncm}</small> : null}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <code className="table-code">{item.sku}</code>
-                  </td>
-                  <td className="capitalize">{item.kind}</td>
-                  <td>{unit?.code ?? '—'}</td>
-                  <td>{price ? money(price.amount, price.currency) : 'Not set'}</td>
-                  <td>{formatQuantity(availabilityByItem.get(item.id) ?? 0)}</td>
-                  <td>
-                    <Badge status={item.active ? 'active' : 'inactive'} />
-                  </td>
-                  {!readOnly ? (
-                    <td>
-                      <div className="row-actions">
-                        <SetPriceDialog
-                          item={item}
-                          priceLists={priceLists}
-                          onChanged={onChanged}
-                          setNotice={setNotice}
-                        />
-                        {item.active ? (
-                          <DeactivateItemDialog
-                            item={item}
-                            onChanged={onChanged}
-                            setNotice={setNotice}
-                          />
-                        ) : null}
-                      </div>
-                    </td>
-                  ) : null}
-                </tr>
-              )
-            })}
+            {items.map((item) => (
+              <ItemRow
+                availability={availabilityByItem.get(item.id) ?? 0}
+                item={item}
+                key={item.id}
+                onChanged={onChanged}
+                price={priceByItem.get(item.id)}
+                priceLists={priceLists}
+                readOnly={readOnly}
+                setNotice={setNotice}
+                unit={item.unitId ? unitById.get(item.unitId) : undefined}
+              />
+            ))}
           </tbody>
         </table>
       </div>
-      {!items.length ? (
-        <EmptyState title="No items found" copy="Create an item or adjust your search." />
-      ) : null}
+      {!items.length ? <EmptyState title={t('emptyItems')} copy={t('emptyItemsCopy')} /> : null}
     </div>
   )
 }
 
+type ItemPrice = { itemId: string; amount: string; currency: string }
+
+function ItemRow({
+  item,
+  unit,
+  price,
+  availability,
+  priceLists,
+  readOnly,
+  onChanged,
+  setNotice,
+}: {
+  item: CatalogItem
+  unit: CatalogUnit | undefined
+  price: ItemPrice | undefined
+  availability: number
+  priceLists: CatalogPriceList[]
+  readOnly: boolean
+  onChanged: () => Promise<void>
+  setNotice: (value: string) => void
+}) {
+  const t = useTranslations('catalog')
+  const common = useTranslations('common')
+  const statusLabel = useStatusLabel()
+  const money = useMoney()
+  const quantity = useQuantity()
+  const status = item.active ? 'active' : 'inactive'
+  return (
+    <tr>
+      <td>
+        <div className="resource-name">
+          <span className="resource-icon" aria-hidden="true">
+            <Package size={17} />
+          </span>
+          <span>
+            <strong>{item.name}</strong>
+            {item.ncm ? <small>NCM {item.ncm}</small> : null}
+          </span>
+        </div>
+      </td>
+      <td>
+        <code className="table-code">{item.sku}</code>
+      </td>
+      <td>{item.kind === 'service' ? t('kindService') : t('kindProduct')}</td>
+      <td>{unit?.code ?? '—'}</td>
+      <td>{price ? money(price.amount, price.currency) : common('notSet')}</td>
+      <td>{quantity(availability)}</td>
+      <td>
+        <Badge status={status} label={statusLabel(status)} />
+      </td>
+      {!readOnly ? (
+        <td>
+          <div className="row-actions">
+            <SetPriceDialog
+              item={item}
+              priceLists={priceLists}
+              onChanged={onChanged}
+              setNotice={setNotice}
+            />
+            {item.active ? (
+              <DeactivateItemDialog item={item} onChanged={onChanged} setNotice={setNotice} />
+            ) : null}
+          </div>
+        </td>
+      ) : null}
+    </tr>
+  )
+}
+
 function UnitsTable({ units }: { units: CatalogUnit[] }) {
+  const t = useTranslations('catalog')
+  const statusLabel = useStatusLabel()
   return (
     <div className="panel table-panel catalog-table-panel">
       <div className="table-scroll">
         <table>
           <thead>
             <tr>
-              <th>Unit</th>
-              <th>Code</th>
-              <th>Decimal places</th>
-              <th>Status</th>
+              <th>{t('unit')}</th>
+              <th>{t('code')}</th>
+              <th>{t('decimalPlaces')}</th>
+              <th>{t('status')}</th>
             </tr>
           </thead>
           <tbody>
@@ -309,21 +348,25 @@ function UnitsTable({ units }: { units: CatalogUnit[] }) {
                 </td>
                 <td>{unit.decimalPlaces}</td>
                 <td>
-                  <Badge status={unit.active ? 'active' : 'inactive'} />
+                  <Badge
+                    status={unit.active ? 'active' : 'inactive'}
+                    label={statusLabel(unit.active ? 'active' : 'inactive')}
+                  />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {!units.length ? (
-        <EmptyState title="No units found" copy="Create a unit of measure to classify items." />
-      ) : null}
+      {!units.length ? <EmptyState title={t('emptyUnits')} copy={t('emptyUnitsCopy')} /> : null}
     </div>
   )
 }
 
 function PriceListsTable({ lists, items }: { lists: CatalogPriceList[]; items: CatalogItem[] }) {
+  const t = useTranslations('catalog')
+  const statusLabel = useStatusLabel()
+  const money = useMoney()
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
   return (
     <div className="price-list-grid">
@@ -336,27 +379,27 @@ function PriceListsTable({ lists, items }: { lists: CatalogPriceList[]; items: C
             <div>
               <h2>{list.name}</h2>
               <p className="price-list-summary">
-                {list.currency} · {list.prices.length} priced items
+                {list.currency} · {t('pricedItems', { count: list.prices.length })}
               </p>
             </div>
-            <Badge status={list.active ? 'active' : 'inactive'} />
+            <Badge
+              status={list.active ? 'active' : 'inactive'}
+              label={statusLabel(list.active ? 'active' : 'inactive')}
+            />
           </header>
           <div className="price-list-rows">
             {list.prices.slice(0, 6).map((price) => (
               <div key={price.itemId}>
-                <span>{itemById.get(price.itemId)?.name ?? 'Unknown item'}</span>
+                <span>{itemById.get(price.itemId)?.name ?? t('unknownItem')}</span>
                 <strong>{money(price.amount, list.currency)}</strong>
               </div>
             ))}
-            {!list.prices.length ? <p className="empty compact-empty">No prices set yet.</p> : null}
+            {!list.prices.length ? <p className="empty compact-empty">{t('noPrices')}</p> : null}
           </div>
         </article>
       ))}
       {!lists.length ? (
-        <EmptyState
-          title="No price lists found"
-          copy="Create the first price list for this workspace."
-        />
+        <EmptyState title={t('emptyPriceLists')} copy={t('emptyPriceListsCopy')} />
       ) : null}
     </div>
   )
@@ -371,6 +414,7 @@ function CreateItemDialog({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('catalog')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -394,13 +438,13 @@ function CreateItemDialog({
       }),
     })
     if (!response.ok) {
-      setError(await apiError(response, 'The item could not be created.'))
+      setError(await apiError(response, t('createItemFailed')))
       setBusy(false)
       return
     }
     form.reset()
     setOpen(false)
-    setNotice('Item created successfully.')
+    setNotice(t('itemCreated'))
     await onChanged()
     setBusy(false)
   }
@@ -409,25 +453,31 @@ function CreateItemDialog({
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger className="ui-button ui-button-primary" disabled={!units.length}>
         <Plus aria-hidden="true" size={17} weight="bold" />
-        New item
+        {t('createItem')}
       </Dialog.Trigger>
-      <DialogSurface description="Add a product or service to this workspace." title="Create item">
+      <DialogSurface description={t('createItemDescription')} title={t('createItemTitle')}>
         <form className="dialog-form" onSubmit={submit}>
           <div className="form-grid two-columns">
             <SelectField
-              label="Type"
+              label={t('type')}
               name="kind"
               options={[
-                { label: 'Product', value: 'product' },
-                { label: 'Service', value: 'service' },
+                { label: t('kindProduct'), value: 'product' },
+                { label: t('kindService'), value: 'service' },
               ]}
               required
             />
-            <TextField label="SKU" maxLength={64} name="sku" placeholder="SKU-001" required />
+            <TextField label={t('sku')} maxLength={64} name="sku" placeholder="SKU-001" required />
           </div>
-          <TextField label="Name" maxLength={160} name="name" placeholder="Item name" required />
+          <TextField
+            label={t('name')}
+            maxLength={160}
+            name="name"
+            placeholder={t('namePlaceholder')}
+            required
+          />
           <SelectField
-            label="Unit of measure"
+            label={t('unitOfMeasure')}
             name="unitId"
             options={units
               .filter((unit) => unit.active)
@@ -435,13 +485,13 @@ function CreateItemDialog({
             required
           />
           <TextField
-            description="Optional Brazilian fiscal classification, with exactly eight digits."
+            description={t('ncmHelp')}
             label="NCM"
             name="ncm"
             pattern="[0-9. ]{8,16}"
             placeholder="0901.21.00"
           />
-          <DialogActions busy={busy} error={error} submitLabel="Create item" />
+          <DialogActions busy={busy} error={error} submitLabel={t('createItemSubmit')} />
         </form>
       </DialogSurface>
     </Dialog.Root>
@@ -455,6 +505,7 @@ function CreateUnitDialog({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('catalog')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -477,13 +528,13 @@ function CreateUnitDialog({
       }),
     })
     if (!response.ok) {
-      setError(await apiError(response, 'The unit could not be created.'))
+      setError(await apiError(response, t('createUnitFailed')))
       setBusy(false)
       return
     }
     form.reset()
     setOpen(false)
-    setNotice('Unit of measure created successfully.')
+    setNotice(t('unitCreated'))
     await onChanged()
     setBusy(false)
   }
@@ -492,18 +543,15 @@ function CreateUnitDialog({
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger className="ui-button ui-button-primary">
         <Plus aria-hidden="true" size={17} weight="bold" />
-        New unit
+        {t('createUnit')}
       </Dialog.Trigger>
-      <DialogSurface
-        description="Define how quantities are recorded for catalog items."
-        title="Create unit"
-      >
+      <DialogSurface description={t('createUnitDescription')} title={t('createUnitTitle')}>
         <form className="dialog-form" onSubmit={submit}>
           <div className="form-grid two-columns">
-            <TextField label="Code" maxLength={6} name="code" placeholder="UN" required />
+            <TextField label={t('code')} maxLength={6} name="code" placeholder="UN" required />
             <TextField
               defaultValue="0"
-              label="Decimal places"
+              label={t('decimalPlaces')}
               max="6"
               min="0"
               name="decimalPlaces"
@@ -511,8 +559,14 @@ function CreateUnitDialog({
               type="number"
             />
           </div>
-          <TextField label="Name" maxLength={160} name="name" placeholder="Unit" required />
-          <DialogActions busy={busy} error={error} submitLabel="Create unit" />
+          <TextField
+            label={t('name')}
+            maxLength={160}
+            name="name"
+            placeholder={t('unitNamePlaceholder')}
+            required
+          />
+          <DialogActions busy={busy} error={error} submitLabel={t('createUnitSubmit')} />
         </form>
       </DialogSurface>
     </Dialog.Root>
@@ -526,6 +580,7 @@ function CreatePriceListDialog({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('catalog')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -551,13 +606,13 @@ function CreatePriceListDialog({
       },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The price list could not be created.'))
+      setError(await apiError(response, t('createPriceListFailed')))
       setBusy(false)
       return
     }
     form.reset()
     setOpen(false)
-    setNotice('Price list created successfully.')
+    setNotice(t('priceListCreated'))
     await onChanged()
     setBusy(false)
   }
@@ -566,25 +621,31 @@ function CreatePriceListDialog({
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger className="ui-button ui-button-primary">
         <Plus aria-hidden="true" size={17} weight="bold" />
-        New price list
+        {t('createPriceList')}
       </Dialog.Trigger>
       <DialogSurface
-        description="Create a commercial price context for this workspace."
-        title="Create price list"
+        description={t('createPriceListDescription')}
+        title={t('createPriceListTitle')}
       >
         <form className="dialog-form" onSubmit={submit}>
-          <TextField label="Name" maxLength={160} name="name" placeholder="Retail" required />
+          <TextField
+            label={t('name')}
+            maxLength={160}
+            name="name"
+            placeholder={t('priceListNamePlaceholder')}
+            required
+          />
           <TextField
             defaultValue="BRL"
-            description="ISO 4217 three-letter currency code."
-            label="Currency"
+            description={t('currencyHelp')}
+            label={t('currency')}
             maxLength={3}
             minLength={3}
             name="currency"
             pattern="[A-Za-z]{3}"
             required
           />
-          <DialogActions busy={busy} error={error} submitLabel="Create price list" />
+          <DialogActions busy={busy} error={error} submitLabel={t('createPriceListSubmit')} />
         </form>
       </DialogSurface>
     </Dialog.Root>
@@ -602,6 +663,7 @@ function SetPriceDialog({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('catalog')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -613,13 +675,13 @@ function SetPriceDialog({
     const data = new FormData(event.currentTarget)
     const list = priceLists.find((candidate) => candidate.id === data.get('priceListId'))
     if (!list) {
-      setError('Select a price list.')
+      setError(t('selectPriceList'))
       setBusy(false)
       return
     }
     const amount = minorUnits(String(data.get('amount') ?? ''))
     if (!amount) {
-      setError('Enter a valid non-negative amount with up to two decimal places.')
+      setError(t('amountInvalid'))
       setBusy(false)
       return
     }
@@ -633,12 +695,12 @@ function SetPriceDialog({
       },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The price could not be saved.'))
+      setError(await apiError(response, t('priceFailed')))
       setBusy(false)
       return
     }
     setOpen(false)
-    setNotice(`Price for ${item.name} updated successfully.`)
+    setNotice(t('priceUpdated', { name: item.name }))
     await onChanged()
     setBusy(false)
   }
@@ -647,12 +709,15 @@ function SetPriceDialog({
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger className="ui-button ui-button-ghost row-action-button">
         <CurrencyCircleDollar aria-hidden="true" size={16} />
-        Price
+        {t('setPrice')}
       </Dialog.Trigger>
-      <DialogSurface description={`Set a price for ${item.name}.`} title="Set item price">
+      <DialogSurface
+        description={t('setPriceDescription', { name: item.name })}
+        title={t('setPriceTitle')}
+      >
         <form className="dialog-form" onSubmit={submit}>
           <SelectField
-            label="Price list"
+            label={t('priceList')}
             name="priceListId"
             options={priceLists
               .filter((list) => list.active)
@@ -660,15 +725,15 @@ function SetPriceDialog({
             required
           />
           <TextField
-            description="Use the major currency amount, for example 149.90."
+            description={t('amountHelp')}
             inputMode="decimal"
-            label="Amount"
+            label={t('amount')}
             name="amount"
             pattern="[0-9]+([.,][0-9]{1,2})?"
             placeholder="0.00"
             required
           />
-          <DialogActions busy={busy} error={error} submitLabel="Save price" />
+          <DialogActions busy={busy} error={error} submitLabel={t('setPriceSubmit')} />
         </form>
       </DialogSurface>
     </Dialog.Root>
@@ -684,6 +749,8 @@ function DeactivateItemDialog({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('catalog')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -697,11 +764,11 @@ function DeactivateItemDialog({
       { method: 'PATCH' },
     )
     if (!response.ok) {
-      setError(await apiError(response, 'The item could not be deactivated.'))
+      setError(await apiError(response, t('deactivateFailed')))
       setBusy(false)
       return
     }
-    setNotice(`${item.name} was deactivated.`)
+    setNotice(t('deactivated', { name: item.name }))
     await onChanged()
     setOpen(false)
     setBusy(false)
@@ -711,17 +778,14 @@ function DeactivateItemDialog({
     <AlertDialog.Root onOpenChange={setOpen} open={open}>
       <AlertDialog.Trigger className="ui-button ui-button-ghost row-action-button danger-action">
         <Prohibit aria-hidden="true" size={16} />
-        Deactivate
+        {t('deactivate')}
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Backdrop className="ui-dialog-backdrop" />
         <AlertDialog.Popup className="ui-dialog-popup ui-alert-popup">
           <div className="dialog-heading">
-            <AlertDialog.Title>Deactivate {item.name}?</AlertDialog.Title>
-            <AlertDialog.Description>
-              Existing documents keep their reference, but this item can no longer be used in new
-              operations.
-            </AlertDialog.Description>
+            <AlertDialog.Title>{t('deactivateTitle', { name: item.name })}</AlertDialog.Title>
+            <AlertDialog.Description>{t('deactivateWarning')}</AlertDialog.Description>
           </div>
           {error ? (
             <p className="form-error" role="alert">
@@ -729,9 +793,11 @@ function DeactivateItemDialog({
             </p>
           ) : null}
           <div className="dialog-actions">
-            <AlertDialog.Close className="ui-button ui-button-secondary">Cancel</AlertDialog.Close>
+            <AlertDialog.Close className="ui-button ui-button-secondary">
+              {common('cancel')}
+            </AlertDialog.Close>
             <Button disabled={busy} onClick={deactivate} type="button" variant="danger">
-              {busy ? 'Deactivating…' : 'Deactivate item'}
+              {busy ? t('deactivating') : t('deactivateItemSubmit')}
             </Button>
           </div>
         </AlertDialog.Popup>
@@ -749,6 +815,7 @@ function DialogSurface({
   description: string
   children: ReactNode
 }) {
+  const common = useTranslations('common')
   return (
     <Dialog.Portal>
       <Dialog.Backdrop className="ui-dialog-backdrop" />
@@ -757,7 +824,7 @@ function DialogSurface({
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description className="dialog-description">{description}</Dialog.Description>
         </div>
-        <Dialog.Close aria-label="Close dialog" className="ui-dialog-close">
+        <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
           <X aria-hidden="true" size={18} weight="bold" />
         </Dialog.Close>
         {children}
@@ -775,6 +842,8 @@ function DialogActions({
   error: string
   submitLabel: string
 }) {
+  const t = useTranslations('catalog')
+  const common = useTranslations('common')
   return (
     <>
       {error ? (
@@ -783,9 +852,9 @@ function DialogActions({
         </p>
       ) : null}
       <div className="dialog-actions">
-        <Dialog.Close className="ui-button ui-button-secondary">Cancel</Dialog.Close>
+        <Dialog.Close className="ui-button ui-button-secondary">{common('cancel')}</Dialog.Close>
         <Button disabled={busy} type="submit" variant="primary">
-          {busy ? 'Saving…' : submitLabel}
+          {busy ? t('saving') : submitLabel}
         </Button>
       </div>
     </>
@@ -813,6 +882,11 @@ async function apiError(response: Response, fallback: string): Promise<string> {
   return fallback
 }
 
-function formatQuantity(value: number) {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 }).format(value)
+function searchPlaceholder(
+  t: (key: 'searchItems' | 'searchUnits' | 'searchPriceLists') => string,
+  section: CatalogSection,
+): string {
+  if (section === 'units') return t('searchUnits')
+  if (section === 'prices') return t('searchPriceLists')
+  return t('searchItems')
 }

@@ -23,7 +23,11 @@ const browser = await chromium.launch({
 })
 
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  // A Brazilian browser with no stored choice must be answered in Portuguese (ADR 0044).
+  const page = await browser.newPage({
+    locale: 'pt-BR',
+    viewport: { width: 1440, height: 900 },
+  })
   page.setDefaultTimeout(60_000)
   const pageErrors = []
   const telemetryRequests = []
@@ -44,13 +48,14 @@ try {
   })
 
   await page.goto(`${appUrl}/login`, { waitUntil: 'domcontentloaded' })
-  await page.getByLabel('Email').fill('demo@horizon.local')
-  await page.getByLabel('Password').fill(password)
+  await page.getByRole('heading', { name: 'Entrar no Horizon' }).waitFor()
+  await page.getByLabel('E-mail').fill('demo@horizon.local')
+  await page.getByLabel('Senha').fill(password)
   const sessionResponsePromise = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' && response.url() === `${appUrl}/api/session`,
   )
-  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'Continuar' }).click()
   const sessionResponse = await sessionResponsePromise
   assert(
     sessionResponse.ok(),
@@ -59,8 +64,19 @@ try {
   await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Horizon Demo/ }).click()
   await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Boa tarde' }).waitFor()
+  await page.getByRole('link', { name: 'Área de trabalho Horizon Demo' }).waitFor()
+
+  // Switching language keeps the reader on the same resource and reaches the whole shell.
+  await page.getByRole('combobox', { name: 'Idioma' }).click()
+  await page.getByRole('option', { name: 'English' }).click()
   await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
-  await page.getByRole('link', { name: 'Horizon Demo workspace' }).waitFor()
+  await page.getByRole('link', { name: 'Overview' }).waitFor()
+  assert(
+    (await page.locator('html').getAttribute('lang')) === 'en',
+    'the document language did not follow the switcher',
+  )
+
   await page.getByRole('link', { name: 'Horizon Demo workspace' }).click()
   await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Horizon Demo/ }).click()

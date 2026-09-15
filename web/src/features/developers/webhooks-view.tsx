@@ -2,6 +2,7 @@
 
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Trash } from '@phosphor-icons/react'
+import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import { PageHeading, PanelHeading } from '@/components/ui/headings'
 import { Empty } from '@/components/ui/state'
 import { TextField } from '@/components/ui/text-field'
 import { jsonHeaders } from '@/lib/http'
+import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 
 export type Subscription = {
@@ -28,6 +30,8 @@ export function WebhooksView({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('webhooks')
+  const statusLabel = useStatusLabel()
   const [secret, setSecret] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -51,29 +55,25 @@ export function WebhooksView({
       },
     )
     if (!response.ok) {
-      setNotice('The endpoint could not be registered. Use HTTPS outside local development.')
+      setNotice(t('registerFailed'))
       setBusy(false)
       return
     }
     const created = await response.json()
     setSecret(created.secret)
-    setNotice('Endpoint registered. Copy the signing secret now; it will not be shown again.')
+    setNotice(t('registered'))
     await onChanged()
     setBusy(false)
   }
 
   return (
     <section>
-      <PageHeading
-        eyebrow="Developer operations"
-        title="Webhooks"
-        copy="Deliver order events to the systems that depend on them."
-      />
+      <PageHeading eyebrow={t('eyebrow')} title={t('title')} copy={t('copy')} />
       <div className="split-grid">
         <form className="panel form-panel" onSubmit={submit}>
-          <PanelHeading title="Add endpoint" copy="Select one or more event types" />
+          <PanelHeading title={t('addEndpoint')} copy={t('addEndpointCopy')} />
           <TextField
-            label="Endpoint URL"
+            label={t('endpointUrl')}
             name="endpointUrl"
             placeholder="https://example.com/horizon"
             required
@@ -81,25 +81,25 @@ export function WebhooksView({
           />
           <TextField
             defaultValue="sales.order.confirmed"
-            description="Separate multiple event types with commas."
-            label="Event types"
+            description={t('eventTypesHelp')}
+            label={t('eventTypes')}
             name="eventTypes"
             required
           />
           <Button disabled={busy} type="submit" variant="primary">
-            {busy ? 'Creating…' : 'Create subscription'}
+            {busy ? t('creating') : t('create')}
           </Button>
           {secret ? (
             <div className="secret-box">
-              <small>Signing secret · shown once</small>
+              <small>{t('secretLabel')}</small>
               <code>{secret}</code>
             </div>
           ) : null}
         </form>
         <section className="panel">
           <PanelHeading
-            title="Subscriptions"
-            copy={`${subscriptions.filter((row) => row.active).length} active`}
+            title={t('subscriptions')}
+            copy={t('activeCount', { count: subscriptions.filter((row) => row.active).length })}
           />
           <div className="stack-list">
             {subscriptions.length ? (
@@ -110,7 +110,10 @@ export function WebhooksView({
                     <small>{row.eventTypes.join(', ')}</small>
                   </div>
                   <div className="row-actions">
-                    <Badge status={row.active ? 'active' : 'inactive'} />
+                    <Badge
+                      status={row.active ? 'active' : 'inactive'}
+                      label={statusLabel(row.active ? 'active' : 'inactive')}
+                    />
                     {row.active ? (
                       <DeleteSubscriptionDialog
                         subscription={row}
@@ -122,7 +125,7 @@ export function WebhooksView({
                 </div>
               ))
             ) : (
-              <Empty copy="No endpoints registered yet." />
+              <Empty copy={t('empty')} />
             )}
           </div>
         </section>
@@ -140,6 +143,8 @@ function DeleteSubscriptionDialog({
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
+  const t = useTranslations('webhooks')
+  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -152,11 +157,11 @@ function DeleteSubscriptionDialog({
       { method: 'DELETE' },
     )
     if (!response.ok) {
-      setError('The subscription could not be deactivated.')
+      setError(t('deactivateFailed'))
       setBusy(false)
       return
     }
-    setNotice('Webhook subscription deactivated.')
+    setNotice(t('deactivated'))
     await onChanged()
     setOpen(false)
     setBusy(false)
@@ -164,7 +169,7 @@ function DeleteSubscriptionDialog({
   return (
     <AlertDialog.Root onOpenChange={setOpen} open={open}>
       <AlertDialog.Trigger
-        aria-label={`Deactivate ${subscription.endpointUrl}`}
+        aria-label={t('deactivateLabel', { url: subscription.endpointUrl })}
         className="ui-button ui-button-ghost icon-action danger-action"
       >
         <Trash aria-hidden="true" size={15} />
@@ -173,9 +178,9 @@ function DeleteSubscriptionDialog({
         <AlertDialog.Backdrop className="ui-dialog-backdrop" />
         <AlertDialog.Popup className="ui-dialog-popup ui-alert-popup">
           <div className="dialog-heading">
-            <AlertDialog.Title>Deactivate this endpoint?</AlertDialog.Title>
+            <AlertDialog.Title>{t('deactivateTitle')}</AlertDialog.Title>
             <AlertDialog.Description className="dialog-description">
-              New matching events will no longer be delivered to {subscription.endpointUrl}.
+              {t('deactivateCopy', { url: subscription.endpointUrl })}
             </AlertDialog.Description>
           </div>
           {error ? (
@@ -184,9 +189,11 @@ function DeleteSubscriptionDialog({
             </p>
           ) : null}
           <div className="dialog-actions">
-            <AlertDialog.Close className="ui-button ui-button-secondary">Cancel</AlertDialog.Close>
+            <AlertDialog.Close className="ui-button ui-button-secondary">
+              {common('cancel')}
+            </AlertDialog.Close>
             <Button disabled={busy} onClick={remove} type="button" variant="danger">
-              {busy ? 'Deactivating…' : 'Deactivate endpoint'}
+              {busy ? t('deactivating') : t('deactivate')}
             </Button>
           </div>
         </AlertDialog.Popup>

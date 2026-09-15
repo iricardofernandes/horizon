@@ -2,6 +2,7 @@
 
 import { ArrowRight, DotsThree } from '@phosphor-icons/react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { tracedFetch } from '@/lib/telemetry'
@@ -9,6 +10,7 @@ import { tracedFetch } from '@/lib/telemetry'
 type Workspace = { tenantId: string; slug: string; name: string }
 
 export default function WorkspacesPage() {
+  const t = useTranslations('workspaces')
   const router = useRouter()
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [busy, setBusy] = useState('')
@@ -21,8 +23,8 @@ export default function WorkspacesPage() {
         const body = (await response.json()) as { workspaces: Workspace[] }
         setWorkspaces(body.workspaces)
       })
-      .catch(() => setError('Your workspaces could not be loaded. Please sign in again.'))
-  }, [router])
+      .catch(() => setError(t('loadError')))
+  }, [router, t])
 
   async function select(workspace: Workspace) {
     setBusy(workspace.tenantId)
@@ -34,7 +36,7 @@ export default function WorkspacesPage() {
     }).catch(() => null)
     if (!response?.ok) {
       setBusy('')
-      setError('This workspace is unavailable. Please sign in again.')
+      setError(t('selectError'))
       return
     }
     window.localStorage.setItem('horizon.activeWorkspace', JSON.stringify(workspace))
@@ -55,9 +57,9 @@ export default function WorkspacesPage() {
           <span>Horizon</span>
         </a>
         <header>
-          <p className="eyebrow">Choose where to work</p>
-          <h1 id="workspace-title">Your workspaces</h1>
-          <p className="muted">Your permissions and data are isolated in each workspace.</p>
+          <p className="eyebrow">{t('eyebrow')}</p>
+          <h1 id="workspace-title">{t('title')}</h1>
+          <p className="muted">{t('subtitle')}</p>
         </header>
         {error ? (
           <p className="form-error" role="alert">
@@ -92,11 +94,11 @@ export default function WorkspacesPage() {
               </Button>
             ))
           ) : (
-            <p className="muted">Loading workspaces…</p>
+            <p className="muted">{t('loading')}</p>
           )}
         </div>
         <Button className="workspace-signout" onClick={useAnotherAccount} type="button">
-          Use another account
+          {t('useAnotherAccount')}
         </Button>
       </section>
     </main>

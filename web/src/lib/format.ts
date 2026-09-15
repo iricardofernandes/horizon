@@ -1,27 +1,7 @@
 /**
- * Presentation formatters. Money crosses the wire as minor units with an explicit
- * currency (ADR 0010); nothing here is allowed to invent a different representation.
+ * Locale-independent helpers. Anything a reader sees formatted — money, quantities,
+ * dates — goes through `lib/use-format.ts`, which knows the active locale (ADR 0044).
  */
-export function money(amount: string, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(
-    Number(amount) / 100,
-  )
-}
-
-export function compact(value: number): string {
-  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(
-    value,
-  )
-}
-
-export function dateOf(value: string): string {
-  return new Date(value).toLocaleDateString()
-}
-
-export function dateTimeOf(value: string): string {
-  return new Date(value).toLocaleString()
-}
-
 export function short(id: string): string {
   return id.slice(0, 8)
 }
