@@ -4,6 +4,7 @@ import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Dialog } from '@base-ui/react/dialog'
 import { Envelope, IdentificationCard, Plus, Trash, User, X } from '@phosphor-icons/react'
 import { type FormEvent, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/ui/text-field'
 import { tracedFetch } from '@/lib/telemetry'
@@ -113,7 +114,7 @@ export function CustomersView({
                   <td>{customer.phone}</td>
                   <td className="customer-address">{customer.address}</td>
                   <td>
-                    <StatusBadge status={customer.status} />
+                    <Badge status={customer.status} />
                   </td>
                   <td>
                     {customer.status === 'active' ? (
@@ -311,10 +312,6 @@ function EraseCustomerDialog({
       </AlertDialog.Portal>
     </AlertDialog.Root>
   )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge badge-${status}`}>{status}</span>
 }
 
 async function apiError(response: Response, fallback: string): Promise<string> {

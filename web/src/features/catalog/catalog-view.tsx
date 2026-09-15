@@ -5,9 +5,12 @@ import { Dialog } from '@base-ui/react/dialog'
 import { Tabs } from '@base-ui/react/tabs'
 import { CurrencyCircleDollar, Package, Plus, Prohibit, Ruler, X } from '@phosphor-icons/react'
 import { type FormEvent, type ReactNode, useMemo, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
+import { minorUnits, money } from '@/lib/format'
+import { jsonHeaders } from '@/lib/http'
 import { tracedFetch } from '@/lib/telemetry'
 
 export type CatalogItem = {
@@ -243,7 +246,7 @@ function ItemsTable({
                   <td>{price ? money(price.amount, price.currency) : 'Not set'}</td>
                   <td>{formatQuantity(availabilityByItem.get(item.id) ?? 0)}</td>
                   <td>
-                    <StatusBadge status={item.active ? 'active' : 'inactive'} />
+                    <Badge status={item.active ? 'active' : 'inactive'} />
                   </td>
                   {!readOnly ? (
                     <td>
@@ -306,7 +309,7 @@ function UnitsTable({ units }: { units: CatalogUnit[] }) {
                 </td>
                 <td>{unit.decimalPlaces}</td>
                 <td>
-                  <StatusBadge status={unit.active ? 'active' : 'inactive'} />
+                  <Badge status={unit.active ? 'active' : 'inactive'} />
                 </td>
               </tr>
             ))}
@@ -336,7 +339,7 @@ function PriceListsTable({ lists, items }: { lists: CatalogPriceList[]; items: C
                 {list.currency} · {list.prices.length} priced items
               </p>
             </div>
-            <StatusBadge status={list.active ? 'active' : 'inactive'} />
+            <Badge status={list.active ? 'active' : 'inactive'} />
           </header>
           <div className="price-list-rows">
             {list.prices.slice(0, 6).map((price) => (
@@ -789,10 +792,6 @@ function DialogActions({
   )
 }
 
-function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge badge-${status}`}>{status.replace('-', ' ')}</span>
-}
-
 function EmptyState({ title, copy }: { title: string; copy: string }) {
   return (
     <div className="catalog-empty">
@@ -800,10 +799,6 @@ function EmptyState({ title, copy }: { title: string; copy: string }) {
       <p>{copy}</p>
     </div>
   )
-}
-
-function jsonHeaders() {
-  return { 'content-type': 'application/json' }
 }
 
 async function apiError(response: Response, fallback: string): Promise<string> {
@@ -816,20 +811,6 @@ async function apiError(response: Response, fallback: string): Promise<string> {
     // The fallback below is intentionally used for empty and non-JSON upstream errors.
   }
   return fallback
-}
-
-function minorUnits(value: string): string | null {
-  const normalized = value.trim().replace(',', '.')
-  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(normalized)
-  if (!match?.[1]) return null
-  const decimal = (match[2] ?? '').padEnd(2, '0')
-  return `${match[1]}${decimal}`.replace(/^0+(?=\d)/, '')
-}
-
-function money(amount: string, currency: string) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(
-    Number(amount) / 100,
-  )
 }
 
 function formatQuantity(value: number) {

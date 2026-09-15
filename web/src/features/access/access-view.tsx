@@ -4,9 +4,11 @@ import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Dialog } from '@base-ui/react/dialog'
 import { Key, Plus, ShieldCheck, UserMinus, UserPlus, X } from '@phosphor-icons/react'
 import { type FormEvent, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
+import { jsonHeaders } from '@/lib/http'
 import { tracedFetch } from '@/lib/telemetry'
 
 type ModuleName = 'identity' | 'catalog' | 'inventory' | 'sales' | 'webhooks'
@@ -140,7 +142,7 @@ export function AccessView({
                     {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never'}
                   </td>
                   <td>
-                    <StatusBadge status={user.status} />
+                    <Badge status={user.status} />
                   </td>
                   <td>
                     <div className="row-actions">
@@ -437,14 +439,6 @@ function FormActions({ busy, error, label }: { busy: boolean; error: string; lab
       </div>
     </>
   )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge badge-${status}`}>{status}</span>
-}
-
-function jsonHeaders() {
-  return { 'content-type': 'application/json' }
 }
 
 async function apiError(response: Response, fallback: string): Promise<string> {

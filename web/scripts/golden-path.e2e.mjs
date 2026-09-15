@@ -76,7 +76,8 @@ try {
   )
   await page.getByRole('button', { name: 'Expand sidebar' }).click()
 
-  await page.getByRole('button', { name: 'Catalog' }).click()
+  await page.getByRole('link', { name: 'Items' }).click()
+  await page.waitForURL(`${appUrl}/app/catalog/items`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Catalog', exact: true }).waitFor()
   await page.getByRole('button', { name: 'New item' }).click()
   await page.getByRole('dialog', { name: 'Create item' }).waitFor()
@@ -90,7 +91,8 @@ try {
   await page.getByRole('dialog', { name: 'Create price list' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('button', { name: 'Customers' }).click()
+  await page.getByRole('link', { name: 'Customers' }).click()
+  await page.waitForURL(`${appUrl}/app/sales/customers`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Customers', exact: true }).waitFor()
   const existingCustomer = await page.evaluate(async () => {
     const response = await fetch('/api/horizon/sales/customers')
@@ -114,13 +116,15 @@ try {
   await page.getByRole('alertdialog').waitFor()
   await page.getByRole('button', { name: 'Cancel' }).click()
 
-  await page.getByRole('button', { name: 'Quotes' }).click()
+  await page.getByRole('link', { name: 'Quotes' }).click()
+  await page.waitForURL(`${appUrl}/app/sales/quotes`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Quotes', exact: true }).waitFor()
   await page.getByRole('button', { name: 'New quote' }).click()
   await page.getByRole('dialog', { name: 'Create quote' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('button', { name: 'Inventory' }).click()
+  await page.getByRole('link', { name: 'Balances' }).click()
+  await page.waitForURL(`${appUrl}/app/inventory/balances`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Inventory', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Receive stock' }).click()
   await page.getByRole('dialog', { name: 'Receive stock' }).waitFor()
@@ -129,7 +133,8 @@ try {
   await page.getByRole('dialog', { name: 'Create warehouse' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('button', { name: 'Orders' }).click()
+  await page.getByRole('link', { name: 'Orders' }).click()
+  await page.waitForURL(`${appUrl}/app/sales/orders`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Orders', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Add line' }).click()
   await page.getByRole('button', { name: 'Remove item 2' }).click()
@@ -141,7 +146,8 @@ try {
   await page.getByRole('button', { name: 'Close dialog' }).click()
   assert(orderTraceId, 'the order request did not carry traceparent')
 
-  await page.getByRole('button', { name: 'Webhooks' }).click()
+  await page.getByRole('link', { name: 'Webhooks' }).click()
+  await page.waitForURL(`${appUrl}/app/developers/webhooks`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Webhooks', exact: true }).waitFor()
   const endpoint = `https://example.com/horizon-phase10/${randomUUID()}`
   await page.getByLabel('Endpoint URL').fill(endpoint)
@@ -160,7 +166,12 @@ try {
   }, endpoint)
   assert(removed, 'the temporary webhook subscription could not be cleaned up')
 
-  await page.getByRole('button', { name: 'Access' }).click()
+  await page.getByRole('link', { name: 'Delivery logs' }).click()
+  await page.waitForURL(`${appUrl}/app/developers/deliveries`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Delivery logs', exact: true }).waitFor()
+
+  await page.getByRole('link', { name: 'People and access' }).click()
+  await page.waitForURL(`${appUrl}/app/administration/people`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'People & access', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Add member' }).click()
   await page.getByRole('dialog', { name: 'Add workspace member' }).waitFor()
@@ -169,24 +180,36 @@ try {
   await page.getByRole('dialog', { name: /^Roles for / }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('button', { name: 'Settings' }).click()
-  await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor()
+  await page.getByRole('link', { name: 'API keys' }).click()
+  await page.waitForURL(`${appUrl}/app/developers/api-keys`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'API keys', exact: true }).waitFor()
   await page.getByRole('button', { name: 'New API key' }).click()
   await page.getByRole('dialog', { name: 'Create API key' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
+  await page.getByRole('link', { name: 'Workspace', exact: true }).click()
+  await page.waitForURL(`${appUrl}/app/administration/workspace`, {
+    waitUntil: 'domcontentloaded',
+  })
+  await page.getByRole('heading', { name: 'Workspace', exact: true }).waitFor()
+
+  // A screen is reachable by URL, and the server still decides what it may show.
+  await page.goto(`${appUrl}/app/sales/orders`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Orders', exact: true }).waitFor()
+
   await page.setViewportSize({ width: 390, height: 844 })
   for (const screen of [
-    ['Catalog', 'Catalog'],
+    ['Items', 'Catalog'],
     ['Customers', 'Customers'],
     ['Quotes', 'Quotes'],
-    ['Inventory', 'Inventory'],
+    ['Balances', 'Inventory'],
     ['Orders', 'Orders'],
     ['Webhooks', 'Webhooks'],
-    ['Access', 'People & access'],
-    ['Settings', 'Settings'],
+    ['Delivery logs', 'Delivery logs'],
+    ['People and access', 'People & access'],
+    ['API keys', 'API keys'],
   ]) {
-    await page.getByRole('button', { name: screen[0] }).click()
+    await page.getByRole('link', { name: screen[0], exact: true }).click()
     await page.getByRole('heading', { name: screen[1], exact: true }).waitFor()
     const documentOverflows = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

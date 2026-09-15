@@ -4,10 +4,13 @@ import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Dialog } from '@base-ui/react/dialog'
 import { Buildings, Cube, Package, Plus, Prohibit, Warning, X } from '@phosphor-icons/react'
 import { type FormEvent, type ReactNode, useMemo, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
 import type { CatalogItem } from '@/features/catalog/catalog-view'
+import { minorUnits } from '@/lib/format'
+import { jsonHeaders } from '@/lib/http'
 import { tracedFetch } from '@/lib/telemetry'
 
 export type Warehouse = {
@@ -144,7 +147,7 @@ export function InventoryView({
                   <small>{warehouse.balances.length} stocked items</small>
                 </span>
                 <span className="warehouse-status">
-                  <StatusBadge status={warehouse.active ? 'active' : 'inactive'} />
+                  <Badge status={warehouse.active ? 'active' : 'inactive'} />
                 </span>
               </Button>
               {warehouse.active ? (
@@ -505,17 +508,6 @@ function FormActions({ busy, error, label }: { busy: boolean; error: string; lab
   )
 }
 
-function jsonHeaders() {
-  return { 'content-type': 'application/json' }
-}
-
-function minorUnits(value: string) {
-  const match = /^(\d+)(?:[.,](\d{1,2}))?$/.exec(value.trim())
-  return match?.[1]
-    ? `${match[1]}${(match[2] ?? '').padEnd(2, '0')}`.replace(/^0+(?=\d)/, '')
-    : null
-}
-
 async function apiError(response: Response, fallback: string) {
   try {
     const body = (await response.json()) as { detail?: unknown; message?: unknown }
@@ -543,10 +535,6 @@ function InventoryStat({
       <strong>{quantity(value)}</strong>
     </article>
   )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge badge-${status}`}>{status}</span>
 }
 
 function quantity(value: number) {

@@ -3,11 +3,13 @@
 import { Dialog } from '@base-ui/react/dialog'
 import { CheckCircle, Eye, FileText, Plus, Trash, X } from '@phosphor-icons/react'
 import { type FormEvent, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
 import type { CatalogItem } from '@/features/catalog/catalog-view'
 import type { Customer } from '@/features/sales/customers-view'
+import { money, short } from '@/lib/format'
 import { tracedFetch } from '@/lib/telemetry'
 
 export type Quote = {
@@ -126,7 +128,7 @@ export function QuotesView({
                   </td>
                   <td>{new Date(quote.expiresAt).toLocaleDateString()}</td>
                   <td>
-                    <StatusBadge status={displayStatus(quote)} />
+                    <Badge status={displayStatus(quote)} />
                   </td>
                   <td>
                     <div className="row-actions">
@@ -322,7 +324,7 @@ function QuoteDetailsDialog({ quote, customer }: { quote: Quote; customer: Custo
           <div className="order-detail-summary">
             <div>
               <span className="summary-label">Status</span>
-              <StatusBadge status={displayStatus(quote)} />
+              <Badge status={displayStatus(quote)} />
             </div>
             <div>
               <span className="summary-label">Total</span>
@@ -375,24 +377,12 @@ function AcceptQuoteButton({ quote, onChanged, setNotice }: { quote: Quote } & M
   )
 }
 
-function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge badge-${status}`}>{status}</span>
-}
 function expired(quote: Quote) {
   return quote.status === 'draft' && new Date(quote.expiresAt).getTime() <= Date.now()
 }
 function displayStatus(quote: Quote) {
   return expired(quote) ? 'expired' : quote.status
 }
-function short(value: string) {
-  return value.slice(0, 8)
-}
-function money(amount: string, currency: string) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(
-    Number(amount) / 100,
-  )
-}
-
 async function apiError(response: Response, fallback: string): Promise<string> {
   try {
     const body = (await response.json()) as { detail?: unknown; message?: unknown; title?: unknown }

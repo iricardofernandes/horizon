@@ -5,8 +5,13 @@ import { Checkbox } from '@base-ui/react/checkbox'
 import { Dialog } from '@base-ui/react/dialog'
 import { ArrowClockwise, Check, Copy, Key, Plus, Trash, X } from '@phosphor-icons/react'
 import { type FormEvent, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PageHeading } from '@/components/ui/headings'
 import { TextField } from '@/components/ui/text-field'
+import { apiError } from '@/lib/api'
+import { dateOf } from '@/lib/format'
+import { jsonHeaders } from '@/lib/http'
 import { tracedFetch } from '@/lib/telemetry'
 
 export type ApiKeyRecord = {
@@ -20,8 +25,8 @@ export type ApiKeyRecord = {
   createdAt: string
 }
 
-type SessionUser = { id: string; name: string; email: string }
 type MutationProps = { onChanged: () => Promise<void>; setNotice: (value: string) => void }
+
 const scopeOptions = [
   'identity:read',
   'catalog:read',
@@ -34,99 +39,61 @@ const scopeOptions = [
   'webhooks:write',
 ]
 
-export function SettingsView({
-  user,
-  workspaceName,
+export function ApiKeysView({
   apiKeys,
   onChanged,
   setNotice,
-}: {
-  user: SessionUser | null
-  workspaceName: string
-  apiKeys: ApiKeyRecord[]
-} & MutationProps) {
+}: { apiKeys: ApiKeyRecord[] } & MutationProps) {
   return (
     <section>
-      <header className="page-heading">
-        <p className="eyebrow">Workspace administration</p>
-        <h1>Settings</h1>
-        <p>Manage your current workspace context and machine credentials.</p>
-      </header>
-
-      <div className="settings-layout">
-        <section className="panel workspace-settings-card">
-          <header>
-            <div className="brand-mark">{workspaceName.slice(0, 1).toUpperCase()}</div>
-            <div>
-              <h2>{workspaceName}</h2>
-              <p className="settings-card-caption">Current workspace</p>
-            </div>
-          </header>
-          <dl>
-            <div>
-              <dt>Signed in as</dt>
-              <dd>{user?.name ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>Account</dt>
-              <dd>{user?.email ?? '—'}</dd>
-            </div>
-          </dl>
-          <a className="ui-button ui-button-secondary settings-link" href="/workspaces">
-            Switch workspace
-          </a>
-        </section>
-
-        <section className="panel api-key-panel">
-          <header className="settings-section-heading">
-            <div>
-              <h2>API keys</h2>
-              <p className="settings-card-caption">
-                Machine credentials inherit only the scopes you explicitly grant.
-              </p>
-            </div>
-            <CreateApiKeyDialog onChanged={onChanged} />
-          </header>
-          <div className="api-key-list">
-            {apiKeys.map((apiKey) => (
-              <article key={apiKey.id}>
-                <span className="resource-icon">
-                  <Key aria-hidden="true" size={17} />
-                </span>
-                <div className="api-key-copy">
-                  <strong>{apiKey.name}</strong>
-                  <code>{apiKey.prefix}••••••••</code>
-                  <small>{apiKey.scopes.join(', ')}</small>
-                </div>
-                <div className="api-key-meta">
-                  <StatusBadge status={apiKey.status} />
-                  <small>
-                    {apiKey.lastUsedAt
-                      ? `Used ${new Date(apiKey.lastUsedAt).toLocaleDateString()}`
-                      : 'Never used'}
-                  </small>
-                </div>
-                {apiKey.status === 'active' ? (
-                  <div className="row-actions">
-                    <RotateApiKeyDialog apiKey={apiKey} onChanged={onChanged} />
-                    <RevokeApiKeyDialog
-                      apiKey={apiKey}
-                      onChanged={onChanged}
-                      setNotice={setNotice}
-                    />
-                  </div>
-                ) : null}
-              </article>
-            ))}
-            {!apiKeys.length ? (
-              <div className="catalog-empty">
-                <strong>No API keys</strong>
-                <p>Create a scoped credential for an integration.</p>
-              </div>
-            ) : null}
+      <PageHeading
+        eyebrow="Developer operations"
+        title="API keys"
+        copy="Machine credentials inherit only the scopes you explicitly grant."
+      />
+      <section className="panel api-key-panel">
+        <header className="settings-section-heading">
+          <div>
+            <h2>Keys</h2>
+            <p className="settings-card-caption">
+              A key can never hold a scope beyond the roles of the person who issued it.
+            </p>
           </div>
-        </section>
-      </div>
+          <CreateApiKeyDialog onChanged={onChanged} />
+        </header>
+        <div className="api-key-list">
+          {apiKeys.map((apiKey) => (
+            <article key={apiKey.id}>
+              <span className="resource-icon">
+                <Key aria-hidden="true" size={17} />
+              </span>
+              <div className="api-key-copy">
+                <strong>{apiKey.name}</strong>
+                <code>{apiKey.prefix}••••••••</code>
+                <small>{apiKey.scopes.join(', ')}</small>
+              </div>
+              <div className="api-key-meta">
+                <Badge status={apiKey.status} />
+                <small>
+                  {apiKey.lastUsedAt ? `Used ${dateOf(apiKey.lastUsedAt)}` : 'Never used'}
+                </small>
+              </div>
+              {apiKey.status === 'active' ? (
+                <div className="row-actions">
+                  <RotateApiKeyDialog apiKey={apiKey} onChanged={onChanged} />
+                  <RevokeApiKeyDialog apiKey={apiKey} onChanged={onChanged} setNotice={setNotice} />
+                </div>
+              ) : null}
+            </article>
+          ))}
+          {!apiKeys.length ? (
+            <div className="catalog-empty">
+              <strong>No API keys</strong>
+              <p>Create a scoped credential for an integration.</p>
+            </div>
+          ) : null}
+        </div>
+      </section>
     </section>
   )
 }
@@ -409,19 +376,4 @@ function OneTimeToken({ token }: { token: string }) {
       </Button>
     </div>
   )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge badge-${status}`}>{status}</span>
-}
-function jsonHeaders() {
-  return { 'content-type': 'application/json' }
-}
-async function apiError(response: Response, fallback: string) {
-  try {
-    const body = (await response.json()) as { detail?: unknown; message?: unknown }
-    const value = body.detail ?? body.message
-    if (typeof value === 'string') return value
-  } catch {}
-  return fallback
 }

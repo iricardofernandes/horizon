@@ -506,6 +506,7 @@ select:focus-visible,
   font-size: 14px;
   font-weight: 650;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 .nav-item:hover {

@@ -86,6 +86,10 @@ capabilities and enforce visibility from permissions.
 
 ```text
 Overview
+Catalog
+  Items and services
+  Units
+  Price lists
 CRM
   Pipeline
   Accounts and contacts
