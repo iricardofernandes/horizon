@@ -44,7 +44,6 @@ try {
   })
 
   await page.goto(`${appUrl}/login`, { waitUntil: 'domcontentloaded' })
-  await page.getByLabel('Workspace').fill('horizon-demo')
   await page.getByLabel('Email').fill('demo@horizon.local')
   await page.getByLabel('Password').fill(password)
   const sessionResponsePromise = page.waitForResponse(
@@ -57,14 +56,89 @@ try {
     sessionResponse.ok(),
     `login returned ${sessionResponse.status()}: ${await responseSummary(sessionResponse)}`,
   )
+  await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /Horizon Demo/ }).click()
   await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
+  await page.getByRole('link', { name: 'Horizon Demo workspace' }).waitFor()
+  await page.getByRole('link', { name: 'Horizon Demo workspace' }).click()
+  await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /Horizon Demo/ }).click()
+  await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
+  await page.getByRole('link', { name: 'Horizon Demo workspace' }).waitFor()
+  await page.getByRole('button', { name: 'Collapse sidebar' }).click()
+  assert(
+    await page.locator('.workspace-shell').evaluate((element) =>
+      element.classList.contains('sidebar-collapsed'),
+    ),
+    'the desktop sidebar did not collapse',
+  )
+  await page.getByRole('button', { name: 'Expand sidebar' }).click()
+
+  await page.getByRole('button', { name: 'Catalog' }).click()
+  await page.getByRole('heading', { name: 'Catalog', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'New item' }).click()
+  await page.getByRole('dialog', { name: 'Create item' }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+  await page.getByRole('tab', { name: /Units/ }).click()
+  await page.getByRole('button', { name: 'New unit' }).click()
+  await page.getByRole('dialog', { name: 'Create unit' }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+  await page.getByRole('tab', { name: /Price lists/ }).click()
+  await page.getByRole('button', { name: 'New price list' }).click()
+  await page.getByRole('dialog', { name: 'Create price list' }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+
+  await page.getByRole('button', { name: 'Customers' }).click()
+  await page.getByRole('heading', { name: 'Customers', exact: true }).waitFor()
+  const existingCustomer = await page.evaluate(async () => {
+    const response = await fetch('/api/horizon/sales/customers')
+    if (!response.ok) return null
+    const rows = await response.json()
+    return rows.find((row) => row.status === 'active') ?? null
+  })
+  assert(existingCustomer, 'the customer fixture is missing')
+  await page.getByRole('button', { name: 'New customer' }).click()
+  const customerDialog = page.getByRole('dialog', { name: 'Create customer' })
+  await customerDialog.getByLabel('Name').fill(existingCustomer.name)
+  await customerDialog.getByLabel('Tax ID').fill('123456789012')
+  await customerDialog.getByLabel('Email').fill(existingCustomer.email)
+  await customerDialog.getByLabel('Phone').fill(existingCustomer.phone)
+  await customerDialog.getByLabel('Address').fill(existingCustomer.address)
+  await customerDialog.getByRole('button', { name: 'Create customer' }).click()
+  await customerDialog.getByText('must be a CPF or CNPJ with 11 or 14 digits').waitFor()
+  await customerDialog.getByRole('button', { name: 'Close dialog' }).click()
+  const customerRow = page.getByRole('row').filter({ hasText: existingCustomer.email })
+  await customerRow.getByRole('button', { name: 'Erase data' }).click()
+  await page.getByRole('alertdialog').waitFor()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+
+  await page.getByRole('button', { name: 'Quotes' }).click()
+  await page.getByRole('heading', { name: 'Quotes', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'New quote' }).click()
+  await page.getByRole('dialog', { name: 'Create quote' }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+
+  await page.getByRole('button', { name: 'Inventory' }).click()
+  await page.getByRole('heading', { name: 'Inventory', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Receive stock' }).click()
+  await page.getByRole('dialog', { name: 'Receive stock' }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+  await page.getByRole('button', { name: 'New warehouse' }).click()
+  await page.getByRole('dialog', { name: 'Create warehouse' }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
 
   await page.getByRole('button', { name: 'Orders' }).click()
   await page.getByRole('heading', { name: 'Orders', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Add line' }).click()
+  await page.getByRole('button', { name: 'Remove item 2' }).click()
   await page.getByLabel('Quantity').fill('1')
   await page.getByRole('button', { name: 'Place order' }).click()
   await page.getByText('Order confirmed and stock committed.').waitFor({ timeout: 20_000 })
+  await page.getByRole('button', { name: 'Details' }).first().click()
+  await page.getByRole('dialog', { name: /^Order / }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
   assert(orderTraceId, 'the order request did not carry traceparent')
 
   await page.getByRole('button', { name: 'Webhooks' }).click()
@@ -86,12 +160,39 @@ try {
   }, endpoint)
   assert(removed, 'the temporary webhook subscription could not be cleaned up')
 
+  await page.getByRole('button', { name: 'Access' }).click()
+  await page.getByRole('heading', { name: 'People & access', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Add member' }).click()
+  await page.getByRole('dialog', { name: 'Add workspace member' }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+  await page.getByRole('button', { name: 'Roles' }).first().click()
+  await page.getByRole('dialog', { name: /^Roles for / }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'New API key' }).click()
+  await page.getByRole('dialog', { name: 'Create API key' }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: 'Catalog' }).click()
-  const documentOverflows = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-  )
-  assert(!documentOverflows, 'the 390px layout overflows the document viewport')
+  for (const screen of [
+    ['Catalog', 'Catalog'],
+    ['Customers', 'Customers'],
+    ['Quotes', 'Quotes'],
+    ['Inventory', 'Inventory'],
+    ['Orders', 'Orders'],
+    ['Webhooks', 'Webhooks'],
+    ['Access', 'People & access'],
+    ['Settings', 'Settings'],
+  ]) {
+    await page.getByRole('button', { name: screen[0] }).click()
+    await page.getByRole('heading', { name: screen[1], exact: true }).waitFor()
+    const documentOverflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    )
+    assert(!documentOverflows, `${screen[0]} overflows the 390px document viewport`)
+  }
   assert(pageErrors.length === 0, `browser errors: ${pageErrors.join('; ')}`)
 
   const services = await waitForTrace(orderTraceId)

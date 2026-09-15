@@ -3,10 +3,12 @@ import { InventoryUnitOfWork } from '@/application/ports/unit-of-work'
 import type { DomainEvent } from '@/core/events/domain-event'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import type { StockReservation } from '@/domain/entities/stock-reservation'
+import type { Warehouse } from '@/domain/entities/warehouse'
 import {
   InventoryEventsRepository,
   StockBalancesRepository,
   StockReservationsRepository,
+  WarehousesRepository,
 } from '@/domain/repositories/inventory-repositories'
 
 class InMemoryBalances extends StockBalancesRepository {
@@ -15,6 +17,11 @@ class InMemoryBalances extends StockBalancesRepository {
     private readonly records: StockBalance[],
   ) {
     super()
+  }
+  create(balance: StockBalance): Promise<void> {
+    if (!balance.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    this.records.push(balance)
+    return Promise.resolve()
   }
   lock(itemId: string, warehouseId: string): Promise<StockBalance | null> {
     return Promise.resolve(
@@ -30,6 +37,39 @@ class InMemoryBalances extends StockBalancesRepository {
   }
   save(balance: StockBalance): Promise<void> {
     if (!balance.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    return Promise.resolve()
+  }
+}
+
+class InMemoryWarehouses extends WarehousesRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: Warehouse[],
+  ) {
+    super()
+  }
+  findById(id: string): Promise<Warehouse | null> {
+    return Promise.resolve(
+      this.records.find(
+        (warehouse) => warehouse.belongsTo(this.tenantId) && warehouse.id.toString() === id,
+      ) ?? null,
+    )
+  }
+  findByName(name: string): Promise<Warehouse | null> {
+    return Promise.resolve(
+      this.records.find((warehouse) => {
+        const row = warehouse.toSnapshot()
+        return warehouse.belongsTo(this.tenantId) && row.name === name
+      }) ?? null,
+    )
+  }
+  create(warehouse: Warehouse): Promise<void> {
+    if (!warehouse.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    this.records.push(warehouse)
+    return Promise.resolve()
+  }
+  save(warehouse: Warehouse): Promise<void> {
+    if (!warehouse.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
     return Promise.resolve()
   }
 }
@@ -76,6 +116,7 @@ class InMemoryEvents extends InventoryEventsRepository {
 
 export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
   readonly balances: StockBalance[] = []
+  readonly warehouses: Warehouse[] = []
   readonly reservations: StockReservation[] = []
   readonly events: DomainEvent[] = []
   readonly provisionedTenants = new Set<string>()
@@ -89,6 +130,7 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
   inTenant<T>(tenantId: string, work: (scope: InventoryScope) => Promise<T>): Promise<T> {
     return work({
       tenantId,
+      warehouses: new InMemoryWarehouses(tenantId, this.warehouses),
       balances: new InMemoryBalances(tenantId, this.balances),
       reservations: new InMemoryReservations(tenantId, this.reservations),
       events: new InMemoryEvents(tenantId, this.events),

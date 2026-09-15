@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { type FormEvent, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { TextField } from '@/components/ui/text-field'
 import { tracedFetch } from '@/lib/telemetry'
 
 export default function LoginPage() {
@@ -18,17 +20,16 @@ export default function LoginPage() {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        tenantSlug: data.get('tenantSlug'),
         email: data.get('email'),
         password: data.get('password'),
       }),
     }).catch(() => null)
     setBusy(false)
     if (!response?.ok) {
-      setError('We could not sign you in. Check the workspace and credentials.')
+      setError('We could not sign you in. Check your email and password.')
       return
     }
-    router.replace('/app')
+    router.replace('/workspaces')
   }
 
   return (
@@ -40,9 +41,9 @@ export default function LoginPage() {
         </a>
         <div>
           <p className="eyebrow eyebrow-light">A calmer operating system</p>
-          <h1>Know what moved, what sold, and what happens next.</h1>
+          <h1>One account. Every operation in reach.</h1>
           <p className="login-lead">
-            One workspace for the daily decisions that keep your operation moving.
+            Every workspace for the daily decisions that keep your operation moving.
           </p>
         </div>
         <div className="signal-row">
@@ -56,40 +57,38 @@ export default function LoginPage() {
         <form className="login-card" onSubmit={submit}>
           <div>
             <p className="eyebrow">Welcome back</p>
-            <h2>Sign in to your workspace</h2>
-            <p className="muted">Use the workspace handle your administrator shared.</p>
+            <h2>Sign in to Horizon</h2>
+            <p className="muted">Your workspaces will appear after you sign in.</p>
           </div>
-          <label>
-            Workspace
-            <input
-              name="tenantSlug"
-              defaultValue="horizon-demo"
-              autoComplete="organization"
-              required
-            />
-          </label>
-          <label>
-            Email
-            <input
-              name="email"
-              type="email"
-              defaultValue="demo@horizon.local"
-              autoComplete="email"
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input name="password" type="password" autoComplete="current-password" required />
-          </label>
+          <TextField
+            autoComplete="email"
+            defaultValue="demo@horizon.local"
+            label="Email"
+            name="email"
+            required
+            type="email"
+          />
+          <TextField
+            autoComplete="current-password"
+            label="Password"
+            name="password"
+            required
+            type="password"
+          />
           {error ? (
             <p className="form-error" role="alert">
               {error}
             </p>
           ) : null}
-          <button className="primary-button wide" disabled={busy} type="submit">
+          <Button
+            className="wide"
+            disabled={busy}
+            focusableWhenDisabled
+            type="submit"
+            variant="primary"
+          >
             {busy ? 'Signing in…' : 'Continue'}
-          </button>
+          </Button>
           <p className="demo-note">
             Local demo password: <code>Horizon-demo-2026!</code>
           </p>

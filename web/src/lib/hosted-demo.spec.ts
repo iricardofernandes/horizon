@@ -12,6 +12,8 @@ const query = vi.fn(async (parts: TemplateStringsArray) => {
       {
         id: '00000000-0000-4000-8000-000000000002',
         tenant_id: '00000000-0000-4000-8000-000000000001',
+        tenant_slug: 'horizon-demo',
+        tenant_name: 'Horizon Demo',
         email: 'demo@horizon.local',
         name: 'Demo Operator',
         password_salt: salt,
@@ -52,12 +54,22 @@ vi.mock('next/headers', () => ({
 vi.mock('@neondatabase/serverless', () => ({ neon: () => query }))
 
 import {
+  beginHostedDemoLogin,
   clearHostedDemoSession,
   hostedDemoEnabled,
   hostedDemoResponse,
   hostedDemoSession,
-  openHostedDemoSession,
+  hostedDemoWorkspaces,
+  selectHostedDemoWorkspace,
 } from './hosted-demo'
+
+function firstTenantId(
+  workspaces: Array<{ tenantId: string; slug: string; name: string }> | null,
+): string {
+  const tenantId = workspaces?.[0]?.tenantId
+  if (!tenantId) throw new Error('Expected a selectable demo workspace')
+  return tenantId
+}
 
 describe('hosted demo', () => {
   beforeEach(() => {
@@ -70,14 +82,23 @@ describe('hosted demo', () => {
     process.env.HORIZON_HOSTED_DEMO = 'true'
   })
 
-  it('opens and verifies a signed HttpOnly session', async () => {
+  it('authenticates first and opens a session only after workspace selection', async () => {
     expect(hostedDemoEnabled()).toBe(true)
-    const user = await openHostedDemoSession({
-      tenantSlug: 'horizon-demo',
+    const workspaces = await beginHostedDemoLogin({
       email: 'demo@horizon.local',
       password: 'Horizon-demo-2026!',
     })
 
+    expect(workspaces).toEqual([
+      {
+        tenantId: '00000000-0000-4000-8000-000000000001',
+        slug: 'horizon-demo',
+        name: 'Horizon Demo',
+      },
+    ])
+    expect(await hostedDemoSession()).toBeNull()
+    expect(await hostedDemoWorkspaces()).toEqual(workspaces)
+    const user = await selectHostedDemoWorkspace(firstTenantId(workspaces))
     expect(user).toMatchObject({ name: 'Demo Operator', roles: [{ role: 'viewer' }] })
     expect(setCookie).toHaveBeenCalledWith(
       'horizon_demo_session',
@@ -89,18 +110,17 @@ describe('hosted demo', () => {
 
   it('rejects an incorrect password and a modified cookie', async () => {
     expect(
-      await openHostedDemoSession({
-        tenantSlug: 'horizon-demo',
+      await beginHostedDemoLogin({
         email: 'demo@horizon.local',
         password: 'incorrect',
       }),
     ).toBeNull()
 
-    await openHostedDemoSession({
-      tenantSlug: 'horizon-demo',
+    const workspaces = await beginHostedDemoLogin({
       email: 'demo@horizon.local',
       password: 'Horizon-demo-2026!',
     })
+    await selectHostedDemoWorkspace(firstTenantId(workspaces))
     const token = cookieValues.get('horizon_demo_session')
     expect(token).toBeDefined()
     cookieValues.set('horizon_demo_session', `${token}tampered`)
@@ -109,11 +129,11 @@ describe('hosted demo', () => {
 
   it('serves only the authenticated Catalog surface', async () => {
     expect((await hostedDemoResponse('/catalog/items')).status).toBe(401)
-    await openHostedDemoSession({
-      tenantSlug: 'horizon-demo',
+    const workspaces = await beginHostedDemoLogin({
       email: 'demo@horizon.local',
       password: 'Horizon-demo-2026!',
     })
+    await selectHostedDemoWorkspace(firstTenantId(workspaces))
 
     const items = await hostedDemoResponse('/catalog/items?limit=100')
     expect(items.status).toBe(200)
@@ -126,5 +146,6 @@ describe('hosted demo', () => {
   it('clears the hosted session', async () => {
     await clearHostedDemoSession()
     expect(deleteCookie).toHaveBeenCalledWith('horizon_demo_session')
+    expect(deleteCookie).toHaveBeenCalledWith('horizon_demo_workspace_selection')
   })
 })

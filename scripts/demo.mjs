@@ -554,6 +554,7 @@ async function seedIdentity(modules, database, admin, clock) {
       name: 'Demo Operator',
       password: 'Horizon-demo-2026!',
       roles: [
+        { module: 'identity', role: 'owner' },
         { module: 'catalog', role: 'admin' },
         { module: 'inventory', role: 'admin' },
         { module: 'sales', role: 'admin' },
@@ -563,6 +564,11 @@ async function seedIdentity(modules, database, admin, clock) {
     })
     if (registered.isLeft()) throw registered.value
     return { tenantId, ownerId, operatorId: registered.value.userId }
+  }
+  if (!operator.holds({ module: 'identity', role: 'owner' })) {
+    const granted = operator.grant({ module: 'identity', role: 'owner' }, clock.now())
+    if (granted.isLeft()) throw granted.value
+    await database.inTenant(tenantId, (scope) => scope.users.save(operator))
   }
   return { tenantId, ownerId, operatorId: operator.id.toString() }
 }

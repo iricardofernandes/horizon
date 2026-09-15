@@ -2,17 +2,30 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
+  beginHostedDemoLogin,
   clearHostedDemoSession,
   hostedDemoEnabled,
   hostedDemoSession,
-  openHostedDemoSession,
 } from '@/lib/hosted-demo'
-import { accessToken, authenticatedFetch, clearSession, openSession } from '@/lib/session'
+import {
+  accessToken,
+  activeWorkspace,
+  authenticatedFetch,
+  clearSession,
+  clearWorkspaceSelection,
+  storeWorkspaceSelection,
+} from '@/lib/session'
 
 const loginSchema = z.strictObject({
-  tenantSlug: z.string().min(1).max(80),
   email: z.email().max(254),
   password: z.string().min(1).max(1024),
+})
+const selectionSchema = z.object({
+  selectionToken: z.string().min(1),
+  selectionExpiresAt: z.iso.datetime(),
+  workspaces: z.array(
+    z.object({ tenantId: z.uuid(), slug: z.string().min(1), name: z.string().min(1) }),
+  ),
 })
 const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
 
@@ -21,13 +34,11 @@ export async function POST(request: Request) {
   if (!parsed.success)
     return NextResponse.json({ message: 'Check the login fields.' }, { status: 400 })
   if (hostedDemoEnabled()) {
-    const user = await openHostedDemoSession(parsed.data)
-    return user
-      ? NextResponse.json(user)
-      : NextResponse.json(
-          { message: 'Workspace, email or password is incorrect.' },
-          { status: 401 },
-        )
+    await Promise.all([clearHostedDemoSession(), clearSession()])
+    const workspaces = await beginHostedDemoLogin(parsed.data)
+    return workspaces
+      ? NextResponse.json({ workspaces })
+      : NextResponse.json({ message: 'Email or password is incorrect.' }, { status: 401 })
   }
   const response = await fetch(`${apiUrl}/auth/login`, {
     method: 'POST',
@@ -37,18 +48,24 @@ export async function POST(request: Request) {
   })
   if (!response.ok)
     return NextResponse.json(
-      { message: 'Workspace, email or password is incorrect.' },
+      { message: 'Email or password is incorrect.' },
       { status: response.status },
     )
-  await openSession(await response.json())
-  return sessionUser()
+  const selection = selectionSchema.parse(await response.json())
+  await clearSession()
+  await clearWorkspaceSelection()
+  await storeWorkspaceSelection(selection.selectionToken, new Date(selection.selectionExpiresAt))
+  return NextResponse.json({ workspaces: selection.workspaces })
 }
 
 export async function GET() {
   if (hostedDemoEnabled()) {
     const user = await hostedDemoSession()
     return user
-      ? NextResponse.json(user)
+      ? NextResponse.json(
+          { ...user, workspace: await activeWorkspace() },
+          { headers: { 'cache-control': 'no-store' } },
+        )
       : NextResponse.json({ message: 'No active session.' }, { status: 401 })
   }
   return sessionUser()
@@ -56,7 +73,7 @@ export async function GET() {
 
 export async function DELETE() {
   if (hostedDemoEnabled()) {
-    await clearHostedDemoSession()
+    await Promise.all([clearHostedDemoSession(), clearSession()])
     return new NextResponse(null, { status: 204 })
   }
   const token = await accessToken()
@@ -70,6 +87,7 @@ export async function DELETE() {
     await response.body?.cancel().catch(() => undefined)
   }
   await clearSession()
+  await clearWorkspaceSelection()
   return new NextResponse(null, { status: 204 })
 }
 
@@ -79,5 +97,8 @@ async function sessionUser() {
     if (response.status === 401) await clearSession()
     return NextResponse.json({ message: 'No active session.' }, { status: response.status })
   }
-  return NextResponse.json(await response.json())
+  return NextResponse.json(
+    { ...(await response.json()), workspace: await activeWorkspace() },
+    { headers: { 'cache-control': 'no-store' } },
+  )
 }

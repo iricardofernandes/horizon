@@ -132,7 +132,7 @@ it('cannot bypass RLS, use the migration role, or carry tenant context across po
       await tx`select * from users`
     }),
   ).rejects.toThrow()
-  expect(Object.keys(db).sort()).toEqual(['directory'])
+  expect(Object.keys(db).sort()).toEqual(['accounts', 'directory'])
 })
 
 it('rolls back state, directory entries, audit and outbox on a failed transaction', async () => {

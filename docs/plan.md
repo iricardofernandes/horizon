@@ -478,17 +478,22 @@ committed load envelope both exercise this real path.
 ## Phase 10 — Web — **complete**
 
 **Status: complete.** The browser surface uses an HttpOnly BFF session and an allowlisted
-Kong proxy. Catalog, stock, orders and webhook subscriptions are live views over their
-own services; no service is addressed directly. `make test-phase10` completes the order
-flow in system Chromium, verifies the 390 px responsive baseline, and requires Jaeger to
-show `web`, `gateway`, `sales`, `inventory` and `webhooks` in the same trace.
+Kong proxy. Catalog, customers, quotes, stock, orders, webhook subscriptions, workspace
+access and API keys are live views over their own services; no service is addressed
+directly. Authentication is account-first: workspace selection and subsequent switching
+happen after login. `make test-phase10` exercises every screen in system Chromium,
+verifies the 390 px responsive baseline, and requires Jaeger to show `web`, `gateway`,
+`sales`, `inventory` and `webhooks` in the same trace.
 
 **Deliverables**
 
 - Next.js App Router app consuming the API **through Kong**, never directly.
-- Authentication flow against `identity/`, session handling, tenant context.
-- Enough surface to be worth opening: catalog list, order creation, order detail,
-  webhook subscription management.
+- Authentication flow against `identity/`, session handling, post-login workspace
+  selection and workspace switching.
+- Operational surface for Catalog, Customers, Quotes, Inventory, Orders, Webhooks,
+  workspace access and scoped API-key lifecycle management.
+- Inter typography, Phosphor icons, Radix Colors tokens and accessible Base UI
+  primitives shared across forms, dialogs, tabs, selects and destructive confirmations.
 - OpenTelemetry in the frontend, traces joined to the backend trace.
 
 **Exit criteria**

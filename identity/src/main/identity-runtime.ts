@@ -6,6 +6,7 @@ import Redis from 'ioredis'
 import { IdentityPolicy } from '@/application/ports/identity-policy'
 import { SessionIssuer } from '@/application/services/session-issuer'
 import { AssignRoleUseCase } from '@/application/use-cases/assign-role'
+import { AuthenticateAccountUseCase } from '@/application/use-cases/authenticate-account'
 import { AuthenticateApiKeyUseCase } from '@/application/use-cases/authenticate-api-key'
 import { AuthenticateUserUseCase } from '@/application/use-cases/authenticate-user'
 import { CreateApiKeyUseCase } from '@/application/use-cases/create-api-key'
@@ -19,9 +20,15 @@ import { RegisterUserUseCase } from '@/application/use-cases/register-user'
 import { RevokeApiKeyUseCase } from '@/application/use-cases/revoke-api-key'
 import { RevokeSessionUseCase } from '@/application/use-cases/revoke-session'
 import { RotateApiKeyUseCase } from '@/application/use-cases/rotate-api-key'
+import {
+  BeginWorkspaceSwitchUseCase,
+  ListSelectableWorkspacesUseCase,
+  SelectWorkspaceUseCase,
+} from '@/application/use-cases/select-workspace'
 import { VerifyAuditChainUseCase } from '@/application/use-cases/verify-audit-chain'
 import { RedisRefreshTokenFamiliesRepository } from '@/infrastructure/cache/redis-refresh-token-families-repository'
 import { RedisTokenDenylist } from '@/infrastructure/cache/redis-token-denylist'
+import { RedisWorkspaceSelections } from '@/infrastructure/cache/redis-workspace-selections'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { Argon2PasswordHasher } from '@/infrastructure/cryptography/argon2-password-hasher'
 import { CryptoSecretGenerator } from '@/infrastructure/cryptography/crypto-secret-generator'
@@ -65,6 +72,10 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
   readonly denylist: RedisTokenDenylist
   readonly createTenant: CreateTenantUseCase
   readonly authenticateUser: AuthenticateUserUseCase
+  readonly authenticateAccount: AuthenticateAccountUseCase
+  readonly listSelectableWorkspaces: ListSelectableWorkspacesUseCase
+  readonly beginWorkspaceSwitch: BeginWorkspaceSwitchUseCase
+  readonly selectWorkspace: SelectWorkspaceUseCase
   readonly authenticateApiKey: AuthenticateApiKeyUseCase
   readonly refreshSession: RefreshSessionUseCase
   readonly revokeSession: RevokeSessionUseCase
@@ -115,6 +126,10 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
       new Logger(IdentityRuntime.name).warn('Redis connection unavailable'),
     )
     const families = new RedisRefreshTokenFamiliesRepository(this.redis)
+    const workspaceSelections = new RedisWorkspaceSelections(
+      this.redis,
+      config.WORKSPACE_SELECTION_TTL_SECONDS,
+    )
     this.denylist = new RedisTokenDenylist(this.redis)
     const sessions = new SessionIssuer(this.signer, families, digest, box, secrets, policy)
     const db = this.database
@@ -125,6 +140,25 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
       hasher,
       sessions,
       policy,
+      clock,
+    )
+    this.authenticateAccount = new AuthenticateAccountUseCase(
+      db.accounts,
+      hasher,
+      workspaceSelections,
+      policy,
+      clock,
+    )
+    this.listSelectableWorkspaces = new ListSelectableWorkspacesUseCase(
+      db.accounts,
+      workspaceSelections,
+    )
+    this.beginWorkspaceSwitch = new BeginWorkspaceSwitchUseCase(db.accounts, workspaceSelections)
+    this.selectWorkspace = new SelectWorkspaceUseCase(
+      db,
+      db.accounts,
+      workspaceSelections,
+      sessions,
       clock,
     )
     this.authenticateApiKey = new AuthenticateApiKeyUseCase(db, hasher, clock)

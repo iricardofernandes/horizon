@@ -8,4 +8,5 @@ export const redisKeys = {
     `identity:refresh:{${segment(tenantId)}}:user:${segment(userId)}`,
   deniedToken: (jti: string): string => `identity:denylist:jti:${segment(jti)}`,
   deniedSubject: (subject: string): string => `identity:denylist:subject:${segment(subject)}`,
+  workspaceSelection: (digest: string): string => `identity:workspace-selection:${segment(digest)}`,
 }

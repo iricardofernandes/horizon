@@ -2,10 +2,12 @@ import type {
   InventoryEventsRepository,
   StockBalancesRepository,
   StockReservationsRepository,
+  WarehousesRepository,
 } from '@/domain/repositories/inventory-repositories'
 
 export interface InventoryScope {
   readonly tenantId: string
+  readonly warehouses: WarehousesRepository
   readonly balances: StockBalancesRepository
   readonly reservations: StockReservationsRepository
   readonly events: InventoryEventsRepository

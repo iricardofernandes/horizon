@@ -24,6 +24,12 @@ const sessionSchema = z.object({
   jti: z.uuid(),
   accessTokenExpiresAt: z.string(),
 })
+const loginSelectionSchema = z.object({
+  selectionToken: z.string(),
+  workspaces: z.array(
+    z.object({ tenantId: z.uuid(), slug: z.string().min(1), name: z.string().min(1) }),
+  ),
+})
 
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), 'horizon-identity-http-'))
@@ -81,9 +87,16 @@ async function tenant() {
 async function login(tenantSlug: string, email: string) {
   const response = await request(app.getHttpServer())
     .post('/auth/login')
-    .send({ tenantSlug, email, password })
+    .send({ email, password })
     .expect(200)
-  return sessionSchema.parse(response.body)
+  const selection = loginSelectionSchema.parse(response.body)
+  const workspace = selection.workspaces.find(({ slug }) => slug === tenantSlug)
+  if (!workspace) throw new Error(`Login did not expose workspace ${tenantSlug}`)
+  const selected = await request(app.getHttpServer())
+    .post('/auth/workspace')
+    .send({ selectionToken: selection.selectionToken, tenantId: workspace.tenantId })
+    .expect(200)
+  return sessionSchema.parse(selected.body)
 }
 
 async function member(owner: Awaited<ReturnType<typeof tenant>>) {
@@ -127,6 +140,13 @@ it('publishes request schemas, authentication and explicit outage exceptions in 
           type: 'object',
           required: ['name', 'slug', 'timezone', 'owner'],
         },
+      },
+    },
+  })
+  expect(document.paths['/auth/login']?.post?.requestBody).toMatchObject({
+    content: {
+      'application/json': {
+        schema: { required: ['email', 'password'] },
       },
     },
   })

@@ -29,6 +29,7 @@ const environmentSchema = z
     REFRESH_TOKEN_ABSOLUTE_TTL_SECONDS: positive.max(31_536_000).default(2_592_000),
     REFRESH_TOKEN_IDLE_TTL_SECONDS: positive.max(31_536_000).default(604_800),
     REFRESH_TOKEN_REUSE_GRACE_MS: z.coerce.number().int().min(0).max(10_000).default(2000),
+    WORKSPACE_SELECTION_TTL_SECONDS: positive.max(900).default(300),
     ARGON2_MEMORY_KIB: positive.min(19_456).max(1_048_576).default(19_456),
     ARGON2_TIME_COST: positive.min(2).max(100).default(2),
     ARGON2_PARALLELISM: positive.max(255).default(1),

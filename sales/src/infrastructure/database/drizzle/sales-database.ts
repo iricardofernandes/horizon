@@ -136,6 +136,45 @@ export class SalesDatabase extends SalesUnitOfWork {
     })
   }
 
+  async listQuoteSnapshots(tenantId: string) {
+    return this.inTenant(tenantId, async () => {
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('Quote listing requires a transaction')
+      const rows = await current.tx
+        .select()
+        .from(schema.quotes)
+        .orderBy(sql`${schema.quotes.createdAt} desc`)
+        .limit(100)
+      return Promise.all(
+        rows.map(async (row) => {
+          const lines = await current.tx
+            .select()
+            .from(schema.quoteLines)
+            .where(eq(schema.quoteLines.quoteId, row.id))
+          return mapQuote(row, lines).toSnapshot()
+        }),
+      )
+    })
+  }
+
+  async findQuoteSnapshot(tenantId: string, quoteId: string) {
+    return this.inTenant(tenantId, async () => {
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('Quote lookup requires a transaction')
+      const [row] = await current.tx
+        .select()
+        .from(schema.quotes)
+        .where(eq(schema.quotes.id, quoteId))
+        .limit(1)
+      if (!row) return null
+      const lines = await current.tx
+        .select()
+        .from(schema.quoteLines)
+        .where(eq(schema.quoteLines.quoteId, row.id))
+      return mapQuote(row, lines).toSnapshot()
+    })
+  }
+
   async findOrderSnapshot(tenantId: string, orderId: string) {
     return this.inTenant(tenantId, async () => {
       const current = this.#transactions.getStore()

@@ -1,6 +1,6 @@
 # 37. A minimal tenant directory before authentication
 
-- Status: accepted
+- Status: superseded for interactive login by [0038](0038-global-account-before-workspace-selection.md)
 - Date: 2026-09-10
 
 ## Context

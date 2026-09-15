@@ -17,10 +17,13 @@ const signup = z.strictObject({
   owner: z.strictObject({ email: z.email().max(254), name: z.string().min(1).max(200), password }),
 })
 const login = z.strictObject({
-  tenantSlug: z.string().min(1).max(80),
   email: z.string().min(1).max(254),
   password: z.string().min(1).max(1024),
 })
+const workspaceSelection = z.strictObject({
+  selectionToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+})
+const selectWorkspace = workspaceSelection.extend({ tenantId: z.uuid() })
 const refresh = z.strictObject({
   tenantId: z.uuid(),
   familyId: z.uuid(),
@@ -49,11 +52,52 @@ export class AuthController {
   @SkipIdempotency()
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
-  async login(@Body() body: unknown, @Req() request: IdentityHttpRequest) {
+  async login(@Body() body: unknown) {
     return unwrap(
-      await this.runtime.authenticateUser.execute({
+      await this.runtime.authenticateAccount.execute({
         ...login.parse(body),
-        ...requestMetadata(request),
+      }),
+    )
+  }
+
+  @Post('workspaces')
+  @RequestSchema(workspaceSelection)
+  @PublicRoute()
+  @SkipIdempotency()
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async workspaces(@Body() body: unknown) {
+    return unwrap(
+      await this.runtime.listSelectableWorkspaces.execute(
+        workspaceSelection.parse(body).selectionToken,
+      ),
+    )
+  }
+
+  @Post('workspace')
+  @RequestSchema(selectWorkspace)
+  @PublicRoute()
+  @SkipIdempotency()
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async workspace(@Body() body: unknown, @Req() request: IdentityHttpRequest) {
+    const input = selectWorkspace.parse(body)
+    return unwrap(
+      await this.runtime.selectWorkspace.execute({ ...input, ...requestMetadata(request) }),
+    )
+  }
+
+  @Post('workspace-selection')
+  @ApiBearerAuth()
+  @SkipIdempotency()
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async beginWorkspaceSwitch(@Req() request: IdentityHttpRequest) {
+    const claims = principal(request)
+    return unwrap(
+      await this.runtime.beginWorkspaceSwitch.execute({
+        tenantId: claims.tenantId,
+        userId: claims.subject,
       }),
     )
   }

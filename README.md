@@ -182,8 +182,8 @@ make test-phase10 # repeat the human flow in Chromium and verify its joined trac
 make test-phase12 # prove the MCP debugger's parse and database privilege boundaries
 ```
 
-The local workspace is `horizon-demo`; sign in as `demo@horizon.local` with
-`Horizon-demo-2026!` after running `make demo`.
+Sign in as `demo@horizon.local` with `Horizon-demo-2026!` after running `make demo`, then
+select the local `horizon-demo` workspace.
 
 Or work on one module, which is the normal case:
 
@@ -226,7 +226,7 @@ but absent from that project's own `package.json`.
 
 ## Decisions
 
-Thirty-seven records in [`docs/adr/`](docs/adr/), MADR format, each with the alternatives
+Thirty-eight records in [`docs/adr/`](docs/adr/), MADR format, each with the alternatives
 that were rejected. The ones a reviewer is most likely to question:
 
 | Decision | Why | ADR |
@@ -241,6 +241,7 @@ that were rejected. The ones a reviewer is most likely to question:
 | EdDSA (Ed25519), not RS256 | The compatibility RS256 buys has no consumer here; smaller, faster, no padding, no nonce | [0018](docs/adr/0018-eddsa-access-tokens.md) |
 | Argon2id via `@node-rs/argon2` | Memory-hard, and prebuilt for musl so Alpine images need no toolchain | [0019](docs/adr/0019-argon2id-password-hashing.md) |
 | Static, module-scoped roles | Tenant-editable roles make the permission surface unanalysable | [0023](docs/adr/0023-casl-static-module-scoped-roles.md) |
+| Global account before workspace selection | Authentication proves a person first; tenant authority exists only after selecting a verified membership | [0038](docs/adr/0038-global-account-before-workspace-selection.md) |
 | Drizzle, not Prisma | RLS needs `SET LOCAL` on the transaction's own connection | [0007](docs/adr/0007-drizzle-and-postgresql-17.md) |
 | Testcontainers, not a shared database | Roles and `FORCE ROW LEVEL SECURITY` are cluster-scoped; role config is what the tests exercise | [0013](docs/adr/0013-vitest-with-testcontainers.md) |
 | Contracts through a registry, never `file:` | A `file:` dependency has no version, so it cannot express a breaking change | [0029](docs/adr/0029-contracts-distributed-through-a-registry.md) |

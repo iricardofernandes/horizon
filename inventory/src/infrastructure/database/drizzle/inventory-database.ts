@@ -11,8 +11,9 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
 import { StockBalance } from '@/domain/entities/stock-balance'
 import { StockReservation } from '@/domain/entities/stock-reservation'
+import { Warehouse } from '@/domain/entities/warehouse'
 import { InventoryStockMovedEvent } from '@/domain/events/inventory-events'
-import { Currency, Money, Quantity } from '@/domain/value-objects/inventory-values'
+import { Currency, Money, Quantity, WarehouseName } from '@/domain/value-objects/inventory-values'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
@@ -132,6 +133,19 @@ function mapBalance(row: typeof schema.stockBalances.$inferSelect): StockBalance
   )
 }
 
+function mapWarehouse(row: typeof schema.warehouses.$inferSelect): Warehouse {
+  return Warehouse.rehydrate(
+    {
+      tenantId: row.tenantId,
+      name: restored(WarehouseName.create(row.name)),
+      active: row.active === 1,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
 function mapReservation(
   row: typeof schema.stockReservations.$inferSelect,
   lines: readonly (typeof schema.stockReservationLines.$inferSelect)[],
@@ -200,6 +214,45 @@ function makeScope(tx: Transaction, tenantId: string): InventoryScope {
   }
   return {
     tenantId,
+    warehouses: {
+      findById: async (id) => {
+        const [row] = await tx
+          .select()
+          .from(schema.warehouses)
+          .where(eq(schema.warehouses.id, id))
+          .limit(1)
+          .for('no key update')
+        return row ? mapWarehouse(row) : null
+      },
+      findByName: async (name) => {
+        const [row] = await tx
+          .select()
+          .from(schema.warehouses)
+          .where(eq(schema.warehouses.name, name))
+          .limit(1)
+        return row ? mapWarehouse(row) : null
+      },
+      create: async (warehouse) => {
+        const row = warehouse.toSnapshot()
+        assertTenant(row.tenantId)
+        await tx.insert(schema.warehouses).values({
+          id: row.id,
+          tenantId,
+          name: row.name,
+          active: row.active ? 1 : 0,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        })
+      },
+      save: async (warehouse) => {
+        const row = warehouse.toSnapshot()
+        assertTenant(row.tenantId)
+        await tx
+          .update(schema.warehouses)
+          .set({ name: row.name, active: row.active ? 1 : 0, updatedAt: row.updatedAt })
+          .where(eq(schema.warehouses.id, row.id))
+      },
+    },
     balances: {
       lock: async (itemId, warehouseId) => {
         const [row] = await tx
@@ -211,6 +264,22 @@ function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           .limit(1)
           .for('update')
         return row ? mapBalance(row) : null
+      },
+      create: async (balance) => {
+        const row = balance.toSnapshot()
+        assertTenant(row.tenantId)
+        await tx.insert(schema.stockBalances).values({
+          id: row.id,
+          tenantId,
+          itemId: row.itemId,
+          warehouseId: row.warehouseId,
+          onHand: restored(Quantity.create(row.onHand)).micros,
+          reserved: restored(Quantity.create(row.reserved)).micros,
+          averageUnitCost: row.averageUnitCost ? BigInt(row.averageUnitCost.amount) : null,
+          currency: row.averageUnitCost?.currency ?? null,
+          version: row.version,
+          updatedAt: row.updatedAt,
+        })
       },
       save: async (balance) => {
         const row = balance.toSnapshot()

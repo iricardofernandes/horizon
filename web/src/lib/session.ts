@@ -16,6 +16,8 @@ const cookieOptions = {
   secure: process.env.HORIZON_COOKIE_SECURE === 'true',
   path: '/',
 }
+const workspaceSelectionCookie = 'horizon_workspace_selection'
+const activeWorkspaceCookie = 'horizon_active_workspace'
 
 export async function openSession(value: unknown): Promise<void> {
   const session = issuedSessionSchema.parse(value)
@@ -33,8 +35,60 @@ export async function openSession(value: unknown): Promise<void> {
 
 export async function clearSession(): Promise<void> {
   const jar = await cookies()
-  for (const name of ['horizon_access', 'horizon_refresh', 'horizon_family', 'horizon_tenant'])
+  for (const name of [
+    'horizon_access',
+    'horizon_refresh',
+    'horizon_family',
+    'horizon_tenant',
+    activeWorkspaceCookie,
+  ])
     jar.delete(name)
+}
+
+export async function storeActiveWorkspace(workspace: {
+  tenantId: string
+  slug: string
+  name: string
+}): Promise<void> {
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  ;(await cookies()).set(activeWorkspaceCookie, JSON.stringify(workspace), {
+    ...cookieOptions,
+    expires,
+  })
+}
+
+export async function activeWorkspace(): Promise<{
+  tenantId: string
+  slug: string
+  name: string
+} | null> {
+  const value = (await cookies()).get(activeWorkspaceCookie)?.value
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    return typeof parsed.tenantId === 'string' &&
+      typeof parsed.slug === 'string' &&
+      typeof parsed.name === 'string'
+      ? { tenantId: parsed.tenantId, slug: parsed.slug, name: parsed.name }
+      : null
+  } catch {
+    return null
+  }
+}
+
+export async function storeWorkspaceSelection(token: string, expiresAt: Date): Promise<void> {
+  ;(await cookies()).set(workspaceSelectionCookie, token, {
+    ...cookieOptions,
+    expires: expiresAt,
+  })
+}
+
+export async function workspaceSelectionToken(): Promise<string | null> {
+  return (await cookies()).get(workspaceSelectionCookie)?.value ?? null
+}
+
+export async function clearWorkspaceSelection(): Promise<void> {
+  ;(await cookies()).delete(workspaceSelectionCookie)
 }
 
 export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {

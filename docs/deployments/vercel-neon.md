@@ -45,9 +45,10 @@ visible is part of the deployment contract.
 
 5. Deploy and verify `/login`, then sign in with:
 
-   - workspace: `horizon-demo`
    - email: `demo@horizon.local`
    - password: `Horizon-demo-2026!`
+
+   After authentication, select the `horizon-demo` workspace on the workspace picker.
 
 The hosted banner and reduced navigation make the partial topology explicit. A successful
 login followed by the Catalog view proves a real browser → Vercel Function → Neon request

@@ -72,13 +72,15 @@ assuming RabbitMQ preserves aggregate ordering across retries and consumers.
 
 ## Endpoints
 
-Inventory is event-driven in phase 7: order commands arrive as versioned Sales events.
-The operator-facing stock bootstrap used by the phase 8 seed flow remains the next HTTP
-surface.
+Order reservation and shipment remain event-driven. Operator commands use the HTTP
+surface below and require a workspace-scoped Inventory role.
 
 | Method | Path | Purpose |
 |---|---|---|
-| — | — | *(event consumers only in phase 7)* |
+| `GET` | `/warehouses` | List warehouse balances for the workspace. |
+| `POST` | `/warehouses` | Create an active warehouse. |
+| `PATCH` | `/warehouses/:id/deactivate` | Remove a warehouse from new operational work. |
+| `POST` | `/stock-receipts` | Receive stock and recalculate weighted average cost. |
 
 ---
 

@@ -21,8 +21,9 @@ the operational golden path through a server-side BFF. A free-tier deployment is
   rather than reimplementing them (ADR 0008).
 - **Token minting or verification.** It holds a session and refreshes it; `identity/`
   decides.
-- **Tenant resolution.** The tenant comes from the token, server-side. The frontend
-  never sends a tenant id it chose.
+- **Tenant authority.** Login first receives an allowlisted workspace projection. The
+  selected tenant is validated server-side before Identity puts it in a token; browser
+  headers never establish tenant authority.
 
 ---
 
@@ -30,9 +31,13 @@ the operational golden path through a server-side BFF. A free-tier deployment is
 
 | Screen | Kong routes consumed |
 |---|---|
-| Session | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /identity/me` |
+| Session | `POST /auth/login`, `POST /auth/workspaces`, `POST /auth/workspace`, `POST /auth/refresh`, `POST /auth/logout`, `GET /identity/me` |
 | Overview/catalog | `GET /catalog/items`, `GET /catalog/price-lists`, `GET /inventory/warehouses` |
+| Customers | `GET/POST/DELETE /sales/customers` |
+| Quotes | `GET/POST /sales/quotes`, `GET /sales/quotes/:id`, `POST /sales/quotes/:id/accept` |
 | Orders | `GET/POST /sales/orders`, `GET /sales/orders/:id`, `GET /sales/customers` |
+| Inventory | `GET/POST/PATCH /inventory/warehouses`, `POST /inventory/stock-receipts` |
+| Access | `GET/POST/PATCH /identity/users`, `POST /identity/users/:id/roles` |
 | Webhooks | `GET/POST/DELETE /webhooks/webhook-subscriptions`, `GET /webhooks/webhook-deliveries` |
 
 The browser calls only `/api/session` and the allowlisted `/api/horizon/*` BFF. Access,
@@ -63,13 +68,15 @@ make up-apps
 make test-phase10
 ```
 
-Sign in to workspace `horizon-demo` as `demo@horizon.local` with the local-only password
-`Horizon-demo-2026!`.
+Sign in as `demo@horizon.local` with the local-only password `Horizon-demo-2026!`, then
+select the `horizon-demo` workspace.
 
 `make test-phase10` drives the production build in the system Chromium: it signs in,
-places an order, waits for Inventory confirmation, creates and removes a temporary
-webhook subscription, checks for document overflow at 390 px, and requires one Jaeger
-trace containing `web`, `gateway`, `sales`, `inventory` and `webhooks`.
+selects and switches workspace, exercises Catalog, Customers, Quotes, Inventory, Orders,
+Webhooks, Access and Settings, places an order, waits for Inventory confirmation, creates
+and removes a temporary webhook subscription, checks every screen for document overflow
+at 390 px, and requires one Jaeger trace containing `web`, `gateway`, `sales`, `inventory`
+and `webhooks`.
 
 ## Accessibility baseline
 
@@ -79,6 +86,19 @@ status/error announcements, no motion-dependent interaction, and no document-lev
 horizontal overflow from 390 px upward. Tables retain their own bounded horizontal scroll
 when their columns cannot fit. The browser golden-path test continuously asserts the
 mobile overflow and the accessible labels used for its interactions.
+
+## Design system foundation
+
+All interface typography uses the self-hosted variable Inter font with `Inter,
+sans-serif` fallbacks. Phosphor is the only interface icon set. Interactive primitives
+are composed from Base UI in `src/components/ui`; feature screens should consume those
+components instead of styling raw buttons, inputs, selects, dialogs, menus, or overlays.
+
+Colors come from Radix Colors. Sage supplies the neutral scale, Jade the accent and
+positive scale, Amber warnings, and Red errors or destructive states. Screens use the
+semantic aliases declared in `src/app/styles.css`, not literal palette values. The
+rationale and extension rules are recorded in
+[ADR 0039](../docs/adr/0039-frontend-design-system-foundation.md).
 
 ## Environment
 

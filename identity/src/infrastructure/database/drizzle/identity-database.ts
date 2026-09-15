@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHmac, randomBytes } from 'node:crypto'
 import { cursorPayloadSchema } from '@horizon/contracts'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { count, desc, eq, gt, type SQL, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, type SQL, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
@@ -16,7 +16,13 @@ import {
 } from '@/core/repositories/pagination-params'
 import { AuditEntry } from '@/domain/audit/audit-entry'
 import { redact } from '@/domain/audit/redaction'
+import { Account } from '@/domain/entities/account'
 import { User } from '@/domain/entities/user'
+import {
+  AccountsRepository,
+  type LegacyMembership,
+  type WorkspaceMembership,
+} from '@/domain/repositories/accounts-repository'
 import type { AuditRecord } from '@/domain/repositories/audit-log-repository'
 import type { TenantDirectory } from '@/domain/repositories/tenant-directory'
 import type { SecretBox } from '@/domain/services/secret-box'
@@ -51,6 +57,7 @@ export class IdentityDatabase extends UnitOfWork {
   readonly #transactions = new AsyncLocalStorage<{ tx: Transaction; tenantId: string }>()
   readonly #options: IdentityDatabaseOptions
   readonly directory: TenantDirectory
+  readonly accounts: AccountsRepository
 
   constructor(options: IdentityDatabaseOptions) {
     super()
@@ -79,6 +86,19 @@ export class IdentityDatabase extends UnitOfWork {
           throw new Error('Directory registration requires its tenant transaction')
         await current.tx.insert(schema.tenantDirectory).values({ slug, tenantId })
       },
+    }
+    this.accounts = {
+      findByEmail: (email) => this.findAccountByEmail(email.value),
+      findLegacyMemberships: (email) => this.legacyMemberships(email.value),
+      provisionFromLegacy: (email, membership) =>
+        this.provisionAccountFromLegacy(email.value, membership),
+      reconcileMemberships: (accountId, memberships) =>
+        this.reconcileAccountMemberships(accountId, memberships),
+      listWorkspaces: (accountId) => this.listAccountWorkspaces(accountId),
+      findMembership: (accountId, tenantId) => this.findAccountMembership(accountId, tenantId),
+      findAccountIdByMembership: (tenantId, userId) =>
+        this.findAccountIdByMembership(tenantId, userId),
+      save: (account) => this.saveAccount(account),
     }
   }
 
@@ -117,6 +137,204 @@ export class IdentityDatabase extends UnitOfWork {
   }
   async close(): Promise<void> {
     await this.#client.end({ timeout: 5 })
+  }
+
+  private globalEmailIndex(email: string): string {
+    return createHmac('sha256', this.#options.blindIndexKey).update(email).digest('hex')
+  }
+
+  private async findAccountByEmail(email: string): Promise<Account | null> {
+    const [entry] = await this.#db
+      .select()
+      .from(schema.accountDirectory)
+      .where(eq(schema.accountDirectory.emailIndex, this.globalEmailIndex(email)))
+      .limit(1)
+    if (!entry) return null
+    return this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_account', ${entry.accountId}, true)`)
+      const [row] = await tx
+        .select()
+        .from(schema.accounts)
+        .where(eq(schema.accounts.id, entry.accountId))
+        .limit(1)
+      return row ? mapAccount(row) : null
+    })
+  }
+
+  private async legacyMemberships(email: string): Promise<readonly LegacyMembership[]> {
+    const workspaces = await this.#db
+      .select({ tenantId: schema.tenantDirectory.tenantId, slug: schema.tenantDirectory.slug })
+      .from(schema.tenantDirectory)
+      .orderBy(schema.tenantDirectory.slug)
+    const matches: LegacyMembership[] = []
+    for (const workspace of workspaces) {
+      const match = await this.inTenant(workspace.tenantId, async (scope) => {
+        const user = await scope.users.findByEmail(restored(Email.create(email)))
+        if (!user) return null
+        const tenant = await scope.tenants.findById(workspace.tenantId)
+        if (!tenant) return null
+        return { ...workspace, name: tenant.toSnapshot().name, user }
+      })
+      if (match) matches.push(match)
+    }
+    return matches
+  }
+
+  private async provisionAccountFromLegacy(
+    email: string,
+    membership: LegacyMembership,
+  ): Promise<Account> {
+    const now = new Date()
+    const snapshot = membership.user.toSnapshot()
+    const accountId = snapshot.id
+    await this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_account', ${accountId}, true)`)
+      await tx
+        .insert(schema.accounts)
+        .values({
+          id: accountId,
+          passwordHash: snapshot.passwordHash,
+          status: 'active',
+          lastLoginAt: snapshot.lastLoginAt,
+          createdAt: snapshot.createdAt,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: schema.accounts.id })
+      await tx
+        .insert(schema.accountDirectory)
+        .values({ emailIndex: this.globalEmailIndex(email), accountId })
+        .onConflictDoNothing({ target: schema.accountDirectory.emailIndex })
+    })
+    const account = await this.findAccountByEmail(email)
+    if (!account) throw new Error('Global account provisioning did not become visible')
+    return account
+  }
+
+  private async reconcileAccountMemberships(
+    accountId: string,
+    memberships: readonly LegacyMembership[],
+  ): Promise<void> {
+    for (const membership of memberships) {
+      const now = new Date()
+      await this.#db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('app.current_account', ${accountId}, true)`)
+        await tx.execute(sql`select set_config('app.current_tenant', ${membership.tenantId}, true)`)
+        const [row] = await tx
+          .select({ accountId: schema.users.accountId })
+          .from(schema.users)
+          .where(eq(schema.users.id, membership.user.id.toString()))
+          .limit(1)
+        if (row?.accountId && row.accountId !== accountId) return
+        await tx
+          .update(schema.users)
+          .set({ accountId })
+          .where(eq(schema.users.id, membership.user.id.toString()))
+        await tx
+          .insert(schema.accountMemberships)
+          .values({
+            accountId,
+            tenantId: membership.tenantId,
+            userId: membership.user.id.toString(),
+            workspaceSlug: membership.slug,
+            workspaceName: membership.name,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [schema.accountMemberships.accountId, schema.accountMemberships.tenantId],
+            set: {
+              userId: membership.user.id.toString(),
+              workspaceSlug: membership.slug,
+              workspaceName: membership.name,
+              updatedAt: now,
+            },
+          })
+      })
+    }
+  }
+
+  private async listAccountWorkspaces(accountId: string): Promise<readonly WorkspaceMembership[]> {
+    return this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_account', ${accountId}, true)`)
+      const rows = await tx
+        .select()
+        .from(schema.accountMemberships)
+        .orderBy(schema.accountMemberships.workspaceName, schema.accountMemberships.tenantId)
+      return rows.map(presentMembership)
+    })
+  }
+
+  private async findAccountMembership(
+    accountId: string,
+    tenantId: string,
+  ): Promise<WorkspaceMembership | null> {
+    return this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_account', ${accountId}, true)`)
+      const [row] = await tx
+        .select()
+        .from(schema.accountMemberships)
+        .where(eq(schema.accountMemberships.tenantId, tenantId))
+        .limit(1)
+      return row ? presentMembership(row) : null
+    })
+  }
+
+  private async findAccountIdByMembership(
+    tenantId: string,
+    userId: string,
+  ): Promise<string | null> {
+    return this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
+      const [row] = await tx
+        .select({ accountId: schema.users.accountId })
+        .from(schema.users)
+        .where(and(eq(schema.users.tenantId, tenantId), eq(schema.users.id, userId)))
+        .limit(1)
+      return row?.accountId ?? null
+    })
+  }
+
+  private async saveAccount(account: Account): Promise<void> {
+    const row = account.toSnapshot()
+    await this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_account', ${row.id}, true)`)
+      await tx
+        .update(schema.accounts)
+        .set({
+          passwordHash: row.passwordHash,
+          status: row.status,
+          lastLoginAt: row.lastLoginAt,
+          updatedAt: row.updatedAt,
+        })
+        .where(eq(schema.accounts.id, row.id))
+    })
+  }
+}
+
+function mapAccount(row: typeof schema.accounts.$inferSelect): Account {
+  if (row.status !== 'active' && row.status !== 'disabled')
+    throw new Error('Invalid account status')
+  return Account.create(
+    {
+      passwordHash: restored(PasswordHash.create(row.passwordHash)),
+      status: row.status,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      ...(row.lastLoginAt === null ? {} : { lastLoginAt: row.lastLoginAt }),
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
+function presentMembership(
+  row: typeof schema.accountMemberships.$inferSelect,
+): WorkspaceMembership {
+  return {
+    accountId: row.accountId,
+    tenantId: row.tenantId,
+    userId: row.userId,
+    slug: row.workspaceSlug,
+    name: row.workspaceName,
   }
 }
 

@@ -32,6 +32,7 @@ export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey(),
+    accountId: uuid('account_id'),
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id),

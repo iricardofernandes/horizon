@@ -3,6 +3,7 @@ import { neon } from '@neondatabase/serverless'
 import { cookies } from 'next/headers'
 
 const cookieName = 'horizon_demo_session'
+const selectionCookieName = 'horizon_demo_workspace_selection'
 const cookieOptions = {
   httpOnly: true,
   sameSite: 'lax' as const,
@@ -15,6 +16,8 @@ type DemoUser = {
   tenant_id: string
   email: string
   name: string
+  tenant_slug: string
+  tenant_name: string
   password_salt: string
   password_hash: string
 }
@@ -33,26 +36,49 @@ export function hostedDemoEnabled(): boolean {
   return process.env.HORIZON_HOSTED_DEMO === 'true'
 }
 
-export async function openHostedDemoSession(input: {
-  tenantSlug: string
+export async function beginHostedDemoLogin(input: {
   email: string
   password: string
-}): Promise<SessionUser | null> {
+}): Promise<Array<{ tenantId: string; slug: string; name: string }> | null> {
   const sql = database()
   const rows = (await sql`
-    select id, tenant_id, email, name, password_salt, password_hash
+    select id, tenant_id, tenant_slug, tenant_name, email, name, password_salt, password_hash
     from horizon_demo_users
-    where tenant_slug = ${input.tenantSlug} and lower(email) = lower(${input.email})
+    where lower(email) = lower(${input.email})
     limit 1
   `) as DemoUser[]
   const user = rows[0]
   if (!user || !passwordMatches(input.password, user.password_salt, user.password_hash)) return null
 
-  const session = publicUser(user)
+  const expires = new Date(Date.now() + 5 * 60 * 1000)
+  const selection = {
+    user: publicUser(user),
+    workspace: { tenantId: user.tenant_id, slug: user.tenant_slug, name: user.tenant_name },
+    exp: Math.floor(expires.getTime() / 1000),
+  }
+  ;(await cookies()).set(selectionCookieName, signPayload(selection), {
+    ...cookieOptions,
+    expires,
+  })
+  return [selection.workspace]
+}
+
+export async function hostedDemoWorkspaces() {
+  const selection = await hostedSelection()
+  return selection ? [selection.workspace] : null
+}
+
+export async function selectHostedDemoWorkspace(tenantId: string): Promise<SessionUser | null> {
+  const selection = await hostedSelection()
+  if (!selection || selection.workspace.tenantId !== tenantId) return null
   const expires = new Date(Date.now() + 8 * 60 * 60 * 1000)
-  const token = signSession({ ...session, exp: Math.floor(expires.getTime() / 1000) })
-  ;(await cookies()).set(cookieName, token, { ...cookieOptions, expires })
-  return session
+  ;(await cookies()).set(
+    cookieName,
+    signPayload({ ...selection.user, exp: Math.floor(expires.getTime() / 1000) }),
+    { ...cookieOptions, expires },
+  )
+  ;(await cookies()).delete(selectionCookieName)
+  return selection.user
 }
 
 export async function hostedDemoSession(): Promise<SessionUser | null> {
@@ -61,7 +87,9 @@ export async function hostedDemoSession(): Promise<SessionUser | null> {
 }
 
 export async function clearHostedDemoSession(): Promise<void> {
-  ;(await cookies()).delete(cookieName)
+  const jar = await cookies()
+  jar.delete(cookieName)
+  jar.delete(selectionCookieName)
 }
 
 export async function hostedDemoResponse(path: string): Promise<Response> {
@@ -128,30 +156,60 @@ function publicUser(user: DemoUser): SessionUser {
   }
 }
 
-function signSession(payload: SessionPayload): string {
+function signPayload(payload: object): string {
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   const signature = createHmac('sha256', signingSecret()).update(encoded).digest('base64url')
   return `${encoded}.${signature}`
 }
 
 function verifySession(token: string): SessionUser | null {
+  const payload = verifyPayload(token) as SessionPayload | null
+  if (!payload?.id || !payload.tenantId || !payload.email || !payload.name) return null
+  const { exp: _, ...user } = payload
+  return user
+}
+
+async function hostedSelection(): Promise<{
+  user: SessionUser
+  workspace: { tenantId: string; slug: string; name: string }
+} | null> {
+  const token = (await cookies()).get(selectionCookieName)?.value
+  if (!token) return null
+  const payload = verifyPayload(token) as {
+    user?: SessionUser
+    workspace?: { tenantId?: string; slug?: string; name?: string }
+    exp?: number
+  } | null
+  if (
+    !payload?.user?.id ||
+    !payload.user.tenantId ||
+    !payload.workspace?.tenantId ||
+    !payload.workspace.slug ||
+    !payload.workspace.name
+  )
+    return null
+  return {
+    user: payload.user,
+    workspace: {
+      tenantId: payload.workspace.tenantId,
+      slug: payload.workspace.slug,
+      name: payload.workspace.name,
+    },
+  }
+}
+
+function verifyPayload(token: string): ({ exp: number } & Record<string, unknown>) | null {
   const [encoded, supplied] = token.split('.')
   if (!encoded || !supplied) return null
   const expected = createHmac('sha256', signingSecret()).update(encoded).digest()
   const actual = Buffer.from(supplied, 'base64url')
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null
   try {
-    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as SessionPayload
-    if (
-      !payload.id ||
-      !payload.tenantId ||
-      !payload.email ||
-      !payload.name ||
-      payload.exp <= Date.now() / 1000
-    )
-      return null
-    const { exp: _, ...user } = payload
-    return user
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as {
+      exp?: number
+    } & Record<string, unknown>
+    if (typeof payload.exp !== 'number' || payload.exp <= Date.now() / 1000) return null
+    return payload as { exp: number } & Record<string, unknown>
   } catch {
     return null
   }

@@ -48,6 +48,8 @@ one means writing a new ADR that supersedes it.
 | [0021](0021-redis-jti-denylist-asymmetric-failure.md) | `jti` denylist in Redis, with asymmetric failure behaviour |
 | [0022](0022-api-key-format-and-scopes.md) | API key format and scope model |
 | [0023](0023-casl-static-module-scoped-roles.md) | CASL, with static, module-scoped roles |
+| [0037](0037-tenant-directory-before-authentication.md) | Minimal tenant directory before authentication (superseded for interactive login) |
+| [0038](0038-global-account-before-workspace-selection.md) | Global account before workspace selection |
 
 ## Integrity, resilience and privacy
 
@@ -67,6 +69,12 @@ one means writing a new ADR that supersedes it.
 | [0030](0030-event-naming-envelope-and-versioning.md) | Event naming, envelope, and version policy |
 | [0031](0031-layering-and-object-calisthenics.md) | Clean Architecture layering, and which Object Calisthenics rules apply |
 | [0032](0032-either-for-expected-failures-rfc9457-at-the-boundary.md) | `Either` for expected failures, RFC 9457 at the boundary |
+
+## Frontend
+
+| # | Decision |
+|---|---|
+| [0039](0039-frontend-design-system-foundation.md) | Inter, Phosphor, Base UI and Radix Colors as the frontend foundation |
 
 ## Testing, observability and operations
 

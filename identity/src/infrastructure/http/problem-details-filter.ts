@@ -24,6 +24,7 @@ const DOMAIN_STATUS: Readonly<Record<string, number>> = {
   SessionExpiredError: 401,
   SessionReusedError: 401,
   SubjectErasedError: 410,
+  WorkspaceSelectionExpiredError: 401,
 }
 
 interface ProblemResponse {

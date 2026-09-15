@@ -14,6 +14,7 @@ await sql`
     id uuid primary key,
     tenant_id uuid not null,
     tenant_slug text not null,
+    tenant_name text not null default 'Horizon Demo',
     email text not null,
     name text not null,
     password_salt text not null,
@@ -21,6 +22,7 @@ await sql`
     unique (tenant_slug, email)
   )
 `
+await sql`alter table horizon_demo_users add column if not exists tenant_name text not null default 'Horizon Demo'`
 await sql`
   create table if not exists horizon_demo_catalog_items (
     id uuid primary key,
@@ -47,9 +49,9 @@ const tenantId = '00000000-0000-4000-8000-000000000001'
 const userId = '00000000-0000-4000-8000-000000000002'
 await sql`
   insert into horizon_demo_users
-    (id, tenant_id, tenant_slug, email, name, password_salt, password_hash)
+    (id, tenant_id, tenant_slug, tenant_name, email, name, password_salt, password_hash)
   values
-    (${userId}, ${tenantId}, 'horizon-demo', 'demo@horizon.local', 'Demo Operator',
+    (${userId}, ${tenantId}, 'horizon-demo', 'Horizon Demo', 'demo@horizon.local', 'Demo Operator',
       ${salt.toString('hex')}, ${passwordHash.toString('hex')})
   on conflict (tenant_slug, email) do update set
     name = excluded.name,

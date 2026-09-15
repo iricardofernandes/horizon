@@ -81,7 +81,10 @@ remains the normal external entry point.
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/auth/signup` | Create tenant and owner atomically. |
-| POST | `/auth/login` | Authenticate and open a refresh family. |
+| POST | `/auth/login` | Verify email/password and issue a short-lived workspace-selection token. |
+| POST | `/auth/workspaces` | List memberships available to a valid selection token. |
+| POST | `/auth/workspace` | Select one membership and open the tenant-scoped refresh family. |
+| POST | `/auth/workspace-selection` | Issue a fresh selection token for an authenticated account switching workspaces. |
 | POST | `/auth/refresh` | Rotate, return the grace replacement, or revoke on replay. |
 | POST | `/auth/logout` | Revoke refresh family and presented access token. |
 | POST | `/auth/api-key` | Authenticate an API key and return its permitted claims. |

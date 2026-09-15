@@ -73,13 +73,22 @@ backward.
 
 ## Endpoints
 
-Sales exposes its application commands internally in phase 7 and consumes Catalog and
-Inventory facts through RabbitMQ. The phase 8 golden-path entry point and seed command
-are the next public surface.
+Every business endpoint requires a workspace-scoped Identity access token. Customer
+erasure is the irreversible crypto-shredding operation from ADR 0026; it is deliberately
+not presented as an ordinary row deletion.
 
 | Method | Path | Purpose |
 |---|---|---|
-| — | — | *(application commands and event consumers only in phase 7)* |
+| `GET` | `/customers` | List the workspace customer directory. |
+| `POST` | `/customers` | Create and encrypt a customer record. |
+| `DELETE` | `/customers/:id` | Permanently erase customer PII while preserving document references. |
+| `GET` | `/quotes` | List recent commercial quotes. |
+| `GET` | `/quotes/:id` | Read a quote and its immutable priced lines. |
+| `POST` | `/quotes` | Create a quote using current Catalog projections. |
+| `POST` | `/quotes/:id/accept` | Accept an open, unexpired quote. |
+| `GET` | `/orders` | List recent sales orders. |
+| `GET` | `/orders/:id` | Read one order snapshot. |
+| `POST` | `/orders` | Place an order and start the Inventory choreography. |
 
 ---
 
