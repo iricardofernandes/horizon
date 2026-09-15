@@ -81,12 +81,18 @@ jobs:
           node-version: 24
 
       - name: fmt
+        run: terraform -chdir=infra/terraform fmt -check -recursive
+
+      - name: initialize without remote state
+        run: terraform -chdir=infra/terraform init -backend=false
+
+      - name: validate shared topology
+        run: terraform -chdir=infra/terraform validate
+
+      - name: plan both variable sets against mock providers
         run: |
-          if [ -n "$(find infra/terraform -name '*.tf' -print -quit)" ]; then
-            terraform -chdir=infra/terraform fmt -check -recursive
-          else
-            echo "no terraform yet — phase 13"
-          fi
+          terraform -chdir=infra/terraform test -var-file=envs/dev/terraform.tfvars.example
+          terraform -chdir=infra/terraform test -var-file=envs/prod/terraform.tfvars.example
 
       # Terraform is written and never applied (ADR 0034). This asserts it stays that
       # way. The check lives in a script because an inline grep matches its own error

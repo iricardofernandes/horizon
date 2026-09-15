@@ -1,0 +1,101 @@
+name: release artifacts
+
+# Manual and inert without an explicitly configured GitHub environment plus OIDC role.
+# It publishes immutable images and a speculative plan artifact. Infrastructure changes
+# are intentionally outside this workflow's capabilities (ADR 0034).
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Variable set to plan against
+        required: true
+        type: choice
+        options: [dev, prod]
+      image_tag:
+        description: Immutable image tag (normally a commit SHA)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  images:
+    name: image ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: identity, context: identity }
+          - { name: catalog, context: catalog }
+          - { name: inventory, context: inventory }
+          - { name: sales, context: sales }
+          - { name: webhooks, context: webhooks }
+          - { name: web, context: web }
+          - { name: gateway, context: gateway }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: publish contracts to a job-local registry
+        run: |
+          if grep -q '"@horizon/' "${{ matrix.context }}/package.json" 2>/dev/null; then
+            scripts/ci-publish-contracts.sh
+          else
+            echo "no private package dependency"
+          fi
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_RELEASE_ROLE_ARN }}
+          aws-region: us-east-1
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+          buildkitd-flags: --allow-insecure-entitlement network.host
+      - name: build and push immutable image
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          network: host
+          allow: network.host
+          tags: ${{ steps.ecr.outputs.registry }}/horizon-${{ inputs.environment }}/${{ matrix.name }}:${{ inputs.image_tag }}
+          cache-from: type=gha,scope=release-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.name }}
+
+  plan:
+    name: speculative infrastructure plan
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.2
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: initialize without remote state
+        run: terraform -chdir=infra/terraform init -backend=false
+      - name: create speculative plan
+        run: |
+          cp "infra/terraform/envs/${{ inputs.environment }}/terraform.tfvars.example" /tmp/horizon.tfvars
+          terraform -chdir=infra/terraform plan \
+            -refresh=false \
+            -var-file=/tmp/horizon.tfvars \
+            -var="image_tag=${{ inputs.image_tag }}" \
+            -out=/tmp/horizon.tfplan
+      - name: render plan for review
+        run: terraform -chdir=infra/terraform show -no-color /tmp/horizon.tfplan > /tmp/horizon-plan.txt
+      - uses: actions/upload-artifact@v6
+        with:
+          name: terraform-plan-${{ inputs.environment }}-${{ inputs.image_tag }}
+          path: /tmp/horizon-plan.txt
+          retention-days: 7

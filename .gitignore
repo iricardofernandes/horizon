@@ -30,6 +30,7 @@ infra/keys/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+!infra/terraform/.terraform.lock.hcl
 *.tfvars
 !*.tfvars.example
 

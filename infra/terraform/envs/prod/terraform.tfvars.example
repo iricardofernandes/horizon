@@ -1,0 +1,24 @@
+environment                = "prod"
+aws_region                 = "us-east-1"
+vpc_cidr                   = "10.21.0.0/16"
+nat_gateway_per_az         = true
+certificate_arn            = null
+image_tag                  = "release-sha"
+desired_count              = 2
+task_cpu                   = 512
+task_memory                = 1024
+rds_instance_class         = "db.t4g.small"
+rds_allocated_storage      = 50
+rds_multi_az               = true
+rds_deletion_protection    = true
+backup_retention_days      = 14
+redis_node_type            = "cache.t4g.small"
+redis_replicas             = 1
+redis_automatic_failover   = true
+mq_instance_type           = "mq.m7g.large"
+mq_deployment_mode         = "CLUSTER_MULTI_AZ"
+log_retention_days         = 30
+
+# Runtime-only application secrets are pre-provisioned by the security bootstrap and
+# supplied as environment-specific ARNs. Never put secret values in this file.
+service_secret_arns = {}
