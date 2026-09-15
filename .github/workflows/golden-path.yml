@@ -57,7 +57,7 @@ jobs:
         run: |
           npm ci --prefix web --no-audit --no-fund
           cd web
-          npx playwright install --with-deps chromium
+          npx --no-install playwright-core install --with-deps chromium
           cd ..
           make up-apps
           make test-phase10
@@ -66,7 +66,7 @@ jobs:
         if: failure()
         run: |
           docker compose -f infra/docker-compose.yml --env-file infra/.env ps
-          for service in postgres rabbitmq otel-collector jaeger; do
+          for service in postgres rabbitmq otel-collector jaeger kong identity catalog inventory sales webhooks web; do
             echo "::group::$service"
             docker logs "horizon-$service" 2>&1 | tail -100 || true
             echo "::endgroup::"

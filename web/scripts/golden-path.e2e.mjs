@@ -24,6 +24,7 @@ const browser = await chromium.launch({
 
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  page.setDefaultTimeout(60_000)
   const pageErrors = []
   const telemetryRequests = []
   let orderTraceId = ''
@@ -46,8 +47,17 @@ try {
   await page.getByLabel('Workspace').fill('horizon-demo')
   await page.getByLabel('Email').fill('demo@horizon.local')
   await page.getByLabel('Password').fill(password)
+  const sessionResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' && response.url() === `${appUrl}/api/session`,
+  )
   await page.getByRole('button', { name: 'Continue' }).click()
-  await page.waitForURL(`${appUrl}/app`)
+  const sessionResponse = await sessionResponsePromise
+  assert(
+    sessionResponse.ok(),
+    `login returned ${sessionResponse.status()}: ${await responseSummary(sessionResponse)}`,
+  )
+  await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
 
   await page.getByRole('button', { name: 'Orders' }).click()
@@ -126,6 +136,13 @@ async function firstExisting(paths) {
     } catch {}
   }
   return null
+}
+
+async function responseSummary(response) {
+  const contentType = response.headers()['content-type'] ?? ''
+  if (!contentType.includes('application/json') && !contentType.startsWith('text/'))
+    return contentType || 'non-text response'
+  return (await response.text().catch(() => 'unreadable response')).slice(0, 500)
 }
 
 function assert(condition, message) {
