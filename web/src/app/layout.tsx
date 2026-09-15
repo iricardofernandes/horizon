@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
+import './styles.css'
 
 export const metadata: Metadata = {
-  title: 'Horizon',
-  description: 'A general-purpose ERP.',
+  title: { default: 'Horizon ERP', template: '%s · Horizon' },
+  description: 'Operations, inventory and sales in one dependable workspace.',
 }
 
 export const viewport: Viewport = {

@@ -2,8 +2,8 @@
 
 The Next.js frontend (App Router).
 
-**Status: phase 1 — scaffold.** This is the blank template plus real configuration.
-The application itself is phase 10; a free-tier deployment of it is phase 11.
+**Status: phase 10 — complete.** The portal authenticates against Identity and exposes
+the operational golden path through a server-side BFF. A free-tier deployment is phase 11.
 
 ---
 
@@ -26,10 +26,19 @@ The application itself is phase 10; a free-tier deployment of it is phase 11.
 
 ---
 
-## Endpoints consumed
+## Surface and endpoints
 
-None yet. The client is written in phase 10 against the OpenAPI documents aggregated
-at the gateway.
+| Screen | Kong routes consumed |
+|---|---|
+| Session | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /identity/me` |
+| Overview/catalog | `GET /catalog/items`, `GET /catalog/price-lists`, `GET /inventory/warehouses` |
+| Orders | `GET/POST /sales/orders`, `GET /sales/orders/:id`, `GET /sales/customers` |
+| Webhooks | `GET/POST/DELETE /webhooks/webhook-subscriptions`, `GET /webhooks/webhook-deliveries` |
+
+The browser calls only `/api/session` and the allowlisted `/api/horizon/*` BFF. Access,
+refresh, family and tenant values stay in `HttpOnly`, `SameSite=Lax` cookies; the BFF
+rotates an expired access token before retrying once. The tenant id is derived from the
+Identity token and is never accepted from a browser-controlled header.
 
 ---
 
@@ -45,20 +54,56 @@ npm test
 npm run dev          # http://localhost:3000
 ```
 
-The API it talks to is a phase 2 (platform) and phase 4 onwards (services) deliverable.
-Until then the page is static.
+From the repository root, the fully integrated path is:
+
+```bash
+make up
+make demo
+make up-apps
+make test-phase10
+```
+
+Sign in to workspace `horizon-demo` as `demo@horizon.local` with the local-only password
+`Horizon-demo-2026!`.
+
+`make test-phase10` drives the production build in the system Chromium: it signs in,
+places an order, waits for Inventory confirmation, creates and removes a temporary
+webhook subscription, checks for document overflow at 390 px, and requires one Jaeger
+trace containing `web`, `gateway`, `sales`, `inventory` and `webhooks`.
+
+## Accessibility baseline
+
+The phase 10 baseline is WCAG 2.2 AA for the delivered screens: semantic landmarks and
+headings, programmatic form labels, keyboard-operable navigation/forms, visible focus,
+status/error announcements, no motion-dependent interaction, and no document-level
+horizontal overflow from 390 px upward. Tables retain their own bounded horizontal scroll
+when their columns cannot fit. The browser golden-path test continuously asserts the
+mobile overflow and the accessible labels used for its interactions.
 
 ## Environment
 
 | Variable | Purpose |
 |---|---|
 | `HORIZON_API_URL` | Kong's address, used from server components and route handlers |
+| `HORIZON_COOKIE_SECURE` | Enables `Secure` on session cookies; required behind HTTPS |
 | `NEXT_PUBLIC_HORIZON_API_URL` | Kong's address as seen by the browser. Carries no secret |
 | `NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT` | Collector endpoint for browser spans |
 | `OTEL_SERVICE_NAME` | Service name in traces |
 
 Anything prefixed `NEXT_PUBLIC_` is compiled into the client bundle and is therefore
 public. No secret may ever carry that prefix.
+
+Browser spans are sent straight to the Collector and their W3C `traceparent` is forwarded
+by the BFF. Kong extracts and reinjects that context; backend HTTP and RabbitMQ spans then
+remain in the same trace.
+
+## Public deployment profile
+
+Phase 11 includes an explicitly reduced Vercel + Neon profile. With
+`HORIZON_HOSTED_DEMO=true`, the route handlers provide a signed HttpOnly demo session and
+read the seeded Catalog from Neon; Orders and Webhooks are hidden because the public
+profile does not run their services or RabbitMQ. The full provisioning and disclosure are
+in [`docs/deployments/vercel-neon.md`](../docs/deployments/vercel-neon.md).
 
 ---
 
@@ -68,4 +113,3 @@ public. No secret may ever carry that prefix.
 **excluded from Biome** in `biome.json`, because otherwise every build would leave the
 lint check failing on formatting Next had just applied. Next owns that file; we own the
 rest.
-
