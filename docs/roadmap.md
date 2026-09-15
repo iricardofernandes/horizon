@@ -12,6 +12,12 @@ be true before it starts.
 
 ## `financial/` — accounts payable and receivable
 
+> Superseded as an implementation outline by the dependency-ordered
+> [operational ERP expansion plan](erp-expansion-plan.md). That plan splits this broad
+> placeholder into `financial/`, `treasury/` and `ledger/` boundaries and adds the
+> prerequisite shared-party model, frontend localization and Developers information
+> architecture.
+
 **Problem it solves.** Every order that `sales/` confirms eventually becomes money
 owed or money owing. Without a financial module, Horizon models commerce but not its
 consequences: there is nowhere to record a receivable, match a bank line against it,
@@ -40,6 +46,10 @@ postings, it is not a certified ledger.
 ---
 
 ## `fiscal/` — a versioned multi-regime tax rules engine
+
+> Sequenced by the [operational ERP expansion plan](erp-expansion-plan.md), phase J. The
+> rules engine described here is the core of that phase; the plan adds the document
+> lifecycle, inbound XML and the sales and purchasing prerequisites it depends on.
 
 **Problem it solves.** Tax calculation in Brazil is currently undergoing a
 constitutional reform in which two tax regimes coexist for several years: the
