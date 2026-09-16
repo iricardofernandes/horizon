@@ -17,7 +17,7 @@ import { z } from 'zod'
  * happens in the module that owns the subject.
  */
 
-export const MODULES = ['identity', 'catalog', 'inventory', 'sales', 'webhooks', 'parties'] as const
+export const MODULES = ['identity', 'catalog', 'inventory', 'sales', 'webhooks', 'parties', 'financial'] as const
 
 export const moduleNameSchema = z.enum(MODULES)
 export type ModuleName = z.infer<typeof moduleNameSchema>
@@ -37,6 +37,7 @@ export const ROLES = {
   sales: ['admin', 'representative', 'viewer'],
   webhooks: ['admin', 'viewer'],
   parties: ['admin', 'editor', 'viewer'],
+  financial: ['admin', 'operator', 'viewer'],
 } as const satisfies Record<ModuleName, readonly string[]>
 
 export type RolesByModule = typeof ROLES
@@ -49,6 +50,7 @@ export const roleAssignmentSchema = z.discriminatedUnion('module', [
   z.object({ module: z.literal('sales'), role: z.enum(ROLES.sales) }),
   z.object({ module: z.literal('webhooks'), role: z.enum(ROLES.webhooks) }),
   z.object({ module: z.literal('parties'), role: z.enum(ROLES.parties) }),
+  z.object({ module: z.literal('financial'), role: z.enum(ROLES.financial) }),
 ])
 
 export type RoleAssignment = z.infer<typeof roleAssignmentSchema>
