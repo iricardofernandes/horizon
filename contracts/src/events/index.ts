@@ -1,6 +1,12 @@
 import { catalogItemCreated, catalogItemDeactivated, catalogPriceChanged } from './catalog'
 import type { EventDefinition } from './define'
 import {
+  financialReceivablePosted,
+  financialReceivableReversed,
+  financialSettlementRecorded,
+  financialSettlementReversed,
+} from './financial'
+import {
   apiKeyRevoked,
   dataSubjectErased,
   sessionReuseDetected,
@@ -30,6 +36,7 @@ import {
 
 export * from './catalog'
 export * from './define'
+export * from './financial'
 export * from './identity'
 export * from './inventory'
 export * from './parties'
@@ -65,6 +72,10 @@ export const EVENTS: readonly EventDefinition[] = [
   partyRoleGranted,
   partyRoleRevoked,
   partyErased,
+  financialReceivablePosted,
+  financialReceivableReversed,
+  financialSettlementRecorded,
+  financialSettlementReversed,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */
