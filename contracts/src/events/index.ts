@@ -15,6 +15,13 @@ import {
   inventoryStockReserved,
 } from './inventory'
 import {
+  partyErased,
+  partyRegistered,
+  partyRoleGranted,
+  partyRoleRevoked,
+  partyUpdated,
+} from './parties'
+import {
   salesInvoicingRequested,
   salesOrderCancelled,
   salesOrderConfirmed,
@@ -25,6 +32,7 @@ export * from './catalog'
 export * from './define'
 export * from './identity'
 export * from './inventory'
+export * from './parties'
 export * from './sales'
 
 /**
@@ -52,6 +60,11 @@ export const EVENTS: readonly EventDefinition[] = [
   inventoryStockReleased,
   inventoryStockMoved,
   salesInvoicingRequested,
+  partyRegistered,
+  partyUpdated,
+  partyRoleGranted,
+  partyRoleRevoked,
+  partyErased,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */
