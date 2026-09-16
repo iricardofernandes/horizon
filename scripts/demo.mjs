@@ -15,6 +15,7 @@ const inventoryRequire = createRequire(join(root, 'inventory/package.json'))
 const salesRequire = createRequire(join(root, 'sales/package.json'))
 const webhooksRequire = createRequire(join(root, 'webhooks/package.json'))
 const partiesRequire = createRequire(join(root, 'parties/package.json'))
+const financialRequire = createRequire(join(root, 'financial/package.json'))
 const postgres = salesRequire('postgres')
 const { drizzle } = salesRequire('drizzle-orm/postgres-js')
 const { migrate } = salesRequire('drizzle-orm/postgres-js/migrator')
@@ -35,6 +36,14 @@ const DEMO = Object.freeze({
   initialStockMicros: 1_000_000_000_000n,
   quantity: '4',
   unitPrice: '1250',
+  revenueCategory: '1.01',
+})
+
+const DEMO_CUSTOMER = Object.freeze({
+  legalName: 'Horizon Coffee Buyer',
+  email: 'buyer@horizon.local',
+  phone: '+5511999999999',
+  address: 'Avenida Paulista, 1000, Sao Paulo - SP',
 })
 
 const resources = []
@@ -76,6 +85,7 @@ try {
   const salesUrls = moduleUrls('sales')
   const webhooksUrls = moduleUrls('webhooks')
   const partiesUrls = moduleUrls('parties')
+  const financialUrls = moduleUrls('financial')
   const blindIndexKey = Buffer.from(
     (await readFile(join(root, 'infra/keys/blind-index.key'), 'utf8')).trim(),
     'hex',
@@ -102,6 +112,7 @@ try {
       blindIndexKey: Buffer.from('0'.repeat(64), 'hex'),
     },
   })
+  const financialDb = new modules.FinancialDatabase({ url: financialUrls.app })
   const webhooksDb = new modules.WebhookDatabase({
     appUrl: webhooksUrls.app,
     workerUrl: webhooksUrls.relay,
@@ -110,12 +121,15 @@ try {
   const identityAdmin = postgres(identityUrls.admin, { max: 1 })
   const inventoryAdmin = postgres(inventoryUrls.admin, { max: 1 })
   const salesAdmin = postgres(salesUrls.admin, { max: 1 })
+  const financialAdmin = postgres(financialUrls.admin, { max: 1 })
   resources.push(() => identityDb.close())
   resources.push(() => catalogDb.close())
   resources.push(() => inventoryDb.close())
   resources.push(() => salesDb.close())
   resources.push(() => webhooksDb.close())
   resources.push(() => partiesDb.close())
+  resources.push(() => financialDb.close())
+  resources.push(() => financialAdmin.end())
   resources.push(() => identityAdmin.end())
   resources.push(() => inventoryAdmin.end())
   resources.push(() => salesAdmin.end())
@@ -136,9 +150,11 @@ try {
 
   const inventoryHandlers = new modules.InventorySalesEventHandlers(inventoryDb, clock, 1800)
   const salesHandlers = new modules.SalesModuleEventHandlers(salesDb, clock)
+  const financialHandlers = new modules.FinancialModuleEventHandlers(financialDb, clock)
   const inventoryQueue = 'horizon.demo.inventory'
   const salesQueue = 'horizon.demo.sales'
   const webhooksQueue = 'horizon.demo.webhooks'
+  const financialQueue = 'horizon.demo.financial'
   const inventoryConsumer = new modules.InventoryConsumer({
     url: rabbitUrl,
     queue: inventoryQueue,
@@ -151,6 +167,12 @@ try {
     handlers: salesHandlers.handlers,
     prefetch: 5,
   })
+  const financialConsumer = new modules.FinancialConsumer({
+    url: rabbitUrl,
+    queue: financialQueue,
+    handlers: financialHandlers.handlers,
+    prefetch: 5,
+  })
   const webhooksConsumer = new modules.WebhookEventConsumer({
     url: rabbitUrl,
     queue: webhooksQueue,
@@ -160,18 +182,22 @@ try {
   await Promise.all([
     inventoryConsumer.start(),
     salesConsumer.start(),
+    financialConsumer.start(),
     webhooksConsumer.start(),
   ])
   resources.push(() =>
     deleteQueues(rabbitUrl, [
       inventoryQueue,
       salesQueue,
+      financialQueue,
+      `${financialQueue}.dlq`,
       webhooksQueue,
       `${webhooksQueue}.dlq`,
     ]),
   )
   resources.push(() => inventoryConsumer.close())
   resources.push(() => salesConsumer.close())
+  resources.push(() => financialConsumer.close())
   resources.push(() => webhooksConsumer.close())
 
   const callback = await startStubReceiver()
@@ -202,6 +228,8 @@ try {
     'sales.order.confirmed',
     'sales.invoicing.requested',
     'inventory.stock.moved',
+    'financial.receivable.posted',
+    'financial.settlement.recorded',
   ])
     await sink.bindQueue(sinkQueue, 'horizon.events', eventType)
   const observedEvents = []
@@ -227,7 +255,9 @@ try {
   )
   const salesRelay = new modules.SalesOutboxRelay(salesUrls.relay, salesPublisher)
   const partiesRelay = new modules.PartiesOutboxRelay(partiesUrls.relay, salesPublisher)
+  const financialRelay = new modules.FinancialOutboxRelay(financialUrls.relay, salesPublisher)
   resources.push(() => partiesRelay.close())
+  resources.push(() => financialRelay.close())
   resources.push(() => catalogRelay.close())
   resources.push(() => inventoryRelay.close())
   resources.push(() => salesRelay.close())
@@ -249,12 +279,20 @@ try {
         where tenant_id = ${identity.tenantId} and id = ${customerId} and status = 'active'`),
     'the Sales projection of the demo customer',
   )
+  await flushUntil(
+    partiesRelay,
+    () =>
+      rowOrNull(financialAdmin`select party_id from party_projection
+        where tenant_id = ${identity.tenantId} and party_id = ${customerId}`),
+    'the Financial projection of the demo customer',
+  )
 
   const [before] = await inventoryAdmin`select on_hand from stock_balances
     where tenant_id = ${identity.tenantId} and item_id = ${catalog.itemId}
       and warehouse_id = ${warehouseId}`
   const stockBefore = BigInt(before.on_hand)
   let orderId = ''
+  let receivable = { titleId: '', status: '', outstanding: '' }
   let traceId = ''
   await trace.getTracer('horizon.demo').startActiveSpan('golden-path', async (span) => {
     traceId = span.spanContext().traceId
@@ -282,6 +320,24 @@ try {
             and status = 'confirmed'`),
       )
       await flushAll(inventoryRelay)
+
+      receivable = await collectReceivable(modules, {
+        database: financialDb,
+        admin: financialAdmin,
+        relay: financialRelay,
+        tenantId: identity.tenantId,
+        orderId,
+        clock,
+      })
+      await waitFor(
+        () =>
+          observedEvents.find(
+            (event) =>
+              event.eventType === 'financial.settlement.recorded' &&
+              event.payload.titleId === receivable.titleId,
+          ) ?? null,
+        'published financial.settlement.recorded event',
+      )
 
       const confirmedEvent = await waitFor(
         () =>
@@ -325,6 +381,9 @@ try {
   assert.equal(order.currency, 'BRL')
   assert.equal(BigInt(balance.on_hand), stockBefore - 4_000_000n)
   assert.equal(balance.reserved, '0')
+  assert.equal(receivable.status, 'posted')
+  assert.equal(receivable.settlementState, 'settled')
+  assert.equal(receivable.outstanding, '0')
 
   await closeAll()
   await shutdownServiceProviders()
@@ -349,6 +408,7 @@ try {
         },
         order: { orderId, status: order.status, total: order.total, currency: order.currency },
         stock: { before: stockBefore.toString(), after: balance.on_hand, reserved: balance.reserved },
+        receivable,
         callback: {
           signed: true,
           implementation: 'webhooks',
@@ -452,6 +512,16 @@ function loadModules() {
     partiesRequire,
     'parties/dist/infrastructure/messaging/rabbitmq-transport.js',
   )
+  const financial = {
+    ...from(financialRequire, 'financial/dist/infrastructure/database/drizzle/financial-database.js'),
+    ...from(financialRequire, 'financial/dist/application/consume-module-events.js'),
+    ...from(financialRequire, 'financial/dist/application/use-cases/manage-dimensions.js'),
+    ...from(financialRequire, 'financial/dist/application/use-cases/manage-receivables.js'),
+  }
+  const financialTransport = from(
+    financialRequire,
+    'financial/dist/infrastructure/messaging/rabbitmq-transport.js',
+  )
   const webhooks = {
     ...from(webhooksRequire, 'webhooks/dist/infrastructure/database/webhook-database.js'),
     ...from(webhooksRequire, 'webhooks/dist/application/webhook-service.js'),
@@ -483,11 +553,20 @@ function loadModules() {
     PartiesDatabase: parties.PartiesDatabase,
     PartiesSecretBox: parties.AesGcmSecretBox,
     RegisterPartyUseCase: parties.RegisterPartyUseCase,
+    DescribePartyUseCase: parties.DescribePartyUseCase,
     PartiesOutboxRelay: partiesTransport.OutboxRelay,
     PlaceOrderUseCase: sales.PlaceOrderUseCase,
     SalesConsumer: salesTransport.RabbitMqEventConsumer,
     SalesPublisher: salesTransport.RabbitMqEventPublisher,
     SalesOutboxRelay: salesTransport.OutboxRelay,
+    FinancialDatabase: financial.FinancialDatabase,
+    FinancialModuleEventHandlers: financial.FinancialModuleEventHandlers,
+    FinancialConsumer: financialTransport.RabbitMqEventConsumer,
+    FinancialOutboxRelay: financialTransport.OutboxRelay,
+    DefineCategoryUseCase: financial.DefineCategoryUseCase,
+    ReviseReceivableUseCase: financial.ReviseReceivableUseCase,
+    PostReceivableUseCase: financial.PostReceivableUseCase,
+    RecordSettlementUseCase: financial.RecordSettlementUseCase,
     WebhookDatabase: webhooks.WebhookDatabase,
     CreateSubscriptionUseCase: webhooks.CreateSubscriptionUseCase,
     WebhookDispatcher: webhooks.WebhookDispatcher,
@@ -690,7 +769,18 @@ async function seedCustomer(modules, parties, salesAdmin, tenantId, clock) {
   const existing = await parties.inTenant(tenantId, (scope) =>
     scope.parties.findByTaxId(DEMO.customerTaxId),
   )
-  if (existing) return existing.id.toString()
+  if (existing) {
+    // Describing the party again republishes it, so a context that started consuming the
+    // registry after the customer was registered (Financial) projects it too.
+    const partyId = existing.id.toString()
+    const described = await new modules.DescribePartyUseCase(parties, clock).execute({
+      tenantId,
+      partyId,
+      ...DEMO_CUSTOMER,
+    })
+    if (described.isLeft()) throw described.value
+    return partyId
+  }
   // A customer Sales registered before the registry existed keeps its identifier.
   const legacyIndex = createHmac('sha256', Buffer.from('0'.repeat(64), 'hex'))
     .update(`${tenantId}:${DEMO.customerTaxId}`)
@@ -701,15 +791,85 @@ async function seedCustomer(modules, parties, salesAdmin, tenantId, clock) {
     tenantId,
     ...(legacy ? { partyId: legacy.id } : {}),
     kind: 'person',
-    legalName: 'Horizon Coffee Buyer',
     taxId: DEMO.customerTaxId,
-    email: 'buyer@horizon.local',
-    phone: '+5511999999999',
-    address: 'Avenida Paulista, 1000, Sao Paulo - SP',
+    ...DEMO_CUSTOMER,
     roles: ['customer'],
   })
   if (registered.isLeft()) throw registered.value
   return registered.value.partyId
+}
+
+/**
+ * The confirmed order became a draft receivable in Financial. A person would classify it,
+ * post it and record the customer's payment; the demo does the same through the use cases
+ * the HTTP API runs, with idempotency keys derived from the order so a rerun is harmless.
+ */
+async function collectReceivable(modules, { database, admin, relay, tenantId, orderId, clock }) {
+  const draft = await waitFor(
+    () =>
+      rowOrNull(admin`select id from titles
+        where tenant_id = ${tenantId} and origin_order_id = ${orderId}`),
+    'the draft receivable raised from the confirmed order',
+  )
+  const categories = await database.listCategories(tenantId)
+  let categoryId = categories.find((category) => category.code === DEMO.revenueCategory)?.id
+  if (!categoryId) {
+    const defined = await new modules.DefineCategoryUseCase(database, clock).execute({
+      tenantId,
+      code: DEMO.revenueCategory,
+      name: 'Product sales',
+      nature: 'revenue',
+    })
+    if (defined.isLeft()) throw defined.value
+    categoryId = defined.value.id
+  }
+  const today = new Date().toISOString().slice(0, 10)
+  const context = (step) => ({
+    tenantId,
+    actor: 'system:demo',
+    requestId: null,
+    idempotencyKey: `demo-${step}-${orderId}`,
+  })
+  const title = await database.receivableDetail(tenantId, draft.id, today)
+  if (title.status === 'draft') {
+    const revised = await new modules.ReviseReceivableUseCase(database, clock).execute({
+      context: context('revise'),
+      titleId: draft.id,
+      terms: {
+        partyId: title.partyId,
+        documentNumber: title.documentNumber,
+        currency: title.currency,
+        categoryId,
+        issuedOn: title.issuedOn,
+        installments: title.installments.map(({ dueOn, amount }) => ({ dueOn, amount })),
+      },
+    })
+    if (revised.isLeft()) throw revised.value
+  }
+  const posted = await new modules.PostReceivableUseCase(database, clock).execute({
+    context: context('post'),
+    titleId: draft.id,
+  })
+  if (posted.isLeft()) throw posted.value
+  const settled = await new modules.RecordSettlementUseCase(database, clock).execute({
+    context: context('settle'),
+    titleId: draft.id,
+    settlement: {
+      installmentNumber: 1,
+      settledOn: title.issuedOn > today ? title.issuedOn : today,
+      received: title.total,
+    },
+  })
+  if (settled.isLeft()) throw settled.value
+  await flushAll(relay)
+  const detail = await database.receivableDetail(tenantId, draft.id, today)
+  return {
+    titleId: draft.id,
+    status: detail.status,
+    settlementState: detail.settlementState,
+    total: detail.total,
+    outstanding: detail.outstanding,
+  }
 }
 
 async function flushAll(relay) {
