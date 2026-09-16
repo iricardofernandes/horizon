@@ -392,6 +392,10 @@ re-invent a table or a settlement dialog.
 
 ### Phase C — financial subledger: payable and receivable
 
+**Progress:** receivables delivered as [plan phase 17](plan.md#phase-17--accounts-receivable)
+(backlog item 8). Payables, approvals, recurrence, bulk actions, attachments, forecasts,
+fees, credits and refunds remain.
+
 **Deliverables**
 
 - Implement `financial/` with payable and receivable titles, installments, issue,

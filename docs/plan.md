@@ -739,6 +739,55 @@ before a single title exists (ADR 0041).
 
 ---
 
+## Phase 17 — Accounts receivable
+
+**Complete.** Backlog item 8 of the [expansion plan](erp-expansion-plan.md), the receivable
+half of its Phase C. A confirmed sales order becomes money someone collects, and every
+correction stays in the record (ADR 0041, ADR 0042).
+
+**Deliverables**
+
+- One title kernel for both directions: installments, issue, competence and due dates,
+  category, allocations and an origin. Drafts are revised or cancelled; posted titles are
+  settled or reversed, never edited.
+- Partial and full settlement with discount, interest and penalty, and settlement reversal
+  with a reason. The balance of every installment is derived from the settlements in force.
+- `Idempotency-Key` required on drafting, posting, settling and every reversal, stored in
+  the same transaction as the effect, so a retry replays the first response and a reused
+  key with a different request is refused (ADR 0028).
+- A per-tenant hash-chained audit log, read back as each title's timeline (ADR 0025).
+- Financial consumes `parties.party.*` into a projection and `sales.order.confirmed` into a
+  draft receivable, once per order; a cancelled order withdraws its draft.
+- `@horizon/contracts@0.6.0`: `financial.receivable.posted`, `financial.receivable.reversed`,
+  `financial.settlement.recorded` and `financial.settlement.reversed`, relayed through the
+  outbox and consumed by Webhooks.
+- Receivable list with views, search, aging buckets and totals at the reader's calendar
+  date, plus a detail with installments, settlements and history.
+- Web: Finance → Accounts receivable, where an operator drafts, classifies, posts and settles
+  and an admin reverses.
+- `make demo` collects the order it places; the browser golden path classifies, posts and
+  settles the receivable raised from the order it places.
+
+**Exit criteria**
+
+- Across random settlement and reversal histories, the outstanding balance equals the
+  original amount plus interest and penalties minus receipts and discounts, and no
+  installment goes below zero (property test).
+- The application role cannot update or delete a settlement, remove a posted schedule or
+  rewrite the audit log; the chain verifies link by link (integration tests).
+- Aging buckets add up to the outstanding balance the list and detail show.
+- Replaying a confirmation raises no second receivable; concurrent retries with one key
+  produce one title.
+
+**Non-goals**
+
+- Accounts payable and approvals (backlog item 9), which reuse this kernel.
+- Recurrence, bulk actions, attachments, forecasts, fees, credits and refunds.
+- Backfilling parties registered before Financial consumed the registry. A party appears in
+  Financial when it is next registered or described; the demo describes its customer again.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

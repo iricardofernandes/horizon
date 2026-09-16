@@ -181,3 +181,21 @@ add up to the total to the last minor unit.
 One hundredth of a percent. Shares are stored as whole basis points (10 000 is 100%) so
 that they add up exactly (ADR 0043).
 
+
+### title
+One claim — receivable or payable — split into installments and settled over time. A
+draft may be revised or cancelled; once posted it is settled or reversed, never edited
+(ADR 0042).
+
+### settlement
+Money received or paid against one installment. `received` is the cash that moved,
+`discount` reduces what is owed without cash, `interest` and `penalty` add to it. A
+settlement is undone by reversing it, with a reason, and stays in the record.
+
+### outstanding balance
+What an installment still owes: its amount plus interest and penalties minus receipts and
+discounts, over the settlements still in force. Never below zero.
+
+### aging
+Outstanding balances grouped by how late they are at a given calendar date: not yet due,
+1–30, 31–60, 61–90 and over 90 days.

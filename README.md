@@ -153,7 +153,7 @@ vendored side by side, and a cross-module import cannot resolve.
 | [`inventory/`](inventory/) | Stock balances, movements, warehouses, reservations, cost method | 3003 | 7 |
 | [`sales/`](sales/) | Customer projection, quotes, sales orders, invoicing trigger | 3004 | 7, 15 |
 | [`parties/`](parties/) | Organizations and people, their roles, tax identifiers and erasure | 3006 | 15 |
-| [`financial/`](financial/) | Categories, departments and projects, payment methods and terms; later payables and receivables | 3007 | 16 |
+| [`financial/`](financial/) | Receivables, settlements and reversals; categories, departments and projects, payment methods and terms | 3007 | 16, 17 |
 | [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, retry, DLQ, replay | 3005 | 9 |
 | [`web/`](web/) | Next.js frontend, routed and bilingual | 3000 | 10, 14 |
 | [`contracts/`](contracts/) | Published package: versioned Zod event and API schemas | — | 3 |
