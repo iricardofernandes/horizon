@@ -11,13 +11,18 @@ import type { FinancialRuntime } from '@/main/financial-runtime'
 
 const PUBLIC = 'financial:public'
 const ACTION = 'financial:action'
-export type FinancialAction = 'read' | 'configure'
+export type FinancialAction = 'read' | 'configure' | 'record' | 'reverse'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
 export const RequireFinancialAction = (action: FinancialAction) => SetMetadata(ACTION, action)
 
 export interface FinancialRequest {
   readonly headers: Readonly<Record<string, string | string[] | undefined>>
   principal?: AccessClaims
+}
+
+export function actorOf(request: FinancialRequest): string {
+  if (!request.principal) throw new UnauthorizedException()
+  return request.principal.subject
 }
 
 export function tenantOf(request: FinancialRequest): string {
@@ -27,12 +32,13 @@ export function tenantOf(request: FinancialRequest): string {
 
 /**
  * The static role map for this module (ADR 0023). Configuring the chart of categories,
- * dimensions and terms changes how every later title is classified, so it is admin-only;
- * operators and viewers read it.
+ * dimensions and terms changes how every later title is classified, so it is admin-only.
+ * Operators draft, post and settle titles. Reversing something already posted or settled
+ * undoes a fact other contexts acted on, so it stays with admins (ADR 0042).
  */
 const PERMITS: Readonly<Record<string, readonly FinancialAction[]>> = {
-  admin: ['read', 'configure'],
-  operator: ['read'],
+  admin: ['read', 'configure', 'record', 'reverse'],
+  operator: ['read', 'record'],
   viewer: ['read'],
 }
 

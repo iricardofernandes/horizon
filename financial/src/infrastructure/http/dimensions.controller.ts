@@ -1,7 +1,5 @@
 import {
-  BadRequestException,
   Body,
-  ConflictException,
   Controller,
   Get,
   HttpCode,
@@ -15,8 +13,6 @@ import {
 } from '@nestjs/common'
 import { z } from 'zod'
 import type { DimensionRegistry } from '@/application/use-cases/manage-dimensions'
-import type { Either } from '@/core/either'
-import type { UseCaseError } from '@/core/errors/use-case-error'
 import { DIMENSION_KINDS } from '@/domain/entities/analytic-dimension'
 import { CATEGORY_NATURES } from '@/domain/entities/financial-category'
 import { PAYMENT_METHOD_KINDS } from '@/domain/entities/payment-method'
@@ -28,6 +24,7 @@ import {
   RequireFinancialAction,
   tenantOf,
 } from './authorization'
+import { id, parse, unwrap } from './request-parsing'
 
 const code = z.string().trim().min(1).max(20)
 const name = z.string().trim().min(2).max(120)
@@ -61,28 +58,6 @@ const allocationInput = z.strictObject({
     .min(1)
     .max(50),
 })
-
-function parse<T>(schema: z.ZodType<T>, body: unknown): T {
-  const parsed = schema.safeParse(body)
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0]
-    throw new BadRequestException(
-      issue ? `${issue.path.join('.') || 'body'}: ${issue.message}` : 'Invalid request',
-    )
-  }
-  return parsed.data
-}
-
-function unwrap<T>(result: Either<UseCaseError, T>): T {
-  if (result.isRight()) return result.value
-  if (result.value.title === 'Conflict') throw new ConflictException(result.value.message)
-  if (result.value.title === 'Resource not found') throw new NotFoundException(result.value.message)
-  throw new BadRequestException(result.value.message)
-}
-
-function id(value: string): string {
-  return parse(z.uuid(), value)
-}
 
 @Controller()
 export class DimensionsController {

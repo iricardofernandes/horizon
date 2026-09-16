@@ -53,6 +53,10 @@ export class PaymentMethod extends AggregateRoot<PaymentMethodProps> {
     return new PaymentMethod(props, id)
   }
 
+  isActive(): boolean {
+    return this.props.active
+  }
+
   changeStatus(active: boolean, now: Date): Either<ConflictError, void> {
     if (this.props.active === active)
       return left(new ConflictError(`payment method is already ${active ? 'active' : 'inactive'}`))

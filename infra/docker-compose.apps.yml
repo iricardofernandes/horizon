@@ -255,11 +255,14 @@ services:
     depends_on:
       financial-migrate:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     environment:
       <<: *env
       PORT: '3007'
       OTEL_SERVICE_NAME: financial
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_financial
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_financial
 
   webhooks-migrate:
     <<: *service

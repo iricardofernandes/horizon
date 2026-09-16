@@ -82,6 +82,14 @@ export class FinancialCategory extends AggregateRoot<CategoryProps> {
     return new FinancialCategory(props, id)
   }
 
+  isActive(): boolean {
+    return this.props.active
+  }
+
+  get nature(): CategoryNature {
+    return this.props.nature
+  }
+
   belongsTo(tenantId: string): boolean {
     return this.props.tenantId === tenantId
   }

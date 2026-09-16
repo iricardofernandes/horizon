@@ -1,4 +1,5 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import { FinancialModuleEventHandlers } from '@/application/consume-module-events'
 import {
   ChangeRegistryStatusUseCase,
   DefineCategoryUseCase,
@@ -8,6 +9,15 @@ import {
   PreviewAllocationUseCase,
   PreviewScheduleUseCase,
 } from '@/application/use-cases/manage-dimensions'
+import {
+  CancelReceivableUseCase,
+  DraftReceivableUseCase,
+  PostReceivableUseCase,
+  RecordSettlementUseCase,
+  ReverseReceivableUseCase,
+  ReverseSettlementUseCase,
+  ReviseReceivableUseCase,
+} from '@/application/use-cases/manage-receivables'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { FinancialDatabase } from '@/infrastructure/database/drizzle/financial-database'
 import type { FinancialEnvironment } from './environment'
@@ -23,6 +33,14 @@ export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
   readonly changeStatus: ChangeRegistryStatusUseCase
   readonly previewSchedule: PreviewScheduleUseCase
   readonly previewAllocation: PreviewAllocationUseCase
+  readonly draftReceivable: DraftReceivableUseCase
+  readonly reviseReceivable: ReviseReceivableUseCase
+  readonly postReceivable: PostReceivableUseCase
+  readonly cancelReceivable: CancelReceivableUseCase
+  readonly reverseReceivable: ReverseReceivableUseCase
+  readonly recordSettlement: RecordSettlementUseCase
+  readonly reverseSettlement: ReverseSettlementUseCase
+  readonly eventHandlers: FinancialModuleEventHandlers
 
   constructor(config: FinancialEnvironment) {
     const clock = { now: () => new Date() }
@@ -42,6 +60,14 @@ export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
     this.changeStatus = new ChangeRegistryStatusUseCase(this.database, clock)
     this.previewSchedule = new PreviewScheduleUseCase(this.database)
     this.previewAllocation = new PreviewAllocationUseCase(this.database)
+    this.draftReceivable = new DraftReceivableUseCase(this.database, clock)
+    this.reviseReceivable = new ReviseReceivableUseCase(this.database, clock)
+    this.postReceivable = new PostReceivableUseCase(this.database, clock)
+    this.cancelReceivable = new CancelReceivableUseCase(this.database, clock)
+    this.reverseReceivable = new ReverseReceivableUseCase(this.database, clock)
+    this.recordSettlement = new RecordSettlementUseCase(this.database, clock)
+    this.reverseSettlement = new ReverseSettlementUseCase(this.database, clock)
+    this.eventHandlers = new FinancialModuleEventHandlers(this.database, clock)
   }
 
   onModuleInit(): Promise<void> {

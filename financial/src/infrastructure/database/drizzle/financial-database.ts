@@ -2,9 +2,16 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { type FinancialScope, FinancialUnitOfWork } from '@/application/ports/unit-of-work'
-import type { Either } from '@/core/either'
+import {
+  type CommandReceipt,
+  type EventOutcome,
+  type FinancialScope,
+  FinancialUnitOfWork,
+  type ReceivedEvent,
+} from '@/application/ports/unit-of-work'
+import { type Either, left, right } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import { ConflictError } from '@/core/errors/errors/conflict-error'
 import {
   AnalyticDimension,
   DIMENSION_KINDS,
@@ -25,7 +32,22 @@ import {
 } from '@/domain/entities/payment-method'
 import { PaymentTerm, type PaymentTermSnapshot } from '@/domain/entities/payment-term'
 import { Code, Name, Share } from '@/domain/value-objects/financial-values'
+import {
+  listCustomers,
+  listReceivables,
+  type ReceivableQuery,
+  receivableDetail,
+  receivablesSummary,
+} from './receivable-reads'
 import * as schema from './schema'
+import { auditTrail, partyProjection, titlesRepository } from './title-store'
+
+/** Carries a refused command out of its transaction, so nothing it wrote is kept. */
+class Refused<E> extends Error {
+  constructor(readonly failure: E) {
+    super('command refused')
+  }
+}
 
 type Database = PostgresJsDatabase<typeof schema>
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
@@ -60,6 +82,77 @@ export class FinancialDatabase extends FinancialUnitOfWork {
       await tx.insert(schema.tenants).values({ id: tenantId }).onConflictDoNothing()
       return this.#transactions.run({ tx }, () => work(makeScope(tx, tenantId)))
     })
+  }
+
+  async once<E, T>(
+    tenantId: string,
+    receipt: CommandReceipt,
+    work: (scope: FinancialScope) => Promise<Either<E, T>>,
+  ): Promise<Either<E | ConflictError, T>> {
+    try {
+      return await this.inTenant(tenantId, async (scope) => {
+        const tx = this.currentTransaction()
+        // Claiming first makes a concurrent retry wait on this transaction, then see its receipt.
+        const claimed = await tx
+          .insert(schema.commandReceipts)
+          .values({ tenantId, ...receipt, response: {} })
+          .onConflictDoNothing()
+          .returning({ key: schema.commandReceipts.idempotencyKey })
+        if (claimed.length === 0) {
+          const [previous] = await tx
+            .select()
+            .from(schema.commandReceipts)
+            .where(eq(schema.commandReceipts.idempotencyKey, receipt.idempotencyKey))
+          if (previous?.command !== receipt.command || previous.fingerprint !== receipt.fingerprint)
+            return left<E | ConflictError, T>(
+              new ConflictError('this Idempotency-Key was already used for a different request'),
+            )
+          return right<E | ConflictError, T>(previous.response as T)
+        }
+        const outcome = await work(scope)
+        if (outcome.isLeft()) throw new Refused(outcome.value)
+        await tx
+          .update(schema.commandReceipts)
+          .set({ response: outcome.value as object })
+          .where(eq(schema.commandReceipts.idempotencyKey, receipt.idempotencyKey))
+        return right<E | ConflictError, T>(outcome.value)
+      })
+    } catch (error) {
+      if (error instanceof Refused) return left(error.failure as E)
+      throw error
+    }
+  }
+
+  async processEvent<T>(
+    tenantId: string,
+    event: ReceivedEvent,
+    work: (scope: FinancialScope) => Promise<T>,
+  ): Promise<EventOutcome<T>> {
+    return this.inTenant(tenantId, async (scope) => {
+      const claimed = await this.currentTransaction()
+        .insert(schema.inbox)
+        .values({ ...event, tenantId })
+        .onConflictDoNothing({ target: [schema.inbox.sourceModule, schema.inbox.eventId] })
+        .returning({ eventId: schema.inbox.eventId })
+      if (claimed.length === 0) return { processed: false as const }
+      return { processed: true as const, value: await work(scope) }
+    })
+  }
+
+  listReceivables(tenantId: string, query: ReceivableQuery) {
+    return this.read(tenantId, (tx) => listReceivables(tx, query))
+  }
+
+  receivableDetail(tenantId: string, id: string, today: string) {
+    return this.read(tenantId, (tx) => receivableDetail(tx, id, today))
+  }
+
+  receivablesSummary(tenantId: string, today: string) {
+    return this.read(tenantId, (tx) => receivablesSummary(tx, today))
+  }
+
+  listCustomers(tenantId: string) {
+    return this.read(tenantId, (tx) => listCustomers(tx))
   }
 
   /** Read models for the HTTP boundary, ordered the way people scan them: by code. */
@@ -108,6 +201,12 @@ export class FinancialDatabase extends FinancialUnitOfWork {
 
   async close(): Promise<void> {
     await this.#client.end({ timeout: 5 })
+  }
+
+  private currentTransaction(): Transaction {
+    const current = this.#transactions.getStore()
+    if (!current) throw new Error('This operation requires a tenant transaction')
+    return current.tx
   }
 
   private read<T>(tenantId: string, query: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -219,6 +318,9 @@ function makeScope(tx: Transaction, tenantId: string): FinancialScope {
     }
   return {
     tenantId,
+    titles: titlesRepository(tx, tenantId),
+    parties: partyProjection(tx, tenantId),
+    audit: auditTrail(tx, tenantId),
     categories: {
       findById: async (id) => {
         const [row] = await tx
