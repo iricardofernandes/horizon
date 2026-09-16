@@ -9,12 +9,23 @@ const partyRoleSchema = z.enum(PARTY_ROLES)
 const partyId = uuidSchema.describe('Party identifier, shared by every context that projects it')
 const roles = z.array(partyRoleSchema).max(PARTY_ROLES.length)
 /**
- * The email pattern as published in 0.4.0, pinned here. `z.email()` emits whatever regex the
- * installed zod ships, so a routine zod upgrade would otherwise rewrite a published schema
- * in place without a version change (ADR 0030).
+ * The email pattern as published in 0.4.0, pinned here byte for byte. `z.email()` emits
+ * whatever regex the installed zod ships, so a routine zod upgrade would otherwise rewrite
+ * a published schema in place without a version change (ADR 0030).
+ *
+ * It is assembled from parts on purpose: the bundler folds a constant regex into a literal
+ * and drops escapes it considers redundant, which keeps the meaning but changes the
+ * published text the compatibility gate compares.
  */
-const PUBLISHED_EMAIL_PATTERN =
-  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/
+const PUBLISHED_EMAIL_PATTERN = new RegExp(
+  [
+    '^(?!\\.)(?!.*\\.\\.)',
+    "([A-Za-z0-9_'+\\-\\.]*)",
+    '[A-Za-z0-9_+-]@',
+    '([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+',
+    '[A-Za-z]{2,}$',
+  ].join(''),
+)
 
 const identity = {
   legalName: z.string().min(2).max(160),
