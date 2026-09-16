@@ -32,6 +32,7 @@ try {
   const pageErrors = []
   const telemetryRequests = []
   let orderTraceId = ''
+  let placedOrderId = ''
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('response', (response) => {
     if (response.url().includes('/v1/traces'))
@@ -45,6 +46,11 @@ try {
     if (request.method() !== 'POST' || !request.url().includes('/api/horizon/sales/orders')) return
     const traceparent = request.headers().traceparent
     orderTraceId = traceparent?.split('-')[1] ?? ''
+  })
+  page.on('response', async (response) => {
+    const request = response.request()
+    if (request.method() !== 'POST' || !response.url().endsWith('/api/horizon/sales/orders')) return
+    if (response.ok()) placedOrderId = (await response.json().catch(() => ({}))).orderId ?? ''
   })
 
   await page.goto(`${appUrl}/login`, { waitUntil: 'domcontentloaded' })
@@ -174,6 +180,36 @@ try {
   await page.getByRole('button', { name: 'Close dialog' }).click()
   assert(orderTraceId, 'the order request did not carry traceparent')
 
+  // The confirmed order reaches Financial as a draft receivable; a person classifies it,
+  // posts it and records the payment (ADR 0041, ADR 0042).
+  assert(placedOrderId, 'the placed order id was not captured')
+  const receivableNumber = `SO-${placedOrderId.slice(-8).toUpperCase()}`
+  await page.getByRole('link', { name: 'Receivables' }).click()
+  await page.waitForURL(`${appUrl}/app/finance/receivables`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Accounts receivable', exact: true }).waitFor()
+  await waitUntil(
+    () =>
+      page.evaluate(async (orderId) => {
+        const response = await fetch('/api/horizon/financial/receivables?view=draft&limit=100')
+        if (!response.ok) return false
+        const { data } = await response.json()
+        return data.some((row) => row.origin.orderId === orderId)
+      }, placedOrderId),
+    'the draft receivable raised from the placed order',
+  )
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: `Open receivable ${receivableNumber}` }).click()
+  const receivableDialog = page.getByRole('dialog', { name: `Receivable ${receivableNumber}` })
+  await receivableDialog.getByRole('button', { name: 'Save classification' }).click()
+  await page.getByText('Classification saved.').waitFor()
+  await receivableDialog.getByRole('button', { name: 'Post', exact: true }).click()
+  await page.getByText('Receivable posted.').waitFor()
+  await receivableDialog.getByRole('button', { name: 'Settle installment 1' }).click()
+  await receivableDialog.getByRole('button', { name: 'Record settlement' }).click()
+  await page.getByText('Settlement recorded.').waitFor()
+  await receivableDialog.getByText('settled', { exact: true }).first().waitFor()
+  await receivableDialog.getByRole('button', { name: 'Close dialog' }).click()
+
   await page.getByRole('link', { name: 'Webhooks' }).click()
   await page.waitForURL(`${appUrl}/app/developers/webhooks`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Webhooks', exact: true }).waitFor()
@@ -250,6 +286,7 @@ try {
     ['People and access', 'People & access'],
     ['API keys', 'API keys'],
     ['Classifications', 'Classifications'],
+    ['Receivables', 'Accounts receivable'],
   ]) {
     await page.getByRole('link', { name: screen[0], exact: true }).click()
     await page.getByRole('heading', { name: screen[1], exact: true }).waitFor()
@@ -292,6 +329,14 @@ async function waitForTrace(traceId) {
     await new Promise((resolve) => setTimeout(resolve, 500))
   } while (Date.now() < deadline)
   return []
+}
+
+async function waitUntil(check, description, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs
+  while (!(await check())) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}`)
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
 }
 
 async function firstExisting(paths) {

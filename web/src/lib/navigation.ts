@@ -5,6 +5,7 @@ import {
   ChartBar,
   FileText,
   Gear,
+  HandCoins,
   Key,
   Package,
   PaperPlaneTilt,
@@ -85,6 +86,18 @@ export const navigation: readonly NavigationGroup[] = [
         labelKey: 'orders',
         icon: ShoppingCart,
         module: 'sales',
+        demo: false,
+      },
+    ],
+  },
+  {
+    labelKey: 'finance',
+    entries: [
+      {
+        href: '/app/finance/receivables',
+        labelKey: 'receivables',
+        icon: HandCoins,
+        module: 'financial',
         demo: false,
       },
     ],

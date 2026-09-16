@@ -1995,3 +1995,177 @@ tbody tr:last-child td {
 .demo-note code {
   color: var(--color-text);
 }
+
+/* Accounts receivable */
+.receivables-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.receivables-summary strong {
+  overflow-wrap: anywhere;
+}
+.receivables-overdue-card strong {
+  color: var(--color-danger-text);
+}
+.receivables-aging {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+}
+.receivables-aging h2 {
+  margin: 0;
+  font-size: 13px;
+}
+.receivables-aging dl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.receivables-aging dt,
+.receivable-facts dt {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.receivables-aging dd,
+.receivable-facts dd {
+  margin: 4px 0 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.receivables-search {
+  max-width: 280px;
+}
+.receivable-origin {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+.receivable-dialog {
+  width: min(880px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
+.receivable-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.receivable-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.receivable-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+.receivable-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.receivable-section h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.receivable-inline-form {
+  display: grid;
+  flex: 1 1 100%;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  background: var(--color-surface-raised);
+}
+.form-grid.four-columns {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.receivables-toolbar .ui-tabs-list {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.receivables-toolbar .ui-tab {
+  white-space: nowrap;
+}
+td.numeric,
+th.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.receivable-timeline {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.receivable-timeline li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.receivable-timeline small {
+  color: var(--color-text-muted);
+}
+.badge-posted,
+.badge-settled,
+.badge-recorded {
+  background: var(--jade-3);
+  color: var(--jade-11);
+}
+.badge-open,
+.badge-partially-settled {
+  background: var(--amber-3);
+  color: var(--amber-11);
+}
+.badge-overdue,
+.badge-reversed,
+.badge-cancelled {
+  background: var(--red-3);
+  color: var(--red-11);
+}
+@media (max-width: 1050px) {
+  .receivables-summary,
+  .form-grid.four-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .receivables-aging dl,
+  .receivable-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .receivables-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .receivables-aging dl,
+  .receivable-facts,
+  .form-grid.four-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .receivables-search {
+    max-width: none;
+  }
+}
+.receivable-classify {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  margin-bottom: 12px;
+}
+@media (max-width: 520px) {
+  .receivable-classify {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
