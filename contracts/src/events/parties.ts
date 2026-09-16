@@ -8,10 +8,18 @@ const partyRoleSchema = z.enum(PARTY_ROLES)
 
 const partyId = uuidSchema.describe('Party identifier, shared by every context that projects it')
 const roles = z.array(partyRoleSchema).max(PARTY_ROLES.length)
+/**
+ * The email pattern as published in 0.4.0, pinned here. `z.email()` emits whatever regex the
+ * installed zod ships, so a routine zod upgrade would otherwise rewrite a published schema
+ * in place without a version change (ADR 0030).
+ */
+const PUBLISHED_EMAIL_PATTERN =
+  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/
+
 const identity = {
   legalName: z.string().min(2).max(160),
   tradeName: z.string().min(2).max(160).nullable(),
-  email: z.email().max(254),
+  email: z.email({ pattern: PUBLISHED_EMAIL_PATTERN }).max(254),
   phone: z.string().regex(/^\+?\d{8,15}$/),
   address: z.string().min(5).max(500),
 }
