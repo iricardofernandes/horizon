@@ -51,10 +51,10 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "uuidv7": "^1.2.1",
-    "zod": "^4.5.4"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.12",
+    "@biomejs/biome": "^2.5.13",
     "@faker-js/faker": "^10.6.0",
     "@nestjs/testing": "^12.0.1",
     "@swc-node/register": "^1.12.1",
@@ -64,7 +64,7 @@
     "@testcontainers/rabbitmq": "^12.1.0",
     "@testcontainers/redis": "^12.1.0",
     "@types/amqplib": "^0.10.8",
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.5.1",
     "@types/opossum": "^8.1.9",
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^5.0.0",
