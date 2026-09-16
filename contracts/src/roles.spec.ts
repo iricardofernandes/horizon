@@ -17,9 +17,7 @@ describe('role assignments', () => {
   })
 
   it('rejects an unknown module', () => {
-    expect(roleAssignmentSchema.safeParse({ module: 'payroll', role: 'admin' }).success).toBe(
-      false,
-    )
+    expect(roleAssignmentSchema.safeParse({ module: 'payroll', role: 'admin' }).success).toBe(false)
   })
 
   it('declares roles for every module, with no duplicates', () => {

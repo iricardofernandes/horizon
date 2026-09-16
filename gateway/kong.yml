@@ -88,6 +88,18 @@ services:
           - /parties
         strip_path: true
 
+  - name: financial
+    url: http://financial:3007
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: financial-api
+        paths:
+          - /financial
+        strip_path: true
+
   - name: webhooks
     url: http://webhooks:3005
     retries: 3

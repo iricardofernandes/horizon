@@ -262,7 +262,7 @@ never disagree:
 | Context | Port | Introduced in |
 |---|---|---|
 | `parties` | 3006 | Phase B |
-| `financial` | 3007 | Phase C |
+| `financial` | 3007 | Phase B (dimensions), Phase C (titles) |
 | `treasury` | 3008 | Phase D |
 | `ledger` | 3009 | Phase F |
 | `procurement` | 3010 | Phase G |

@@ -1,4 +1,12 @@
-const roots = new Set(['catalog', 'identity', 'inventory', 'parties', 'sales', 'webhooks'])
+const roots = new Set([
+  'catalog',
+  'financial',
+  'identity',
+  'inventory',
+  'parties',
+  'sales',
+  'webhooks',
+])
 
 export function buildUpstreamPath(path: string[], search = ''): string | null {
   if (

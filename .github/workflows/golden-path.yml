@@ -31,6 +31,7 @@ jobs:
             sales/package-lock.json
             webhooks/package-lock.json
             parties/package-lock.json
+            financial/package-lock.json
             web/package-lock.json
 
       - name: start the platform
@@ -45,7 +46,7 @@ jobs:
 
       - name: install golden-path modules
         run: |
-          for module in identity catalog inventory sales webhooks parties; do
+          for module in identity catalog inventory sales webhooks parties financial; do
             npm ci --prefix "$module" --no-audit --no-fund
           done
 
@@ -67,7 +68,7 @@ jobs:
         if: failure()
         run: |
           docker compose -f infra/docker-compose.yml --env-file infra/.env ps
-          for service in postgres rabbitmq otel-collector jaeger kong identity catalog inventory sales webhooks parties web; do
+          for service in postgres rabbitmq otel-collector jaeger kong identity catalog inventory sales webhooks parties financial web; do
             echo "::group::$service"
             docker logs "horizon-$service" 2>&1 | tail -100 || true
             echo "::endgroup::"

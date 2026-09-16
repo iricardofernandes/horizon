@@ -235,6 +235,32 @@ services:
       DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_parties
       PARTY_BLIND_INDEX_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
 
+  financial-migrate:
+    <<: *service
+    build:
+      context: ../financial
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_financial
+    command: ["npm", "run", "db:migrate"]
+
+  financial:
+    <<: *service
+    build:
+      context: ../financial
+      network: host
+    container_name: horizon-financial
+    depends_on:
+      financial-migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *env
+      PORT: '3007'
+      OTEL_SERVICE_NAME: financial
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_financial
+
   webhooks-migrate:
     <<: *service
     build:

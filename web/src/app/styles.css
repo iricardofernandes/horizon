@@ -808,6 +808,8 @@ tbody tr:last-child td {
 }
 .catalog-tabs {
   display: grid;
+  /* An implicit `auto` track grows to the tab list's full width; a narrow screen must scroll the tabs instead. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 .catalog-toolbar {

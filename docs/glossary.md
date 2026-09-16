@@ -159,3 +159,25 @@ What a party is to the business: `customer`, `supplier`, `carrier`, `prospect` o
 `partner`. A set, not a type — one company being both a customer and a supplier is the
 ordinary case, and revoking a role never deletes the party.
 
+---
+
+## Financial
+
+### financial category
+What money is for — revenue or expense — as a node in a tree of at most four levels. A
+child always shares its parent's nature, so a cash flow or a DRE built on the tree cannot
+count an expense as revenue.
+
+### department and project
+Who money is for. An amount is allocated across them by percentage, and the allocation
+must total exactly 100%.
+
+### payment term
+How an amount is split into installments and how many days after issue each falls due —
+"30/60/90". Shares total exactly 100%, and the installment amounts are allocated so they
+add up to the total to the last minor unit.
+
+### basis point
+One hundredth of a percent. Shares are stored as whole basis points (10 000 is 100%) so
+that they add up exactly (ADR 0043).
+

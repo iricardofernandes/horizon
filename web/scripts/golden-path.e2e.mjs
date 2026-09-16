@@ -215,6 +215,18 @@ try {
   await page.getByRole('dialog', { name: 'Create API key' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
+  await page.getByRole('link', { name: 'Classifications' }).click()
+  await page.waitForURL(`${appUrl}/app/administration/classifications`, {
+    waitUntil: 'domcontentloaded',
+  })
+  await page.getByRole('heading', { name: 'Classifications', exact: true }).waitFor()
+  await page.getByRole('tab', { name: /Payment terms/ }).click()
+  await page.getByRole('button', { name: 'New payment term' }).click()
+  const termDialog = page.getByRole('dialog', { name: 'New payment term' })
+  await termDialog.getByLabel('Percentage').fill('99')
+  await termDialog.getByText('Total: 99%').waitFor()
+  await termDialog.getByRole('button', { name: 'Close dialog' }).click()
+
   await page.getByRole('link', { name: 'Workspace', exact: true }).click()
   await page.waitForURL(`${appUrl}/app/administration/workspace`, {
     waitUntil: 'domcontentloaded',
@@ -237,6 +249,7 @@ try {
     ['Delivery logs', 'Delivery logs'],
     ['People and access', 'People & access'],
     ['API keys', 'API keys'],
+    ['Classifications', 'Classifications'],
   ]) {
     await page.getByRole('link', { name: screen[0], exact: true }).click()
     await page.getByRole('heading', { name: screen[1], exact: true }).waitFor()

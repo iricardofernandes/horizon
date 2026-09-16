@@ -17,7 +17,15 @@ import { z } from 'zod'
  * happens in the module that owns the subject.
  */
 
-export const MODULES = ['identity', 'catalog', 'inventory', 'sales', 'webhooks', 'parties', 'financial'] as const
+export const MODULES = [
+  'identity',
+  'catalog',
+  'inventory',
+  'sales',
+  'webhooks',
+  'parties',
+  'financial',
+] as const
 
 export const moduleNameSchema = z.enum(MODULES)
 export type ModuleName = z.infer<typeof moduleNameSchema>

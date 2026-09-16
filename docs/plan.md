@@ -699,6 +699,46 @@ projection of it (ADR 0040).
 
 ---
 
+## Phase 16 — Financial dimensions
+
+**Complete.** Backlog item 7 of the [expansion plan](erp-expansion-plan.md). The
+`financial/` context exists, and holds the dimensions every title will be classified by
+before a single title exists (ADR 0041).
+
+**Deliverables**
+
+- `financial/` on port 3007: a revenue and expense category tree, departments and
+  projects, payment methods and payment terms, each deactivated rather than deleted.
+- Payment terms whose installment shares must total exactly 100% and whose due days never
+  go backwards, with `POST /financial/payment-terms/:id/schedule` previewing the
+  installments an amount produces on calendar dates.
+- Allocation by percentage across departments and projects,
+  `POST /financial/allocations/preview`, refused unless it totals exactly 100% across
+  active dimensions of the same workspace.
+- Money allocation that never loses or invents a minor unit (largest remainder), shares
+  held as basis points and dates as calendar dates (ADR 0010, ADR 0043).
+- `@horizon/contracts@0.5.0` declaring the `financial` module, with every service moved to
+  it before any role in it could be granted.
+- Web: Administration → Classifications, readable by every financial role and editable by
+  a financial admin.
+
+**Exit criteria**
+
+- A thousand random splits add up to their totals exactly, and each part is within one
+  minor unit of its exact share (property test).
+- A child category cannot change nature, a tree stops at four levels, codes are unique per
+  workspace and a parent from another workspace is refused (integration tests).
+- A token carrying a financial role is accepted by Identity and Catalog; both golden paths
+  pass, including Classifications at 390px.
+
+**Non-goals**
+
+- Sellers and buyers, which are people and belong with Identity or Parties rather than with
+  money; import of categories from CSV; a starter chart of categories.
+- Events for these registries. Nothing consumes them yet, so none are published.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.
