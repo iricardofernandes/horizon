@@ -2,12 +2,9 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { ApplyStockReservedUseCase } from '@/application/use-cases/apply-reservation-outcome'
-import {
-  CreateCustomerUseCase,
-  EraseCustomerUseCase,
-} from '@/application/use-cases/manage-customers'
 import { AcceptQuoteUseCase, CreateQuoteUseCase } from '@/application/use-cases/manage-quotes'
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
+import { ForgetPartyUseCase, ProjectPartyUseCase } from '@/application/use-cases/project-parties'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
 
@@ -189,21 +186,27 @@ it('uses an RLS-bound application role and protects relay-owned outbox state', a
 
 it('persists priced quotes and crypto-shreds customer personal data', async () => {
   const fixture = await seedCatalogItem()
-  const customers = new CreateCustomerUseCase(database, clock)
-  const created = await customers.execute({
-    tenantId: fixture.tenantId,
-    name: 'Maria Silva',
-    taxId: '123.456.789-01',
-    email: 'maria@example.com',
-    phone: '+55 11 99999-9999',
-    address: 'Rua Um, 42, São Paulo',
-  })
-  if (created.isLeft()) throw created.value
+  const partyId = randomUUID()
+  const projected = await database.inTenant(fixture.tenantId, (scope) =>
+    new ProjectPartyUseCase(clock).executeInScope(scope, {
+      tenantId: fixture.tenantId,
+      partyId,
+      legalName: 'Maria Silva',
+      email: 'maria@example.com',
+      phone: '+55 11 99999-9999',
+      address: 'Rua Um, 42, São Paulo',
+      roles: ['customer'],
+      active: true,
+    }),
+  )
+  if (projected.isLeft()) throw projected.value
+  const created = { value: { customerId: partyId } }
   const [stored] =
     await administrator`select * from customers where id = ${created.value.customerId}`
   expect(stored?.name_ciphertext).not.toContain('Maria')
   expect(stored?.email_ciphertext).not.toContain('maria@example.com')
-  expect(stored?.tax_id_index).not.toContain('12345678901')
+  // The registry owns the tax identifier; the projection never receives it.
+  expect(stored?.tax_id_ciphertext).toBeNull()
 
   const quote = await new CreateQuoteUseCase(database, clock, 15).execute({
     tenantId: fixture.tenantId,
@@ -220,11 +223,10 @@ it('persists priced quotes and crypto-shreds customer personal data', async () =
     where id = ${quote.value.quoteId}`
   expect(persistedQuote).toEqual({ status: 'accepted', total: '3125', currency: 'BRL' })
 
-  const erased = await new EraseCustomerUseCase(database, clock).execute({
-    tenantId: fixture.tenantId,
-    customerId: created.value.customerId,
-  })
-  expect(erased.isRight()).toBe(true)
+  const erased = await database.inTenant(fixture.tenantId, (scope) =>
+    new ForgetPartyUseCase(clock).executeInScope(scope, created.value.customerId),
+  )
+  expect(erased).toBe(true)
   const [key] = await administrator`select material, erased_at from customer_data_keys
     where id = ${created.value.customerId}`
   expect(key?.material).toBeNull()

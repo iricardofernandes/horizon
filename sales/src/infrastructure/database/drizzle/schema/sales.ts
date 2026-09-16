@@ -57,8 +57,8 @@ export const customers = pgTable(
       .notNull()
       .references(() => tenants.id),
     nameCiphertext: text('name_ciphertext').notNull(),
-    taxIdCiphertext: text('tax_id_ciphertext').notNull(),
-    taxIdIndex: text('tax_id_index').notNull(),
+    taxIdCiphertext: text('tax_id_ciphertext'),
+    taxIdIndex: text('tax_id_index'),
     emailCiphertext: text('email_ciphertext').notNull(),
     phoneCiphertext: text('phone_ciphertext').notNull(),
     addressCiphertext: text('address_ciphertext').notNull(),

@@ -1,9 +1,5 @@
 import { type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
 import { SalesModuleEventHandlers } from '@/application/consume-module-events'
-import {
-  CreateCustomerUseCase,
-  EraseCustomerUseCase,
-} from '@/application/use-cases/manage-customers'
 import { AcceptQuoteUseCase, CreateQuoteUseCase } from '@/application/use-cases/manage-quotes'
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
@@ -14,8 +10,6 @@ import type { SalesEnvironment } from './environment'
 export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
   readonly database: SalesDatabase
   readonly eventHandlers: SalesModuleEventHandlers
-  readonly createCustomer: CreateCustomerUseCase
-  readonly eraseCustomer: EraseCustomerUseCase
   readonly createQuote: CreateQuoteUseCase
   readonly acceptQuote: AcceptQuoteUseCase
   readonly placeOrder: PlaceOrderUseCase
@@ -37,8 +31,6 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
     )
     this.eventHandlers = new SalesModuleEventHandlers(this.database, clock)
-    this.createCustomer = new CreateCustomerUseCase(this.database, clock)
-    this.eraseCustomer = new EraseCustomerUseCase(this.database, clock)
     this.createQuote = new CreateQuoteUseCase(
       this.database,
       clock,

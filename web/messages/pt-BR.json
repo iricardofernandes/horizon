@@ -33,6 +33,7 @@
       "developers": "Desenvolvedores",
       "inventory": "Estoque",
       "overview": "Visão geral",
+      "registrations": "Cadastros",
       "sales": "Vendas"
     },
     "items": {
@@ -43,6 +44,7 @@
       "items": "Itens",
       "orders": "Pedidos",
       "overview": "Visão geral",
+      "parties": "Pessoas e empresas",
       "people": "Pessoas e acessos",
       "quotes": "Orçamentos",
       "webhooks": "Webhooks",
@@ -357,6 +359,7 @@
     "catalog": "Catálogo",
     "identity": "Identidade",
     "inventory": "Estoque",
+    "parties": "Cadastros",
     "sales": "Vendas",
     "webhooks": "Webhooks"
   },
@@ -541,5 +544,44 @@
     "units": "Unidades",
     "unknownItem": "Item desconhecido",
     "viewOnly": "Somente leitura"
+  },
+  "parties": {
+    "copy": "Cada empresa e pessoa com quem o negócio se relaciona, uma única vez — com os papéis que cada uma desempenha.",
+    "create": "Novo cadastro",
+    "createDescription": "Um CPF/CNPJ, um cadastro. Uma empresa já cadastrada ganha um papel em vez de um novo registro.",
+    "createFailed": "O cadastro não pôde ser criado.",
+    "createSubmit": "Cadastrar",
+    "createTitle": "Novo cadastro",
+    "created": "Cadastro criado.",
+    "emptyCopy": "Crie um cadastro ou ajuste sua busca.",
+    "emptyTitle": "Nenhum cadastro encontrado",
+    "eyebrow": "Cadastros",
+    "kind": "Tipo",
+    "noRoles": "Sem papel",
+    "party": "Cadastro",
+    "roleChangeFailed": "O papel não pôde ser alterado.",
+    "roleGranted": "{name} agora é {role}.",
+    "roleRevoked": "{name} deixou de ser {role}.",
+    "roles": "Papéis",
+    "rolesDescription": "O cadastro mantém seu identificador quando os papéis mudam; documentos que o referenciam continuam válidos.",
+    "rolesHelp": "Escolha ao menos o papel que este cadastro desempenha hoje.",
+    "rolesTitle": "Papéis de {name}",
+    "search": "Buscar cadastros",
+    "searchPlaceholder": "Buscar nome ou e-mail…",
+    "status": "Status",
+    "taxId": "CPF/CNPJ",
+    "title": "Pessoas e empresas",
+    "tradeName": "Nome fantasia"
+  },
+  "partyRoles": {
+    "carrier": "transportadora",
+    "customer": "cliente",
+    "partner": "parceiro",
+    "prospect": "prospect",
+    "supplier": "fornecedor"
+  },
+  "partyKinds": {
+    "organization": "Empresa",
+    "person": "Pessoa"
   }
 }

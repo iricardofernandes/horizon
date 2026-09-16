@@ -37,7 +37,7 @@ export class CreateQuoteUseCase {
   ): Promise<Either<QuoteError, { quoteId: string; expiresAt: Date }>> {
     const customer = await scope.customers.findById(request.customerId)
     if (!customer) return left(new ResourceNotFoundError('customer was not found'))
-    if (!customer.isActive()) return left(new ConflictError('customer has been erased'))
+    if (!customer.isActive()) return left(new ConflictError('customer is no longer active'))
     if (request.lines.length === 0)
       return left(new InvalidInputError('/lines', 'a quote requires at least one line'))
     const lines = await this.buildLines(scope, request.lines)

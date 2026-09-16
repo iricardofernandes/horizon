@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-MODULES=(identity catalog inventory sales webhooks)
+MODULES=(identity catalog inventory sales webhooks parties)
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<-SQL
   CREATE ROLE horizon_owner LOGIN PASSWORD '${HORIZON_OWNER_PASSWORD:-horizon}'

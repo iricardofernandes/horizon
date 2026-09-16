@@ -144,3 +144,18 @@ from its token, and every query runs inside a transaction that has declared it.
 The only way to reach the database. It opens a transaction, issues
 `SET LOCAL app.current_tenant`, and runs the caller's work. The Drizzle client itself is
 never exported, so no repository can bypass it.
+
+---
+
+## Registrations
+
+### party
+An organization or a natural person the business deals with, recorded once per tax
+identifier in `parties/` (ADR 0040). Other contexts reference it by its id and keep their
+own projection of the fields they need.
+
+### party role
+What a party is to the business: `customer`, `supplier`, `carrier`, `prospect` or
+`partner`. A set, not a type — one company being both a customer and a supplier is the
+ordinary case, and revoking a role never deletes the party.
+

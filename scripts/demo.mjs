@@ -14,6 +14,7 @@ const catalogRequire = createRequire(join(root, 'catalog/package.json'))
 const inventoryRequire = createRequire(join(root, 'inventory/package.json'))
 const salesRequire = createRequire(join(root, 'sales/package.json'))
 const webhooksRequire = createRequire(join(root, 'webhooks/package.json'))
+const partiesRequire = createRequire(join(root, 'parties/package.json'))
 const postgres = salesRequire('postgres')
 const { drizzle } = salesRequire('drizzle-orm/postgres-js')
 const { migrate } = salesRequire('drizzle-orm/postgres-js/migrator')
@@ -74,6 +75,7 @@ try {
   const inventoryUrls = moduleUrls('inventory')
   const salesUrls = moduleUrls('sales')
   const webhooksUrls = moduleUrls('webhooks')
+  const partiesUrls = moduleUrls('parties')
   const blindIndexKey = Buffer.from(
     (await readFile(join(root, 'infra/keys/blind-index.key'), 'utf8')).trim(),
     'hex',
@@ -93,6 +95,13 @@ try {
       blindIndexKey: Buffer.from('0'.repeat(64)),
     },
   })
+  const partiesDb = new modules.PartiesDatabase({
+    url: partiesUrls.app,
+    privacy: {
+      secretBox: new modules.PartiesSecretBox(),
+      blindIndexKey: Buffer.from('0'.repeat(64), 'hex'),
+    },
+  })
   const webhooksDb = new modules.WebhookDatabase({
     appUrl: webhooksUrls.app,
     workerUrl: webhooksUrls.relay,
@@ -106,6 +115,7 @@ try {
   resources.push(() => inventoryDb.close())
   resources.push(() => salesDb.close())
   resources.push(() => webhooksDb.close())
+  resources.push(() => partiesDb.close())
   resources.push(() => identityAdmin.end())
   resources.push(() => inventoryAdmin.end())
   resources.push(() => salesAdmin.end())
@@ -123,7 +133,6 @@ try {
     catalog.itemId,
   )
   await seedSalesProjection(salesAdmin, identity.tenantId, catalog.itemId)
-  const customerId = await seedCustomer(modules, salesDb, identity.tenantId, clock)
 
   const inventoryHandlers = new modules.InventorySalesEventHandlers(inventoryDb, clock, 1800)
   const salesHandlers = new modules.SalesModuleEventHandlers(salesDb, clock)
@@ -217,6 +226,8 @@ try {
     inventoryPublisher,
   )
   const salesRelay = new modules.SalesOutboxRelay(salesUrls.relay, salesPublisher)
+  const partiesRelay = new modules.PartiesOutboxRelay(partiesUrls.relay, salesPublisher)
+  resources.push(() => partiesRelay.close())
   resources.push(() => catalogRelay.close())
   resources.push(() => inventoryRelay.close())
   resources.push(() => salesRelay.close())
@@ -227,6 +238,17 @@ try {
   // Flush seed events as well. Sales is reconciled above so the demo remains recoverable
   // if only one module database was reset between runs.
   await flushAll(catalogRelay)
+
+  // The customer is a party (ADR 0040): registered in the registry, published, and
+  // projected by Sales through the same consumer the service runs.
+  const customerId = await seedCustomer(modules, partiesDb, salesAdmin, identity.tenantId, clock)
+  await flushUntil(
+    partiesRelay,
+    () =>
+      rowOrNull(salesAdmin`select id from customers
+        where tenant_id = ${identity.tenantId} and id = ${customerId} and status = 'active'`),
+    'the Sales projection of the demo customer',
+  )
 
   const [before] = await inventoryAdmin`select on_hand from stock_balances
     where tenant_id = ${identity.tenantId} and item_id = ${catalog.itemId}
@@ -415,12 +437,20 @@ function loadModules() {
     ...from(salesRequire, 'sales/dist/infrastructure/database/drizzle/sales-database.js'),
     ...from(salesRequire, 'sales/dist/infrastructure/cryptography/aes-gcm-secret-box.js'),
     ...from(salesRequire, 'sales/dist/application/consume-module-events.js'),
-    ...from(salesRequire, 'sales/dist/application/use-cases/manage-customers.js'),
     ...from(salesRequire, 'sales/dist/application/use-cases/place-order.js'),
   }
   const salesTransport = from(
     salesRequire,
     'sales/dist/infrastructure/messaging/rabbitmq-transport.js',
+  )
+  const parties = {
+    ...from(partiesRequire, 'parties/dist/infrastructure/database/drizzle/parties-database.js'),
+    ...from(partiesRequire, 'parties/dist/infrastructure/cryptography/aes-gcm-secret-box.js'),
+    ...from(partiesRequire, 'parties/dist/application/use-cases/manage-parties.js'),
+  }
+  const partiesTransport = from(
+    partiesRequire,
+    'parties/dist/infrastructure/messaging/rabbitmq-transport.js',
   )
   const webhooks = {
     ...from(webhooksRequire, 'webhooks/dist/infrastructure/database/webhook-database.js'),
@@ -450,7 +480,10 @@ function loadModules() {
     SalesDatabase: sales.SalesDatabase,
     SalesSecretBox: sales.AesGcmSecretBox,
     SalesModuleEventHandlers: sales.SalesModuleEventHandlers,
-    CreateCustomerUseCase: sales.CreateCustomerUseCase,
+    PartiesDatabase: parties.PartiesDatabase,
+    PartiesSecretBox: parties.AesGcmSecretBox,
+    RegisterPartyUseCase: parties.RegisterPartyUseCase,
+    PartiesOutboxRelay: partiesTransport.OutboxRelay,
     PlaceOrderUseCase: sales.PlaceOrderUseCase,
     SalesConsumer: salesTransport.RabbitMqEventConsumer,
     SalesPublisher: salesTransport.RabbitMqEventPublisher,
@@ -483,7 +516,7 @@ async function loadEnv(path) {
 }
 
 async function migrateModules() {
-  for (const name of ['identity', 'catalog', 'inventory', 'sales']) {
+  for (const name of ['identity', 'catalog', 'inventory', 'sales', 'parties']) {
     const client = postgres(moduleUrls(name).owner, { max: 1, connect_timeout: 5 })
     try {
       await migrate(drizzle(client), {
@@ -559,14 +592,19 @@ async function seedIdentity(modules, database, admin, clock) {
         { module: 'inventory', role: 'admin' },
         { module: 'sales', role: 'admin' },
         { module: 'webhooks', role: 'admin' },
+        { module: 'parties', role: 'admin' },
       ],
       actor: { type: 'user', id: ownerId },
     })
     if (registered.isLeft()) throw registered.value
     return { tenantId, ownerId, operatorId: registered.value.userId }
   }
-  if (!operator.holds({ module: 'identity', role: 'owner' })) {
-    const granted = operator.grant({ module: 'identity', role: 'owner' }, clock.now())
+  for (const assignment of [
+    { module: 'identity', role: 'owner' },
+    { module: 'parties', role: 'admin' },
+  ]) {
+    if (operator.holds(assignment)) continue
+    const granted = operator.grant(assignment, clock.now())
     if (granted.isLeft()) throw granted.value
     await database.inTenant(tenantId, (scope) => scope.users.save(operator))
   }
@@ -646,21 +684,30 @@ async function seedSalesProjection(admin, tenantId, itemId) {
       updated_at = now()`
 }
 
-async function seedCustomer(modules, database, tenantId, clock) {
-  const existing = await database.inTenant(tenantId, (scope) =>
-    scope.customers.findByTaxId(DEMO.customerTaxId),
+async function seedCustomer(modules, parties, salesAdmin, tenantId, clock) {
+  const existing = await parties.inTenant(tenantId, (scope) =>
+    scope.parties.findByTaxId(DEMO.customerTaxId),
   )
   if (existing) return existing.id.toString()
-  const created = await new modules.CreateCustomerUseCase(database, clock).execute({
+  // A customer Sales registered before the registry existed keeps its identifier.
+  const legacyIndex = createHmac('sha256', Buffer.from('0'.repeat(64), 'hex'))
+    .update(`${tenantId}:${DEMO.customerTaxId}`)
+    .digest('hex')
+  const legacy = await rowOrNull(salesAdmin`select id from customers
+    where tenant_id = ${tenantId} and tax_id_index = ${legacyIndex}`)
+  const registered = await new modules.RegisterPartyUseCase(parties, clock).execute({
     tenantId,
-    name: 'Horizon Coffee Buyer',
+    ...(legacy ? { partyId: legacy.id } : {}),
+    kind: 'person',
+    legalName: 'Horizon Coffee Buyer',
     taxId: DEMO.customerTaxId,
     email: 'buyer@horizon.local',
     phone: '+5511999999999',
     address: 'Avenida Paulista, 1000, Sao Paulo - SP',
+    roles: ['customer'],
   })
-  if (created.isLeft()) throw created.value
-  return created.value.customerId
+  if (registered.isLeft()) throw registered.value
+  return registered.value.partyId
 }
 
 async function flushAll(relay) {

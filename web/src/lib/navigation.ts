@@ -1,5 +1,6 @@
 import type { Icon } from '@phosphor-icons/react'
 import {
+  AddressBook,
   ChartBar,
   FileText,
   Gear,
@@ -36,6 +37,18 @@ export const navigation: readonly NavigationGroup[] = [
   {
     labelKey: 'overview',
     entries: [{ href: '/app', labelKey: 'overview', icon: ChartBar, module: null, demo: true }],
+  },
+  {
+    labelKey: 'registrations',
+    entries: [
+      {
+        href: '/app/registrations/parties',
+        labelKey: 'parties',
+        icon: AddressBook,
+        module: 'parties',
+        demo: false,
+      },
+    ],
   },
   {
     labelKey: 'catalog',

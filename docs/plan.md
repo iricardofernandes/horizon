@@ -655,6 +655,50 @@ them.
 
 ---
 
+## Phase 15 — Shared registrations and company configuration
+
+**Complete.** Backlog items 5 and 6 of the [expansion plan](erp-expansion-plan.md). The
+reader's language is stored on the global account and outranks this device's cookie; a
+workspace describes the company it legally is. The `parties/` context owns every
+organization and person the business deals with, and Sales' customers became a
+projection of it (ADR 0040).
+
+**Deliverables**
+
+- Identity: `PATCH /identity/me/preferences`, `GET /identity/workspace` and an owner-only
+  `PUT /identity/workspace/company` with legal name, registrations, address, base
+  currency, fiscal regime and timezone.
+- `parties/` on port 3006: one record per tax identifier, holding any of `customer`,
+  `supplier`, `carrier`, `prospect` and `partner`; personal data encrypted per party with a
+  blind-indexed tax identifier; crypto-shredding erasure; forced RLS; transactional outbox.
+- `@horizon/contracts@0.4.0`: the `parties` module and roles, and five party events. Every
+  service moved to it in the same change, because a token naming an unknown module is
+  rejected.
+- Sales consumes `parties.party.registered`, `updated` and `erased` into its customer
+  projection and no longer registers or erases customers itself.
+- `make migrate-customers`: registers every legacy Sales customer as a party adopting its
+  identifier, so existing quotes and orders keep resolving. Idempotent.
+- Web: the Customers screen reads and writes the registry; a Parties screen manages roles;
+  the Workspace screen edits the company profile.
+
+**Exit criteria**
+
+- One party is both customer and supplier without a second tax-identifier record, and the
+  same tax identifier may exist once in each tenant (integration tests).
+- A registered party reaches Sales through the outbox and the inbox, under the id quotes
+  and orders reference; erasure reaches Sales' copy.
+- Both golden paths pass: `make demo` twice, and the bilingual browser flow including the
+  Parties screen.
+
+**Non-goals**
+
+- Suppliers in Purchasing, contacts and multiple addresses per party, attachments and CSV
+  import; these belong to later phases of the expansion plan.
+- A `parties` role granted to existing workspaces automatically. Until administrators
+  grant one, a Sales role keeps read and manage — never erase — on the registry.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

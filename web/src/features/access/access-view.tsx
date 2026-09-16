@@ -14,7 +14,7 @@ import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 import { useDateTime } from '@/lib/use-format'
 
-type ModuleName = 'identity' | 'catalog' | 'inventory' | 'sales' | 'webhooks'
+type ModuleName = 'identity' | 'catalog' | 'inventory' | 'sales' | 'webhooks' | 'parties'
 type RoleAssignment = { module: ModuleName; role: string }
 
 export type WorkspaceUser = {
@@ -33,6 +33,7 @@ const roleOptions: Record<ModuleName, string[]> = {
   inventory: ['admin', 'operator', 'viewer'],
   sales: ['admin', 'representative', 'viewer'],
   webhooks: ['admin', 'viewer'],
+  parties: ['admin', 'editor', 'viewer'],
 }
 
 const modules = Object.keys(roleOptions) as ModuleName[]
@@ -45,6 +46,7 @@ const profiles: Record<'admin' | 'operator' | 'viewer', RoleAssignment[]> = {
     { module: 'inventory', role: 'operator' },
     { module: 'sales', role: 'representative' },
     { module: 'webhooks', role: 'viewer' },
+    { module: 'parties', role: 'editor' },
   ],
   viewer: [
     { module: 'identity', role: 'member' },
@@ -52,6 +54,7 @@ const profiles: Record<'admin' | 'operator' | 'viewer', RoleAssignment[]> = {
     { module: 'inventory', role: 'viewer' },
     { module: 'sales', role: 'viewer' },
     { module: 'webhooks', role: 'viewer' },
+    { module: 'parties', role: 'viewer' },
   ],
 }
 

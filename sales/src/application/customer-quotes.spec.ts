@@ -2,8 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { InMemorySalesUnitOfWork } from 'test/repositories/in-memory-sales-unit-of-work'
 import { snapshotOf } from 'test/support/snapshot-of'
 import { Currency, LineDescription, Money } from '@/domain/value-objects/sales-values'
-import { CreateCustomerUseCase, EraseCustomerUseCase } from './use-cases/manage-customers'
 import { AcceptQuoteUseCase, CreateQuoteUseCase } from './use-cases/manage-quotes'
+import {
+  ForgetPartyUseCase,
+  type PartyState,
+  ProjectPartyUseCase,
+} from './use-cases/project-parties'
 
 function unwrap<T>(result: { isLeft(): boolean; value: T }): T {
   if (result.isLeft()) throw result.value
@@ -18,41 +22,65 @@ function required<T>(value: T | undefined): T {
 const now = new Date('2026-09-14T20:00:00.000Z')
 const clock = { now: () => now }
 
-async function customerFixture(unitOfWork: InMemorySalesUnitOfWork) {
-  const tenantId = randomUUID()
-  const created = await new CreateCustomerUseCase(unitOfWork, clock).execute({
+function partyState(tenantId: string, overrides: Partial<PartyState> = {}): PartyState {
+  return {
     tenantId,
-    name: '  Maria   Silva ',
-    taxId: '123.456.789-01',
+    partyId: randomUUID(),
+    legalName: '  Maria   Silva ',
     email: ' MARIA@EXAMPLE.COM ',
     phone: '+55 (11) 99999-9999',
     address: 'Rua Um, 42, São Paulo',
-  })
-  if (created.isLeft()) throw created.value
-  return { tenantId, customerId: created.value.customerId }
+    roles: ['customer'],
+    active: true,
+    ...overrides,
+  }
+}
+
+async function project(unitOfWork: InMemorySalesUnitOfWork, state: PartyState) {
+  return unitOfWork.inTenant(state.tenantId, (scope) =>
+    new ProjectPartyUseCase(clock).executeInScope(scope, state),
+  )
+}
+
+async function customerFixture(unitOfWork: InMemorySalesUnitOfWork) {
+  const state = partyState(randomUUID())
+  unwrap(await project(unitOfWork, state))
+  return { tenantId: state.tenantId, customerId: state.partyId }
 }
 
 describe('customers and quotes', () => {
-  it('normalizes customer PII and prevents an active duplicate tax id', async () => {
+  it('projects a party holding the customer role under the party id', async () => {
     const unitOfWork = new InMemorySalesUnitOfWork()
     const fixture = await customerFixture(unitOfWork)
     expect(snapshotOf(required(unitOfWork.customers[0]))).toMatchObject({
       id: fixture.customerId,
       name: 'Maria Silva',
-      taxId: '12345678901',
+      taxId: null,
       email: 'maria@example.com',
       phone: '+5511999999999',
       status: 'active',
     })
-    const duplicate = await new CreateCustomerUseCase(unitOfWork, clock).execute({
-      tenantId: fixture.tenantId,
-      name: 'Other Customer',
-      taxId: '12345678901',
-      email: 'other@example.com',
-      phone: '1199999999',
-      address: 'Rua Dois, 10',
+  })
+
+  it('ignores a party that has never been a customer', async () => {
+    const unitOfWork = new InMemorySalesUnitOfWork()
+    const outcome = await project(unitOfWork, partyState(randomUUID(), { roles: ['supplier'] }))
+    expect(unwrap(outcome)).toBe('ignored')
+    expect(unitOfWork.customers).toHaveLength(0)
+  })
+
+  it('keeps a former customer projected, but closed to new quotes', async () => {
+    const unitOfWork = new InMemorySalesUnitOfWork()
+    const state = partyState(randomUUID())
+    unwrap(await project(unitOfWork, state))
+    expect(unwrap(await project(unitOfWork, { ...state, roles: ['supplier'] }))).toBe('refreshed')
+    expect(snapshotOf(required(unitOfWork.customers[0])).status).toBe('inactive')
+    const quote = await new CreateQuoteUseCase(unitOfWork, clock, 15).execute({
+      tenantId: state.tenantId,
+      customerId: state.partyId,
+      lines: [{ lineId: randomUUID(), itemId: randomUUID(), quantity: '1' }],
     })
-    expect(duplicate.isLeft()).toBe(true)
+    expect(quote.isLeft()).toBe(true)
   })
 
   it('snapshots current catalog prices into an expiring quote and accepts it once', async () => {
@@ -97,43 +125,35 @@ describe('customers and quotes', () => {
     ).toBe(true)
   })
 
-  it('marks an erased customer unavailable for new quotes', async () => {
+  it('forgets an erased party and never brings it back', async () => {
     const unitOfWork = new InMemorySalesUnitOfWork()
-    const fixture = await customerFixture(unitOfWork)
-    const erased = await new EraseCustomerUseCase(unitOfWork, clock).execute(fixture)
-    expect(erased.isRight()).toBe(true)
+    const state = partyState(randomUUID())
+    unwrap(await project(unitOfWork, state))
+    const forgotten = await unitOfWork.inTenant(state.tenantId, (scope) =>
+      new ForgetPartyUseCase(clock).executeInScope(scope, state.partyId),
+    )
+    expect(forgotten).toBe(true)
     expect(snapshotOf(required(unitOfWork.customers[0]))).toMatchObject({ status: 'erased' })
+    expect(unwrap(await project(unitOfWork, state))).toBe('ignored')
     const quote = await new CreateQuoteUseCase(unitOfWork, clock, 15).execute({
-      ...fixture,
+      tenantId: state.tenantId,
+      customerId: state.partyId,
       lines: [{ lineId: randomUUID(), itemId: randomUUID(), quantity: '1' }],
     })
     expect(quote.isLeft()).toBe(true)
   })
 
-  it('rejects invalid customer fields and missing erasure targets', async () => {
+  it('refuses a party whose details Sales cannot print', async () => {
     const unitOfWork = new InMemorySalesUnitOfWork()
-    const create = new CreateCustomerUseCase(unitOfWork, clock)
-    const valid = {
-      tenantId: randomUUID(),
-      name: 'Maria Silva',
-      taxId: '12345678901',
-      email: 'maria@example.com',
-      phone: '1199999999',
-      address: 'Rua Um, 42',
-    }
-    expect((await create.execute({ ...valid, name: '' })).isLeft()).toBe(true)
-    expect((await create.execute({ ...valid, taxId: '123' })).isLeft()).toBe(true)
-    expect((await create.execute({ ...valid, email: 'invalid' })).isLeft()).toBe(true)
-    expect((await create.execute({ ...valid, phone: '12' })).isLeft()).toBe(true)
-    expect((await create.execute({ ...valid, address: 'x' })).isLeft()).toBe(true)
+    expect((await project(unitOfWork, partyState(randomUUID(), { legalName: '' }))).isLeft()).toBe(
+      true,
+    )
     expect(
-      (
-        await new EraseCustomerUseCase(unitOfWork, clock).execute({
-          tenantId: valid.tenantId,
-          customerId: randomUUID(),
-        })
-      ).isLeft(),
+      (await project(unitOfWork, partyState(randomUUID(), { email: 'invalid' }))).isLeft(),
     ).toBe(true)
+    expect((await project(unitOfWork, partyState(randomUUID(), { phone: '12' }))).isLeft()).toBe(
+      true,
+    )
   })
 
   it('rejects malformed quote lines, inactive items and mixed currencies', async () => {

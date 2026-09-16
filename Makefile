@@ -4,7 +4,7 @@
 # Makefile shells out per project rather than sharing state between them.
 
 PROJECTS_JSON := scripts/modules.json
-SERVICES := identity catalog inventory sales webhooks
+SERVICES := identity catalog inventory sales webhooks parties
 
 .DEFAULT_GOAL := help
 
@@ -135,7 +135,14 @@ demo: ## Seed a tenant and run the golden path (phase 8)
 	@cd inventory && npm run build
 	@cd sales && npm run build
 	@cd webhooks && npm run build
+	@cd parties && npm run build
 	@node scripts/demo.mjs
+
+.PHONY: migrate-customers
+migrate-customers: ## Register every legacy Sales customer as a party, keeping its id (ADR 0040)
+	@cd sales && npm run build
+	@cd parties && npm run build
+	@node scripts/migrate-customers-to-parties.mjs
 
 .PHONY: benchmark-golden-path
 benchmark-golden-path: demo ## Measure the golden path with staged k6 arrival rates

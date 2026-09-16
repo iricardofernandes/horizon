@@ -122,19 +122,13 @@ class InMemoryCustomers extends CustomersRepository {
       ) ?? null,
     )
   }
-  findByTaxId(taxId: string): Promise<Customer | null> {
-    return Promise.resolve(
-      this.records.find(
-        (customer) =>
-          customer.belongsTo(this.tenantId) &&
-          customer.isActive() &&
-          customer.toSnapshot().taxId === taxId,
-      ) ?? null,
-    )
-  }
   create(customer: Customer): Promise<void> {
     if (!customer.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
     this.records.push(customer)
+    return Promise.resolve()
+  }
+  save(customer: Customer): Promise<void> {
+    if (!customer.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
     return Promise.resolve()
   }
   erase(customer: Customer): Promise<void> {

@@ -250,6 +250,11 @@ feature is called complete:
 | Observability | the service's OpenTelemetry bootstrap | Traces, domain metrics and structured logs joined by correlation id (ADR 0033) |
 | Seeds and smoke | `infra/scripts/smoke.sh` and the service's seed script | The context appears in the runnable local environment |
 | Documentation | `docs/events.md`, `docs/glossary.md`, `docs/adr/` | Generated event catalogue, new business terms and the decision record |
+| Database creation | `infra/postgres/init/01-roles-and-databases.sh` | The module's database joins `MODULES`; an existing local cluster needs it created by hand, because init runs once |
+| Role module | `contracts/src/roles.ts` and identity's `test/contracts.spec.ts` | The module and its roles are published, and identity's guard test acknowledges it |
+| Frontend proxy | `web/src/lib/upstream-path.ts` | The module joins the proxy's allowlist; without it every screen gets a silent 404 |
+| CI lists | `.github/workflows/{golden-path,isolation,release}.yml` | The workflows that enumerate modules by hand gain the new one |
+| Demo | `scripts/demo.mjs` | The operator gains the module's role and the golden path migrates its database |
 
 Ports are allocated in phase order so that the compose file, gateway and `modules.json`
 never disagree:
@@ -264,6 +269,13 @@ never disagree:
 | `fiscal` | 3011 | Phase J |
 | `crm` | 3012 | Phase L |
 | `reporting` | 3013 | Phase M |
+
+**Rollout order for a new module name.** Identity and Catalog reject an access token whose
+role assignments name a module their pinned `@horizon/contracts` does not know. Every
+service must therefore upgrade to the contracts version that declares the module *before*
+any user is granted a role in it — otherwise that user is locked out of the services that
+lag. `parties` shipped with every service moved to `@horizon/contracts@0.4.0` in the same
+change for exactly this reason.
 
 Services are added in phase order and never speculatively: a registered project that
 contains no delivered capability still costs CI time, compose memory and review attention.

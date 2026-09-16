@@ -1,6 +1,6 @@
 # `sales/`
 
-Customers, quotes, sales orders and the invoicing trigger.
+A projection of the customers in `parties/`, quotes, sales orders and the invoicing trigger.
 
 An independently deployable NestJS service with its own database, its own container
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
@@ -18,7 +18,7 @@ are all exercised by the phase 7 E2E flow.
 
 ## What this context owns
 
-- **Customers** — commercial counterparties, with the personal data that implies (ADR 0026).
+- **The customer projection** — parties holding the `customer` role, fed by `parties/` events (ADR 0040). Sales no longer registers or erases customers.
 - **Quotes** — priced proposals with an expiry.
 - **Sales orders** and their lines, including the price snapshotted at confirmation.
 - **Order lifecycle** — draft, placed, confirmed, cancelled — and the invariants of each transition.

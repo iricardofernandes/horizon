@@ -18,10 +18,11 @@ export abstract class SalesOrdersRepository {
   abstract save(order: SalesOrder): Promise<void>
 }
 
+/** A projection fed by `parties/`; Sales never registers a customer itself (ADR 0040). */
 export abstract class CustomersRepository {
   abstract findById(id: string): Promise<Customer | null>
-  abstract findByTaxId(taxId: string): Promise<Customer | null>
   abstract create(customer: Customer): Promise<void>
+  abstract save(customer: Customer): Promise<void>
   abstract erase(customer: Customer): Promise<void>
 }
 

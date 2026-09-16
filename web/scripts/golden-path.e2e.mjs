@@ -132,6 +132,18 @@ try {
   await page.getByRole('alertdialog').waitFor()
   await page.getByRole('button', { name: 'Cancel' }).click()
 
+  // A customer is a party with the customer role (ADR 0040): the registry shows it with its roles.
+  await page.getByRole('link', { name: 'Parties' }).click()
+  await page.waitForURL(`${appUrl}/app/registrations/parties`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Parties', exact: true }).waitFor()
+  await page
+    .getByRole('row')
+    .filter({ hasText: existingCustomer.email })
+    .getByRole('button', { name: 'Roles' })
+    .click()
+  await page.getByRole('dialog', { name: /^Roles of / }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+
   await page.getByRole('link', { name: 'Quotes' }).click()
   await page.waitForURL(`${appUrl}/app/sales/quotes`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Quotes', exact: true }).waitFor()
@@ -217,6 +229,7 @@ try {
   for (const screen of [
     ['Items', 'Catalog'],
     ['Customers', 'Customers'],
+    ['Parties', 'Parties'],
     ['Quotes', 'Quotes'],
     ['Balances', 'Inventory'],
     ['Orders', 'Orders'],

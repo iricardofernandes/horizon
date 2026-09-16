@@ -5,6 +5,9 @@ import {
   type EventEnvelope,
   inventoryStockReservationRejected,
   inventoryStockReserved,
+  partyErased,
+  partyRegistered,
+  partyUpdated,
 } from '@horizon/contracts'
 import { Currency, LineDescription, Money } from '@/domain/value-objects/sales-values'
 import type { EventHandler } from '@/infrastructure/messaging/rabbitmq-transport'
@@ -14,11 +17,18 @@ import {
   ApplyStockReservationRejectedUseCase,
   ApplyStockReservedUseCase,
 } from './use-cases/apply-reservation-outcome'
+import {
+  ForgetPartyUseCase,
+  type PartyState,
+  ProjectPartyUseCase,
+} from './use-cases/project-parties'
 
 export class SalesModuleEventHandlers {
   readonly handlers: Readonly<Record<string, EventHandler>>
   private readonly reserved: ApplyStockReservedUseCase
   private readonly rejected: ApplyStockReservationRejectedUseCase
+  private readonly projectParty: ProjectPartyUseCase
+  private readonly forgetParty: ForgetPartyUseCase
 
   constructor(
     private readonly unitOfWork: SalesUnitOfWork,
@@ -26,12 +36,17 @@ export class SalesModuleEventHandlers {
   ) {
     this.reserved = new ApplyStockReservedUseCase(unitOfWork, clock)
     this.rejected = new ApplyStockReservationRejectedUseCase(unitOfWork, clock)
+    this.projectParty = new ProjectPartyUseCase(clock)
+    this.forgetParty = new ForgetPartyUseCase(clock)
     this.handlers = {
       'catalog.item.created': (event) => this.itemCreated(event),
       'catalog.item.deactivated': (event) => this.itemDeactivated(event),
       'catalog.price.changed': (event) => this.priceChanged(event),
       'inventory.stock.reserved': (event) => this.stockReserved(event),
       'inventory.stock.reservation-rejected': (event) => this.stockRejected(event),
+      'parties.party.registered': (event) => this.partyRegistered(event),
+      'parties.party.updated': (event) => this.partyUpdated(event),
+      'parties.party.erased': (event) => this.partyErased(event),
     }
   }
 
@@ -96,8 +111,40 @@ export class SalesModuleEventHandlers {
     )
     if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
   }
+  private async partyRegistered(event: EventEnvelope): Promise<void> {
+    const parsed = partyRegistered.envelope.parse(event)
+    await this.project(parsed, { ...parsed.payload, active: true })
+  }
+
+  private async partyUpdated(event: EventEnvelope): Promise<void> {
+    const parsed = partyUpdated.envelope.parse(event)
+    await this.project(parsed, parsed.payload)
+  }
+
+  private async partyErased(event: EventEnvelope): Promise<void> {
+    const parsed = partyErased.envelope.parse(event)
+    await this.unitOfWork.provisionTenant(parsed.tenantId)
+    await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'parties'), (scope) =>
+      this.forgetParty.executeInScope(scope, parsed.payload.partyId),
+    )
+  }
+
+  /** A party may be the first thing a workspace ever tells Sales about. */
+  private async project(
+    envelope: EventEnvelope,
+    payload: Omit<PartyState, 'tenantId'>,
+  ): Promise<void> {
+    await this.unitOfWork.provisionTenant(envelope.tenantId)
+    const outcome = await this.unitOfWork.processEvent(
+      envelope.tenantId,
+      received(envelope, 'parties'),
+      (scope) =>
+        this.projectParty.executeInScope(scope, { ...payload, tenantId: envelope.tenantId }),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
+  }
 }
 
-function received(event: EventEnvelope, sourceModule: 'catalog' | 'inventory') {
+function received(event: EventEnvelope, sourceModule: 'catalog' | 'inventory' | 'parties') {
   return { sourceModule, eventId: event.eventId, eventType: event.eventType }
 }

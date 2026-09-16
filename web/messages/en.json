@@ -33,6 +33,7 @@
       "developers": "Developers",
       "inventory": "Inventory",
       "overview": "Overview",
+      "registrations": "Registrations",
       "sales": "Sales"
     },
     "items": {
@@ -43,6 +44,7 @@
       "items": "Items",
       "orders": "Orders",
       "overview": "Overview",
+      "parties": "Parties",
       "people": "People and access",
       "quotes": "Quotes",
       "webhooks": "Webhooks",
@@ -357,6 +359,7 @@
     "catalog": "Catalog",
     "identity": "Identity",
     "inventory": "Inventory",
+    "parties": "Parties",
     "sales": "Sales",
     "webhooks": "Webhooks"
   },
@@ -541,5 +544,44 @@
     "units": "Units",
     "unknownItem": "Unknown item",
     "viewOnly": "View only"
+  },
+  "parties": {
+    "copy": "Every organization and person the business deals with, once — with the roles each one plays.",
+    "create": "New party",
+    "createDescription": "One tax identifier, one record. A company that already exists gains a role instead.",
+    "createFailed": "The party could not be registered.",
+    "createSubmit": "Register party",
+    "createTitle": "Register party",
+    "created": "Party registered.",
+    "emptyCopy": "Register a party or adjust your search.",
+    "emptyTitle": "No parties found",
+    "eyebrow": "Registrations",
+    "kind": "Kind",
+    "noRoles": "No role",
+    "party": "Party",
+    "roleChangeFailed": "The role could not be changed.",
+    "roleGranted": "{name} is now a {role}.",
+    "roleRevoked": "{name} is no longer a {role}.",
+    "roles": "Roles",
+    "rolesDescription": "A party keeps its identifier as its roles change; documents that reference it stay valid.",
+    "rolesHelp": "Choose at least the role this party plays today.",
+    "rolesTitle": "Roles of {name}",
+    "search": "Search parties",
+    "searchPlaceholder": "Search name or email…",
+    "status": "Status",
+    "taxId": "Tax ID",
+    "title": "Parties",
+    "tradeName": "Trade name"
+  },
+  "partyRoles": {
+    "carrier": "carrier",
+    "customer": "customer",
+    "partner": "partner",
+    "prospect": "prospect",
+    "supplier": "supplier"
+  },
+  "partyKinds": {
+    "organization": "Organization",
+    "person": "Person"
   }
 }

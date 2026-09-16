@@ -8,26 +8,32 @@ import { type FormEvent, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/ui/text-field'
+import { kindOfTaxId, maskedTaxId, type Party } from '@/features/parties/party'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 
+/** Sales' projection of a party holding the customer role, as quotes and orders read it. */
 export type Customer = {
   id: string
   name: string
-  taxId: string
+  taxId: string | null
   email: string
   phone: string
   address: string
-  status: 'active' | 'erased'
+  status: 'active' | 'inactive' | 'erased'
   createdAt?: string
 }
 
+/**
+ * Customers are parties holding the `customer` role (ADR 0040). This screen reads and
+ * writes the registry; Sales follows it through events.
+ */
 export function CustomersView({
   customers,
   onChanged,
   setNotice,
 }: {
-  customers: Customer[]
+  customers: Party[]
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
@@ -39,9 +45,9 @@ export function CustomersView({
   const filtered = customers.filter(
     (customer) =>
       !normalizedQuery ||
-      customer.name.toLocaleLowerCase().includes(normalizedQuery) ||
+      customer.legalName.toLocaleLowerCase().includes(normalizedQuery) ||
       customer.email.toLocaleLowerCase().includes(normalizedQuery) ||
-      customer.taxId.includes(normalizedQuery),
+      (customer.taxIdSuffix ?? '').includes(normalizedQuery),
   )
 
   return (
@@ -101,7 +107,7 @@ export function CustomersView({
                         <User size={17} />
                       </span>
                       <span>
-                        <strong>{customer.name}</strong>
+                        <strong>{customer.legalName}</strong>
                         <small>
                           <Envelope aria-hidden="true" size={11} /> {customer.email}
                         </small>
@@ -111,7 +117,7 @@ export function CustomersView({
                   <td>
                     <span className="customer-tax-id">
                       <IdentificationCard aria-hidden="true" size={15} />
-                      {formatTaxId(customer.taxId)}
+                      {maskedTaxId(customer)}
                     </span>
                   </td>
                   <td>{customer.phone}</td>
@@ -163,15 +169,18 @@ function CreateCustomerDialog({
     setError('')
     const form = event.currentTarget
     const data = new FormData(form)
-    const response = await tracedFetch('sales.customer.create', '/api/horizon/sales/customers', {
+    const taxId = String(data.get('taxId') ?? '').trim()
+    const response = await tracedFetch('parties.party.register', '/api/horizon/parties/parties', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        name: String(data.get('name') ?? '').trim(),
-        taxId: String(data.get('taxId') ?? '').trim(),
+        kind: kindOfTaxId(taxId),
+        legalName: String(data.get('name') ?? '').trim(),
+        taxId,
         email: String(data.get('email') ?? '').trim(),
         phone: String(data.get('phone') ?? '').trim(),
         address: String(data.get('address') ?? '').trim(),
+        roles: ['customer'],
       }),
     })
     if (!response.ok) {
@@ -261,7 +270,7 @@ function EraseCustomerDialog({
   onChanged,
   setNotice,
 }: {
-  customer: Customer
+  customer: Party
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
 }) {
@@ -275,8 +284,8 @@ function EraseCustomerDialog({
     setBusy(true)
     setError('')
     const response = await tracedFetch(
-      'sales.customer.erase',
-      `/api/horizon/sales/customers/${customer.id}`,
+      'parties.party.erase',
+      `/api/horizon/parties/parties/${customer.id}`,
       { method: 'DELETE' },
     )
     if (!response.ok) {
@@ -284,7 +293,7 @@ function EraseCustomerDialog({
       setBusy(false)
       return
     }
-    setNotice(t('erased', { name: customer.name }))
+    setNotice(t('erased', { name: customer.legalName }))
     await onChanged()
     setOpen(false)
     setBusy(false)
@@ -300,7 +309,7 @@ function EraseCustomerDialog({
         <AlertDialog.Backdrop className="ui-dialog-backdrop" />
         <AlertDialog.Popup className="ui-dialog-popup ui-alert-popup">
           <div className="dialog-heading">
-            <AlertDialog.Title>{t('eraseTitle', { name: customer.name })}</AlertDialog.Title>
+            <AlertDialog.Title>{t('eraseTitle', { name: customer.legalName })}</AlertDialog.Title>
             <AlertDialog.Description className="dialog-description">
               {t('eraseDescription')}
             </AlertDialog.Description>
@@ -334,12 +343,4 @@ async function apiError(response: Response, fallback: string): Promise<string> {
     // Empty and non-JSON responses use the stable fallback below.
   }
   return fallback
-}
-
-function formatTaxId(value: string) {
-  const digits = value.replace(/\D/g, '')
-  if (digits.length === 11) return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
-  if (digits.length === 14)
-    return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
-  return value
 }

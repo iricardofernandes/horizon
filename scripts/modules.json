@@ -6,6 +6,7 @@
     { "path": "inventory",             "kind": "service", "port": 3003 },
     { "path": "sales",                 "kind": "service", "port": 3004 },
     { "path": "webhooks",              "kind": "service", "port": 3005 },
+    { "path": "parties",               "kind": "service", "port": 3006 },
     { "path": "web",                   "kind": "frontend", "port": 3000 },
     { "path": "contracts",             "kind": "package" },
     { "path": "tooling/mcp-debugger",  "kind": "package" },

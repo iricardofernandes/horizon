@@ -34,6 +34,7 @@ jobs:
           - { name: inventory, context: inventory }
           - { name: sales, context: sales }
           - { name: webhooks, context: webhooks }
+          - { name: parties, context: parties }
           - { name: web, context: web }
           - { name: gateway, context: gateway }
     steps:

@@ -2,12 +2,13 @@
 
 import { useNotice } from '@/components/shell/workspace-context'
 import { Resource } from '@/components/ui/resource'
-import { type Customer, CustomersView } from '@/features/sales/customers-view'
-import { readJson } from '@/lib/api'
+import type { Party } from '@/features/parties/party'
+import { CustomersView } from '@/features/sales/customers-view'
+import { readPage } from '@/lib/api'
 import { useLoader } from '@/lib/use-loader'
 
 function load() {
-  return readJson<Customer[]>('sales.customers', '/api/horizon/sales/customers')
+  return readPage<Party>('parties.customers', '/api/horizon/parties/parties?role=customer')
 }
 
 export default function CustomersPage() {

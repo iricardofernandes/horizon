@@ -205,6 +205,36 @@ services:
       ORDER_CONFIRMATION_TIMEOUT_MS: '10000'
       CUSTOMER_BLIND_INDEX_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
 
+  parties-migrate:
+    <<: *service
+    build:
+      context: ../parties
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_parties
+    command: ["npm", "run", "db:migrate"]
+
+  parties:
+    <<: *service
+    build:
+      context: ../parties
+      network: host
+    container_name: horizon-parties
+    depends_on:
+      parties-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      <<: *env
+      PORT: '3006'
+      OTEL_SERVICE_NAME: parties
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_parties
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_parties
+      PARTY_BLIND_INDEX_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+
   webhooks-migrate:
     <<: *service
     build:

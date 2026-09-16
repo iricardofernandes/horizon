@@ -8,6 +8,12 @@ describe('buildUpstreamPath', () => {
     )
   })
 
+  it('proxies the party registry', () => {
+    expect(buildUpstreamPath(['parties', 'parties'], '?role=customer')).toBe(
+      '/parties/parties?role=customer',
+    )
+  })
+
   it('rejects empty and unknown roots', () => {
     expect(buildUpstreamPath([])).toBeNull()
     expect(buildUpstreamPath(['admin', 'secrets'])).toBeNull()

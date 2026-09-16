@@ -275,7 +275,7 @@ async function mapCustomer(
   row: typeof schema.customers.$inferSelect,
   privacy: CustomerPrivacy,
 ): Promise<Customer> {
-  if (row.status !== 'active' && row.status !== 'erased')
+  if (row.status !== 'active' && row.status !== 'inactive' && row.status !== 'erased')
     throw new Error('Invalid persisted customer status')
   const [key] = await tx
     .select()
@@ -299,7 +299,10 @@ async function mapCustomer(
       name: restored(
         CustomerName.create(erased ? 'Erased customer' : open('name', row.nameCiphertext)),
       ),
-      taxId: restored(TaxId.create(erased ? '00000000000' : open('taxId', row.taxIdCiphertext))),
+      taxId:
+        erased || row.taxIdCiphertext === null
+          ? null
+          : restored(TaxId.create(open('taxId', row.taxIdCiphertext))),
       email: restored(
         CustomerEmail.create(
           erased ? 'erased@invalid.example' : open('email', row.emailCiphertext),
@@ -385,16 +388,6 @@ function makeScope(
           .for('no key update')
         return row ? mapCustomer(tx, row, privacyOf(customerPrivacy)) : null
       },
-      findByTaxId: async (taxId) => {
-        const privacy = privacyOf(customerPrivacy)
-        const [row] = await tx
-          .select()
-          .from(schema.customers)
-          .where(eq(schema.customers.taxIdIndex, customerIndex(tenantId, taxId, privacy)))
-          .limit(1)
-          .for('no key update')
-        return row ? mapCustomer(tx, row, privacy) : null
-      },
       create: async (customer) => {
         const privacy = privacyOf(customerPrivacy)
         const row = customer.toSnapshot()
@@ -412,8 +405,9 @@ function makeScope(
           id: row.id,
           tenantId,
           nameCiphertext: seal('name', row.name),
-          taxIdCiphertext: seal('taxId', row.taxId),
-          taxIdIndex: customerIndex(tenantId, row.taxId, privacy),
+          // Projected customers carry no tax identifier: the registry owns it (ADR 0040).
+          taxIdCiphertext: row.taxId === null ? null : seal('taxId', row.taxId),
+          taxIdIndex: row.taxId === null ? null : customerIndex(tenantId, row.taxId, privacy),
           emailCiphertext: seal('email', row.email),
           phoneCiphertext: seal('phone', row.phone),
           addressCiphertext: seal('address', row.address),
@@ -421,6 +415,31 @@ function makeScope(
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
         })
+      },
+      save: async (customer) => {
+        const privacy = privacyOf(customerPrivacy)
+        const row = customer.toSnapshot()
+        assertTenant(row.tenantId)
+        const [key] = await tx
+          .select()
+          .from(schema.customerDataKeys)
+          .where(eq(schema.customerDataKeys.id, row.id))
+          .limit(1)
+        if (!key?.material) throw new Error('Customer data key is unavailable')
+        const material = key.material
+        const seal = (field: string, value: string) =>
+          privacy.secretBox.seal(`${tenantId}:${row.id}:${field}:${material}`, value)
+        await tx
+          .update(schema.customers)
+          .set({
+            nameCiphertext: seal('name', row.name),
+            emailCiphertext: seal('email', row.email),
+            phoneCiphertext: seal('phone', row.phone),
+            addressCiphertext: seal('address', row.address),
+            status: row.status,
+            updatedAt: row.updatedAt,
+          })
+          .where(eq(schema.customers.id, row.id))
       },
       erase: async (customer) => {
         const row = customer.toSnapshot()
