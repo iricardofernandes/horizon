@@ -94,8 +94,10 @@ section "data services"
 check "postgres accepts connections" \
   docker exec horizon-postgres pg_isready -U postgres -d postgres
 
-check "five module databases exist" bash -c \
-  "test \"\$(docker exec horizon-postgres psql -U postgres -tAc \"SELECT count(*) FROM pg_database WHERE datname LIKE 'horizon_%'\")\" = 5"
+# The expected set comes from the init script, so a new module cannot drift from it.
+MODULE_DATABASES=$(sed -n 's/^MODULES=(\(.*\))$/\1/p' "$(dirname "$0")/../postgres/init/01-roles-and-databases.sh" | wc -w)
+check "${MODULE_DATABASES} module databases exist" bash -c \
+  "test \"\$(docker exec horizon-postgres psql -U postgres -tAc \"SELECT count(*) FROM pg_database WHERE datname LIKE 'horizon_%'\")\" = ${MODULE_DATABASES}"
 
 # The claim ADR 0017 rests on. If the application role could bypass RLS, every tenant
 # isolation test in the repository would pass without proving anything.
