@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
 import {
+  financialPayablePosted,
+  financialPayableReversed,
   financialReceivablePosted,
   financialReceivableReversed,
   financialSettlementRecorded,
@@ -85,6 +87,18 @@ describe('financial event contracts', () => {
         reversedAt: '2026-09-21T12:00:00.000Z',
         reason: 'Payment bounced',
         outstanding: brl('10000'),
+      }).success,
+    ).toBe(true)
+  })
+
+  it('gives payables the same posted and reversed shape as receivables', () => {
+    expect(financialPayablePosted.payload.safeParse(posted).success).toBe(true)
+    expect(
+      financialPayableReversed.payload.safeParse({
+        titleId: randomUUID(),
+        partyId: randomUUID(),
+        reversedAt: '2026-09-16T12:00:00.000Z',
+        reason: 'Duplicated invoice',
       }).success,
     ).toBe(true)
   })

@@ -1,6 +1,8 @@
 import { catalogItemCreated, catalogItemDeactivated, catalogPriceChanged } from './catalog'
 import type { EventDefinition } from './define'
 import {
+  financialPayablePosted,
+  financialPayableReversed,
   financialReceivablePosted,
   financialReceivableReversed,
   financialSettlementRecorded,
@@ -76,6 +78,8 @@ export const EVENTS: readonly EventDefinition[] = [
   financialReceivableReversed,
   financialSettlementRecorded,
   financialSettlementReversed,
+  financialPayablePosted,
+  financialPayableReversed,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

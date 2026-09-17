@@ -14,33 +14,41 @@ const originSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('sales-order'), orderId: uuidSchema }),
 ])
 
+/** Shared by both directions, so a receivable and a payable carry the same shape. */
+const postedPayload = z.object({
+  titleId,
+  partyId: uuidSchema,
+  documentNumber: z.string().min(1).max(40),
+  origin: originSchema,
+  categoryId: uuidSchema,
+  issuedOn: dateSchema,
+  competenceOn: dateSchema,
+  total: moneySchema,
+  installments: z
+    .array(
+      z.object({ number: z.number().int().positive(), dueOn: dateSchema, amount: moneySchema }),
+    )
+    .min(1)
+    .max(120),
+  allocations: z
+    .array(z.object({ dimensionId: uuidSchema, basisPoints: z.number().int().min(1).max(10_000) }))
+    .max(50),
+  postedAt: instantSchema,
+})
+
 export const financialReceivablePosted = defineEvent({
   type: 'financial.receivable.posted',
   version: 1,
   description:
     'A receivable left draft and became an immutable claim on a customer. Installment amounts always add up to the total; from here corrections are reversals, never edits (ADR 0042).',
-  payload: z.object({
-    titleId,
-    partyId: uuidSchema,
-    documentNumber: z.string().min(1).max(40),
-    origin: originSchema,
-    categoryId: uuidSchema,
-    issuedOn: dateSchema,
-    competenceOn: dateSchema,
-    total: moneySchema,
-    installments: z
-      .array(
-        z.object({ number: z.number().int().positive(), dueOn: dateSchema, amount: moneySchema }),
-      )
-      .min(1)
-      .max(120),
-    allocations: z
-      .array(
-        z.object({ dimensionId: uuidSchema, basisPoints: z.number().int().min(1).max(10_000) }),
-      )
-      .max(50),
-    postedAt: instantSchema,
-  }),
+  payload: postedPayload,
+})
+
+const reversedPayload = z.object({
+  titleId,
+  partyId: uuidSchema,
+  reversedAt: instantSchema,
+  reason,
 })
 
 export const financialReceivableReversed = defineEvent({
@@ -48,7 +56,23 @@ export const financialReceivableReversed = defineEvent({
   version: 1,
   description:
     'A posted receivable with no settlement in force was reversed. The title remains, marked reversed, so its history and the reason stay readable.',
-  payload: z.object({ titleId, partyId: uuidSchema, reversedAt: instantSchema, reason }),
+  payload: reversedPayload,
+})
+
+export const financialPayablePosted = defineEvent({
+  type: 'financial.payable.posted',
+  version: 1,
+  description:
+    'A payable left draft and became an obligation to a supplier, after the approval the workspace policy required. Installment amounts always add up to the total; corrections are reversals, never edits (ADR 0042).',
+  payload: postedPayload,
+})
+
+export const financialPayableReversed = defineEvent({
+  type: 'financial.payable.reversed',
+  version: 1,
+  description:
+    'A posted payable with no settlement in force was reversed. The title remains, marked reversed, with its reason.',
+  payload: reversedPayload,
 })
 
 const settlementId = uuidSchema.describe('Settlement identifier')
