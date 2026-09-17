@@ -23,6 +23,7 @@ describe('published role contract', () => {
         'parties',
         'sales',
         'treasury',
+        'ledger',
         'webhooks',
       ].sort(),
     )

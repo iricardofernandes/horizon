@@ -656,7 +656,16 @@ async function loadEnv(path) {
 }
 
 async function migrateModules() {
-  for (const name of ['identity', 'catalog', 'inventory', 'sales', 'parties', 'financial', 'treasury']) {
+  for (const name of [
+    'identity',
+    'catalog',
+    'inventory',
+    'sales',
+    'parties',
+    'financial',
+    'treasury',
+    'ledger',
+  ]) {
     const client = postgres(moduleUrls(name).owner, { max: 1, connect_timeout: 5 })
     try {
       await migrate(drizzle(client), {
@@ -735,6 +744,7 @@ async function seedIdentity(modules, database, admin, clock) {
         { module: 'parties', role: 'admin' },
         { module: 'financial', role: 'admin' },
         { module: 'treasury', role: 'admin' },
+        { module: 'ledger', role: 'admin' },
       ],
       actor: { type: 'user', id: ownerId },
     })
@@ -746,6 +756,7 @@ async function seedIdentity(modules, database, admin, clock) {
     { module: 'parties', role: 'admin' },
     { module: 'financial', role: 'admin' },
     { module: 'treasury', role: 'admin' },
+    { module: 'ledger', role: 'admin' },
   ]) {
     if (operator.holds(assignment)) continue
     const granted = operator.grant(assignment, clock.now())

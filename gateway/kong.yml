@@ -112,6 +112,18 @@ services:
           - /treasury
         strip_path: true
 
+  - name: ledger
+    url: http://ledger:3009
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: ledger-api
+        paths:
+          - /ledger
+        strip_path: true
+
   - name: webhooks
     url: http://webhooks:3005
     retries: 3
