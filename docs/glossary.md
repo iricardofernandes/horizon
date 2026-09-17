@@ -204,3 +204,22 @@ Outstanding balances grouped by how late they are at a given calendar date: not 
 The amount, per currency, from which a payable needs a second person before it posts.
 Below it a payable posts directly and is recorded as exempt; with no policy every payable
 needs approval. The person who requests an approval can never decide it (four eyes).
+
+---
+
+## Treasury
+
+### book balance
+What an account holds according to Horizon's own journal through a calendar date: inflows
+minus outflows by value date. It is always labelled as the ERP's figure and never presented
+as the bank's live balance.
+
+### value date
+The day money actually moved in or out of an account, which may be earlier or later than
+the day it was recorded. Every balance and statement is ordered by it, so a backdated entry
+changes later balances without rewriting anything.
+
+### transfer leg
+One of the journal entries a transfer is made of: the outflow from the source account, the
+inflow into the destination and, when there is one, the fee charged to the source. All of
+them are committed together or not at all.

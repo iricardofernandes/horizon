@@ -420,6 +420,10 @@ Recurrence, bulk actions, attachments, forecasts, fees, credits and refunds rema
 
 ### Phase D — treasury: accounts, balances and transfers
 
+**Progress:** delivered as [plan phase 19](plan.md#phase-19--treasury-accounts-balances-and-transfers)
+(backlog item 10). Available balance and overdraft limits are deferred; the imported
+statement balance arrives with Phase E.
+
 **Deliverables**
 
 - Implement `treasury/` bank, cash, card/clearing and virtual accounts with bank code,

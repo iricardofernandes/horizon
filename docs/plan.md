@@ -836,6 +836,55 @@ subledger half of its Phase C on the same title kernel as receivables (ADR 0041,
 
 ---
 
+## Phase 19 — Treasury accounts, balances and transfers
+
+**Complete.** Backlog item 10 of the [expansion plan](erp-expansion-plan.md), its Phase D:
+the `treasury/` context exists and knows where the company's money is according to its own
+books (ADR 0041, ADR 0042).
+
+**Deliverables**
+
+- `treasury/` on port 3008, wired through `scripts/modules.json`, the Makefile, compose,
+  Kong, the Postgres init script, CI, the web proxy and the demo.
+- Bank, cash, card-clearing and virtual accounts with bank code, branch and account
+  number, one currency, a tracked-from date and an active state.
+- An append-only journal: direction instead of sign, value date, source (opening, manual,
+  transfer, transfer fee, reversal), counterparty and memo, and a reconciliation state that
+  stays unreconciled until Phase E. Manual entries are corrected by reversal, once.
+- Transfers as one aggregate whose outflow, inflow and optional fee legs are written in the
+  same transaction; cancelling appends inverse entries and keeps the originals.
+- Book, projected and reconciled balances computed from the journal by value date, with the
+  date they are as of; an account statement with the running balance after every line and a
+  daily balance timeline. The statement balance field stays empty until statements exist.
+- `@horizon/contracts@0.8.0` declaring the `treasury` module and its roles, with every
+  service moved to it, and `treasury.account.opened`, `treasury.entry.recorded`,
+  `treasury.transfer.posted` and `treasury.transfer.cancelled`.
+- Idempotency keys on every money-moving command and a per-tenant hash-chained audit log.
+- Web: Finance → Accounts and balances, with account cards labelled as ERP book balances, a
+  statement with running balances, manual entries and reversals, transfers and their
+  cancellation.
+
+**Exit criteria**
+
+- A transfer cannot commit with only one leg: a deferred constraint refuses it even when a
+  row is written directly (integration test).
+- The book balance and the daily timeline are the sum of the journal whatever order
+  backdated entries are recorded in (property test); statements shift every later running
+  balance when an earlier-dated entry arrives.
+- Twenty concurrent transfers in both directions between two accounts keep the combined
+  balance equal to the opening total minus fees, without deadlock.
+- The application role cannot update or delete a journal entry.
+- The browser golden path posts a transfer with a fee and checks that the combined book
+  balance moved by exactly the fee.
+
+**Non-goals**
+
+- Statement import, bank balances and reconciliation (Phase E).
+- Settlements in `financial/` creating treasury entries automatically (Phase F).
+- Overdraft limits, available balance and bank integrations.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.
