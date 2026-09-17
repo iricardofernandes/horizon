@@ -15,7 +15,8 @@ import { SCHEMA_REGISTRY, toJsonSchemas } from './registry'
 const NOT_INDEPENDENTLY_VERSIONED = new Set([
   'tenantIdSchema', // an alias of uuidSchema with a description
   'currencySchema', // only ever appears inside moneySchema
-  'dateSchema', // no registered schema uses it yet
+  'dateSchema', // only ever appears inside registered event payloads
+  'periodSchema', // a calendar month, only ever inside registered ledger payloads
   'eventTypeSchema', // a naming rule, enforced at definition time
   'violationSchema', // only ever appears inside validationProblemSchema
   'cursorPayloadSchema', // the decoded form of an opaque cursor; not a contract

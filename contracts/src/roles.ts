@@ -26,6 +26,7 @@ export const MODULES = [
   'parties',
   'financial',
   'treasury',
+  'ledger',
 ] as const
 
 export const moduleNameSchema = z.enum(MODULES)
@@ -48,6 +49,7 @@ export const ROLES = {
   parties: ['admin', 'editor', 'viewer'],
   financial: ['admin', 'operator', 'viewer'],
   treasury: ['admin', 'operator', 'viewer'],
+  ledger: ['admin', 'accountant', 'viewer'],
 } as const satisfies Record<ModuleName, readonly string[]>
 
 export type RolesByModule = typeof ROLES
@@ -62,6 +64,7 @@ export const roleAssignmentSchema = z.discriminatedUnion('module', [
   z.object({ module: z.literal('parties'), role: z.enum(ROLES.parties) }),
   z.object({ module: z.literal('financial'), role: z.enum(ROLES.financial) }),
   z.object({ module: z.literal('treasury'), role: z.enum(ROLES.treasury) }),
+  z.object({ module: z.literal('ledger'), role: z.enum(ROLES.ledger) }),
 ])
 
 export type RoleAssignment = z.infer<typeof roleAssignmentSchema>
