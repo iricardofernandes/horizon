@@ -516,7 +516,7 @@ function loadModules() {
     ...from(financialRequire, 'financial/dist/infrastructure/database/drizzle/financial-database.js'),
     ...from(financialRequire, 'financial/dist/application/consume-module-events.js'),
     ...from(financialRequire, 'financial/dist/application/use-cases/manage-dimensions.js'),
-    ...from(financialRequire, 'financial/dist/application/use-cases/manage-receivables.js'),
+    ...from(financialRequire, 'financial/dist/application/use-cases/manage-titles.js'),
   }
   const financialTransport = from(
     financialRequire,
@@ -564,8 +564,8 @@ function loadModules() {
     FinancialConsumer: financialTransport.RabbitMqEventConsumer,
     FinancialOutboxRelay: financialTransport.OutboxRelay,
     DefineCategoryUseCase: financial.DefineCategoryUseCase,
-    ReviseReceivableUseCase: financial.ReviseReceivableUseCase,
-    PostReceivableUseCase: financial.PostReceivableUseCase,
+    ReviseTitleUseCase: financial.ReviseTitleUseCase,
+    PostTitleUseCase: financial.PostTitleUseCase,
     RecordSettlementUseCase: financial.RecordSettlementUseCase,
     WebhookDatabase: webhooks.WebhookDatabase,
     CreateSubscriptionUseCase: webhooks.CreateSubscriptionUseCase,
@@ -830,9 +830,9 @@ async function collectReceivable(modules, { database, admin, relay, tenantId, or
     requestId: null,
     idempotencyKey: `demo-${step}-${orderId}`,
   })
-  const title = await database.receivableDetail(tenantId, draft.id, today)
+  const title = await database.titleDetail(tenantId, 'receivable', draft.id, today)
   if (title.status === 'draft') {
-    const revised = await new modules.ReviseReceivableUseCase(database, clock).execute({
+    const revised = await new modules.ReviseTitleUseCase(database, clock, 'receivable').execute({
       context: context('revise'),
       titleId: draft.id,
       terms: {
@@ -846,12 +846,12 @@ async function collectReceivable(modules, { database, admin, relay, tenantId, or
     })
     if (revised.isLeft()) throw revised.value
   }
-  const posted = await new modules.PostReceivableUseCase(database, clock).execute({
+  const posted = await new modules.PostTitleUseCase(database, clock, 'receivable').execute({
     context: context('post'),
     titleId: draft.id,
   })
   if (posted.isLeft()) throw posted.value
-  const settled = await new modules.RecordSettlementUseCase(database, clock).execute({
+  const settled = await new modules.RecordSettlementUseCase(database, clock, 'receivable').execute({
     context: context('settle'),
     titleId: draft.id,
     settlement: {
@@ -862,7 +862,7 @@ async function collectReceivable(modules, { database, admin, relay, tenantId, or
   })
   if (settled.isLeft()) throw settled.value
   await flushAll(relay)
-  const detail = await database.receivableDetail(tenantId, draft.id, today)
+  const detail = await database.titleDetail(tenantId, 'receivable', draft.id, today)
   return {
     titleId: draft.id,
     status: detail.status,
