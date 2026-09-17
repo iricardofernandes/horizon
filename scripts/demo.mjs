@@ -16,6 +16,7 @@ const salesRequire = createRequire(join(root, 'sales/package.json'))
 const webhooksRequire = createRequire(join(root, 'webhooks/package.json'))
 const partiesRequire = createRequire(join(root, 'parties/package.json'))
 const financialRequire = createRequire(join(root, 'financial/package.json'))
+const treasuryRequire = createRequire(join(root, 'treasury/package.json'))
 const postgres = salesRequire('postgres')
 const { drizzle } = salesRequire('drizzle-orm/postgres-js')
 const { migrate } = salesRequire('drizzle-orm/postgres-js/migrator')
@@ -37,6 +38,7 @@ const DEMO = Object.freeze({
   quantity: '4',
   unitPrice: '1250',
   revenueCategory: '1.01',
+  treasuryAccount: 'Demo checking',
 })
 
 const DEMO_CUSTOMER = Object.freeze({
@@ -76,6 +78,8 @@ try {
   telemetry.start()
   const inventoryTracer = makeServiceTracer('inventory')
   const webhooksTracer = makeServiceTracer('webhooks')
+  const financialTracer = makeServiceTracer('financial')
+  const treasuryTracer = makeServiceTracer('treasury')
 
   const modules = loadModules()
   const clock = { now: () => new Date() }
@@ -86,6 +90,7 @@ try {
   const webhooksUrls = moduleUrls('webhooks')
   const partiesUrls = moduleUrls('parties')
   const financialUrls = moduleUrls('financial')
+  const treasuryUrls = moduleUrls('treasury')
   const blindIndexKey = Buffer.from(
     (await readFile(join(root, 'infra/keys/blind-index.key'), 'utf8')).trim(),
     'hex',
@@ -113,6 +118,10 @@ try {
     },
   })
   const financialDb = new modules.FinancialDatabase({ url: financialUrls.app })
+  const treasuryDb = new modules.TreasuryDatabase({ url: treasuryUrls.app })
+  const treasuryAdmin = postgres(treasuryUrls.admin, { max: 1 })
+  resources.push(() => treasuryDb.close())
+  resources.push(() => treasuryAdmin.end())
   const webhooksDb = new modules.WebhookDatabase({
     appUrl: webhooksUrls.app,
     workerUrl: webhooksUrls.relay,
@@ -151,6 +160,8 @@ try {
   const inventoryHandlers = new modules.InventorySalesEventHandlers(inventoryDb, clock, 1800)
   const salesHandlers = new modules.SalesModuleEventHandlers(salesDb, clock)
   const financialHandlers = new modules.FinancialModuleEventHandlers(financialDb, clock)
+  const treasuryHandlers = new modules.TreasuryModuleEventHandlers(treasuryDb, clock)
+  const treasuryQueue = 'horizon.demo.treasury'
   const inventoryQueue = 'horizon.demo.inventory'
   const salesQueue = 'horizon.demo.sales'
   const webhooksQueue = 'horizon.demo.webhooks'
@@ -170,7 +181,13 @@ try {
   const financialConsumer = new modules.FinancialConsumer({
     url: rabbitUrl,
     queue: financialQueue,
-    handlers: financialHandlers.handlers,
+    handlers: tracedHandlers(financialHandlers.handlers, financialTracer),
+    prefetch: 5,
+  })
+  const treasuryConsumer = new modules.TreasuryConsumer({
+    url: rabbitUrl,
+    queue: treasuryQueue,
+    handlers: tracedHandlers(treasuryHandlers.handlers, treasuryTracer),
     prefetch: 5,
   })
   const webhooksConsumer = new modules.WebhookEventConsumer({
@@ -183,6 +200,7 @@ try {
     inventoryConsumer.start(),
     salesConsumer.start(),
     financialConsumer.start(),
+    treasuryConsumer.start(),
     webhooksConsumer.start(),
   ])
   resources.push(() =>
@@ -191,6 +209,8 @@ try {
       salesQueue,
       financialQueue,
       `${financialQueue}.dlq`,
+      treasuryQueue,
+      `${treasuryQueue}.dlq`,
       webhooksQueue,
       `${webhooksQueue}.dlq`,
     ]),
@@ -198,6 +218,7 @@ try {
   resources.push(() => inventoryConsumer.close())
   resources.push(() => salesConsumer.close())
   resources.push(() => financialConsumer.close())
+  resources.push(() => treasuryConsumer.close())
   resources.push(() => webhooksConsumer.close())
 
   const callback = await startStubReceiver()
@@ -293,6 +314,7 @@ try {
   const stockBefore = BigInt(before.on_hand)
   let orderId = ''
   let receivable = { titleId: '', status: '', outstanding: '' }
+  let bank = { accountId: '', entryAmount: '', statementLineStatus: '', reconciliationId: '' }
   let traceId = ''
   await trace.getTracer('horizon.demo').startActiveSpan('golden-path', async (span) => {
     traceId = span.spanContext().traceId
@@ -321,12 +343,22 @@ try {
       )
       await flushAll(inventoryRelay)
 
+      const treasuryAccountId = await demoTreasuryAccount(modules, treasuryDb, identity.tenantId, clock)
       receivable = await collectReceivable(modules, {
         database: financialDb,
         admin: financialAdmin,
         relay: financialRelay,
         tenantId: identity.tenantId,
         orderId,
+        treasuryAccountId,
+        clock,
+      })
+      bank = await reconcileSettlement(modules, {
+        database: treasuryDb,
+        admin: treasuryAdmin,
+        tenantId: identity.tenantId,
+        accountId: treasuryAccountId,
+        receivable,
         clock,
       })
       await waitFor(
@@ -384,6 +416,13 @@ try {
   assert.equal(receivable.status, 'posted')
   assert.equal(receivable.settlementState, 'settled')
   assert.equal(receivable.outstanding, '0')
+  // One amount, followed across four contexts: the order, the receivable, the cash in the
+  // bank account and the bank's own line, matched by a person.
+  assert.equal(receivable.total, order.total)
+  assert.equal(bank.entryAmount, order.total)
+  assert.equal(bank.statementLineAmount, order.total)
+  assert.equal(bank.reconciledAmount, order.total)
+  assert.equal(bank.statementLineStatus, 'matched')
 
   await closeAll()
   await shutdownServiceProviders()
@@ -391,7 +430,7 @@ try {
   telemetry = undefined
   const traceUrl = `http://localhost:${jaegerPort}/trace/${traceId}`
   const traceServices = await waitForJaeger(jaegerPort, traceId)
-  for (const service of ['sales', 'inventory', 'webhooks'])
+  for (const service of ['sales', 'inventory', 'webhooks', 'financial', 'treasury'])
     assert(traceServices.includes(service), `Trace is missing the ${service} service`)
 
   console.log(
@@ -409,6 +448,7 @@ try {
         order: { orderId, status: order.status, total: order.total, currency: order.currency },
         stock: { before: stockBefore.toString(), after: balance.on_hand, reserved: balance.reserved },
         receivable,
+        bank,
         callback: {
           signed: true,
           implementation: 'webhooks',
@@ -518,6 +558,19 @@ function loadModules() {
     ...from(financialRequire, 'financial/dist/application/use-cases/manage-dimensions.js'),
     ...from(financialRequire, 'financial/dist/application/use-cases/manage-titles.js'),
   }
+  const treasury = {
+    ...from(treasuryRequire, 'treasury/dist/infrastructure/database/drizzle/treasury-database.js'),
+    ...from(treasuryRequire, 'treasury/dist/application/consume-module-events.js'),
+    ...from(treasuryRequire, 'treasury/dist/application/use-cases/manage-accounts.js'),
+    ...from(treasuryRequire, 'treasury/dist/application/use-cases/import-statements.js'),
+    ...from(treasuryRequire, 'treasury/dist/application/use-cases/reconcile.js'),
+    ...from(treasuryRequire, 'treasury/dist/infrastructure/statements/csv-adapter.js'),
+    ...from(treasuryRequire, 'treasury/dist/infrastructure/statements/ofx-adapter.js'),
+  }
+  const treasuryTransport = from(
+    treasuryRequire,
+    'treasury/dist/infrastructure/messaging/rabbitmq-transport.js',
+  )
   const financialTransport = from(
     financialRequire,
     'financial/dist/infrastructure/messaging/rabbitmq-transport.js',
@@ -567,6 +620,14 @@ function loadModules() {
     ReviseTitleUseCase: financial.ReviseTitleUseCase,
     PostTitleUseCase: financial.PostTitleUseCase,
     RecordSettlementUseCase: financial.RecordSettlementUseCase,
+    TreasuryDatabase: treasury.TreasuryDatabase,
+    TreasuryModuleEventHandlers: treasury.TreasuryModuleEventHandlers,
+    TreasuryConsumer: treasuryTransport.RabbitMqEventConsumer,
+    OpenAccountUseCase: treasury.OpenAccountUseCase,
+    ImportStatementUseCase: treasury.ImportStatementUseCase,
+    ConfirmMatchUseCase: treasury.ConfirmMatchUseCase,
+    CsvStatementAdapter: treasury.CsvStatementAdapter,
+    OfxStatementAdapter: treasury.OfxStatementAdapter,
     WebhookDatabase: webhooks.WebhookDatabase,
     CreateSubscriptionUseCase: webhooks.CreateSubscriptionUseCase,
     WebhookDispatcher: webhooks.WebhookDispatcher,
@@ -806,7 +867,10 @@ async function seedCustomer(modules, parties, salesAdmin, tenantId, clock) {
  * post it and record the customer's payment; the demo does the same through the use cases
  * the HTTP API runs, with idempotency keys derived from the order so a rerun is harmless.
  */
-async function collectReceivable(modules, { database, admin, relay, tenantId, orderId, clock }) {
+async function collectReceivable(
+  modules,
+  { database, admin, relay, tenantId, orderId, treasuryAccountId, clock },
+) {
   const draft = await waitFor(
     () =>
       rowOrNull(admin`select id from titles
@@ -860,6 +924,7 @@ async function collectReceivable(modules, { database, admin, relay, tenantId, or
       installmentNumber: 1,
       settledOn: title.issuedOn > today ? title.issuedOn : today,
       received: title.total,
+      treasuryAccountId,
     },
   })
   if (settled.isLeft()) throw settled.value
@@ -871,6 +936,86 @@ async function collectReceivable(modules, { database, admin, relay, tenantId, or
     settlementState: detail.settlementState,
     total: detail.total,
     outstanding: detail.outstanding,
+  }
+}
+
+/** The bank account the demo collects into, opened once with a stable key. */
+async function demoTreasuryAccount(modules, database, tenantId, clock) {
+  const today = new Date().toISOString().slice(0, 10)
+  const existing = (await database.listAccounts(tenantId, today)).find(
+    (account) => account.name === DEMO.treasuryAccount,
+  )
+  if (existing) return existing.id
+  const opened = await new modules.OpenAccountUseCase(database, clock).execute({
+    context: { tenantId, actor: 'system:demo', requestId: null, idempotencyKey: `demo-account-${tenantId}` },
+    account: {
+      kind: 'bank',
+      name: DEMO.treasuryAccount,
+      currency: 'BRL',
+      bank: { bankCode: '001', branch: '0001', accountNumber: '10000-1' },
+      openedOn: '2026-01-01',
+      openingBalance: { amount: '0', direction: 'inflow' },
+    },
+  })
+  if (opened.isLeft()) throw opened.value
+  return opened.value.id
+}
+
+/**
+ * Treasury recorded the settlement as cash in the account. The bank's statement reports the
+ * same money; it is imported, the matcher proposes the pair, and the demo accepts it exactly
+ * as a person would — the suggestion never confirms itself (ADR 0046).
+ */
+async function reconcileSettlement(modules, { database, admin, tenantId, accountId, receivable, clock }) {
+  const posting = await waitFor(
+    () =>
+      rowOrNull(admin`select p.entry_id, p.status, e.amount::text as amount, e.value_on::text as value_on
+        from settlement_postings p join journal_entries e on e.tenant_id = p.tenant_id and e.id = p.entry_id
+        where p.tenant_id = ${tenantId} and p.title_id = ${receivable.titleId}`),
+    'the settlement recorded in the treasury account',
+  )
+  assert.equal(posting.status, 'posted')
+  const [year, month, day] = posting.value_on.split('-')
+  const description = `RECEBIMENTO ${receivable.titleId.slice(-12).toUpperCase()}`
+  const amount = `${posting.amount.slice(0, -2) || '0'},${posting.amount.slice(-2).padStart(2, '0')}`
+  const imported = await new modules.ImportStatementUseCase(database, clock, {
+    csv: new modules.CsvStatementAdapter(),
+    ofx: new modules.OfxStatementAdapter(),
+  }).execute({
+    context: { tenantId, actor: 'system:demo', requestId: null, idempotencyKey: `demo-import-${receivable.titleId}` },
+    accountId,
+    format: 'csv',
+    fileName: `demo-${receivable.titleId}.csv`,
+    content: `Data;Histórico;Valor\n${day}/${month}/${year};${description};${amount}\n`,
+  })
+  if (imported.isLeft()) throw imported.value
+  const range = { from: posting.value_on, to: posting.value_on }
+  const before = await database.reconciliationWorkspace(tenantId, accountId, range)
+  const line = before.lines.find((candidate) => candidate.description === description)
+  assert(line, 'the imported bank line is missing')
+  const suggestion = before.suggestions.find(
+    (candidate) =>
+      candidate.statementLineIds.includes(line.id) && candidate.entryIds.includes(posting.entry_id),
+  )
+  assert(suggestion, 'the matcher did not propose the settlement for its bank line')
+  const confirmed = await new modules.ConfirmMatchUseCase(database, clock).execute({
+    context: { tenantId, actor: 'system:demo', requestId: null, idempotencyKey: `demo-match-${receivable.titleId}` },
+    accountId,
+    statementLines: [{ id: line.id }],
+    entries: [{ id: posting.entry_id }],
+    suggestionKey: suggestion.key,
+  })
+  if (confirmed.isLeft()) throw confirmed.value
+  const after = await database.reconciliationWorkspace(tenantId, accountId, range)
+  const reconciled = after.reconciliations.find((record) => record.id === confirmed.value.id)
+  return {
+    accountId,
+    entryAmount: posting.amount,
+    statementLineAmount: after.lines.find((candidate) => candidate.id === line.id)?.amount,
+    statementLineStatus: after.lines.find((candidate) => candidate.id === line.id)?.status,
+    reconciledAmount: reconciled?.items.find((item) => item.kind === 'entry')?.applied,
+    suggestionScore: suggestion.score,
+    reconciliationId: confirmed.value.id,
   }
 }
 
