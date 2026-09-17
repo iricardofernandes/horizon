@@ -421,6 +421,7 @@ export class Title extends AggregateRoot<TitleProps> {
         settlementId,
         direction: this.props.direction,
         partyId: this.props.partyId,
+        documentNumber: this.props.documentNumber.value,
         installmentNumber: input.installmentNumber,
         settledOn: input.settledOn.value,
         received: moneyPayload(input.received),
