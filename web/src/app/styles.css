@@ -2183,3 +2183,94 @@ th.numeric {
   background: var(--jade-3);
   color: var(--jade-11);
 }
+/* Treasury */
+.form-grid.three-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.treasury-accounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.treasury-account {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 16px;
+}
+.treasury-account-selected {
+  border-color: var(--jade-8);
+  box-shadow: 0 0 0 1px var(--jade-8);
+}
+.treasury-account-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.treasury-account-heading h2 {
+  margin: 0;
+  font-size: 15px;
+}
+.treasury-account-heading small,
+.treasury-account-note {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+.treasury-account dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.treasury-account dt {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.treasury-account dd {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.treasury-account-note {
+  margin: 0;
+}
+.treasury-negative {
+  color: var(--color-danger-text);
+}
+.treasury-statement,
+.treasury-transfers {
+  margin-bottom: 14px;
+  padding: 16px;
+}
+.treasury-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0;
+}
+.treasury-line-text {
+  margin-left: 8px;
+}
+.badge-entry-opening,
+.badge-entry-manual {
+  background: var(--sage-3);
+  color: var(--sage-11);
+}
+.badge-entry-transfer,
+.badge-entry-transfer-fee {
+  background: var(--amber-3);
+  color: var(--amber-11);
+}
+.badge-entry-reversal {
+  background: var(--red-3);
+  color: var(--red-11);
+}
+@media (max-width: 760px) {
+  .form-grid.three-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

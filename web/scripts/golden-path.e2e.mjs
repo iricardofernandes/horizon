@@ -157,7 +157,7 @@ try {
   await page.getByRole('dialog', { name: 'Create quote' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('link', { name: 'Balances' }).click()
+  await page.getByRole('link', { name: 'Balances', exact: true }).click()
   await page.waitForURL(`${appUrl}/app/inventory/balances`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Inventory', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Receive stock' }).click()
@@ -261,6 +261,60 @@ try {
   )
   await payableDialog.getByRole('button', { name: 'Close dialog' }).click()
 
+  // Treasury: a transfer changes two book balances together and keeps their sum.
+  const treasuryAccounts = await page.evaluate(async () => {
+    const list = async () => (await (await fetch('/api/horizon/treasury/accounts')).json()).data
+    for (const name of ['Golden checking', 'Golden savings']) {
+      if ((await list()).some((account) => account.name === name)) continue
+      const response = await fetch('/api/horizon/treasury/accounts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({
+          kind: 'cash',
+          name,
+          currency: 'BRL',
+          openedOn: '2026-01-01',
+          openingBalance: { amount: '100000', direction: 'inflow' },
+        }),
+      })
+      if (!response.ok) return null
+    }
+    return (await list()).filter((account) => account.name.startsWith('Golden '))
+  })
+  assert(treasuryAccounts?.length === 2, 'the golden treasury accounts could not be opened')
+  const totalBefore = treasuryAccounts.reduce((sum, account) => sum + BigInt(account.bookBalance), 0n)
+  await page.getByRole('link', { name: 'Accounts and balances' }).click()
+  await page.waitForURL(`${appUrl}/app/finance/treasury`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Accounts and balances', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Show the statement of Golden checking' }).click()
+  await page.getByRole('heading', { name: 'Statement · Golden checking' }).waitFor()
+  await page.getByRole('button', { name: 'New transfer' }).click()
+  const transferForm = page.getByRole('dialog', { name: 'New transfer' })
+  // The accounts are listed by name, so the form proposes checking → savings.
+  for (const [label, name] of [
+    ['From', 'Golden checking'],
+    ['To', 'Golden savings'],
+  ])
+    assert(
+      (await transferForm.getByRole('combobox', { name: label }).textContent())?.includes(name),
+      `the transfer form did not propose ${name} as ${label}`,
+    )
+  await transferForm.getByLabel('Amount').fill('12.34')
+  await transferForm.getByLabel('Fee').fill('0.50')
+  await transferForm.getByRole('button', { name: 'Transfer', exact: true }).click()
+  await page.getByText('Transfer posted.').waitFor()
+  const totalAfter = await page.evaluate(async () => {
+    const { data } = await (await fetch('/api/horizon/treasury/accounts')).json()
+    return data
+      .filter((account) => account.name.startsWith('Golden '))
+      .reduce((sum, account) => sum + BigInt(account.bookBalance), 0n)
+      .toString()
+  })
+  assert(
+    BigInt(totalAfter) === totalBefore - 50n,
+    `the transfer changed the combined balance by more than its fee (${totalBefore} → ${totalAfter})`,
+  )
+
   await page.getByRole('link', { name: 'Webhooks' }).click()
   await page.waitForURL(`${appUrl}/app/developers/webhooks`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Webhooks', exact: true }).waitFor()
@@ -339,6 +393,7 @@ try {
     ['Classifications', 'Classifications'],
     ['Receivables', 'Accounts receivable'],
     ['Payables', 'Accounts payable'],
+    ['Accounts and balances', 'Accounts and balances'],
   ]) {
     await page.getByRole('link', { name: screen[0], exact: true }).click()
     await page.getByRole('heading', { name: screen[1], exact: true }).waitFor()

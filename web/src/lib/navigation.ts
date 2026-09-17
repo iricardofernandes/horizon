@@ -1,6 +1,7 @@
 import type { Icon } from '@phosphor-icons/react'
 import {
   AddressBook,
+  Bank,
   Books,
   ChartBar,
   FileText,
@@ -106,6 +107,13 @@ export const navigation: readonly NavigationGroup[] = [
         labelKey: 'payables',
         icon: Invoice,
         module: 'financial',
+        demo: false,
+      },
+      {
+        href: '/app/finance/treasury',
+        labelKey: 'treasury',
+        icon: Bank,
+        module: 'treasury',
         demo: false,
       },
     ],
