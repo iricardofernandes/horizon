@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   date,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -72,7 +73,6 @@ export const journalEntries = pgTable('journal_entries', {
   counterparty: text('counterparty'),
   memo: text('memo'),
   reason: text('reason'),
-  reconciliationState: text('reconciliation_state').notNull().default('unreconciled'),
   recordedAt: instant('recorded_at').notNull(),
 })
 
@@ -125,4 +125,100 @@ export const outbox = pgTable('outbox', {
   dispatchedAt: instant('dispatched_at'),
   attempts: smallint('attempts').notNull().default(0),
   lastError: text('last_error'),
+})
+
+export const statementImports = pgTable('statement_imports', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  accountId: uuid('account_id').notNull(),
+  format: text('format').notNull(),
+  fileName: text('file_name').notNull(),
+  fileHash: text('file_hash').notNull(),
+  lineCount: integer('line_count').notNull(),
+  duplicateCount: integer('duplicate_count').notNull(),
+  periodStart: businessDate('period_start'),
+  periodEnd: businessDate('period_end'),
+  closingBalance: minorUnits('closing_balance'),
+  closingBalanceOn: businessDate('closing_balance_on'),
+  importedBy: text('imported_by').notNull(),
+  importedAt: instant('imported_at').notNull(),
+})
+
+export const statementLines = pgTable('statement_lines', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  accountId: uuid('account_id').notNull(),
+  importId: uuid('import_id').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  postedOn: businessDate('posted_on').notNull(),
+  amount: minorUnits('amount').notNull(),
+  currency: text('currency').notNull(),
+  bankReference: text('bank_reference'),
+  documentId: text('document_id'),
+  description: text('description').notNull(),
+  counterparty: text('counterparty'),
+  raw: jsonb('raw').$type<Record<string, string>>().notNull(),
+})
+
+export const reconciliations = pgTable('reconciliations', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  accountId: uuid('account_id').notNull(),
+  kind: text('kind').notNull(),
+  origin: text('origin').notNull(),
+  suggestionKey: text('suggestion_key'),
+  suggestionScore: smallint('suggestion_score'),
+  corrected: boolean('corrected').notNull(),
+  reason: text('reason'),
+  status: text('status').notNull(),
+  confirmedBy: text('confirmed_by').notNull(),
+  confirmedAt: instant('confirmed_at').notNull(),
+  undoneBy: text('undone_by'),
+  undoneAt: instant('undone_at'),
+  undoReason: text('undo_reason'),
+})
+
+export const reconciliationItems = pgTable('reconciliation_items', {
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  reconciliationId: uuid('reconciliation_id').notNull(),
+  statementLineId: uuid('statement_line_id'),
+  entryId: uuid('entry_id'),
+  applied: minorUnits('applied').notNull(),
+})
+
+export const dismissedSuggestions = pgTable(
+  'dismissed_suggestions',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    accountId: uuid('account_id').notNull(),
+    suggestionKey: text('suggestion_key').notNull(),
+    score: smallint('score').notNull(),
+    dismissedBy: text('dismissed_by').notNull(),
+    dismissedAt: instant('dismissed_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.accountId, table.suggestionKey] })],
+)
+
+export const reconciliationClosures = pgTable('reconciliation_closures', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  accountId: uuid('account_id').notNull(),
+  through: businessDate('through').notNull(),
+  closedBy: text('closed_by').notNull(),
+  closedAt: instant('closed_at').notNull(),
+  reopenedBy: text('reopened_by'),
+  reopenedAt: instant('reopened_at'),
+  reopenReason: text('reopen_reason'),
 })

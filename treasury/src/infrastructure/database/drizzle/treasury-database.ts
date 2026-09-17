@@ -9,6 +9,7 @@ import {
 } from '@/application/ports/unit-of-work'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import { reconciliationMetrics, reconciliationWorkspace } from './reconciliation-reads'
 import * as schema from './schema'
 import {
   accountBalances,
@@ -115,6 +116,18 @@ export class TreasuryDatabase extends TreasuryUnitOfWork {
 
   balanceTimeline(tenantId: string, accountId: string, range: { from: string; to: string }) {
     return this.read(tenantId, (tx) => balanceTimeline(tx, accountId, range))
+  }
+
+  reconciliationWorkspace(
+    tenantId: string,
+    accountId: string,
+    range: { from: string; to: string },
+  ) {
+    return this.read(tenantId, (tx) => reconciliationWorkspace(tx, tenantId, accountId, range))
+  }
+
+  reconciliationMetrics(tenantId: string, accountId: string) {
+    return this.read(tenantId, (tx) => reconciliationMetrics(tx, accountId))
   }
 
   listTransfers(tenantId: string, limit: number) {

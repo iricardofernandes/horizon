@@ -20,8 +20,11 @@ export interface AccountBalances {
   readonly bookBalance: string
   /** Including entries dated after `asOf`: scheduled movements already recorded. */
   readonly projectedBalance: string
+  /** The part of the book balance a person has matched to bank lines. */
   readonly reconciledBalance: string
-  readonly statementBalance: null
+  /** The balance the bank last reported in an imported statement, and its date. */
+  readonly statementBalance: string | null
+  readonly statementBalanceOn: string | null
   readonly lastValueOn: string | null
   readonly asOf: string
 }
@@ -40,6 +43,8 @@ type BalanceRow = {
   projected: string
   reconciled: string
   last_value_on: string | null
+  statement: string | null
+  statement_on: string | null
 }
 
 function presentBalances(row: BalanceRow, asOf: string): AccountBalances {
@@ -56,7 +61,8 @@ function presentBalances(row: BalanceRow, asOf: string): AccountBalances {
     bookBalance: row.book,
     projectedBalance: row.projected,
     reconciledBalance: row.reconciled,
-    statementBalance: null,
+    statementBalance: row.statement,
+    statementBalanceOn: row.statement_on,
     lastValueOn: row.last_value_on,
     asOf,
   }
@@ -68,8 +74,17 @@ function balancesQuery(asOf: string, accountId?: string) {
       a.opened_on::text as opened_on, a.active,
       coalesce(sum(${signed}) filter (where e.value_on <= ${asOf}::date), 0)::text as book,
       coalesce(sum(${signed}), 0)::text as projected,
-      coalesce(sum(${signed}) filter (where e.reconciliation_state = 'reconciled'), 0)::text as reconciled,
-      max(e.value_on) filter (where e.value_on <= ${asOf}::date)::text as last_value_on
+      max(e.value_on) filter (where e.value_on <= ${asOf}::date)::text as last_value_on,
+      (select coalesce(sum(i.applied), 0) from reconciliation_items i
+        join reconciliations r on r.tenant_id = i.tenant_id and r.id = i.reconciliation_id
+        join journal_entries j on j.tenant_id = i.tenant_id and j.id = i.entry_id
+        where r.status = 'active' and j.account_id = a.id and j.value_on <= ${asOf}::date)::text as reconciled,
+      (select s.closing_balance::text from statement_imports s
+        where s.account_id = a.id and s.closing_balance_on <= ${asOf}::date
+        order by s.closing_balance_on desc, s.imported_at desc limit 1) as statement,
+      (select s.closing_balance_on::text from statement_imports s
+        where s.account_id = a.id and s.closing_balance_on <= ${asOf}::date
+        order by s.closing_balance_on desc, s.imported_at desc limit 1) as statement_on
     from accounts a
     left join journal_entries e on e.tenant_id = a.tenant_id and e.account_id = a.id
     ${accountId ? sql`where a.id = ${accountId}` : sql``}

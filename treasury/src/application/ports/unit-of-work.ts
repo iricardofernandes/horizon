@@ -2,7 +2,10 @@ import type { Either } from '@/core/either'
 import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type {
   AccountsRepository,
+  ClosuresRepository,
   JournalRepository,
+  ReconciliationsRepository,
+  StatementsRepository,
   TransfersRepository,
 } from '@/domain/repositories/treasury-repositories'
 
@@ -10,7 +13,13 @@ import type {
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'account' | 'entry' | 'transfer'
+  readonly subjectType:
+    | 'account'
+    | 'entry'
+    | 'transfer'
+    | 'statement-import'
+    | 'reconciliation'
+    | 'closure'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -26,7 +35,12 @@ export interface TreasuryScope {
   readonly accounts: AccountsRepository
   readonly journal: JournalRepository
   readonly transfers: TransfersRepository
+  readonly statements: StatementsRepository
+  readonly reconciliations: ReconciliationsRepository
+  readonly closures: ClosuresRepository
   readonly audit: AuditTrail
+  /** Serializes reconciliation work on one account for the rest of the transaction. */
+  lockAccount(accountId: string): Promise<void>
 }
 
 export interface CommandReceipt {

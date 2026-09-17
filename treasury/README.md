@@ -8,8 +8,8 @@ its own lifecycle. It is reached through Kong at `/treasury`, never directly, an
 no source with any other module (ADR 0001). Its boundary against `financial/` and `ledger/`
 is ADR 0041.
 
-**Status: phase 19 — accounts, journal, balances and transfers complete.** Statement import
-and reconciliation arrive next.
+**Status: phase 20 — accounts, journal, balances, transfers, statement import and
+reconciliation complete.**
 
 ---
 
@@ -23,13 +23,21 @@ and reconciliation arrive next.
 - **Transfers** — one aggregate whose outflow, inflow and optional fee legs are written in
   the transaction that records it. A deferred database constraint refuses a transfer that
   commits without both legs. Cancelling adds inverse entries and keeps the originals.
+- **Statements** — OFX and CSV files imported into an account through pluggable adapters.
+  A file is recognised by its hash and each line by its fingerprint, so reimports and
+  overlapping files store nothing twice. Lines are immutable and keep the bank's own fields.
+- **Reconciliation** — a person matches bank lines to entries (one to one, one to many, many
+  to one, partially, or with an explicit adjustment entry), or ignores lines with a reason.
+  Deterministic suggestions carry a score and their reasons and never confirm themselves.
+  Every reconciliation balances, is undone rather than deleted, and a closed period freezes
+  the ones it covers (ADR 0046).
 - **Balances** — always computed from the journal by value date: the book balance through a
-  date, the projected balance including later-dated entries, and the reconciled balance
-  (zero until reconciliation exists). There is no stored balance to drift, so a backdated
+  date, the projected balance including later-dated entries, the reconciled balance, and the
+  last balance a bank statement reported. There is no stored balance to drift, so a backdated
   entry moves every later balance deterministically.
 
 A book balance is labelled as such everywhere. It is never presented as the bank's live
-balance; an imported statement balance arrives with reconciliation.
+balance; the statement balance is the bank's figure on the date its file reported it.
 
 ## Events
 
@@ -39,13 +47,16 @@ balance; an imported statement balance arrives with reconciliation.
 | `treasury.entry.recorded` | A line was appended — including every transfer leg, fee and reversal |
 | `treasury.transfer.posted` | Money moved between two accounts, both legs committed |
 | `treasury.transfer.cancelled` | A transfer was undone by inverse entries |
+| `treasury.statement.imported` | A statement file was imported; duplicates are counted, not stored |
+| `treasury.reconciliation.confirmed` | A person matched or ignored bank lines |
+| `treasury.reconciliation.undone` | A reconciliation was undone |
 
 It consumes nothing yet. Every command that moves money requires an `Idempotency-Key`
 header (ADR 0028), and every command is written to a per-tenant hash-chained audit log.
 
 ## Authorization
 
-| Role | Reads | Records entries and transfers | Reverses and cancels | Opens and deactivates accounts |
+| Role | Reads | Records entries, transfers, imports and reconciliations | Reverses, cancels and undoes | Opens accounts, closes and reopens periods |
 |---|---|---|---|---|
 | `treasury:admin` | yes | yes | yes | yes |
 | `treasury:operator` | yes | yes | — | — |
@@ -64,5 +75,6 @@ npm run dev
 daily timeline come out the same whatever order backdated entries are recorded in.
 `npm run test:e2e` starts PostgreSQL with Testcontainers and proves statements with running
 balances, idempotent commands, transfer cancellation, concurrent transfers in both
-directions keeping money constant, the deferred leg constraint, the append-only journal and
-tenant isolation.
+directions keeping money constant, the deferred leg constraint, the append-only journal,
+statement reimports, every reconciliation shape, suggestions and their measurement, the
+period summary, period closure and tenant isolation.

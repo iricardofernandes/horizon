@@ -25,6 +25,11 @@ import {
   Money,
   Reason,
 } from '@/domain/value-objects/treasury-values'
+import {
+  closuresRepository,
+  reconciliationsRepository,
+  statementsRepository,
+} from './reconciliation-store'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
@@ -32,7 +37,7 @@ export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 export const GENESIS_HASH = '0'.repeat(64)
 
-function restored<E, T>(result: Either<E, T>): T {
+export function restored<E, T>(result: Either<E, T>): T {
   if (result.isLeft()) throw new Error('Invalid persisted treasury value', { cause: result.value })
   return result.value
 }
@@ -130,7 +135,7 @@ async function publish(tx: Transaction, tenantId: string, event: DomainEvent): P
   })
 }
 
-async function publishAll(
+export async function publishAll(
   tx: Transaction,
   tenantId: string,
   aggregate: { pullDomainEvents(): readonly DomainEvent[] },
@@ -296,6 +301,14 @@ export function makeScope(tx: Transaction, tenantId: string): TreasuryScope {
         await publishAll(tx, tenantId, transfer)
       },
     },
+    statements: statementsRepository(tx, tenantId),
+    reconciliations: reconciliationsRepository(tx, tenantId),
+    closures: closuresRepository(tx, tenantId),
     audit: auditTrail(tx, tenantId),
+    lockAccount: async (accountId) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`treasury.reconcile:${accountId}`}, 0))`,
+      )
+    },
   }
 }

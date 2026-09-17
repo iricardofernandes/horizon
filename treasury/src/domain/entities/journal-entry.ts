@@ -89,6 +89,10 @@ export class JournalEntry extends AggregateRoot<EntryProps> {
     return this.props.accountId
   }
 
+  get valueOn(): string {
+    return this.props.valueOn.value
+  }
+
   get source(): EntrySource {
     return this.props.source
   }
