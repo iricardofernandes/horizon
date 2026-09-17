@@ -342,6 +342,7 @@ function InstallmentsTable({
             }
           }}
           paymentMethods={data.paymentMethods}
+          treasuryAccounts={data.treasuryAccounts}
         />
       ) : null}
     </section>

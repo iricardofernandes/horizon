@@ -784,7 +784,9 @@
     "approve": "Approve",
     "approved": "Payable approved.",
     "reject": "Reject",
-    "rejected": "Payable returned to its author."
+    "rejected": "Payable returned to its author.",
+    "treasuryAccount": "Received into account",
+    "noTreasuryAccount": "Not recorded in Treasury"
   },
   "payables": {
     "eyebrow": "Finance",
@@ -911,7 +913,9 @@
     "threshold": "Approval threshold",
     "thresholdHelp": "Payables at or above this amount need a second person. Use 0 to require approval for all.",
     "savePolicy": "Save policy",
-    "policySaved": "Approval policy saved."
+    "policySaved": "Approval policy saved.",
+    "treasuryAccount": "Paid from account",
+    "noTreasuryAccount": "Not recorded in Treasury"
   },
   "treasury": {
     "eyebrow": "Finance",
@@ -981,7 +985,8 @@
       "manual": "manual",
       "transfer": "transfer",
       "transfer-fee": "transfer fee",
-      "reversal": "reversal"
+      "reversal": "reversal",
+      "settlement": "settlement"
     },
     "reversedLine": "Reversed by a later entry",
     "reverseEntry": "Reverse",
@@ -1024,7 +1029,8 @@
       "manual": "Manual entry",
       "transfer": "Transfer",
       "transfer-fee": "Transfer fee",
-      "reversal": "Reversal"
+      "reversal": "Reversal",
+      "settlement": "Settlement"
     },
     "acceptLabel": "Accept the suggestion for {description}",
     "accept": "Accept",

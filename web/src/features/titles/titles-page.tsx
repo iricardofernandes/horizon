@@ -43,6 +43,22 @@ export async function loadTitles(direction: Direction): Promise<TitlesData> {
     paymentMethods,
     paymentTerms,
     approvalPolicies: policies,
+    treasuryAccounts: await treasuryAccounts(),
+  }
+}
+
+/** Treasury is another module: a reader without a treasury role simply gets no accounts. */
+async function treasuryAccounts(): Promise<TitlesData['treasuryAccounts']> {
+  try {
+    const accounts = await readPage<{
+      id: string
+      name: string
+      currency: string
+      active: boolean
+    }>('treasury.accounts', '/api/horizon/treasury/accounts')
+    return accounts.filter((account) => account.active)
+  } catch {
+    return []
   }
 }
 

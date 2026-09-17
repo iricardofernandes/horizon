@@ -18,6 +18,7 @@ import {
 } from './types'
 
 const NO_METHOD = 'none'
+const NO_ACCOUNT = 'none'
 
 /** Reversals and cancellations always say why; the reason stays in the record (ADR 0042). */
 export function ReasonForm({
@@ -59,6 +60,7 @@ export function SettleForm({
   installment,
   issuedOn,
   paymentMethods,
+  treasuryAccounts,
   busy,
   onSubmit,
   onCancel,
@@ -67,6 +69,7 @@ export function SettleForm({
   installment: Installment
   issuedOn: string
   paymentMethods: PaymentMethod[]
+  treasuryAccounts: { id: string; name: string }[]
   busy: boolean
   onSubmit: (body: Record<string, unknown>) => Promise<void>
   onCancel: () => void
@@ -97,11 +100,13 @@ export function SettleForm({
       return
     }
     const method = String(form.get('paymentMethodId') ?? NO_METHOD)
+    const account = String(form.get('treasuryAccountId') ?? NO_ACCOUNT)
     await onSubmit({
       installmentNumber: installment.number,
       settledOn: String(form.get('settledOn') ?? today),
       ...amounts,
       paymentMethodId: method === NO_METHOD ? null : method,
+      treasuryAccountId: account === NO_ACCOUNT ? null : account,
     })
   }
 
@@ -119,6 +124,16 @@ export function SettleForm({
         />
         <SelectField label={t('paymentMethod')} name="paymentMethodId" options={methods} />
       </div>
+      {treasuryAccounts.length ? (
+        <SelectField
+          label={t('treasuryAccount')}
+          name="treasuryAccountId"
+          options={[
+            { value: NO_ACCOUNT, label: t('noTreasuryAccount') },
+            ...treasuryAccounts.map((account) => ({ value: account.id, label: account.name })),
+          ]}
+        />
+      ) : null}
       <div className="form-grid four-columns">
         <AmountField
           defaultValue={decimalOf(installment.outstanding)}

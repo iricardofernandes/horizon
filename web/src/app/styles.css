@@ -2391,3 +2391,7 @@ tbody tr.reconciliation-selected td {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.badge-entry-settlement {
+  background: var(--jade-3);
+  color: var(--jade-11);
+}

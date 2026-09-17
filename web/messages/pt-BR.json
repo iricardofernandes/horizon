@@ -784,7 +784,9 @@
     "approve": "Aprovar",
     "approved": "Título a pagar aprovado.",
     "reject": "Recusar",
-    "rejected": "Título a pagar devolvido ao autor."
+    "rejected": "Título a pagar devolvido ao autor.",
+    "treasuryAccount": "Conta de recebimento",
+    "noTreasuryAccount": "Não registrar na tesouraria"
   },
   "payables": {
     "eyebrow": "Financeiro",
@@ -911,7 +913,9 @@
     "threshold": "Valor mínimo para aprovação",
     "thresholdHelp": "Títulos a partir deste valor precisam de uma segunda pessoa. Use 0 para exigir aprovação em todos.",
     "savePolicy": "Salvar política",
-    "policySaved": "Política de aprovação salva."
+    "policySaved": "Política de aprovação salva.",
+    "treasuryAccount": "Conta de pagamento",
+    "noTreasuryAccount": "Não registrar na tesouraria"
   },
   "treasury": {
     "eyebrow": "Financeiro",
@@ -981,7 +985,8 @@
       "manual": "manual",
       "transfer": "transferência",
       "transfer-fee": "tarifa de transferência",
-      "reversal": "estorno"
+      "reversal": "estorno",
+      "settlement": "baixa"
     },
     "reversedLine": "Estornado por um lançamento posterior",
     "reverseEntry": "Estornar",
@@ -1024,7 +1029,8 @@
       "manual": "Lançamento manual",
       "transfer": "Transferência",
       "transfer-fee": "Tarifa de transferência",
-      "reversal": "Estorno"
+      "reversal": "Estorno",
+      "settlement": "Baixa"
     },
     "acceptLabel": "Aceitar a sugestão para {description}",
     "accept": "Aceitar",

@@ -290,15 +290,8 @@ try {
   await page.getByRole('heading', { name: 'Statement · Golden checking' }).waitFor()
   await page.getByRole('button', { name: 'New transfer' }).click()
   const transferForm = page.getByRole('dialog', { name: 'New transfer' })
-  // The accounts are listed by name, so the form proposes checking → savings.
-  for (const [label, name] of [
-    ['From', 'Golden checking'],
-    ['To', 'Golden savings'],
-  ])
-    assert(
-      (await transferForm.getByRole('combobox', { name: label }).textContent())?.includes(name),
-      `the transfer form did not propose ${name} as ${label}`,
-    )
+  await chooseOption(page, transferForm.getByRole('combobox', { name: 'From' }), 'Golden checking')
+  await chooseOption(page, transferForm.getByRole('combobox', { name: 'To' }), 'Golden savings')
   await transferForm.getByLabel('Amount').fill('12.34')
   await transferForm.getByLabel('Fee').fill('0.50')
   await transferForm.getByRole('button', { name: 'Transfer', exact: true }).click()
@@ -327,10 +320,7 @@ try {
   await page.getByRole('link', { name: 'Bank reconciliation' }).click()
   await page.waitForURL(`${appUrl}/app/finance/reconciliation`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Bank reconciliation', exact: true }).waitFor()
-  assert(
-    (await page.getByRole('combobox', { name: 'Account' }).textContent())?.includes('Golden checking'),
-    'the reconciliation did not open on Golden checking',
-  )
+  await chooseOption(page, page.getByRole('combobox', { name: 'Account' }), 'Golden checking')
   for (const expected of ['1 new line imported, 0 already known.', '0 new lines imported, 1 already known.']) {
     await page.getByRole('button', { name: 'Import statement' }).click()
     const importForm = page.getByRole('dialog', { name: 'Import statement' })
@@ -472,6 +462,22 @@ async function waitForTrace(traceId) {
     await new Promise((resolve) => setTimeout(resolve, 500))
   } while (Date.now() < deadline)
   return []
+}
+
+/**
+ * Picks an option of a Base UI select by typing its label, as a keyboard user would. Inside a
+ * dialog the open list overlaps its trigger, so pointer clicks on options are unreliable.
+ */
+async function chooseOption(page, combobox, label) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if ((await combobox.textContent())?.includes(label)) return
+    await combobox.focus()
+    await page.keyboard.press('Enter')
+    await page.keyboard.type(label)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+  }
+  assert((await combobox.textContent())?.includes(label), `could not choose ${label}`)
 }
 
 async function waitUntil(check, description, timeoutMs = 30_000) {

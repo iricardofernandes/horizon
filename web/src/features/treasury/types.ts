@@ -24,7 +24,7 @@ export type StatementLine = {
   direction: 'inflow' | 'outflow'
   amount: string
   valueOn: string
-  source: 'opening' | 'manual' | 'transfer' | 'transfer-fee' | 'reversal'
+  source: 'opening' | 'manual' | 'transfer' | 'transfer-fee' | 'reversal' | 'settlement'
   transferId: string | null
   reverses: string | null
   reversedBy: string | null

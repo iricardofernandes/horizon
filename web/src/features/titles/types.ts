@@ -106,6 +106,8 @@ export type TitlesData = {
   summary: TitlesSummary
   counterparties: Counterparty[]
   approvalPolicies: ApprovalPolicy[]
+  /** Accounts the cash may move through; empty when the session holds no treasury role. */
+  treasuryAccounts: { id: string; name: string; currency: string }[]
   categories: Category[]
   paymentMethods: PaymentMethod[]
   paymentTerms: PaymentTerm[]
