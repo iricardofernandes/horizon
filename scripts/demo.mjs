@@ -17,6 +17,7 @@ const webhooksRequire = createRequire(join(root, 'webhooks/package.json'))
 const partiesRequire = createRequire(join(root, 'parties/package.json'))
 const financialRequire = createRequire(join(root, 'financial/package.json'))
 const treasuryRequire = createRequire(join(root, 'treasury/package.json'))
+const ledgerRequire = createRequire(join(root, 'ledger/package.json'))
 const postgres = salesRequire('postgres')
 const { drizzle } = salesRequire('drizzle-orm/postgres-js')
 const { migrate } = salesRequire('drizzle-orm/postgres-js/migrator')
@@ -80,6 +81,7 @@ try {
   const webhooksTracer = makeServiceTracer('webhooks')
   const financialTracer = makeServiceTracer('financial')
   const treasuryTracer = makeServiceTracer('treasury')
+  const ledgerTracer = makeServiceTracer('ledger')
 
   const modules = loadModules()
   const clock = { now: () => new Date() }
@@ -91,6 +93,7 @@ try {
   const partiesUrls = moduleUrls('parties')
   const financialUrls = moduleUrls('financial')
   const treasuryUrls = moduleUrls('treasury')
+  const ledgerUrls = moduleUrls('ledger')
   const blindIndexKey = Buffer.from(
     (await readFile(join(root, 'infra/keys/blind-index.key'), 'utf8')).trim(),
     'hex',
@@ -120,8 +123,10 @@ try {
   const financialDb = new modules.FinancialDatabase({ url: financialUrls.app })
   const treasuryDb = new modules.TreasuryDatabase({ url: treasuryUrls.app })
   const treasuryAdmin = postgres(treasuryUrls.admin, { max: 1 })
+  const ledgerDb = new modules.LedgerDatabase({ url: ledgerUrls.app })
   resources.push(() => treasuryDb.close())
   resources.push(() => treasuryAdmin.end())
+  resources.push(() => ledgerDb.close())
   const webhooksDb = new modules.WebhookDatabase({
     appUrl: webhooksUrls.app,
     workerUrl: webhooksUrls.relay,
@@ -161,7 +166,9 @@ try {
   const salesHandlers = new modules.SalesModuleEventHandlers(salesDb, clock)
   const financialHandlers = new modules.FinancialModuleEventHandlers(financialDb, clock)
   const treasuryHandlers = new modules.TreasuryModuleEventHandlers(treasuryDb, clock)
+  const ledgerHandlers = new modules.LedgerModuleEventHandlers(ledgerDb, clock)
   const treasuryQueue = 'horizon.demo.treasury'
+  const ledgerQueue = 'horizon.demo.ledger'
   const inventoryQueue = 'horizon.demo.inventory'
   const salesQueue = 'horizon.demo.sales'
   const webhooksQueue = 'horizon.demo.webhooks'
@@ -190,6 +197,12 @@ try {
     handlers: tracedHandlers(treasuryHandlers.handlers, treasuryTracer),
     prefetch: 5,
   })
+  const ledgerConsumer = new modules.LedgerConsumer({
+    url: rabbitUrl,
+    queue: ledgerQueue,
+    handlers: tracedHandlers(ledgerHandlers.handlers, ledgerTracer),
+    prefetch: 5,
+  })
   const webhooksConsumer = new modules.WebhookEventConsumer({
     url: rabbitUrl,
     queue: webhooksQueue,
@@ -201,6 +214,7 @@ try {
     salesConsumer.start(),
     financialConsumer.start(),
     treasuryConsumer.start(),
+    ledgerConsumer.start(),
     webhooksConsumer.start(),
   ])
   resources.push(() =>
@@ -211,6 +225,8 @@ try {
       `${financialQueue}.dlq`,
       treasuryQueue,
       `${treasuryQueue}.dlq`,
+      ledgerQueue,
+      `${ledgerQueue}.dlq`,
       webhooksQueue,
       `${webhooksQueue}.dlq`,
     ]),
@@ -219,6 +235,7 @@ try {
   resources.push(() => salesConsumer.close())
   resources.push(() => financialConsumer.close())
   resources.push(() => treasuryConsumer.close())
+  resources.push(() => ledgerConsumer.close())
   resources.push(() => webhooksConsumer.close())
 
   const callback = await startStubReceiver()
@@ -315,6 +332,7 @@ try {
   let orderId = ''
   let receivable = { titleId: '', status: '', outstanding: '' }
   let bank = { accountId: '', entryAmount: '', statementLineStatus: '', reconciliationId: '' }
+  let books = { reference: '', raised: [], settled: [], totalDebits: '0', totalCredits: '0', pending: 0 }
   let traceId = ''
   await trace.getTracer('horizon.demo').startActiveSpan('golden-path', async (span) => {
     traceId = span.spanContext().traceId
@@ -343,6 +361,7 @@ try {
       )
       await flushAll(inventoryRelay)
 
+      await seedLedgerChart(modules, ledgerDb, identity.tenantId, clock)
       const treasuryAccountId = await demoTreasuryAccount(modules, treasuryDb, identity.tenantId, clock)
       receivable = await collectReceivable(modules, {
         database: financialDb,
@@ -370,6 +389,7 @@ try {
           ) ?? null,
         'published financial.settlement.recorded event',
       )
+      books = await ledgerBooks(ledgerDb, identity.tenantId, receivable)
 
       const confirmedEvent = await waitFor(
         () =>
@@ -423,6 +443,20 @@ try {
   assert.equal(bank.statementLineAmount, order.total)
   assert.equal(bank.reconciledAmount, order.total)
   assert.equal(bank.statementLineStatus, 'matched')
+  // And the same amount once more, as the books record it: the sale raised a claim on the
+  // customer against revenue, and collecting it turned that claim into cash.
+  assert.equal(books.total, order.total)
+  assert.equal(books.reference, receivable.documentNumber)
+  assert.deepEqual(books.raised, [
+    `1.01 debit ${order.total}`,
+    `3.01 credit ${order.total}`,
+  ])
+  assert.deepEqual(books.settled, [
+    `1.02 debit ${order.total}`,
+    `1.01 credit ${order.total}`,
+  ])
+  assert.equal(books.totalDebits, books.totalCredits)
+  assert.equal(books.pending, 0)
 
   await closeAll()
   await shutdownServiceProviders()
@@ -430,7 +464,7 @@ try {
   telemetry = undefined
   const traceUrl = `http://localhost:${jaegerPort}/trace/${traceId}`
   const traceServices = await waitForJaeger(jaegerPort, traceId)
-  for (const service of ['sales', 'inventory', 'webhooks', 'financial', 'treasury'])
+  for (const service of ['sales', 'inventory', 'webhooks', 'financial', 'treasury', 'ledger'])
     assert(traceServices.includes(service), `Trace is missing the ${service} service`)
 
   console.log(
@@ -448,6 +482,7 @@ try {
         order: { orderId, status: order.status, total: order.total, currency: order.currency },
         stock: { before: stockBefore.toString(), after: balance.on_hand, reserved: balance.reserved },
         receivable,
+        books,
         bank,
         callback: {
           signed: true,
@@ -567,6 +602,17 @@ function loadModules() {
     ...from(treasuryRequire, 'treasury/dist/infrastructure/statements/csv-adapter.js'),
     ...from(treasuryRequire, 'treasury/dist/infrastructure/statements/ofx-adapter.js'),
   }
+  const ledger = {
+    ...from(ledgerRequire, 'ledger/dist/infrastructure/database/drizzle/ledger-database.js'),
+    ...from(ledgerRequire, 'ledger/dist/application/consume-module-events.js'),
+    ...from(ledgerRequire, 'ledger/dist/application/use-cases/manage-chart.js'),
+    ...from(ledgerRequire, 'ledger/dist/application/use-cases/map-accounts.js'),
+    ...from(ledgerRequire, 'ledger/dist/application/use-cases/replay-pending.js'),
+  }
+  const ledgerTransport = from(
+    ledgerRequire,
+    'ledger/dist/infrastructure/messaging/rabbitmq-transport.js',
+  )
   const treasuryTransport = from(
     treasuryRequire,
     'treasury/dist/infrastructure/messaging/rabbitmq-transport.js',
@@ -628,6 +674,12 @@ function loadModules() {
     ConfirmMatchUseCase: treasury.ConfirmMatchUseCase,
     CsvStatementAdapter: treasury.CsvStatementAdapter,
     OfxStatementAdapter: treasury.OfxStatementAdapter,
+    LedgerDatabase: ledger.LedgerDatabase,
+    LedgerModuleEventHandlers: ledger.LedgerModuleEventHandlers,
+    LedgerConsumer: ledgerTransport.RabbitMqEventConsumer,
+    OpenLedgerAccountUseCase: ledger.OpenAccountUseCase,
+    DefineAccountMappingUseCase: ledger.DefineAccountMappingUseCase,
+    ReplayPendingFactsUseCase: ledger.ReplayPendingFactsUseCase,
     WebhookDatabase: webhooks.WebhookDatabase,
     CreateSubscriptionUseCase: webhooks.CreateSubscriptionUseCase,
     WebhookDispatcher: webhooks.WebhookDispatcher,
@@ -943,10 +995,121 @@ async function collectReceivable(
   const detail = await database.titleDetail(tenantId, 'receivable', draft.id, today)
   return {
     titleId: draft.id,
+    documentNumber: detail.documentNumber,
     status: detail.status,
     settlementState: detail.settlementState,
     total: detail.total,
     outstanding: detail.outstanding,
+  }
+}
+
+/**
+ * The smallest chart that can account for the demo: a group per account type, one postable
+ * leaf per part the automatic postings need, and the mapping that puts each in its place.
+ * Seeded before the order flows, so the receivable and its settlement post as they arrive
+ * rather than waiting as pending facts.
+ */
+async function seedLedgerChart(modules, database, tenantId, clock) {
+  const opening = new modules.OpenLedgerAccountUseCase(database, clock)
+  const mapping = new modules.DefineAccountMappingUseCase(database, clock)
+  const context = (suffix) => ({
+    tenantId,
+    actor: 'system:demo',
+    requestId: null,
+    idempotencyKey: `demo-ledger-${suffix}-${tenantId}`,
+  })
+  const open = async (code, name, type, postable) => {
+    const opened = await opening.execute({
+      context: context(`account-${code}`),
+      account: { code, name, type, postable, currency: 'BRL' },
+    })
+    if (opened.isLeft()) throw opened.value
+    return opened.value.id
+  }
+  const groups = [
+    ['1', 'Ativo', 'asset'],
+    ['2', 'Passivo', 'liability'],
+    ['3', 'Receitas', 'revenue'],
+    ['4', 'Despesas', 'expense'],
+    ['5', 'Patrimônio líquido', 'equity'],
+  ]
+  const leaves = [
+    ['receivables', '1.01', 'Clientes', 'asset'],
+    ['cash', '1.02', 'Bancos conta movimento', 'asset'],
+    ['suspense', '1.09', 'Valores a classificar', 'asset'],
+    ['payables', '2.01', 'Fornecedores', 'liability'],
+    ['opening-balance', '5.01', 'Saldo inicial', 'equity'],
+    ['revenue', '3.01', 'Receita de vendas', 'revenue'],
+    ['discount-received', '3.02', 'Descontos obtidos', 'revenue'],
+    ['financial-income', '3.03', 'Receitas financeiras', 'revenue'],
+    ['expense', '4.01', 'Despesas gerais', 'expense'],
+    ['discount-granted', '4.02', 'Descontos concedidos', 'expense'],
+    ['financial-expense', '4.03', 'Despesas financeiras', 'expense'],
+    ['bank-fees', '4.04', 'Tarifas bancárias', 'expense'],
+  ]
+  const existing = new Set(
+    (await database.chartOfAccounts(tenantId, new Date().toISOString().slice(0, 10))).map(
+      (account) => account.code,
+    ),
+  )
+  for (const [code, name, type] of groups)
+    if (!existing.has(code)) await open(code, name, type, false)
+  for (const [role, code, name, type] of leaves) {
+    const accountId = existing.has(code)
+      ? (await database.chartOfAccounts(tenantId, new Date().toISOString().slice(0, 10))).find(
+          (account) => account.code === code,
+        ).id
+      : await open(code, name, type, true)
+    const mapped = await mapping.execute({
+      context: { tenantId, actor: 'system:demo', requestId: null },
+      role,
+      key: null,
+      accountId,
+    })
+    if (mapped.isLeft()) throw mapped.value
+  }
+}
+
+/**
+ * What the books say about *this* sale.
+ *
+ * The demo reuses its workspace, so a run's own postings are found by the facts it
+ * created — the receivable and its settlement — rather than by reading balances that
+ * accumulate across runs. What is asserted workspace-wide is what must hold whatever has
+ * been posted before: debits equal credits, and nothing is waiting to be posted.
+ */
+async function ledgerBooks(database, tenantId, { titleId }) {
+  const range = { from: '2020-01-01', to: '2039-12-31' }
+  const mine = await waitFor(async () => {
+    const listed = await database.listTransactions(tenantId, { ...range, limit: 200, offset: 0 })
+    const raised = listed.data.find((row) => row.sourceId === titleId)
+    if (!raised) return null
+    const settlements = listed.data.filter((row) => row.sourceType === 'settlement')
+    const detailed = await Promise.all(
+      [raised, ...settlements].map((row) => database.transactionDetail(tenantId, row.id)),
+    )
+    // The settlement of this run is the one that credits exactly what the receivable raised.
+    const settled = detailed
+      .slice(1)
+      .find((row) =>
+        row?.lines.some((line) => line.side === 'credit' && line.amount === raised.total),
+      )
+    return settled ? { raised: detailed[0], settled } : null
+  }, 'ledger posted this run\'s receivable and its settlement')
+
+  const lines = (transaction) =>
+    transaction.lines.map((line) => `${line.accountCode} ${line.side} ${line.amount}`)
+  const trial = await database.trialBalance(tenantId, range)
+  const pending = await database.listPendingFacts(tenantId, 10)
+  return {
+    titleId,
+    reference: mine.raised.reference,
+    raised: lines(mine.raised),
+    settled: lines(mine.settled),
+    total: mine.raised.total,
+    totalDebits: trial.totalDebits,
+    totalCredits: trial.totalCredits,
+    pending: pending.total,
   }
 }
 
