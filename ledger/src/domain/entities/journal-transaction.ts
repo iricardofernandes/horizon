@@ -14,7 +14,19 @@ import type {
 import { Money, Period } from '../value-objects/ledger-values'
 import type { EntrySide } from './ledger-account'
 
-export const TRANSACTION_SOURCES = ['manual'] as const
+/**
+ * The business fact a transaction accounts for. `manual` is a person writing the entry;
+ * every other value names a fact another module reported, and the source id is that fact's
+ * own identifier — never the event id, so a redelivery resolves to the same posting.
+ */
+export const TRANSACTION_SOURCES = [
+  'manual',
+  'receivable',
+  'payable',
+  'settlement',
+  'transfer',
+  'treasury-entry',
+] as const
 export type TransactionSource = (typeof TRANSACTION_SOURCES)[number]
 
 export const TRANSACTION_STATUSES = ['posted', 'reversed'] as const

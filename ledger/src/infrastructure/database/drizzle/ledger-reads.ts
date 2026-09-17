@@ -290,6 +290,9 @@ export interface TransactionRow {
   readonly currency: string
   readonly total: string
   readonly status: string
+  /** The business fact this accounts for: `manual`, or the kind and id another module reported. */
+  readonly sourceType: string
+  readonly sourceId: string | null
   readonly reverses: string | null
   readonly reversedBy: string | null
   readonly lineCount: number
@@ -303,6 +306,8 @@ type ListedRow = {
   currency: string
   total: string
   status: string
+  source_type: string
+  source_id: string | null
   reverses: string | null
   reversed_by: string | null
   line_count: number
@@ -314,7 +319,7 @@ export async function listTransactions(
 ): Promise<{ data: TransactionRow[]; total: number }> {
   const rows = await tx.execute<ListedRow>(sql`
     select t.id, t.reference, t.posted_on::text as posted_on, t.period, t.currency,
-      t.total::text as total, t.status, t.reverses, t.reversed_by,
+      t.total::text as total, t.status, t.source_type, t.source_id, t.reverses, t.reversed_by,
       (select count(*)::int from transaction_lines l
         where l.tenant_id = t.tenant_id and l.transaction_id = t.id) as line_count
     from transactions t
@@ -335,6 +340,8 @@ export async function listTransactions(
       currency: row.currency,
       total: row.total,
       status: row.status,
+      sourceType: row.source_type,
+      sourceId: row.source_id,
       reverses: row.reverses,
       reversedBy: row.reversed_by,
       lineCount: row.line_count,
@@ -366,8 +373,8 @@ export async function transactionDetail(
     ListedRow & { memo: string | null; reversal_reason: string | null; posted_at: string }
   >(sql`
     select t.id, t.reference, t.posted_on::text as posted_on, t.period, t.currency,
-      t.total::text as total, t.status, t.reverses, t.reversed_by, t.memo,
-      t.reversal_reason, t.posted_at::text as posted_at,
+      t.total::text as total, t.status, t.source_type, t.source_id, t.reverses, t.reversed_by,
+      t.memo, t.reversal_reason, t.posted_at::text as posted_at,
       (select count(*)::int from transaction_lines l
         where l.tenant_id = t.tenant_id and l.transaction_id = t.id) as line_count
     from transactions t where t.id = ${id}
@@ -397,6 +404,8 @@ export async function transactionDetail(
     currency: row.currency,
     total: row.total,
     status: row.status,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
     reverses: row.reverses,
     reversedBy: row.reversed_by,
     lineCount: row.line_count,
@@ -453,4 +462,88 @@ export async function listPeriods(tx: Transaction, limit: number): Promise<Perio
     reopenReason: row.reopen_reason,
     transactionCount: row.transaction_count,
   }))
+}
+
+export interface MappingRow {
+  readonly role: string
+  readonly key: string | null
+  readonly accountId: string
+  readonly accountCode: string
+  readonly accountName: string
+  readonly updatedBy: string
+  readonly updatedAt: string
+}
+
+/** Which account plays each part, with the account's own name so the list reads. */
+export async function listMappings(tx: Transaction): Promise<MappingRow[]> {
+  const rows = await tx.execute<{
+    role: string
+    key: string
+    account_id: string
+    account_code: string
+    account_name: string
+    updated_by: string
+    updated_at: string
+  }>(sql`
+    select m.role, m.key, m.account_id, m.account_code, a.name as account_name,
+      m.updated_by, m.updated_at::text as updated_at
+    from account_mappings m
+    join accounts a on a.tenant_id = m.tenant_id and a.id = m.account_id
+    order by m.role, m.key
+  `)
+  return [...rows].map((row) => ({
+    role: row.role,
+    key: row.key === '' ? null : row.key,
+    accountId: row.account_id,
+    accountCode: row.account_code,
+    accountName: row.account_name,
+    updatedBy: row.updated_by,
+    updatedAt: row.updated_at,
+  }))
+}
+
+export interface PendingFactRow {
+  readonly kind: string
+  readonly factId: string
+  readonly reference: string
+  readonly reason: string | null
+  readonly receivedAt: string
+}
+
+/**
+ * The facts the books are still missing, oldest first.
+ *
+ * This list is the module's own honesty check: while it is not empty, the trial balance is
+ * complete for what it contains but does not yet contain everything that happened.
+ */
+export async function listPendingFacts(
+  tx: Transaction,
+  limit: number,
+): Promise<{ data: PendingFactRow[]; total: number }> {
+  const rows = await tx.execute<{
+    kind: string
+    fact_id: string
+    reference: string
+    reason: string | null
+    received_at: string
+  }>(sql`
+    select f.kind, f.fact_id, f.reference, f.reason, f.received_at::text as received_at
+    from posting_facts f
+    where f.status = 'pending'
+    order by f.received_at
+    limit ${limit}
+  `)
+  const [counted] = await tx.execute<{ total: string }>(sql`
+    select count(*)::text as total from posting_facts where status = 'pending'
+  `)
+  return {
+    data: [...rows].map((row) => ({
+      kind: row.kind,
+      factId: row.fact_id,
+      reference: row.reference,
+      reason: row.reason,
+      receivedAt: row.received_at,
+    })),
+    total: Number(counted?.total ?? 0),
+  }
 }

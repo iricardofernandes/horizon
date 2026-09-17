@@ -2,7 +2,7 @@ import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { LedgerAuthGuard } from '@/infrastructure/http/authorization'
 import { LedgerController } from '@/infrastructure/http/ledger.controller'
-import { OutboxWorker } from '@/infrastructure/messaging/rabbitmq-transport'
+import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { LedgerEnvironment } from './environment'
 import { LedgerRuntime } from './ledger-runtime'
 
@@ -18,8 +18,18 @@ export class AppModule {
         useFactory: (runtime: LedgerRuntime, reflector: Reflector) =>
           new LedgerAuthGuard(runtime, reflector),
       },
+      {
+        provide: RabbitMqEventConsumer,
+        inject: [LedgerRuntime],
+        useFactory: (runtime: LedgerRuntime) =>
+          new RabbitMqEventConsumer({
+            url: config.RABBITMQ_URL,
+            queue: 'ledger.events',
+            handlers: runtime.eventHandlers.handlers,
+            prefetch: config.AMQP_PREFETCH,
+          }),
+      },
     ]
-    // The ledger publishes what it posts; it consumes nothing yet, so it has no queue.
     if (config.DATABASE_RELAY_URL)
       providers.push({
         provide: OutboxWorker,

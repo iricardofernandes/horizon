@@ -143,3 +143,50 @@ export const outbox = pgTable('outbox', {
   attempts: smallint('attempts').notNull().default(0),
   lastError: text('last_error'),
 })
+
+export const accountMappings = pgTable('account_mappings', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  role: text('role').notNull(),
+  /** The empty string is "for the whole workspace"; NULL would not compare equal to itself. */
+  key: text('key').notNull(),
+  accountId: uuid('account_id').notNull(),
+  accountCode: text('account_code').notNull(),
+  updatedBy: text('updated_by').notNull(),
+  updatedAt: instant('updated_at').notNull(),
+})
+
+export const postingFacts = pgTable(
+  'posting_facts',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    kind: text('kind').notNull(),
+    factId: uuid('fact_id').notNull(),
+    status: text('status').notNull(),
+    transactionId: uuid('transaction_id'),
+    reference: text('reference').notNull(),
+    reason: text('reason'),
+    fact: jsonb('fact').$type<Record<string, unknown>>().notNull(),
+    receivedAt: instant('received_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.kind, table.factId] })],
+)
+
+export const inbox = pgTable(
+  'inbox',
+  {
+    sourceModule: text('source_module').notNull(),
+    eventId: uuid('event_id').notNull(),
+    eventType: text('event_type').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    receivedAt: instant('received_at').notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.sourceModule, table.eventId] })],
+)

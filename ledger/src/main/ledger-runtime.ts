@@ -1,13 +1,16 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import { LedgerModuleEventHandlers } from '@/application/consume-module-events'
 import {
   ChangeAccountStatusUseCase,
   OpenAccountUseCase,
 } from '@/application/use-cases/manage-chart'
 import { ClosePeriodUseCase, ReopenPeriodUseCase } from '@/application/use-cases/manage-periods'
+import { DefineAccountMappingUseCase } from '@/application/use-cases/map-accounts'
 import {
   PostTransactionUseCase,
   ReverseTransactionUseCase,
 } from '@/application/use-cases/post-journal'
+import { ReplayPendingFactsUseCase } from '@/application/use-cases/replay-pending'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { LedgerDatabase } from '@/infrastructure/database/drizzle/ledger-database'
 import type { LedgerEnvironment } from './environment'
@@ -22,6 +25,9 @@ export class LedgerRuntime implements OnModuleInit, OnModuleDestroy {
   readonly reverseTransaction: ReverseTransactionUseCase
   readonly closePeriod: ClosePeriodUseCase
   readonly reopenPeriod: ReopenPeriodUseCase
+  readonly defineMapping: DefineAccountMappingUseCase
+  readonly replayPending: ReplayPendingFactsUseCase
+  readonly eventHandlers: LedgerModuleEventHandlers
 
   constructor(config: LedgerEnvironment) {
     const clock = { now: () => new Date() }
@@ -40,6 +46,9 @@ export class LedgerRuntime implements OnModuleInit, OnModuleDestroy {
     this.reverseTransaction = new ReverseTransactionUseCase(this.database, clock)
     this.closePeriod = new ClosePeriodUseCase(this.database, clock)
     this.reopenPeriod = new ReopenPeriodUseCase(this.database, clock)
+    this.defineMapping = new DefineAccountMappingUseCase(this.database, clock)
+    this.replayPending = new ReplayPendingFactsUseCase(this.database, clock)
+    this.eventHandlers = new LedgerModuleEventHandlers(this.database, clock)
   }
 
   onModuleInit(): Promise<void> {

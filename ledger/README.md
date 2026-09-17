@@ -9,9 +9,8 @@ source with any other module (ADR 0001). Its boundary against `financial/` and `
 is ADR 0041: those two own what is owed and where the cash is, and the ledger owns what all
 of it means in accounting terms.
 
-**Status: phase 22 — chart of accounts, balanced journal, periods and trial balance
-complete. Postings raised automatically by other modules arrive in the next slice of
-Phase F.**
+**Status: phase 23 — chart of accounts, balanced journal, periods, trial balance, and the
+automatic postings raised from `financial/` and `treasury/` facts.**
 
 ---
 
@@ -34,6 +33,14 @@ Phase F.**
 - **Accounting periods** — calendar months. Closing one refuses every posting into it and
   every reversal inside it; reopening keeps who did it and why. A month with no record has
   never been closed, so a new ledger writes nothing until someone decides something.
+- **Automatic postings** — a receivable, a payable, a settlement, an internal transfer and
+  the treasury entries no other fact covers become balanced transactions as they are
+  reported. The rules are fixed code, because a posting rule is accounting policy and a
+  rule engine a workspace can edit is a ledger nobody can audit. What a workspace chooses
+  is which of its accounts plays each part.
+- **Pending facts** — a fact the workspace cannot post yet, because a category has no
+  account or the month is closed, waits with the numbers it arrived with and is replayed
+  once the workspace fixes it. The queue never blocks, and nothing is lost.
 - **Reports** — the chart with each account's balance and its subtree's total, the trial
   balance (opening, movement and closing per account, with the two totals it exists to
   compare), and one account's lines with the balance each left behind.
@@ -51,12 +58,42 @@ drift, so a backdated transaction moves every later balance deterministically.
 | `ledger.period.closed` | A month stopped taking postings |
 | `ledger.period.reopened` | A closed month was reopened, with the reason |
 
-It consumes nothing yet, so it has no queue. Every command requires an `Idempotency-Key`
-header (ADR 0028), and every command is written to a per-tenant hash-chained audit log.
+It consumes `financial.receivable.posted`, `financial.payable.posted`, their reversals,
+`financial.settlement.recorded` and `financial.settlement.reversed`,
+`treasury.transfer.posted`, `treasury.transfer.cancelled` and `treasury.entry.recorded`.
+Every command requires an `Idempotency-Key` header (ADR 0028), and every command is written
+to a per-tenant hash-chained audit log.
+
+## The posting rules
+
+| Fact | Debit | Credit |
+|---|---|---|
+| Receivable posted | receivables | revenue, by the title's category |
+| Payable posted | expense, by the title's category | payables |
+| Receivable settled | cash, discount granted | financial income, receivables (net) |
+| Payable settled | payables (net), financial expense | cash, discount received |
+| Internal transfer | the destination cash account, bank fees | the source cash account |
+| Treasury opening balance | cash | opening balance |
+| Manual treasury entry | cash or suspense | suspense or cash |
+
+A settlement's receivable or payable leg is the *net* of the cash and the discount less the
+interest and penalty, and takes whichever side that net calls for: a settlement that charges
+more interest than it collects cash raises what the party owes rather than lowering it.
+
+Moving money between two of the workspace's own accounts changes nothing it owns, so a
+transfer never touches profit or loss. The fee the bank charges for moving it does.
+
+A transfer leg, its fee, a settlement and a reversal all reach the ledger through the fact
+that caused them, so the treasury journal lines for those are deliberately ignored —
+posting them as well would count each of them twice.
+
+Resolution of an account is exact, then the role's default, then suspense. Suspense keeps
+the books complete when a category has no account yet: the transaction still balances, and
+the accountant reclassifies it.
 
 ## Authorization
 
-| Role | Reads | Posts and reverses | Opens accounts, closes and reopens months |
+| Role | Reads | Posts, reverses and replays | Opens accounts, maps them, closes and reopens months |
 |---|---|---|---|
 | `ledger:admin` | yes | yes | yes |
 | `ledger:accountant` | yes | yes | — |
@@ -75,10 +112,16 @@ npm run db:migrate
 npm run dev
 ```
 
-`npm test` runs the domain tests, including a property test that debits equal credits after
-every posting and every reversal, across the whole chart. `npm run test:e2e` starts
-PostgreSQL with Testcontainers and proves the chart's tree and its roll-ups, the trial
-balance, idempotent commands, the running balance of an account, reversal into a later
-month, a closed month refusing postings and reversals until reopened, the deferred balance
-constraint, the append-only lines under both the application and the owner role, and tenant
-isolation.
+`npm test` runs the domain tests, including property tests that debits equal credits after
+every posting and every reversal across the whole chart, and that every combination of
+cash, discount, interest and penalty a settlement can carry plans a balanced transaction.
+
+`npm run test:e2e` starts PostgreSQL with Testcontainers and proves the chart's tree and its
+roll-ups, the trial balance, idempotent commands, the running balance of an account,
+reversal into a later month, a closed month refusing postings and reversals until reopened,
+the deferred balance constraint, the append-only lines under both the application and the
+owner role, tenant isolation — and, for the automatic postings, that a fact posts exactly
+one transaction however often its event is delivered, that a fact the workspace cannot post
+yet waits and then posts on replay, that a fact reversed while pending is never posted at
+all, and that replaying every event into an empty ledger, in any order and twice over,
+produces the same balances.

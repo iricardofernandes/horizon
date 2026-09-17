@@ -4,14 +4,18 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import {
   type CommandReceipt,
+  type EventOutcome,
   type LedgerScope,
   LedgerUnitOfWork,
+  type ReceivedEvent,
 } from '@/application/ports/unit-of-work'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import {
   accountLedger,
   chartOfAccounts,
+  listMappings,
+  listPendingFacts,
   listPeriods,
   listTransactions,
   transactionDetail,
@@ -98,6 +102,22 @@ export class LedgerDatabase extends LedgerUnitOfWork {
     }
   }
 
+  async processEvent<T>(
+    tenantId: string,
+    event: ReceivedEvent,
+    work: (scope: LedgerScope) => Promise<T>,
+  ): Promise<EventOutcome<T>> {
+    return this.inTenant(tenantId, async (scope) => {
+      const claimed = await this.currentTransaction()
+        .insert(schema.inbox)
+        .values({ ...event, tenantId })
+        .onConflictDoNothing()
+        .returning({ eventId: schema.inbox.eventId })
+      if (claimed.length === 0) return { processed: false as const }
+      return { processed: true as const, value: await work(scope) }
+    })
+  }
+
   chartOfAccounts(tenantId: string, asOf: string) {
     return this.read(tenantId, (tx) => chartOfAccounts(tx, asOf))
   }
@@ -127,6 +147,14 @@ export class LedgerDatabase extends LedgerUnitOfWork {
 
   listPeriods(tenantId: string, limit: number) {
     return this.read(tenantId, (tx) => listPeriods(tx, limit))
+  }
+
+  listMappings(tenantId: string) {
+    return this.read(tenantId, (tx) => listMappings(tx))
+  }
+
+  listPendingFacts(tenantId: string, limit: number) {
+    return this.read(tenantId, (tx) => listPendingFacts(tx, limit))
   }
 
   async ping(): Promise<void> {

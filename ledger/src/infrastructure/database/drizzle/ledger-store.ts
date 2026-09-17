@@ -8,6 +8,12 @@ import type { Either } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
 import {
+  AccountMapping,
+  POSTING_ROLES,
+  PostingChart,
+  type PostingRole,
+} from '@/domain/entities/account-mapping'
+import {
   AccountingPeriod,
   PERIOD_STATUSES,
   type PeriodStatus,
@@ -27,6 +33,8 @@ import {
   type EntrySide,
   LedgerAccount,
 } from '@/domain/entities/ledger-account'
+import type { FactStatus, PostingFactRecord } from '@/domain/repositories/ledger-repositories'
+import type { Fact } from '@/domain/services/posting-rules'
 import {
   AccountCode,
   AccountName,
@@ -196,6 +204,55 @@ function auditTrail(tx: Transaction, tenantId: string): AuditTrail {
   }
 }
 
+function mapMapping(row: typeof schema.accountMappings.$inferSelect): AccountMapping {
+  return AccountMapping.rehydrate(
+    {
+      tenantId: row.tenantId,
+      role: oneOf<PostingRole>(POSTING_ROLES, row.role, 'posting role'),
+      key: row.key === '' ? null : row.key,
+      accountId: row.accountId,
+      accountCode: row.accountCode,
+      updatedBy: row.updatedBy,
+      updatedAt: row.updatedAt,
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
+const FACT_STATUSES = ['posted', 'pending', 'reversed', 'ignored'] as const
+
+/** Every field of a fact that is an amount in minor units, and so a bigint in the domain. */
+const FACT_AMOUNTS = ['total', 'received', 'discount', 'interest', 'penalty', 'amount', 'fee']
+
+/**
+ * Read a stored fact back with its amounts as bigints.
+ *
+ * JSON has no integer wide enough to be trusted with money, so the amounts were written as
+ * text. Naming the fields here, rather than guessing from the shape of a value, means a
+ * document number that happens to be all digits never becomes a number.
+ */
+function revive(stored: Record<string, unknown>): Fact {
+  const fact: Record<string, unknown> = { ...stored }
+  for (const field of FACT_AMOUNTS) {
+    const value = fact[field]
+    if (typeof value === 'string') fact[field] = BigInt(value)
+  }
+  return fact as unknown as Fact
+}
+
+function mapFact(row: typeof schema.postingFacts.$inferSelect): PostingFactRecord {
+  return {
+    kind: row.kind as Fact['kind'],
+    factId: row.factId,
+    status: oneOf<FactStatus>(FACT_STATUSES, row.status, 'fact status'),
+    transactionId: row.transactionId,
+    reference: row.reference,
+    reason: row.reason,
+    fact: revive(row.fact),
+    receivedAt: row.receivedAt,
+  }
+}
+
 async function loadTransaction(
   tx: Transaction,
   row: typeof schema.transactions.$inferSelect,
@@ -206,6 +263,11 @@ async function loadTransaction(
     .where(eq(schema.transactionLines.transactionId, row.id))
     .orderBy(asc(schema.transactionLines.lineNumber))
   return mapTransaction(row, lines)
+}
+
+/** Minor units are bigint in the domain and JSON has no such thing; they travel as text. */
+function bigints(_key: string, value: unknown): unknown {
+  return typeof value === 'bigint' ? value.toString() : value
 }
 
 export function makeScope(tx: Transaction, tenantId: string): LedgerScope {
@@ -369,6 +431,91 @@ export function makeScope(tx: Transaction, tenantId: string): LedgerScope {
           .where(eq(schema.periods.id, row.id))
         await publishAll(tx, tenantId, period)
       },
+    },
+    mappings: {
+      chart: async () =>
+        new PostingChart((await tx.select().from(schema.accountMappings)).map(mapMapping)),
+      list: async () =>
+        (
+          await tx
+            .select()
+            .from(schema.accountMappings)
+            .orderBy(asc(schema.accountMappings.role), asc(schema.accountMappings.key))
+        ).map(mapMapping),
+      find: async (role, key) => {
+        const [row] = await tx
+          .select()
+          .from(schema.accountMappings)
+          .where(
+            and(eq(schema.accountMappings.role, role), eq(schema.accountMappings.key, key ?? '')),
+          )
+          .limit(1)
+        return row ? mapMapping(row) : null
+      },
+      save: async (mapping) => {
+        const row = mapping.toSnapshot()
+        assertTenant(row.tenantId)
+        await tx
+          .insert(schema.accountMappings)
+          .values({ ...row, key: row.key ?? '' })
+          .onConflictDoUpdate({
+            target: [
+              schema.accountMappings.tenantId,
+              schema.accountMappings.role,
+              schema.accountMappings.key,
+            ],
+            set: {
+              accountId: row.accountId,
+              accountCode: row.accountCode,
+              updatedBy: row.updatedBy,
+              updatedAt: row.updatedAt,
+            },
+          })
+      },
+    },
+    facts: {
+      find: async (kind, factId) => {
+        const [row] = await tx
+          .select()
+          .from(schema.postingFacts)
+          .where(and(eq(schema.postingFacts.kind, kind), eq(schema.postingFacts.factId, factId)))
+          .limit(1)
+        return row ? mapFact(row) : null
+      },
+      record: async (record) => {
+        await tx.insert(schema.postingFacts).values({
+          tenantId,
+          kind: record.kind,
+          factId: record.factId,
+          status: record.status,
+          transactionId: record.transactionId,
+          reference: record.reference,
+          reason: record.reason,
+          fact: JSON.parse(JSON.stringify(record.fact, bigints)) as Record<string, unknown>,
+          receivedAt: record.receivedAt,
+          updatedAt: record.receivedAt,
+        })
+      },
+      update: async (kind, factId, change) => {
+        await tx
+          .update(schema.postingFacts)
+          .set({
+            status: change.status,
+            ...(change.transactionId === undefined ? {} : { transactionId: change.transactionId }),
+            ...(change.reason === undefined ? {} : { reason: change.reason }),
+            updatedAt: new Date(),
+          })
+          .where(and(eq(schema.postingFacts.kind, kind), eq(schema.postingFacts.factId, factId)))
+      },
+      pending: async (limit) =>
+        (
+          await tx
+            .select()
+            .from(schema.postingFacts)
+            .where(eq(schema.postingFacts.status, 'pending'))
+            .orderBy(asc(schema.postingFacts.receivedAt))
+            .limit(limit)
+        ).map(mapFact),
     },
     audit: auditTrail(tx, tenantId),
     lockPeriod: async (period) => {

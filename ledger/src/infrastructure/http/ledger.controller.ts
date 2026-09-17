@@ -8,10 +8,12 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
 } from '@nestjs/common'
 import { z } from 'zod'
+import { POSTING_ROLES } from '@/domain/entities/account-mapping'
 import { ACCOUNT_TYPES, ENTRY_SIDES } from '@/domain/entities/ledger-account'
 import { LedgerRuntime } from '@/main/ledger-runtime'
 import { type LedgerRequest, PublicRoute, RequireLedgerAction, tenantOf } from './authorization'
@@ -48,6 +50,12 @@ const transactionInput = z.strictObject({
     )
     .min(2)
     .max(200),
+})
+
+const mappingInput = z.strictObject({
+  role: z.enum(POSTING_ROLES),
+  key: z.uuid().nullable().default(null),
+  accountId: z.uuid(),
 })
 
 const page = z.object({
@@ -196,6 +204,40 @@ export class LedgerController {
         reversalOn: input.reversalOn,
       }),
     )
+  }
+
+  /** Which of the workspace's accounts plays each part when another module reports a fact. */
+  @Get('mappings')
+  @RequireLedgerAction('read')
+  async mappings(@Req() request: LedgerRequest) {
+    return { data: await this.runtime.database.listMappings(tenantOf(request)) }
+  }
+
+  @Put('mappings')
+  @RequireLedgerAction('configure')
+  @HttpCode(200)
+  async map(@Body() body: unknown, @Req() request: LedgerRequest) {
+    return unwrap(
+      await this.runtime.defineMapping.execute({
+        context: context(request),
+        ...parse(mappingInput, body),
+      }),
+    )
+  }
+
+  /** The facts the books are still missing, and why each one could not be posted. */
+  @Get('postings/pending')
+  @RequireLedgerAction('read')
+  async pending(@Query('limit') limit: unknown, @Req() request: LedgerRequest) {
+    const size = parse(z.coerce.number().int().min(1).max(500).default(100), limit)
+    return this.runtime.database.listPendingFacts(tenantOf(request), size)
+  }
+
+  @Post('postings/pending/replay')
+  @RequireLedgerAction('post')
+  @HttpCode(200)
+  async replay(@Req() request: LedgerRequest) {
+    return unwrap(await this.runtime.replayPending.execute({ context: context(request) }))
   }
 
   @Get('periods')

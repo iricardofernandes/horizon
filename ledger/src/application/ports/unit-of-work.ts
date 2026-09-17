@@ -3,14 +3,16 @@ import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type {
   JournalRepository,
   LedgerAccountsRepository,
+  MappingsRepository,
   PeriodsRepository,
+  PostingFactsRepository,
 } from '@/domain/repositories/ledger-repositories'
 
 /** One line in the tenant's hash-chained audit log (ADR 0025, ADR 0042). */
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'account' | 'transaction' | 'period'
+  readonly subjectType: 'account' | 'transaction' | 'period' | 'mapping'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -26,6 +28,8 @@ export interface LedgerScope {
   readonly accounts: LedgerAccountsRepository
   readonly journal: JournalRepository
   readonly periods: PeriodsRepository
+  readonly mappings: MappingsRepository
+  readonly facts: PostingFactsRepository
   readonly audit: AuditTrail
   /** Serializes work on one month for the rest of the transaction, so a close cannot race a posting. */
   lockPeriod(period: string): Promise<void>
@@ -37,6 +41,16 @@ export interface CommandReceipt {
   readonly fingerprint: string
 }
 
+export interface ReceivedEvent {
+  readonly sourceModule: string
+  readonly eventId: string
+  readonly eventType: string
+}
+
+export type EventOutcome<T> =
+  | { readonly processed: false }
+  | { readonly processed: true; readonly value: T }
+
 export abstract class LedgerUnitOfWork {
   abstract inTenant<T>(tenantId: string, work: (scope: LedgerScope) => Promise<T>): Promise<T>
 
@@ -46,4 +60,11 @@ export abstract class LedgerUnitOfWork {
     receipt: CommandReceipt,
     work: (scope: LedgerScope) => Promise<Either<E, T>>,
   ): Promise<Either<E | ConflictError, T>>
+
+  /** Handle an event at most once per source and id, in one transaction with its effect. */
+  abstract processEvent<T>(
+    tenantId: string,
+    event: ReceivedEvent,
+    work: (scope: LedgerScope) => Promise<T>,
+  ): Promise<EventOutcome<T>>
 }
