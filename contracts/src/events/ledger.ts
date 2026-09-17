@@ -11,8 +11,20 @@ import { defineEvent } from './define'
 export const ACCOUNT_TYPES = ['asset', 'liability', 'equity', 'revenue', 'expense'] as const
 export const ENTRY_SIDES = ['debit', 'credit'] as const
 
-/** Where a transaction came from. Postings raised by other modules arrive in Phase F's next slice. */
-export const TRANSACTION_SOURCES = ['manual'] as const
+/**
+ * The business fact a transaction accounts for. `manual` is a person writing the entry;
+ * every other value names a fact another module published, and `source.id` is that fact's
+ * own identifier — the settlement id, the transfer id — never the event id, so a
+ * redelivery under a new event id still resolves to the same posting.
+ */
+export const TRANSACTION_SOURCES = [
+  'manual',
+  'receivable',
+  'payable',
+  'settlement',
+  'transfer',
+  'treasury-entry',
+] as const
 
 /** A calendar month, `YYYY-MM`: the unit a ledger opens and closes. */
 export const periodSchema = z

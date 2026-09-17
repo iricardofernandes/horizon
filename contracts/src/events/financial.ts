@@ -81,12 +81,14 @@ export const financialSettlementRecorded = defineEvent({
   type: 'financial.settlement.recorded',
   version: 1,
   description:
-    'Money was received or paid against one installment. `received` is the cash that moved; `discount` reduces what is owed without cash; `interest` and `penalty` add to it. `outstanding` is the title balance after this settlement. With `treasuryAccountId`, Treasury records `received` in that account.',
+    'Money was received or paid against one installment. `received` is the cash that moved; `discount` reduces what is owed without cash; `interest` and `penalty` add to it. `outstanding` is the title balance after this settlement. With `treasuryAccountId`, Treasury records `received` in that account. `documentNumber` names the title settled, so a consumer never has to hold the title to label the movement.',
   payload: z.object({
     settlementId,
     titleId,
     direction: z.enum(TITLE_DIRECTIONS),
     partyId: uuidSchema,
+    /** The settled title's document number, so a consumer names the invoice (0.12.0). */
+    documentNumber: z.string().min(1).max(40).optional(),
     installmentNumber: z.number().int().positive(),
     settledOn: dateSchema,
     received: moneySchema,
