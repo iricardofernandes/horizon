@@ -788,6 +788,54 @@ correction stays in the record (ADR 0041, ADR 0042).
 
 ---
 
+## Phase 18 — Accounts payable and approvals
+
+**Complete.** Backlog item 9 of the [expansion plan](erp-expansion-plan.md), completing the
+subledger half of its Phase C on the same title kernel as receivables (ADR 0041, ADR 0042).
+
+**Deliverables**
+
+- The title commands are shared by both directions: a payable is drafted, posted, settled
+  and reversed exactly as a receivable is, names a supplier and an expense category, and a
+  title of one direction is not found through the other's routes.
+- Payable approval with four eyes: an operator requests it, a financial admin other than
+  the requester approves or rejects it with a reason, and a revision withdraws any
+  approval already given.
+- A per-workspace approval policy per currency: payables at or above the threshold need
+  approval, smaller ones post directly and are recorded as exempt. With no policy every
+  payable needs approval.
+- The database enforces what the aggregate does: a posted payable was approved or exempt,
+  and the approver is never the requester.
+- `@horizon/contracts@0.7.0`: `financial.payable.posted` and `financial.payable.reversed`,
+  with the same payloads as their receivable counterparts.
+- A payables list with an "awaiting approval" view and count, and a detail with the
+  approval section and history.
+- Web: Finance → Payables beside Receivables, sharing one set of components; an admin
+  edits the approval policy there.
+- The browser golden path grants the demo party the supplier role, drafts a payable,
+  requests approval and checks the requester is not offered their own approval.
+
+**Exit criteria**
+
+- A payable that needs approval cannot post before it is approved, a requester cannot
+  decide their own request, and a revision returns an approved draft to unapproved (domain
+  and integration tests).
+- A payable below the threshold posts as exempt; one at the threshold does not.
+- Updating a row directly to a posted, unapproved payable or to a self-approval is refused
+  by the database.
+- Receivables keep passing every phase 17 test after the kernel was generalized, and
+  `make demo` still settles the order's receivable.
+- The migration applies over existing posted receivables, which it records as exempt.
+
+**Non-goals**
+
+- Multi-level approval chains, delegation and approval by amount band per role.
+- A separate approver role; approval authority is `financial:admin` (decision 7 of the
+  expansion plan keeps it inside the module).
+- Purchase orders raising payables, which arrive with `procurement/` (Phase G).
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

@@ -199,3 +199,8 @@ discounts, over the settlements still in force. Never below zero.
 ### aging
 Outstanding balances grouped by how late they are at a given calendar date: not yet due,
 1–30, 31–60, 61–90 and over 90 days.
+
+### approval policy
+The amount, per currency, from which a payable needs a second person before it posts.
+Below it a payable posts directly and is recorded as exempt; with no policy every payable
+needs approval. The person who requests an approval can never decide it (four eyes).
