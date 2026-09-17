@@ -12,20 +12,25 @@ import { idempotentJsonHeaders, jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 import { useDate, useDateTime, useMoney } from '@/lib/use-format'
-import { ClassifyForm, ReasonForm, SettleForm } from './receivable-forms'
-import type { MutationProps, ReceivableAbilities } from './receivables-view'
+import { ApprovalSection } from './approval-section'
+import { ClassifyForm, ReasonForm, SettleForm } from './title-forms'
+import type { MutationProps, TitleAbilities } from './titles-view'
 import {
+  apiBaseOf,
+  approvalRequired,
+  type Direction,
   displayStatus,
   type Installment,
   localToday,
-  type ReceivableDetail,
-  type ReceivablesData,
+  namespaceOf,
+  type TitleDetail,
+  type TitlesData,
 } from './types'
 
 type Props = {
   id: string
-  data: ReceivablesData
-  abilities: ReceivableAbilities
+  data: TitlesData
+  abilities: TitleAbilities
   onClose: () => void
 } & MutationProps
 
@@ -36,17 +41,11 @@ type Command = (
   options?: { idempotent?: boolean; method?: 'POST' | 'PUT' },
 ) => Promise<boolean>
 
-export function ReceivableDetailDialog({
-  id,
-  data,
-  abilities,
-  onClose,
-  onChanged,
-  setNotice,
-}: Props) {
-  const t = useTranslations('receivables')
+export function TitleDetailDialog({ id, data, abilities, onClose, onChanged, setNotice }: Props) {
+  const { direction } = data
+  const t = useTranslations(namespaceOf(direction))
   const common = useTranslations('common')
-  const [detail, setDetail] = useState<ReceivableDetail | null>(null)
+  const [detail, setDetail] = useState<TitleDetail | null>(null)
   const [failed, setFailed] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -54,16 +53,16 @@ export function ReceivableDetailDialog({
   const load = useCallback(async () => {
     try {
       setDetail(
-        await readJson<ReceivableDetail>(
-          'financial.receivable.detail',
-          `/api/horizon/financial/receivables/${id}?today=${localToday()}`,
+        await readJson<TitleDetail>(
+          `financial.${direction}.detail`,
+          `${apiBaseOf(direction)}/${id}?today=${localToday()}`,
         ),
       )
       setFailed(false)
     } catch {
       setFailed(true)
     }
-  }, [id])
+  }, [id, direction])
 
   useEffect(() => {
     void load()
@@ -72,7 +71,7 @@ export function ReceivableDetailDialog({
   const command: Command = async (name, path, body, options = { idempotent: true }) => {
     setBusy(true)
     setError('')
-    const response = await tracedFetch(name, `/api/horizon/financial/receivables/${id}${path}`, {
+    const response = await tracedFetch(name, `${apiBaseOf(direction)}/${id}${path}`, {
       method: options.method ?? 'POST',
       headers: options.idempotent ? idempotentJsonHeaders() : jsonHeaders(),
       body: JSON.stringify(body),
@@ -125,18 +124,20 @@ function DetailBody({
   command,
   setNotice,
 }: {
-  detail: ReceivableDetail
-  data: ReceivablesData
-  abilities: ReceivableAbilities
+  detail: TitleDetail
+  data: TitlesData
+  abilities: TitleAbilities
   busy: boolean
   command: Command
   setNotice: (value: string) => void
 }) {
-  const t = useTranslations('receivables')
+  const { direction } = data
+  const t = useTranslations(namespaceOf(direction))
   const statusLabel = useStatusLabel()
   const money = useMoney()
   const date = useDate()
   const status = displayStatus(detail)
+  const section = { abilities, busy, command, detail, direction, setNotice }
   const category = data.categories.find((candidate) => candidate.id === detail.categoryId)
   return (
     <>
@@ -145,7 +146,7 @@ function DetailBody({
         <Badge label={statusLabel(status)} status={status} />
       </div>
       <dl className="receivable-facts">
-        <Fact label={t('customer')} value={detail.partyName ?? t('erasedParty')} />
+        <Fact label={t('counterparty')} value={detail.partyName ?? t('erasedParty')} />
         <Fact label={t('issuedOn')} value={date(`${detail.issuedOn}T12:00:00`)} />
         <Fact
           label={t('category')}
@@ -155,14 +156,18 @@ function DetailBody({
         <Fact label={t('outstanding')} value={money(detail.outstanding, detail.currency)} />
         {detail.closureReason ? <Fact label={t('reason')} value={detail.closureReason} /> : null}
       </dl>
-      {detail.status === 'draft' && abilities.canRecord ? (
+      {detail.status === 'draft' &&
+      abilities.canRecord &&
+      // Revising withdraws an approval, so a draft under review is not reclassified here.
+      (detail.approvalState === 'none' || detail.approvalState === 'rejected') ? (
         <ClassifyForm
           busy={busy}
           categories={data.categories}
           detail={detail}
+          direction={direction}
           onSubmit={async (terms) => {
             if (
-              await command('financial.receivable.revise', '', terms, {
+              await command(`financial.${direction}.revise`, '', terms, {
                 idempotent: false,
                 method: 'PUT',
               })
@@ -171,30 +176,13 @@ function DetailBody({
           }}
         />
       ) : null}
-      <TitleActions
-        abilities={abilities}
-        busy={busy}
-        command={command}
-        detail={detail}
-        setNotice={setNotice}
-      />
-      <InstallmentsTable
-        abilities={abilities}
-        busy={busy}
-        command={command}
-        data={data}
-        detail={detail}
-        setNotice={setNotice}
-      />
-      <SettlementsTable
-        abilities={abilities}
-        busy={busy}
-        command={command}
-        data={data}
-        detail={detail}
-        setNotice={setNotice}
-      />
-      <Timeline detail={detail} />
+      {direction === 'payable' && detail.status === 'draft' ? (
+        <ApprovalSection {...section} required={approvalRequired(data, detail)} />
+      ) : null}
+      <TitleActions {...section} postable={postable(data, detail)} />
+      <InstallmentsTable {...section} data={data} />
+      <SettlementsTable {...section} data={data} />
+      <Timeline detail={detail} direction={direction} />
     </>
   )
 }
@@ -208,16 +196,30 @@ function Fact({ label, value }: { label: string; value: string }) {
   )
 }
 
-type SectionProps = {
-  detail: ReceivableDetail
-  abilities: ReceivableAbilities
+/** A payable that needs approval offers posting only once approved. */
+function postable(data: TitlesData, detail: TitleDetail): boolean {
+  return !approvalRequired(data, detail) || detail.approvalState === 'approved'
+}
+
+export type SectionProps = {
+  direction: Direction
+  detail: TitleDetail
+  abilities: TitleAbilities
   busy: boolean
   command: Command
   setNotice: (value: string) => void
 }
 
-function TitleActions({ detail, abilities, busy, command, setNotice }: SectionProps) {
-  const t = useTranslations('receivables')
+function TitleActions({
+  direction,
+  detail,
+  abilities,
+  busy,
+  command,
+  setNotice,
+  postable: canPost,
+}: SectionProps & { postable: boolean }) {
+  const t = useTranslations(namespaceOf(direction))
   const [closing, setClosing] = useState(false)
   const draft = detail.status === 'draft'
   // Settlements in force are reversed first, so the title offers reversal only once none remain.
@@ -226,11 +228,11 @@ function TitleActions({ detail, abilities, busy, command, setNotice }: SectionPr
   if (!(draft && abilities.canRecord) && !reversible) return null
   return (
     <div className="receivable-actions">
-      {draft && abilities.canRecord ? (
+      {draft && abilities.canRecord && canPost ? (
         <Button
           disabled={busy}
           onClick={async () => {
-            if (await command('financial.receivable.post', '/post', {})) setNotice(t('posted'))
+            if (await command(`financial.${direction}.post`, '/post', {})) setNotice(t('posted'))
           }}
           type="button"
           variant="primary"
@@ -241,16 +243,17 @@ function TitleActions({ detail, abilities, busy, command, setNotice }: SectionPr
       {closing ? (
         <ReasonForm
           busy={busy}
+          direction={direction}
           onCancel={() => setClosing(false)}
           onSubmit={async (reason) => {
             const done = draft
               ? await command(
-                  'financial.receivable.cancel',
+                  `financial.${direction}.cancel`,
                   '/cancel',
                   { reason },
                   { idempotent: false },
                 )
-              : await command('financial.receivable.reverse', '/reverse', { reason })
+              : await command(`financial.${direction}.reverse`, '/reverse', { reason })
             if (done) {
               setClosing(false)
               setNotice(draft ? t('cancelled') : t('reversed'))
@@ -268,14 +271,15 @@ function TitleActions({ detail, abilities, busy, command, setNotice }: SectionPr
 }
 
 function InstallmentsTable({
+  direction,
   detail,
   data,
   abilities,
   busy,
   command,
   setNotice,
-}: SectionProps & { data: ReceivablesData }) {
-  const t = useTranslations('receivables')
+}: SectionProps & { data: TitlesData }) {
+  const t = useTranslations(namespaceOf(direction))
   const statusLabel = useStatusLabel()
   const money = useMoney()
   const date = useDate()
@@ -327,11 +331,12 @@ function InstallmentsTable({
       {settling ? (
         <SettleForm
           busy={busy}
+          direction={direction}
           installment={settling}
           issuedOn={detail.issuedOn}
           onCancel={() => setSettling(null)}
           onSubmit={async (body) => {
-            if (await command('financial.receivable.settle', '/settlements', body)) {
+            if (await command(`financial.${direction}.settle`, '/settlements', body)) {
               setSettling(null)
               setNotice(t('settled'))
             }
@@ -344,14 +349,15 @@ function InstallmentsTable({
 }
 
 function SettlementsTable({
+  direction,
   detail,
   data,
   abilities,
   busy,
   command,
   setNotice,
-}: SectionProps & { data: ReceivablesData }) {
-  const t = useTranslations('receivables')
+}: SectionProps & { data: TitlesData }) {
+  const t = useTranslations(namespaceOf(direction))
   const statusLabel = useStatusLabel()
   const money = useMoney()
   const date = useDate()
@@ -420,6 +426,7 @@ function SettlementsTable({
       {reversing ? (
         <ReasonForm
           busy={busy}
+          direction={direction}
           onCancel={() => setReversing(null)}
           onSubmit={async (reason) => {
             if (
@@ -438,8 +445,8 @@ function SettlementsTable({
   )
 }
 
-function Timeline({ detail }: { detail: ReceivableDetail }) {
-  const t = useTranslations('receivables')
+function Timeline({ detail, direction }: { detail: TitleDetail; direction: Direction }) {
+  const t = useTranslations(namespaceOf(direction))
   const dateTime = useDateTime()
   return (
     <section className="receivable-section">

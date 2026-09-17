@@ -4,11 +4,12 @@ import {
   displayStatus,
   inView,
   localToday,
-  type ReceivableRow,
   scheduleOf,
+  type TitleRow,
+  viewsOf,
 } from './types'
 
-const row = (overrides: Partial<ReceivableRow>): ReceivableRow => ({
+const row = (overrides: Partial<TitleRow>): TitleRow => ({
   id: 'r',
   documentNumber: 'NF-1',
   partyId: 'p',
@@ -19,6 +20,7 @@ const row = (overrides: Partial<ReceivableRow>): ReceivableRow => ({
   nextDueOn: '2026-09-10',
   status: 'posted',
   settlementState: 'open',
+  approvalState: 'none',
   overdue: false,
   total: '100',
   outstanding: '100',
@@ -49,6 +51,11 @@ describe('receivable presentation helpers', () => {
     expect(inView(row({ status: 'reversed' }), 'closed')).toBe(true)
     expect(displayStatus(overdue)).toBe('overdue')
     expect(displayStatus(row({ status: 'draft' }))).toBe('draft')
+    const pending = row({ status: 'draft', approvalState: 'pending' })
+    expect(displayStatus(pending)).toBe('awaiting-approval')
+    expect(inView(pending, 'awaiting-approval')).toBe(true)
+    expect(viewsOf('receivable')).not.toContain('awaiting-approval')
+    expect(viewsOf('payable')).toContain('awaiting-approval')
   })
 
   it('formats minor units and the local calendar date', () => {

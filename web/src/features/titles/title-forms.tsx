@@ -7,23 +7,33 @@ import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
 import type { Category, PaymentMethod } from '@/features/classifications/types'
 import { minorUnits } from '@/lib/format'
-import { decimalOf, type Installment, localToday, type ReceivableDetail } from './types'
+import {
+  type Direction,
+  decimalOf,
+  type Installment,
+  localToday,
+  namespaceOf,
+  natureOf,
+  type TitleDetail,
+} from './types'
 
 const NO_METHOD = 'none'
 
 /** Reversals and cancellations always say why; the reason stays in the record (ADR 0042). */
 export function ReasonForm({
+  direction,
   busy,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
+  direction: Direction
   busy: boolean
   submitLabel: string
   onSubmit: (reason: string) => Promise<void>
   onCancel: () => void
 }) {
-  const t = useTranslations('receivables')
+  const t = useTranslations(namespaceOf(direction))
   const common = useTranslations('common')
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -45,6 +55,7 @@ export function ReasonForm({
 }
 
 export function SettleForm({
+  direction,
   installment,
   issuedOn,
   paymentMethods,
@@ -52,6 +63,7 @@ export function SettleForm({
   onSubmit,
   onCancel,
 }: {
+  direction: Direction
   installment: Installment
   issuedOn: string
   paymentMethods: PaymentMethod[]
@@ -59,7 +71,7 @@ export function SettleForm({
   onSubmit: (body: Record<string, unknown>) => Promise<void>
   onCancel: () => void
 }) {
-  const t = useTranslations('receivables')
+  const t = useTranslations(namespaceOf(direction))
   const common = useTranslations('common')
   const [error, setError] = useState('')
   const today = localToday()
@@ -156,25 +168,27 @@ function AmountField({
 }
 
 /**
- * A draft raised from a sales order arrives unclassified. Revising replaces the draft's
+ * A draft may arrive unclassified — a receivable raised from a sales order does. Revising replaces the draft's
  * terms wholesale, so the form resends them with the chosen category.
  */
 export function ClassifyForm({
+  direction,
   detail,
   categories,
   busy,
   onSubmit,
 }: {
-  detail: ReceivableDetail
+  direction: Direction
+  detail: TitleDetail
   categories: Category[]
   busy: boolean
   onSubmit: (terms: Record<string, unknown>) => Promise<void>
 }) {
-  const t = useTranslations('receivables')
+  const t = useTranslations(namespaceOf(direction))
   const options = categories
-    .filter((category) => category.active && category.nature === 'revenue')
+    .filter((category) => category.active && category.nature === natureOf(direction))
     .map((category) => ({ value: category.id, label: `${category.code} · ${category.name}` }))
-  if (!options.length) return <p className="catalog-page-copy">{t('noRevenueCategories')}</p>
+  if (!options.length) return <p className="catalog-page-copy">{t('noCategories')}</p>
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

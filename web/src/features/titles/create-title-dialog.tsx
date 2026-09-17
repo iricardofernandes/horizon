@@ -11,30 +11,31 @@ import { apiError } from '@/lib/api'
 import { minorUnits } from '@/lib/format'
 import { idempotentJsonHeaders } from '@/lib/http'
 import { tracedFetch } from '@/lib/telemetry'
-import type { MutationProps } from './receivables-view'
-import { localToday, type ReceivablesData, scheduleOf } from './types'
+import type { MutationProps } from './titles-view'
+import { apiBaseOf, localToday, namespaceOf, natureOf, scheduleOf, type TitlesData } from './types'
 
 const SINGLE = 'single'
 const NO_CATEGORY = 'none'
 
-/** A new receivable starts as a draft; it becomes a claim only when someone posts it. */
-export function CreateReceivableDialog({
+/** A new title starts as a draft; it becomes a claim or an obligation only once posted. */
+export function CreateTitleDialog({
   data,
   onChanged,
   setNotice,
-}: { data: ReceivablesData } & MutationProps) {
-  const t = useTranslations('receivables')
+}: { data: TitlesData } & MutationProps) {
+  const { direction } = data
+  const t = useTranslations(namespaceOf(direction))
   const common = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const today = localToday()
-  const customers = data.customers.map((customer) => ({
-    value: customer.partyId,
-    label: customer.legalName,
+  const counterparties = data.counterparties.map((party) => ({
+    value: party.partyId,
+    label: party.legalName,
   }))
   const categories = data.categories
-    .filter((category) => category.active && category.nature === 'revenue')
+    .filter((category) => category.active && category.nature === natureOf(direction))
     .map((category) => ({ value: category.id, label: `${category.code} · ${category.name}` }))
   const terms = [
     { value: SINGLE, label: t('singleInstallment') },
@@ -74,15 +75,11 @@ export function CreateReceivableDialog({
       return
     }
     setBusy(true)
-    const response = await tracedFetch(
-      'financial.receivable.draft',
-      '/api/horizon/financial/receivables',
-      {
-        method: 'POST',
-        headers: idempotentJsonHeaders(),
-        body: JSON.stringify(body),
-      },
-    )
+    const response = await tracedFetch(`financial.${direction}.draft`, apiBaseOf(direction), {
+      method: 'POST',
+      headers: idempotentJsonHeaders(),
+      body: JSON.stringify(body),
+    })
     if (!response.ok) {
       setError(await apiError(response, t('createFailed')))
       setBusy(false)
@@ -112,9 +109,14 @@ export function CreateReceivableDialog({
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {customers.length ? (
+          {counterparties.length ? (
             <form className="dialog-form" onSubmit={submit}>
-              <SelectField label={t('customer')} name="partyId" options={customers} required />
+              <SelectField
+                label={t('counterparty')}
+                name="partyId"
+                options={counterparties}
+                required
+              />
               <div className="form-grid two-columns">
                 <TextField label={t('document')} maxLength={40} name="documentNumber" required />
                 <SelectField
@@ -167,7 +169,7 @@ export function CreateReceivableDialog({
               </div>
             </form>
           ) : (
-            <p className="catalog-page-copy">{t('noCustomers')}</p>
+            <p className="catalog-page-copy">{t('noCounterparties')}</p>
           )}
         </Dialog.Popup>
       </Dialog.Portal>

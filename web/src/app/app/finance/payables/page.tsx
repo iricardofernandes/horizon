@@ -2,8 +2,8 @@
 
 import { loadTitles, TitlesPage } from '@/features/titles/titles-page'
 
-const load = () => loadTitles('receivable')
+const load = () => loadTitles('payable')
 
-export default function ReceivablesPage() {
+export default function PayablesPage() {
   return <TitlesPage load={load} />
 }

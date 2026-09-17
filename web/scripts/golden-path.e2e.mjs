@@ -210,6 +210,57 @@ try {
   await receivableDialog.getByText('settled', { exact: true }).first().waitFor()
   await receivableDialog.getByRole('button', { name: 'Close dialog' }).click()
 
+  // A supplier invoice waits for a second person: whoever requests approval cannot give it.
+  const supplierGrant = await page.evaluate(
+    async (partyId) =>
+      (
+        await fetch(`/api/horizon/parties/parties/${partyId}/roles/supplier`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ operation: 'grant' }),
+        })
+      ).status,
+    existingCustomer.id,
+  )
+  // 409 on a rerun: the party already plays the role.
+  assert([204, 409].includes(supplierGrant), `granting the supplier role returned ${supplierGrant}`)
+  await page.getByRole('link', { name: 'Payables' }).click()
+  await page.waitForURL(`${appUrl}/app/finance/payables`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Accounts payable', exact: true }).waitFor()
+  await waitUntil(
+    () =>
+      page.evaluate(async (partyId) => {
+        const response = await fetch('/api/horizon/financial/payables/counterparties')
+        if (!response.ok) return false
+        const { data } = await response.json()
+        return data.some((row) => row.partyId === partyId)
+      }, existingCustomer.id),
+    'the supplier projection in Financial',
+  )
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Approval policy' }).click()
+  await page.getByRole('dialog', { name: 'Approval policy' }).waitFor()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+  const payableNumber = `NF-${randomUUID().slice(0, 8).toUpperCase()}`
+  await page.getByRole('button', { name: 'New payable' }).click()
+  const payableForm = page.getByRole('dialog', { name: 'New payable' })
+  await payableForm.getByLabel('Document').fill(payableNumber)
+  await payableForm.getByLabel('Amount').fill('123.45')
+  await payableForm.getByRole('button', { name: 'Save draft' }).click()
+  await page.getByText('Draft payable saved.').waitFor()
+  await page.getByRole('button', { name: `Open payable ${payableNumber}` }).click()
+  const payableDialog = page.getByRole('dialog', { name: `Payable ${payableNumber}` })
+  await payableDialog.getByRole('button', { name: 'Request approval' }).click()
+  await page.getByText('Approval requested.').waitFor()
+  await payableDialog
+    .getByText('You requested this approval, so another approver must decide it.')
+    .waitFor()
+  assert(
+    (await payableDialog.getByRole('button', { name: 'Approve', exact: true }).count()) === 0,
+    'the requester was offered their own approval',
+  )
+  await payableDialog.getByRole('button', { name: 'Close dialog' }).click()
+
   await page.getByRole('link', { name: 'Webhooks' }).click()
   await page.waitForURL(`${appUrl}/app/developers/webhooks`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Webhooks', exact: true }).waitFor()
@@ -287,6 +338,7 @@ try {
     ['API keys', 'API keys'],
     ['Classifications', 'Classifications'],
     ['Receivables', 'Accounts receivable'],
+    ['Payables', 'Accounts payable'],
   ]) {
     await page.getByRole('link', { name: screen[0], exact: true }).click()
     await page.getByRole('heading', { name: screen[1], exact: true }).waitFor()

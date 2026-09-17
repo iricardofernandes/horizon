@@ -2169,3 +2169,17 @@ th.numeric {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.title-approval-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.badge-awaiting-approval {
+  background: var(--amber-3);
+  color: var(--amber-11);
+}
+.badge-approved,
+.badge-not-required {
+  background: var(--jade-3);
+  color: var(--jade-11);
+}

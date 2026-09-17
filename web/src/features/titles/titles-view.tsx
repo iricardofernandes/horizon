@@ -7,38 +7,50 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useStatusLabel } from '@/lib/status'
 import { useDate, useMoney } from '@/lib/use-format'
-import { CreateReceivableDialog } from './create-receivable-dialog'
-import { ReceivableDetailDialog } from './receivable-detail-dialog'
+import { ApprovalPolicyDialog } from './approval-policy-dialog'
+import { CreateTitleDialog } from './create-title-dialog'
+import { TitleDetailDialog } from './title-detail-dialog'
 import {
   AGING_BUCKETS,
+  type Direction,
   displayStatus,
   inView,
-  RECEIVABLE_VIEWS,
-  type ReceivableRow,
-  type ReceivablesData,
-  type ReceivableView,
+  namespaceOf,
+  type TitleRow,
+  type TitlesData,
+  type TitleView,
+  viewsOf,
 } from './types'
 
-export type ReceivableAbilities = { canRecord: boolean; canReverse: boolean }
+/** What the session may attempt; Financial still decides every command (ADR 0045). */
+export type TitleAbilities = {
+  canRecord: boolean
+  canReverse: boolean
+  canApprove: boolean
+  canConfigure: boolean
+  /** The signed-in subject, so a requester is not offered their own approval. */
+  userId: string | null
+}
 export type MutationProps = { onChanged: () => Promise<void>; setNotice: (value: string) => void }
 
 /**
- * Accounts receivable: what customers owe, when it falls due and what was collected. Posted
- * titles are never edited away — a correction is a reversal that stays in the timeline
- * (ADR 0042).
+ * Accounts receivable or payable: what is owed, when it falls due and what was settled.
+ * Posted titles are never edited away — a correction is a reversal that stays in the
+ * timeline (ADR 0042).
  */
-export function ReceivablesView({
+export function TitlesView({
   data,
   abilities,
   onChanged,
   setNotice,
-}: { data: ReceivablesData; abilities: ReceivableAbilities } & MutationProps) {
-  const t = useTranslations('receivables')
-  const [view, setView] = useState<ReceivableView>('all')
+}: { data: TitlesData; abilities: TitleAbilities } & MutationProps) {
+  const { direction } = data
+  const t = useTranslations(namespaceOf(direction))
+  const [view, setView] = useState<TitleView>('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const normalized = query.trim().toLocaleLowerCase()
-  const rows = data.receivables.filter(
+  const rows = data.titles.filter(
     (row) =>
       inView(row, view) &&
       (!normalized ||
@@ -55,8 +67,11 @@ export function ReceivablesView({
           <p className="catalog-page-copy">{t('copy')}</p>
         </div>
         <div className="page-actions">
+          {direction === 'payable' && abilities.canConfigure ? (
+            <ApprovalPolicyDialog data={data} onChanged={onChanged} setNotice={setNotice} />
+          ) : null}
           {abilities.canRecord ? (
-            <CreateReceivableDialog data={data} onChanged={onChanged} setNotice={setNotice} />
+            <CreateTitleDialog data={data} onChanged={onChanged} setNotice={setNotice} />
           ) : null}
         </div>
       </header>
@@ -65,16 +80,16 @@ export function ReceivablesView({
 
       <Tabs.Root
         className="catalog-tabs"
-        onValueChange={(value) => setView(value as ReceivableView)}
+        onValueChange={(value) => setView(value as TitleView)}
         value={view}
       >
         <div className="catalog-toolbar receivables-toolbar">
           <Tabs.List aria-label={t('views')} className="ui-tabs-list">
-            {RECEIVABLE_VIEWS.map((candidate) => (
+            {viewsOf(direction).map((candidate) => (
               <Tabs.Tab className="ui-tab" key={candidate} value={candidate}>
                 {t(`view.${candidate}`)}{' '}
                 <span className="tab-count">
-                  {data.receivables.filter((row) => inView(row, candidate)).length}
+                  {data.titles.filter((row) => inView(row, candidate)).length}
                 </span>
               </Tabs.Tab>
             ))}
@@ -90,7 +105,7 @@ export function ReceivablesView({
         </div>
         <div className="panel table-panel">
           <div className="table-scroll">
-            <ReceivablesTable onOpen={setSelected} rows={rows} />
+            <TitlesTable direction={direction} onOpen={setSelected} rows={rows} />
           </div>
           {!rows.length ? (
             <div className="catalog-empty">
@@ -102,7 +117,7 @@ export function ReceivablesView({
       </Tabs.Root>
 
       {selected ? (
-        <ReceivableDetailDialog
+        <TitleDetailDialog
           abilities={abilities}
           data={data}
           id={selected}
@@ -115,8 +130,9 @@ export function ReceivablesView({
   )
 }
 
-function SummaryCards({ data }: { data: ReceivablesData }) {
-  const t = useTranslations('receivables')
+function SummaryCards({ data }: { data: TitlesData }) {
+  const { direction } = data
+  const t = useTranslations(namespaceOf(direction))
   const money = useMoney()
   const totals = data.summary.currencies
   const sum = (pick: (entry: (typeof totals)[number]) => string) =>
@@ -136,10 +152,17 @@ function SummaryCards({ data }: { data: ReceivablesData }) {
           <span>{t('dueWithin7Days')}</span>
           <strong>{sum((entry) => entry.dueWithin7Days)}</strong>
         </article>
-        <article className="customer-summary-card">
-          <span>{t('drafts')}</span>
-          <strong>{data.summary.drafts}</strong>
-        </article>
+        {direction === 'payable' ? (
+          <article className="customer-summary-card">
+            <span>{t('awaitingApproval')}</span>
+            <strong>{data.summary.awaitingApproval}</strong>
+          </article>
+        ) : (
+          <article className="customer-summary-card">
+            <span>{t('drafts')}</span>
+            <strong>{data.summary.drafts}</strong>
+          </article>
+        )}
       </div>
       {totals.map((entry) => (
         <section
@@ -162,14 +185,16 @@ function SummaryCards({ data }: { data: ReceivablesData }) {
   )
 }
 
-function ReceivablesTable({
+function TitlesTable({
+  direction,
   rows,
   onOpen,
 }: {
-  rows: ReceivableRow[]
+  direction: Direction
+  rows: TitleRow[]
   onOpen: (id: string) => void
 }) {
-  const t = useTranslations('receivables')
+  const t = useTranslations(namespaceOf(direction))
   const common = useTranslations('common')
   const statusLabel = useStatusLabel()
   const money = useMoney()
@@ -179,7 +204,7 @@ function ReceivablesTable({
       <thead>
         <tr>
           <th>{t('document')}</th>
-          <th>{t('customer')}</th>
+          <th>{t('counterparty')}</th>
           <th>{t('issuedOn')}</th>
           <th>{t('nextDue')}</th>
           <th className="numeric">{t('total')}</th>
