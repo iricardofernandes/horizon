@@ -2274,3 +2274,120 @@ th.numeric {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* Reconciliation */
+.reconciliation-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+}
+.reconciliation-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.reconciliation-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.reconciliation-suggestions,
+.reconciliation-bar {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+}
+.reconciliation-suggestions h2 {
+  margin: 0;
+  font-size: 15px;
+}
+.reconciliation-suggestions ul,
+.reconciliation-history {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.reconciliation-suggestions li,
+.reconciliation-history li {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border);
+}
+.reconciliation-suggestion-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.reconciliation-suggestions small {
+  color: var(--color-text-muted);
+}
+.reconciliation-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.reconciliation-pane-title {
+  margin: 14px 16px 0;
+  font-size: 14px;
+}
+tbody tr.reconciliation-selected td {
+  background: var(--jade-2);
+}
+.reconciliation-bar {
+  display: grid;
+  gap: 10px;
+}
+.reconciliation-bar dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: 0;
+}
+.reconciliation-bar dt {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.reconciliation-bar dd {
+  margin: 2px 0 0;
+  font-size: 18px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.reconciliation-balanced {
+  color: var(--jade-11);
+}
+.reconciliation-history li > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.badge-reconciliation-unmatched,
+.badge-reconciliation-partial,
+.badge-reconciliation-score {
+  background: var(--amber-3);
+  color: var(--amber-11);
+}
+.badge-reconciliation-matched {
+  background: var(--jade-3);
+  color: var(--jade-11);
+}
+.badge-reconciliation-ignored {
+  background: var(--sage-3);
+  color: var(--sage-11);
+}
+@media (max-width: 1050px) {
+  .reconciliation-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -315,6 +315,41 @@ try {
     `the transfer changed the combined balance by more than its fee (${totalBefore} → ${totalAfter})`,
   )
 
+  // Reconciliation: the bank's line for that transfer is imported once and matched by a person.
+  const bankDescription = `TRANSFER GOLDEN ${randomUUID().slice(0, 8).toUpperCase()}`
+  const now = new Date()
+  const bankDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`
+  const statementFile = {
+    name: 'golden-statement.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(`Data;Histórico;Valor\n${bankDate};${bankDescription};-12,34\n`),
+  }
+  await page.getByRole('link', { name: 'Bank reconciliation' }).click()
+  await page.waitForURL(`${appUrl}/app/finance/reconciliation`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Bank reconciliation', exact: true }).waitFor()
+  assert(
+    (await page.getByRole('combobox', { name: 'Account' }).textContent())?.includes('Golden checking'),
+    'the reconciliation did not open on Golden checking',
+  )
+  for (const expected of ['1 new line imported, 0 already known.', '0 new lines imported, 1 already known.']) {
+    await page.getByRole('button', { name: 'Import statement' }).click()
+    const importForm = page.getByRole('dialog', { name: 'Import statement' })
+    await importForm.getByLabel('Statement file').setInputFiles(statementFile)
+    await importForm.getByRole('button', { name: 'Import', exact: true }).click()
+    await page.getByText(expected).waitFor()
+  }
+  await page.getByRole('button', { name: `Accept the suggestion for ${bankDescription}` }).click()
+  await page.getByText('Reconciliation confirmed.').waitFor()
+  const reconciledLine = await page.evaluate(async (description) => {
+    const accounts = (await (await fetch('/api/horizon/treasury/accounts')).json()).data
+    const checking = accounts.find((account) => account.name === 'Golden checking')
+    const workspace = await (
+      await fetch(`/api/horizon/treasury/accounts/${checking.id}/reconciliation`)
+    ).json()
+    return workspace.lines.find((line) => line.description === description)?.status ?? null
+  }, bankDescription)
+  assert(reconciledLine === 'matched', `the imported bank line is ${reconciledLine}, not matched`)
+
   await page.getByRole('link', { name: 'Webhooks' }).click()
   await page.waitForURL(`${appUrl}/app/developers/webhooks`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Webhooks', exact: true }).waitFor()
@@ -394,6 +429,7 @@ try {
     ['Receivables', 'Accounts receivable'],
     ['Payables', 'Accounts payable'],
     ['Accounts and balances', 'Accounts and balances'],
+    ['Bank reconciliation', 'Bank reconciliation'],
   ]) {
     await page.getByRole('link', { name: screen[0], exact: true }).click()
     await page.getByRole('heading', { name: screen[1], exact: true }).waitFor()
