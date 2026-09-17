@@ -937,6 +937,46 @@ Treasury confronts the bank's record with the books', and a person decides (ADR 
 
 ---
 
+## Phase 21 — Order to bank reconciliation, end to end
+
+**Complete.** Backlog item 12 of the [expansion plan](erp-expansion-plan.md), closing its
+first backlog: the golden path now follows one sale from the order to the bank line that
+proves the money arrived, in one trace, with the amounts asserted at every step.
+
+**Deliverables**
+
+- A settlement may name the treasury account the cash moved through.
+  `financial.settlement.recorded` carries it as an optional `treasuryAccountId`
+  (`@horizon/contracts@0.10.0`, additive), and `treasury.entry.recorded` gains the
+  `settlement` source.
+- Treasury consumes `financial.settlement.recorded` and `financial.settlement.reversed`
+  through its inbox: a settlement becomes exactly one journal entry in that account and a
+  reversal reverses it. A settlement the account cannot take is recorded as refused with its
+  reason rather than retried forever, and a settlement entry cannot be reversed by hand.
+- `make demo`, which CI runs twice: the confirmed order raises a receivable, which is
+  classified, posted and settled into a demo bank account; Treasury records the cash; a CSV
+  statement line for it is imported; the matcher's suggestion for that exact pair is
+  accepted, never auto-confirmed.
+- The golden-path trace must contain `sales`, `inventory`, `webhooks`, `financial` and
+  `treasury`.
+- Web: the settlement form offers the treasury accounts the session may use.
+
+**Exit criteria**
+
+- The order total, the receivable total, the treasury entry, the statement line and the
+  reconciled amount are asserted equal in CI, and the bank line ends matched.
+- Redelivering a settlement event, or delivering it under another event id, records one
+  entry; reversing it in Financial reverses that entry once (integration tests).
+- Both golden paths pass twice in a row against a rebuilt platform.
+
+**Non-goals**
+
+- Ledger postings for these facts (Phase F).
+- Choosing the account automatically from the payment method, and settlements imported from
+  bank return files.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

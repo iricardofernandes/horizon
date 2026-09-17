@@ -713,3 +713,5 @@ The first executable backlog, in order, is:
 12. Extend the golden path to order → receivable → settlement → bank reconciliation and
     require one joined trace plus reconciled numeric assertions in CI.
 
+**Status:** items 1 to 12 are delivered as plan phases 14 to 21; the next work is Phase F.
+
