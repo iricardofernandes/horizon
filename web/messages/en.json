@@ -378,12 +378,14 @@
     "financial": "Financial",
     "identity": "Identity",
     "inventory": "Inventory",
+    "ledger": "Ledger",
     "parties": "Parties",
     "sales": "Sales",
     "treasury": "Treasury",
     "webhooks": "Webhooks"
   },
   "roles": {
+    "accountant": "Accountant",
     "admin": "Administrator",
     "editor": "Editor",
     "member": "Member",

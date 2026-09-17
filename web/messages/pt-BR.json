@@ -378,12 +378,14 @@
     "financial": "Financeiro",
     "identity": "Identidade",
     "inventory": "Estoque",
+    "ledger": "Contabilidade",
     "parties": "Cadastros",
     "sales": "Vendas",
     "treasury": "Tesouraria",
     "webhooks": "Webhooks"
   },
   "roles": {
+    "accountant": "Contador",
     "admin": "Administrador",
     "editor": "Editor",
     "member": "Membro",

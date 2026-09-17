@@ -23,6 +23,7 @@ type ModuleName =
   | 'parties'
   | 'financial'
   | 'treasury'
+  | 'ledger'
 type RoleAssignment = { module: ModuleName; role: string }
 
 export type WorkspaceUser = {
@@ -44,6 +45,7 @@ const roleOptions: Record<ModuleName, string[]> = {
   parties: ['admin', 'editor', 'viewer'],
   financial: ['admin', 'operator', 'viewer'],
   treasury: ['admin', 'operator', 'viewer'],
+  ledger: ['admin', 'accountant', 'viewer'],
 }
 
 const modules = Object.keys(roleOptions) as ModuleName[]
@@ -59,6 +61,7 @@ const profiles: Record<'admin' | 'operator' | 'viewer', RoleAssignment[]> = {
     { module: 'parties', role: 'editor' },
     { module: 'financial', role: 'operator' },
     { module: 'treasury', role: 'operator' },
+    { module: 'ledger', role: 'accountant' },
   ],
   viewer: [
     { module: 'identity', role: 'member' },
@@ -69,6 +72,7 @@ const profiles: Record<'admin' | 'operator' | 'viewer', RoleAssignment[]> = {
     { module: 'parties', role: 'viewer' },
     { module: 'financial', role: 'viewer' },
     { module: 'treasury', role: 'viewer' },
+    { module: 'ledger', role: 'viewer' },
   ],
 }
 
