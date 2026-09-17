@@ -76,6 +76,12 @@ describe('financial event contracts', () => {
     }
     expect(financialSettlementRecorded.payload.safeParse(recorded).success).toBe(true)
     expect(
+      financialSettlementRecorded.payload.safeParse({
+        ...recorded,
+        treasuryAccountId: randomUUID(),
+      }).success,
+    ).toBe(true)
+    expect(
       financialSettlementRecorded.payload.safeParse({ ...recorded, direction: 'refund' }).success,
     ).toBe(false)
     expect(

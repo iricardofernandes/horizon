@@ -5,7 +5,14 @@ import { defineEvent } from './define'
 
 export const ACCOUNT_KINDS = ['bank', 'cash', 'card-clearing', 'virtual'] as const
 export const ENTRY_DIRECTIONS = ['inflow', 'outflow'] as const
-export const ENTRY_SOURCES = ['opening', 'manual', 'transfer', 'transfer-fee', 'reversal'] as const
+export const ENTRY_SOURCES = [
+  'opening',
+  'manual',
+  'transfer',
+  'transfer-fee',
+  'reversal',
+  'settlement',
+] as const
 
 const accountId = uuidSchema.describe('Treasury account identifier')
 const transferId = uuidSchema.describe('Internal transfer identifier')

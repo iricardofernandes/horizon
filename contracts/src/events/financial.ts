@@ -81,7 +81,7 @@ export const financialSettlementRecorded = defineEvent({
   type: 'financial.settlement.recorded',
   version: 1,
   description:
-    'Money was received or paid against one installment. `received` is the cash that moved; `discount` reduces what is owed without cash; `interest` and `penalty` add to it. `outstanding` is the title balance after this settlement.',
+    'Money was received or paid against one installment. `received` is the cash that moved; `discount` reduces what is owed without cash; `interest` and `penalty` add to it. `outstanding` is the title balance after this settlement. With `treasuryAccountId`, Treasury records `received` in that account.',
   payload: z.object({
     settlementId,
     titleId,
@@ -94,6 +94,8 @@ export const financialSettlementRecorded = defineEvent({
     interest: moneySchema,
     penalty: moneySchema,
     paymentMethodId: uuidSchema.nullable(),
+    /** The treasury account the cash moved through, when the person said which (0.10.0). */
+    treasuryAccountId: uuidSchema.optional(),
     outstanding: moneySchema,
     recordedAt: instantSchema,
   }),
