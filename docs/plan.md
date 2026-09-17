@@ -885,6 +885,58 @@ books (ADR 0041, ADR 0042).
 
 ---
 
+## Phase 20 — Bank statements and reconciliation
+
+**Complete.** Backlog item 11 of the [expansion plan](erp-expansion-plan.md), its Phase E:
+Treasury confronts the bank's record with the books', and a person decides (ADR 0046).
+
+**Deliverables**
+
+- Pluggable statement adapters behind a port, starting with OFX 1.x/2.x and CSV (Portuguese
+  or English headers, `;` or `,`, decimal comma or dot). A bank-feed port with the same
+  normalized output is declared for Open Finance providers, none implemented.
+- Immutable imports: the file hash makes a reimport a reported no-op, and every line's
+  fingerprint — the bank reference when there is one, otherwise date, amount, description
+  and its occurrence within the file — skips lines already known from overlapping files.
+  The bank's reference, document number, description and raw fields are kept.
+- Reconciliations of one line to one entry, one to many and many to one, partial amounts,
+  ignored lines with a reason, and an explicit adjustment entry for a difference the person
+  accepts. Every reconciliation balances and is undone rather than deleted.
+- Deterministic suggestions from amount, a five-day date window, document number,
+  counterparty and description similarity, each with a score and its reasons. None is ever
+  confirmed without a person; a dismissed suggestion is not proposed again.
+- Acceptance, correction and dismissal counts per account, the evidence ADR 0046 asks for.
+- Period closure through a date, refused while bank lines up to it are open; it freezes the
+  reconciliations it covers until reopened with a reason.
+- Accounts now report the reconciled balance and the last statement balance with its date.
+- `@horizon/contracts@0.9.0`: `treasury.statement.imported`,
+  `treasury.reconciliation.confirmed` and `treasury.reconciliation.undone`.
+- Web: Finance → Bank reconciliation, with statement import, suggestions and their reasons,
+  bank and book panes with the selected difference always visible, match, match with
+  adjustment, ignore, history with undo, and period close and reopen.
+
+**Exit criteria**
+
+- Importing the same file again stores nothing, and an overlapping file stores only its new
+  lines (integration test and browser golden path).
+- Statement lines, imports and reconciliation items cannot be updated or deleted by the
+  application role; an unbalanced reconciliation written directly is refused at commit.
+- A reconciliation is undone with a reason, its lines become unmatched again, and a closed
+  period refuses the undo until reopened.
+- For a period, book opening + bank lines − ignored − unmatched bank lines + unmatched book
+  entries + cross-period matches equals the book closing balance.
+- Suggestions come out identical whatever order lines and entries arrive in, and never reuse
+  a line or entry.
+
+**Non-goals**
+
+- Automatic confirmation above a confidence threshold, until measured acceptance supports
+  its own ADR.
+- Open Finance and bank-feed providers, CNAB return files and statement balances per day.
+- Settlements in `financial/` recorded in Treasury automatically (Phase F).
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

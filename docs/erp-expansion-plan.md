@@ -445,6 +445,10 @@ statement balance arrives with Phase E.
 
 ### Phase E — bank statements and reconciliation
 
+**Progress:** delivered as [plan phase 20](plan.md#phase-20--bank-statements-and-reconciliation)
+(backlog item 11). The bank-feed adapter port is declared without a provider; automatic
+confirmation stays out until acceptance data justifies it.
+
 **Deliverables**
 
 - Add pluggable import adapters, starting with OFX and CSV; retain original file hash and

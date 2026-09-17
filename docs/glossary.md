@@ -223,3 +223,18 @@ changes later balances without rewriting anything.
 One of the journal entries a transfer is made of: the outflow from the source account, the
 inflow into the destination and, when there is one, the fee charged to the source. All of
 them are committed together or not at all.
+
+### statement line fingerprint
+What identifies a bank line across imports: the bank's own reference when it sends one,
+otherwise its date, amount, description and position among identical lines in the file.
+A line whose fingerprint is already known is counted as a duplicate and not stored.
+
+### reconciliation
+A person's statement that bank lines and book entries describe the same movements, or that
+bank lines are to be ignored. It always balances, may apply part of a line or entry, and is
+undone rather than deleted.
+
+### match suggestion
+A proposed reconciliation built deterministically from amount, date, document number,
+counterparty and description, with a score and the reasons behind it. It is never confirmed
+without a person.

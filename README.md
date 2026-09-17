@@ -154,7 +154,7 @@ vendored side by side, and a cross-module import cannot resolve.
 | [`sales/`](sales/) | Customer projection, quotes, sales orders, invoicing trigger | 3004 | 7, 15 |
 | [`parties/`](parties/) | Organizations and people, their roles, tax identifiers and erasure | 3006 | 15 |
 | [`financial/`](financial/) | Receivables and payables with approvals, settlements and reversals; categories, departments and projects, payment methods and terms | 3007 | 16–18 |
-| [`treasury/`](treasury/) | Bank and cash accounts, their append-only journal, book balances and internal transfers | 3008 | 19 |
+| [`treasury/`](treasury/) | Bank and cash accounts, their append-only journal, balances, transfers, statement import and reconciliation | 3008 | 19, 20 |
 | [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, retry, DLQ, replay | 3005 | 9 |
 | [`web/`](web/) | Next.js frontend, routed and bilingual | 3000 | 10, 14 |
 | [`contracts/`](contracts/) | Published package: versioned Zod event and API schemas | — | 3 |
