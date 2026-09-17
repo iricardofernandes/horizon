@@ -100,6 +100,18 @@ services:
           - /financial
         strip_path: true
 
+  - name: treasury
+    url: http://treasury:3008
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: treasury-api
+        paths:
+          - /treasury
+        strip_path: true
+
   - name: webhooks
     url: http://webhooks:3005
     retries: 3

@@ -264,6 +264,35 @@ services:
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_financial
       DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_financial
 
+  treasury-migrate:
+    <<: *service
+    build:
+      context: ../treasury
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_treasury
+    command: ["npm", "run", "db:migrate"]
+
+  treasury:
+    <<: *service
+    build:
+      context: ../treasury
+      network: host
+    container_name: horizon-treasury
+    depends_on:
+      treasury-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      <<: *env
+      PORT: '3008'
+      OTEL_SERVICE_NAME: treasury
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_treasury
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_treasury
+
   webhooks-migrate:
     <<: *service
     build:

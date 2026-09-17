@@ -36,6 +36,7 @@ jobs:
           - { name: webhooks, context: webhooks }
           - { name: parties, context: parties }
           - { name: financial, context: financial }
+          - { name: treasury, context: treasury }
           - { name: web, context: web }
           - { name: gateway, context: gateway }
     steps:

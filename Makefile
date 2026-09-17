@@ -4,7 +4,7 @@
 # Makefile shells out per project rather than sharing state between them.
 
 PROJECTS_JSON := scripts/modules.json
-SERVICES := identity catalog inventory sales webhooks parties financial
+SERVICES := identity catalog inventory sales webhooks parties financial treasury
 
 .DEFAULT_GOAL := help
 
@@ -137,6 +137,7 @@ demo: ## Seed a tenant and run the golden path (phase 8)
 	@cd webhooks && npm run build
 	@cd parties && npm run build
 	@cd financial && npm run build
+	@cd treasury && npm run build
 	@node scripts/demo.mjs
 
 .PHONY: migrate-customers

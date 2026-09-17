@@ -8,6 +8,7 @@
     { "path": "webhooks",              "kind": "service", "port": 3005 },
     { "path": "parties",               "kind": "service", "port": 3006 },
     { "path": "financial",             "kind": "service", "port": 3007 },
+    { "path": "treasury",              "kind": "service", "port": 3008 },
     { "path": "web",                   "kind": "frontend", "port": 3000 },
     { "path": "contracts",             "kind": "package" },
     { "path": "tooling/mcp-debugger",  "kind": "package" },
