@@ -1,4 +1,5 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import { TreasuryModuleEventHandlers } from '@/application/consume-module-events'
 import { ImportStatementUseCase } from '@/application/use-cases/import-statements'
 import {
   ChangeAccountStatusUseCase,
@@ -40,6 +41,7 @@ export class TreasuryRuntime implements OnModuleInit, OnModuleDestroy {
   readonly dismissSuggestion: DismissSuggestionUseCase
   readonly closePeriod: ClosePeriodUseCase
   readonly reopenPeriod: ReopenPeriodUseCase
+  readonly eventHandlers: TreasuryModuleEventHandlers
 
   constructor(config: TreasuryEnvironment) {
     const clock = { now: () => new Date() }
@@ -68,6 +70,7 @@ export class TreasuryRuntime implements OnModuleInit, OnModuleDestroy {
     this.dismissSuggestion = new DismissSuggestionUseCase(this.database, clock)
     this.closePeriod = new ClosePeriodUseCase(this.database, clock)
     this.reopenPeriod = new ReopenPeriodUseCase(this.database, clock)
+    this.eventHandlers = new TreasuryModuleEventHandlers(this.database, clock)
   }
 
   onModuleInit(): Promise<void> {

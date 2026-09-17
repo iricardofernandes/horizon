@@ -3,7 +3,7 @@ import { APP_GUARD, Reflector } from '@nestjs/core'
 import { TreasuryAuthGuard } from '@/infrastructure/http/authorization'
 import { ReconciliationController } from '@/infrastructure/http/reconciliation.controller'
 import { TreasuryController } from '@/infrastructure/http/treasury.controller'
-import { OutboxWorker } from '@/infrastructure/messaging/rabbitmq-transport'
+import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { TreasuryEnvironment } from './environment'
 import { TreasuryRuntime } from './treasury-runtime'
 
@@ -19,8 +19,18 @@ export class AppModule {
         useFactory: (runtime: TreasuryRuntime, reflector: Reflector) =>
           new TreasuryAuthGuard(runtime, reflector),
       },
+      {
+        provide: RabbitMqEventConsumer,
+        inject: [TreasuryRuntime],
+        useFactory: (runtime: TreasuryRuntime) =>
+          new RabbitMqEventConsumer({
+            url: config.RABBITMQ_URL,
+            queue: 'treasury.events',
+            handlers: runtime.eventHandlers.handlers,
+            prefetch: config.AMQP_PREFETCH,
+          }),
+      },
     ]
-    // Treasury consumes nothing yet; it only publishes through its outbox (ADR 0024).
     if (config.DATABASE_RELAY_URL)
       providers.push({
         provide: OutboxWorker,

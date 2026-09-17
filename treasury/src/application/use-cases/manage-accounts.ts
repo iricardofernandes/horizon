@@ -107,6 +107,7 @@ export class OpenAccountUseCase {
           valueOn: values.openedOn,
           source: 'opening',
           transferId: null,
+          settlementId: null,
           reverses: null,
           counterparty: null,
           memo: null,

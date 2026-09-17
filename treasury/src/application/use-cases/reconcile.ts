@@ -213,6 +213,7 @@ export class ConfirmMatchUseCase {
       valueOn: valueOn.value,
       source: 'manual',
       transferId: null,
+      settlementId: null,
       reverses: null,
       counterparty: null,
       memo: memo.value,

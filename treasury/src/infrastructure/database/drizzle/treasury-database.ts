@@ -4,6 +4,8 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import {
   type CommandReceipt,
+  type EventOutcome,
+  type ReceivedEvent,
   type TreasuryScope,
   TreasuryUnitOfWork,
 } from '@/application/ports/unit-of-work'
@@ -96,6 +98,22 @@ export class TreasuryDatabase extends TreasuryUnitOfWork {
       if (error instanceof Refused) return left(error.failure as E)
       throw error
     }
+  }
+
+  async processEvent<T>(
+    tenantId: string,
+    event: ReceivedEvent,
+    work: (scope: TreasuryScope) => Promise<T>,
+  ): Promise<EventOutcome<T>> {
+    return this.inTenant(tenantId, async (scope) => {
+      const claimed = await this.currentTransaction()
+        .insert(schema.inbox)
+        .values({ ...event, tenantId })
+        .onConflictDoNothing()
+        .returning({ eventId: schema.inbox.eventId })
+      if (claimed.length === 0) return { processed: false as const }
+      return { processed: true as const, value: await work(scope) }
+    })
   }
 
   listAccounts(tenantId: string, asOf: string) {

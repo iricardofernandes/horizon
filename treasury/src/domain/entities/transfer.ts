@@ -147,6 +147,7 @@ export class Transfer extends AggregateRoot<TransferProps> {
       tenantId: this.props.tenantId,
       valueOn: this.props.valueOn,
       transferId: this.id.toString(),
+      settlementId: null,
       reverses: null,
       counterparty: null,
       memo: this.props.memo,

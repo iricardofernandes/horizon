@@ -69,6 +69,7 @@ export const journalEntries = pgTable('journal_entries', {
   valueOn: businessDate('value_on').notNull(),
   source: text('source').notNull(),
   transferId: uuid('transfer_id'),
+  settlementId: uuid('settlement_id'),
   reverses: uuid('reverses'),
   counterparty: text('counterparty'),
   memo: text('memo'),
@@ -221,4 +222,27 @@ export const reconciliationClosures = pgTable('reconciliation_closures', {
   reopenedBy: text('reopened_by'),
   reopenedAt: instant('reopened_at'),
   reopenReason: text('reopen_reason'),
+})
+
+export const inbox = pgTable('inbox', {
+  sourceModule: text('source_module').notNull(),
+  eventId: uuid('event_id').notNull(),
+  eventType: text('event_type').notNull(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  receivedAt: instant('received_at').notNull().defaultNow(),
+})
+
+export const settlementPostings = pgTable('settlement_postings', {
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  settlementId: uuid('settlement_id').notNull(),
+  titleId: uuid('title_id').notNull(),
+  accountId: uuid('account_id').notNull(),
+  status: text('status').notNull(),
+  entryId: uuid('entry_id'),
+  reason: text('reason'),
+  receivedAt: instant('received_at').notNull(),
 })

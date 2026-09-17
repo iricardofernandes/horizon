@@ -9,7 +9,14 @@ import type { BusinessDate, Memo, Money, Reason } from '../value-objects/treasur
 export const ENTRY_DIRECTIONS = ['inflow', 'outflow'] as const
 export type EntryDirection = (typeof ENTRY_DIRECTIONS)[number]
 
-export const ENTRY_SOURCES = ['opening', 'manual', 'transfer', 'transfer-fee', 'reversal'] as const
+export const ENTRY_SOURCES = [
+  'opening',
+  'manual',
+  'transfer',
+  'transfer-fee',
+  'reversal',
+  'settlement',
+] as const
 export type EntrySource = (typeof ENTRY_SOURCES)[number]
 
 interface EntryProps {
@@ -20,6 +27,8 @@ interface EntryProps {
   valueOn: BusinessDate
   source: EntrySource
   transferId: string | null
+  /** The Financial settlement this entry records, when it came from one. */
+  settlementId: string | null
   reverses: string | null
   counterparty: Memo | null
   memo: Memo | null
@@ -38,6 +47,7 @@ export interface EntrySnapshot {
   readonly valueOn: string
   readonly source: EntrySource
   readonly transferId: string | null
+  readonly settlementId: string | null
   readonly reverses: string | null
   readonly counterparty: string | null
   readonly memo: string | null
@@ -72,7 +82,7 @@ export class JournalEntry extends AggregateRoot<EntryProps> {
         valueOn: props.valueOn.value,
         source: {
           type: props.source,
-          id: props.transferId ?? props.reverses,
+          id: props.transferId ?? props.settlementId ?? props.reverses,
         },
         reverses: props.reverses,
         recordedAt: now.toISOString(),
@@ -117,7 +127,7 @@ export class JournalEntry extends AggregateRoot<EntryProps> {
   reverse(
     reason: Reason,
     now: Date,
-    options: { valueOn?: BusinessDate; fromTransfer?: boolean } = {},
+    options: { valueOn?: BusinessDate; fromTransfer?: boolean; fromSettlement?: boolean } = {},
   ): Either<ConflictError | InvalidInputError, JournalEntry> {
     if (this.props.source === 'reversal')
       return left(new ConflictError('a reversal cannot itself be reversed; record a new entry'))
@@ -126,6 +136,8 @@ export class JournalEntry extends AggregateRoot<EntryProps> {
     const isTransferLeg = this.props.source === 'transfer' || this.props.source === 'transfer-fee'
     if (isTransferLeg && !options.fromTransfer)
       return left(new ConflictError('a transfer leg is undone by cancelling the transfer'))
+    if (this.props.source === 'settlement' && !options.fromSettlement)
+      return left(new ConflictError('a settlement is undone by reversing it in Financial'))
     return JournalEntry.record({
       tenantId: this.props.tenantId,
       accountId: this.props.accountId,
@@ -134,6 +146,7 @@ export class JournalEntry extends AggregateRoot<EntryProps> {
       valueOn: options.valueOn ?? this.props.valueOn,
       source: 'reversal',
       transferId: this.props.transferId,
+      settlementId: this.props.settlementId,
       reverses: this.id.toString(),
       counterparty: this.props.counterparty,
       memo: null,
@@ -153,6 +166,7 @@ export class JournalEntry extends AggregateRoot<EntryProps> {
       valueOn: this.props.valueOn.value,
       source: this.props.source,
       transferId: this.props.transferId,
+      settlementId: this.props.settlementId,
       reverses: this.props.reverses,
       counterparty: this.props.counterparty?.value ?? null,
       memo: this.props.memo?.value ?? null,

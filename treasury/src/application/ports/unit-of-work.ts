@@ -5,6 +5,7 @@ import type {
   ClosuresRepository,
   JournalRepository,
   ReconciliationsRepository,
+  SettlementPostingsRepository,
   StatementsRepository,
   TransfersRepository,
 } from '@/domain/repositories/treasury-repositories'
@@ -38,6 +39,7 @@ export interface TreasuryScope {
   readonly statements: StatementsRepository
   readonly reconciliations: ReconciliationsRepository
   readonly closures: ClosuresRepository
+  readonly settlements: SettlementPostingsRepository
   readonly audit: AuditTrail
   /** Serializes reconciliation work on one account for the rest of the transaction. */
   lockAccount(accountId: string): Promise<void>
@@ -49,6 +51,16 @@ export interface CommandReceipt {
   readonly fingerprint: string
 }
 
+export interface ReceivedEvent {
+  readonly sourceModule: string
+  readonly eventId: string
+  readonly eventType: string
+}
+
+export type EventOutcome<T> =
+  | { readonly processed: false }
+  | { readonly processed: true; readonly value: T }
+
 export abstract class TreasuryUnitOfWork {
   abstract inTenant<T>(tenantId: string, work: (scope: TreasuryScope) => Promise<T>): Promise<T>
 
@@ -58,4 +70,11 @@ export abstract class TreasuryUnitOfWork {
     receipt: CommandReceipt,
     work: (scope: TreasuryScope) => Promise<Either<E, T>>,
   ): Promise<Either<E | ConflictError, T>>
+
+  /** Handle an event at most once per source and id, in one transaction with its effect. */
+  abstract processEvent<T>(
+    tenantId: string,
+    event: ReceivedEvent,
+    work: (scope: TreasuryScope) => Promise<T>,
+  ): Promise<EventOutcome<T>>
 }

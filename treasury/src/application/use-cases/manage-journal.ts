@@ -54,6 +54,7 @@ export class RecordEntryUseCase {
         valueOn: valueOn.value,
         source: 'manual',
         transferId: null,
+        settlementId: null,
         reverses: null,
         counterparty: counterparty.value,
         memo: memo.value,

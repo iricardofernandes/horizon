@@ -84,6 +84,7 @@ export function mapEntry(row: typeof schema.journalEntries.$inferSelect): Journa
       valueOn: restored(BusinessDate.create(row.valueOn)),
       source: oneOf<EntrySource>(ENTRY_SOURCES, row.source, 'entry source'),
       transferId: row.transferId,
+      settlementId: row.settlementId,
       reverses: row.reverses,
       counterparty: restored(Memo.create(row.counterparty ?? undefined, '/counterparty')),
       memo: restored(Memo.create(row.memo ?? undefined, '/memo')),
@@ -304,6 +305,19 @@ export function makeScope(tx: Transaction, tenantId: string): TreasuryScope {
     statements: statementsRepository(tx, tenantId),
     reconciliations: reconciliationsRepository(tx, tenantId),
     closures: closuresRepository(tx, tenantId),
+    settlements: {
+      find: async (settlementId) => {
+        const [row] = await tx
+          .select()
+          .from(schema.settlementPostings)
+          .where(eq(schema.settlementPostings.settlementId, settlementId))
+          .limit(1)
+        return row ? { ...row, status: row.status === 'posted' ? 'posted' : 'refused' } : null
+      },
+      record: async (posting) => {
+        await tx.insert(schema.settlementPostings).values({ ...posting, tenantId })
+      },
+    },
     audit: auditTrail(tx, tenantId),
     lockAccount: async (accountId) => {
       await tx.execute(

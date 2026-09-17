@@ -51,7 +51,9 @@ balance; the statement balance is the bank's figure on the date its file reporte
 | `treasury.reconciliation.confirmed` | A person matched or ignored bank lines |
 | `treasury.reconciliation.undone` | A reconciliation was undone |
 
-It consumes nothing yet. Every command that moves money requires an `Idempotency-Key`
+It consumes `financial.settlement.recorded` and `financial.settlement.reversed`: a settlement
+that names a treasury account becomes, or stops being, that account's journal entry, and a
+settlement the account cannot take is recorded as refused with its reason. Every command that moves money requires an `Idempotency-Key`
 header (ADR 0028), and every command is written to a per-tenant hash-chained audit log.
 
 ## Authorization

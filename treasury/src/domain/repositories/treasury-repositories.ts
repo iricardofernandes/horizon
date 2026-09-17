@@ -28,6 +28,22 @@ export abstract class TransfersRepository {
   abstract save(transfer: Transfer): Promise<void>
 }
 
+/** What Treasury did with one settlement Financial reported with an account. */
+export interface SettlementPosting {
+  readonly settlementId: string
+  readonly titleId: string
+  readonly accountId: string
+  readonly status: 'posted' | 'refused'
+  readonly entryId: string | null
+  readonly reason: string | null
+  readonly receivedAt: Date
+}
+
+export abstract class SettlementPostingsRepository {
+  abstract find(settlementId: string): Promise<SettlementPosting | null>
+  abstract record(posting: SettlementPosting): Promise<void>
+}
+
 export interface StatementImport {
   readonly id: string
   readonly accountId: string

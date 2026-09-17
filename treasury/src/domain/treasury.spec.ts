@@ -39,6 +39,7 @@ function entry(accountId: string, direction: EntryDirection, amount: number, val
       valueOn: date(valueOn),
       source: 'manual',
       transferId: null,
+      settlementId: null,
       reverses: null,
       counterparty: null,
       memo: null,
