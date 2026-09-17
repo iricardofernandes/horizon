@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 import {
   treasuryAccountOpened,
   treasuryEntryRecorded,
+  treasuryReconciliationConfirmed,
+  treasuryStatementImported,
   treasuryTransferCancelled,
   treasuryTransferPosted,
 } from './treasury'
@@ -62,5 +64,35 @@ describe('treasury event contracts', () => {
         reason: 'Wrong destination',
       }).success,
     ).toBe(true)
+  })
+
+  it('imports a statement and confirms a reconciliation with at least one bank line', () => {
+    expect(
+      treasuryStatementImported.payload.safeParse({
+        importId: randomUUID(),
+        accountId: randomUUID(),
+        format: 'ofx',
+        lineCount: 12,
+        duplicateCount: 3,
+        periodStart: '2026-09-01',
+        periodEnd: '2026-09-30',
+        importedAt: '2026-09-30T12:00:00.000Z',
+      }).success,
+    ).toBe(true)
+    const confirmed = {
+      reconciliationId: randomUUID(),
+      accountId: randomUUID(),
+      kind: 'match',
+      origin: 'suggestion',
+      statementLineIds: [randomUUID()],
+      entryIds: [randomUUID(), randomUUID()],
+      amount: brl('1500'),
+      confirmedAt: '2026-09-30T12:00:00.000Z',
+    }
+    expect(treasuryReconciliationConfirmed.payload.safeParse(confirmed).success).toBe(true)
+    expect(
+      treasuryReconciliationConfirmed.payload.safeParse({ ...confirmed, statementLineIds: [] })
+        .success,
+    ).toBe(false)
   })
 })

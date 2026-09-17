@@ -38,6 +38,9 @@ import {
 import {
   treasuryAccountOpened,
   treasuryEntryRecorded,
+  treasuryReconciliationConfirmed,
+  treasuryReconciliationUndone,
+  treasuryStatementImported,
   treasuryTransferCancelled,
   treasuryTransferPosted,
 } from './treasury'
@@ -91,6 +94,9 @@ export const EVENTS: readonly EventDefinition[] = [
   treasuryEntryRecorded,
   treasuryTransferPosted,
   treasuryTransferCancelled,
+  treasuryStatementImported,
+  treasuryReconciliationConfirmed,
+  treasuryReconciliationUndone,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

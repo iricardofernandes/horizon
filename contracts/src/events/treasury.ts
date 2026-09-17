@@ -68,3 +68,54 @@ export const treasuryTransferCancelled = defineEvent({
     reason: z.string().trim().min(3).max(500),
   }),
 })
+
+export const STATEMENT_FORMATS = ['ofx', 'csv'] as const
+
+export const treasuryStatementImported = defineEvent({
+  type: 'treasury.statement.imported',
+  version: 1,
+  description:
+    'A bank statement file was imported into an account. Statement lines are immutable; `duplicateCount` lines were already known from an earlier import and were not stored again (ADR 0046).',
+  payload: z.object({
+    importId: uuidSchema,
+    accountId,
+    format: z.enum(STATEMENT_FORMATS),
+    lineCount: z.number().int().nonnegative(),
+    duplicateCount: z.number().int().nonnegative(),
+    periodStart: dateSchema.nullable(),
+    periodEnd: dateSchema.nullable(),
+    importedAt: instantSchema,
+  }),
+})
+
+const reconciliationId = uuidSchema.describe('Reconciliation identifier')
+
+export const treasuryReconciliationConfirmed = defineEvent({
+  type: 'treasury.reconciliation.confirmed',
+  version: 1,
+  description:
+    'A person confirmed that statement lines and journal entries describe the same movements, or that statement lines are to be ignored. A suggestion never confirms itself (ADR 0046).',
+  payload: z.object({
+    reconciliationId,
+    accountId,
+    kind: z.enum(['match', 'ignore']),
+    origin: z.enum(['manual', 'suggestion']),
+    statementLineIds: z.array(uuidSchema).min(1),
+    entryIds: z.array(uuidSchema),
+    amount: moneySchema,
+    confirmedAt: instantSchema,
+  }),
+})
+
+export const treasuryReconciliationUndone = defineEvent({
+  type: 'treasury.reconciliation.undone',
+  version: 1,
+  description:
+    'A confirmed reconciliation was undone. The statement lines and entries become unmatched again; the reconciliation stays in history.',
+  payload: z.object({
+    reconciliationId,
+    accountId,
+    undoneAt: instantSchema,
+    reason: z.string().trim().min(3).max(500),
+  }),
+})
