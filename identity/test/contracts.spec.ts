@@ -15,7 +15,16 @@ describe('published role contract', () => {
   it('declares roles for every module identity can mint for', () => {
     // If a module is added to the system, identity must be able to mint for it.
     expect([...MODULES].sort()).toEqual(
-      ['catalog', 'financial', 'identity', 'inventory', 'parties', 'sales', 'webhooks'].sort(),
+      [
+        'catalog',
+        'financial',
+        'identity',
+        'inventory',
+        'parties',
+        'sales',
+        'treasury',
+        'webhooks',
+      ].sort(),
     )
   })
 

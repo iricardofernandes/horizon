@@ -35,6 +35,12 @@ import {
   salesOrderConfirmed,
   salesOrderPlaced,
 } from './sales'
+import {
+  treasuryAccountOpened,
+  treasuryEntryRecorded,
+  treasuryTransferCancelled,
+  treasuryTransferPosted,
+} from './treasury'
 
 export * from './catalog'
 export * from './define'
@@ -43,6 +49,7 @@ export * from './identity'
 export * from './inventory'
 export * from './parties'
 export * from './sales'
+export * from './treasury'
 
 /**
  * Every event Horizon publishes.
@@ -80,6 +87,10 @@ export const EVENTS: readonly EventDefinition[] = [
   financialSettlementReversed,
   financialPayablePosted,
   financialPayableReversed,
+  treasuryAccountOpened,
+  treasuryEntryRecorded,
+  treasuryTransferPosted,
+  treasuryTransferCancelled,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */
