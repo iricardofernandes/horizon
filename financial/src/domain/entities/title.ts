@@ -52,6 +52,8 @@ export interface Settlement {
   readonly interest: Money
   readonly penalty: Money
   readonly paymentMethodId: string | null
+  /** The treasury account the cash moved through, when known. */
+  readonly treasuryAccountId: string | null
   readonly recordedAt: Date
   readonly reversal: { readonly at: Date; readonly reason: Reason } | null
 }
@@ -77,6 +79,8 @@ export interface SettlementInput {
   readonly interest: Money
   readonly penalty: Money
   readonly paymentMethodId: string | null
+  /** The treasury account the cash moved through, when known. */
+  readonly treasuryAccountId: string | null
 }
 
 interface TitleProps {
@@ -118,6 +122,7 @@ export interface SettlementSnapshot {
   readonly interest: string
   readonly penalty: string
   readonly paymentMethodId: string | null
+  readonly treasuryAccountId: string | null
   readonly recordedAt: Date
   readonly reversedAt: Date | null
   readonly reversalReason: string | null
@@ -423,6 +428,7 @@ export class Title extends AggregateRoot<TitleProps> {
         interest: moneyPayload(input.interest),
         penalty: moneyPayload(input.penalty),
         paymentMethodId: input.paymentMethodId,
+        ...(input.treasuryAccountId ? { treasuryAccountId: input.treasuryAccountId } : {}),
         outstanding: moneyPayload(this.outstanding()),
       }),
     )
@@ -548,6 +554,7 @@ export class Title extends AggregateRoot<TitleProps> {
         interest: settlement.interest.amount.toString(),
         penalty: settlement.penalty.amount.toString(),
         paymentMethodId: settlement.paymentMethodId,
+        treasuryAccountId: settlement.treasuryAccountId,
         recordedAt: settlement.recordedAt,
         reversedAt: settlement.reversal?.at ?? null,
         reversalReason: settlement.reversal?.reason.value ?? null,

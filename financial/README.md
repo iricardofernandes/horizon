@@ -41,7 +41,7 @@ Every registry entry is deactivated, never deleted: documents keep what they use
 | Consumes | `sales.order.cancelled` | Cancels that draft if it was never posted |
 | Publishes | `financial.receivable.posted`, `.reversed` | A claim on a customer began or was undone |
 | Publishes | `financial.payable.posted`, `.reversed` | An obligation to a supplier began or was undone |
-| Publishes | `financial.settlement.recorded`, `.reversed` | Money was received, or a receipt was undone |
+| Publishes | `financial.settlement.recorded`, `.reversed` | Money was received or paid, or that was undone; with a treasury account, Treasury records the cash |
 
 Posting, settling and every reversal require an `Idempotency-Key` header (ADR 0028).
 

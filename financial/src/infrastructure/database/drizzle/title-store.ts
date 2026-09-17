@@ -94,6 +94,7 @@ export function mapTitle(
           interest: money(settlement.interest),
           penalty: money(settlement.penalty),
           paymentMethodId: settlement.paymentMethodId,
+          treasuryAccountId: settlement.treasuryAccountId,
           recordedAt: settlement.recordedAt,
           reversal:
             settlement.reversedAt && settlement.reversalReason
@@ -264,6 +265,7 @@ export function titlesRepository(tx: Transaction, tenantId: string): TitlesRepos
           interest: BigInt(settlement.interest),
           penalty: BigInt(settlement.penalty),
           paymentMethodId: settlement.paymentMethodId,
+          treasuryAccountId: settlement.treasuryAccountId,
           recordedAt: settlement.recordedAt,
           reversedAt: settlement.reversedAt,
           reversalReason: settlement.reversalReason,

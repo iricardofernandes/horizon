@@ -98,6 +98,7 @@ export const titleSettlements = pgTable('title_settlements', {
   interest: minorUnits('interest').notNull(),
   penalty: minorUnits('penalty').notNull(),
   paymentMethodId: uuid('payment_method_id'),
+  treasuryAccountId: uuid('treasury_account_id'),
   recordedAt: instant('recorded_at').notNull(),
   reversedAt: instant('reversed_at'),
   reversalReason: text('reversal_reason'),

@@ -43,6 +43,7 @@ export interface SettlementRequest {
   readonly interest?: string | undefined
   readonly penalty?: string | undefined
   readonly paymentMethodId?: string | null | undefined
+  readonly treasuryAccountId?: string | null | undefined
 }
 
 export type Failure = InvalidInputError | ConflictError | ResourceNotFoundError
@@ -148,6 +149,7 @@ export function settlementOf(
     interest,
     penalty,
     paymentMethodId: request.paymentMethodId ?? null,
+    treasuryAccountId: request.treasuryAccountId ?? null,
   })
 }
 

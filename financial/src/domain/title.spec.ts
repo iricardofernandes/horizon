@@ -64,6 +64,7 @@ const settlement = (
   interest: money(extra.interest ?? 0),
   penalty: money(extra.penalty ?? 0),
   paymentMethodId: null,
+  treasuryAccountId: null,
 })
 
 describe('a receivable title', () => {

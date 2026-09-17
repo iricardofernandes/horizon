@@ -51,6 +51,7 @@ const settlementInput = z.strictObject({
   interest: minorUnits.optional(),
   penalty: minorUnits.optional(),
   paymentMethodId: z.uuid().nullable().optional(),
+  treasuryAccountId: z.uuid().nullable().optional(),
 })
 
 const listQuery = z.object({
