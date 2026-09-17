@@ -271,3 +271,22 @@ every posting into it and every reversal inside it; reopening it keeps who did i
 Per account, the opening balance, the debits and credits inside a range and the closing
 balance. Its two totals are equal, or the ledger is wrong — which is the whole reason the
 report exists.
+
+### posting rule
+How one fact from another module becomes journal lines: which parts are debited and which
+credited, and for how much. The rules are fixed code, because a posting rule is accounting
+policy and a rule engine a workspace can edit is a ledger nobody can audit.
+
+### account mapping
+Which of a workspace's own accounts plays one part in the posting rules — its receivables
+account, its cash account for one bank account, its revenue account for one financial
+category. Resolution is exact, then the part's default, then suspense.
+
+### suspense account
+Where a posting goes when the part it needs has no account yet. The transaction still
+balances and the fact is not lost; an accountant reclassifies it later with a manual entry.
+
+### pending fact
+A fact the ledger received but could not post — nothing mapped, or the month already
+closed. It waits with the numbers it arrived with and is replayed once the workspace fixes
+what blocked it, so the queue never stops and nothing is dropped.

@@ -1035,6 +1035,60 @@ already proven balanced.
 
 ---
 
+## Phase 23 — Automatic postings: financial and treasury facts become journal transactions
+
+**Complete.** The second slice of Phase F of the [expansion plan](erp-expansion-plan.md).
+Phase 22 delivered a book proven balanced; this fills it without anyone typing an entry.
+
+**Deliverables**
+
+- **Posting rules as code.** A receivable, a payable, a settlement, an internal transfer
+  and the treasury entries no other fact covers each have one rule, in one file. They are
+  not configurable: a posting rule is accounting policy, and a rule engine a workspace can
+  edit is a ledger nobody can audit.
+- **Account mappings.** What a workspace does choose is which of its accounts plays each of
+  twelve parts — receivables, payables, cash, revenue, expense, discounts, financial income
+  and expense, bank fees, opening balance and suspense. Cash, revenue and expense are chosen
+  per treasury account and per financial category; the rest once. A mapping must point at a
+  postable account of the type the part requires.
+- **Resolution with a fallback.** Exact, then the part's default, then suspense. Suspense
+  keeps the books complete when a category has no account yet: the transaction balances and
+  the accountant reclassifies it, rather than the fact being lost.
+- **Pending facts.** A fact the workspace cannot post yet — nothing mapped at all, or a
+  closed month — is kept with the numbers it arrived with and replayed once the workspace
+  fixes it. A queue that retries an unmapped category forever is a queue that stops.
+- **Idempotency by fact, not by event.** A posting is keyed by the settlement id or transfer
+  id, so a redelivery under a new event id resolves to the same transaction; a database
+  trigger refuses to repoint a fact at a second one.
+- `@horizon/contracts@0.12.0`: `ledger.transaction.posted` gains the fact kinds as source
+  types, and `financial.settlement.recorded` gains an optional `documentNumber`, so a
+  consumer names the invoice a payment settles without holding the title.
+- `make demo`, which CI runs twice: the demo seeds a chart and its mappings, and the sale's
+  receivable and settlement are asserted as the exact journal lines they produced.
+
+**Exit criteria**
+
+- Replaying every event into an empty ledger produces the same balances, in any order and
+  however many times each event is delivered (integration test).
+- Every posting balances, for every combination of cash, discount, interest and penalty a
+  settlement can carry (property test), including one that charges more than it collects and
+  so raises what the party owes.
+- A transfer moves cash without touching profit or loss; its fee does.
+- A treasury line already accounted for by the fact that caused it is never posted twice.
+- A fact reversed while still pending is never posted at all.
+- The golden path's order, receivable, settlement, bank line and journal lines are asserted
+  equal in CI, and no fact is left pending.
+
+**Non-goals**
+
+- Sales and purchasing forecasts: an approved order raising a forecast receivable that
+  invoicing then replaces (the next slice of Phase F).
+- Cash flow, DRE and drill-down reports, which close Phase F.
+- A ledger screen in the web application, which follows the reports it would show.
+- Posting rules a workspace can write, and multi-currency translation.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

@@ -480,9 +480,11 @@ confirmation stays out until acceptance data justifies it.
 
 **Progress:** `ledger/` itself — the chart of accounts, the balanced journal, accounting
 periods and the trial balance — is delivered as
-[plan phase 22](plan.md#phase-22--the-general-ledger-chart-journal-periods-and-trial-balance).
-The posting rules and the idempotent consumers that will feed it, the sales and purchasing
-forecasts, and the cash flow, DRE and drill-down reports remain.
+[plan phase 22](plan.md#phase-22--the-general-ledger-chart-journal-periods-and-trial-balance),
+and the posting rules and idempotent consumers that fill it from `financial/` and
+`treasury/` facts as
+[plan phase 23](plan.md#phase-23--automatic-postings-financial-and-treasury-facts-become-journal-transactions).
+The sales and purchasing forecasts, and the cash flow, DRE and drill-down reports, remain.
 
 **Deliverables**
 
@@ -724,7 +726,7 @@ The first executable backlog, in order, is:
 12. Extend the golden path to order → receivable → settlement → bank reconciliation and
     require one joined trace plus reconciled numeric assertions in CI.
 
-**Status:** items 1 to 12 are delivered as plan phases 14 to 21. Phase F is under way: its
-first slice, `ledger/` itself, is delivered as plan phase 22; what remains of Phase F is the
-automatic postings, the forecasts and the reports.
+**Status:** items 1 to 12 are delivered as plan phases 14 to 21. Phase F is under way:
+`ledger/` is plan phase 22 and its automatic postings are plan phase 23; what remains of
+Phase F is the sales and purchasing forecasts and the reports.
 
