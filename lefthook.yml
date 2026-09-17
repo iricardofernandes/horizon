@@ -12,6 +12,9 @@ pre-commit:
     boundaries:
       glob: '*.{ts,tsx,js,mjs,json}'
       run: node scripts/check-boundaries.mjs
+    contract-pins:
+      glob: '*package*.json'
+      run: node scripts/check-contract-pins.mjs
     typecheck:
       glob: '*.{ts,tsx}'
       run: node scripts/staged-by-project.mjs typecheck {staged_files}

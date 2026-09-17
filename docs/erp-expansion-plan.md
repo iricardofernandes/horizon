@@ -277,6 +277,11 @@ any user is granted a role in it — otherwise that user is locked out of the se
 lag. `parties` shipped with every service moved to `@horizon/contracts@0.4.0` in the same
 change for exactly this reason.
 
+**Every consumer pins the current contracts version.** CI publishes only the version in the
+checkout, so a project left on an older pin passes locally — where the registry still holds
+it — and fails in every CI job. `scripts/check-contract-pins.mjs` enforces this in the repo
+workflow and in the pre-commit hook.
+
 Services are added in phase order and never speculatively: a registered project that
 contains no delivered capability still costs CI time, compose memory and review attention.
 Phase K adds service orders and contracts inside `sales/` unless its aggregates prove to
