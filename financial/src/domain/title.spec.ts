@@ -15,6 +15,7 @@ const brl = valid(Currency.create('BRL'))
 const money = (amount: bigint | number) => Money.of(BigInt(amount), brl)
 const date = (value: string) => valid(BusinessDate.create(value))
 const reason = valid(Reason.create('Entered by mistake'))
+const exempt = { approvalRequired: false }
 const categoryId = '0192a3b4-0000-7000-8000-000000000001'
 
 function terms(overrides: Partial<TitleTerms> = {}): TitleTerms {
@@ -45,7 +46,7 @@ function posted(overrides: Partial<TitleTerms> = {}): Title {
       now,
     }),
   )
-  valid(title.post(now))
+  valid(title.post(now, exempt))
   title.pullDomainEvents()
   return title
 }
@@ -108,9 +109,9 @@ describe('a receivable title', () => {
         now,
       }),
     )
-    expect(draft.post(now).isLeft()).toBe(true)
+    expect(draft.post(now, exempt).isLeft()).toBe(true)
     valid(draft.revise(terms(), now))
-    valid(draft.post(now))
+    valid(draft.post(now, exempt))
     const [event] = draft.pullDomainEvents()
     expect(event?.eventType).toBe('financial.receivable.posted')
     expect(event?.payloadOf()).toMatchObject({ total: { amount: '10000', currency: 'BRL' } })
@@ -175,6 +176,72 @@ describe('a receivable title', () => {
     const charged = valid(title.settle(settlement(1, 10, { interest: 500 }), now))
     valid(title.settle(settlement(1, 6490), now))
     expect(title.reverseSettlement(charged.id, reason, now).isLeft()).toBe(true)
+  })
+})
+
+describe('a payable awaiting approval', () => {
+  function payableDraft() {
+    return valid(
+      Title.draft({
+        tenantId: 't',
+        direction: 'payable',
+        origin: { type: 'manual' },
+        terms: terms(),
+        now,
+      }),
+    )
+  }
+  const required = { approvalRequired: true }
+
+  it('posts only after someone other than the requester approves it', () => {
+    const payable = payableDraft()
+    expect(payable.post(now, required).isLeft()).toBe(true)
+    valid(payable.requestApproval('clerk', now))
+    expect(payable.requestApproval('clerk', now).isLeft()).toBe(true)
+    expect(payable.approve('clerk', now).isLeft()).toBe(true)
+    expect(payable.post(now, required).isLeft()).toBe(true)
+    valid(payable.approve('controller', now))
+    valid(payable.post(now, required))
+    expect(snapshotOf(payable)).toMatchObject({
+      status: 'posted',
+      approvalState: 'approved',
+      approvalRequestedBy: 'clerk',
+      approvalDecidedBy: 'controller',
+    })
+    expect(payable.pullDomainEvents().map((event) => event.eventType)).toEqual([
+      'financial.payable.posted',
+    ])
+  })
+
+  it('returns a rejected draft to its author, and a revision withdraws any approval', () => {
+    const payable = payableDraft()
+    valid(payable.requestApproval('clerk', now))
+    valid(payable.reject('controller', reason, now))
+    expect(snapshotOf(payable)).toMatchObject({
+      approvalState: 'rejected',
+      approvalReason: 'Entered by mistake',
+    })
+    valid(payable.requestApproval('clerk', now))
+    valid(payable.approve('controller', now))
+    valid(payable.revise(terms(), now))
+    expect(snapshotOf(payable).approvalState).toBe('none')
+    expect(payable.post(now, required).isLeft()).toBe(true)
+  })
+
+  it('records a payable below the policy threshold as exempt, and never asks a receivable', () => {
+    const payable = payableDraft()
+    valid(payable.post(now, exempt))
+    expect(snapshotOf(payable).approvalState).toBe('not-required')
+    const receivable = valid(
+      Title.draft({
+        tenantId: 't',
+        direction: 'receivable',
+        origin: { type: 'manual' },
+        terms: terms(),
+        now,
+      }),
+    )
+    expect(receivable.requestApproval('clerk', now).isLeft()).toBe(true)
   })
 })
 

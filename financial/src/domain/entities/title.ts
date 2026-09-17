@@ -14,6 +14,11 @@ import {
 import { Allocation, type AllocationEntry } from '../value-objects/allocation'
 import type { BusinessDate, Currency } from '../value-objects/financial-values'
 import { Money } from '../value-objects/financial-values'
+import {
+  type ApprovalState,
+  NO_APPROVAL,
+  type TitleApproval,
+} from '../value-objects/title-approval'
 import type { DocumentNumber, Memo, Reason } from '../value-objects/title-values'
 
 export const TITLE_DIRECTIONS = ['receivable', 'payable'] as const
@@ -91,6 +96,7 @@ interface TitleProps {
   settlements: readonly Settlement[]
   postedAt: Date | null
   closure: { readonly at: Date; readonly reason: Reason } | null
+  approval: TitleApproval
   createdAt: Date
   updatedAt: Date
 }
@@ -139,6 +145,12 @@ export interface TitleSnapshot {
   readonly postedAt: Date | null
   readonly closedAt: Date | null
   readonly closureReason: string | null
+  readonly approvalState: ApprovalState
+  readonly approvalRequestedBy: string | null
+  readonly approvalRequestedAt: Date | null
+  readonly approvalDecidedBy: string | null
+  readonly approvalDecidedAt: Date | null
+  readonly approvalReason: string | null
   readonly createdAt: Date
   readonly updatedAt: Date
 }
@@ -181,6 +193,7 @@ export class Title extends AggregateRoot<TitleProps> {
           settlements: [],
           postedAt: null,
           closure: null,
+          approval: NO_APPROVAL,
           createdAt: props.now,
           updatedAt: props.now,
         },
@@ -213,6 +226,10 @@ export class Title extends AggregateRoot<TitleProps> {
     return this.props.origin
   }
 
+  get approvalState(): ApprovalState {
+    return this.props.approval.state
+  }
+
   get currency(): Currency {
     return this.props.currency
   }
@@ -231,15 +248,25 @@ export class Title extends AggregateRoot<TitleProps> {
     const installments = scheduleOf(terms)
     if (installments.isLeft()) return left(installments.value)
     Object.assign(this.props, termsProps(terms), { installments: installments.value })
+    // What was approved is no longer what is on the draft.
+    this.props.approval = NO_APPROVAL
     this.props.updatedAt = now
     return right(undefined)
   }
 
-  post(now: Date): Either<ConflictError, void> {
+  /**
+   * `approvalRequired` is the workspace policy's verdict on this title. A title that needs
+   * approval posts only once approved; one that does not is recorded as exempt.
+   */
+  post(now: Date, policy: { approvalRequired: boolean }): Either<ConflictError, void> {
     if (this.props.status !== 'draft')
       return left(new ConflictError(`a ${this.props.status} title cannot be posted`))
     if (this.props.categoryId === null)
       return left(new ConflictError('classify the title with a category before posting it'))
+    if (policy.approvalRequired && this.props.approval.state !== 'approved')
+      return left(new ConflictError('this title must be approved before it is posted'))
+    if (!policy.approvalRequired && this.props.approval.state !== 'approved')
+      this.props.approval = { ...NO_APPROVAL, state: 'not-required' }
     this.props.status = 'posted'
     this.props.postedAt = now
     this.props.updatedAt = now
@@ -264,6 +291,54 @@ export class Title extends AggregateRoot<TitleProps> {
         postedAt: now.toISOString(),
       }),
     )
+    return right(undefined)
+  }
+
+  requestApproval(actor: string, now: Date): Either<ConflictError, void> {
+    if (this.props.direction !== 'payable')
+      return left(new ConflictError('only payables go through approval'))
+    if (this.props.status !== 'draft')
+      return left(new ConflictError('only a draft can be sent for approval'))
+    if (this.props.approval.state === 'pending' || this.props.approval.state === 'approved')
+      return left(new ConflictError(`this payable is already ${this.props.approval.state}`))
+    this.props.approval = { ...NO_APPROVAL, state: 'pending', requestedBy: actor, requestedAt: now }
+    this.props.updatedAt = now
+    return right(undefined)
+  }
+
+  /** Four eyes: whoever asked for approval cannot give it or refuse it. */
+  approve(actor: string, now: Date): Either<ConflictError, void> {
+    const decidable = this.decidable(actor)
+    if (decidable.isLeft()) return decidable
+    this.props.approval = {
+      ...this.props.approval,
+      state: 'approved',
+      decidedBy: actor,
+      decidedAt: now,
+    }
+    this.props.updatedAt = now
+    return right(undefined)
+  }
+
+  reject(actor: string, reason: Reason, now: Date): Either<ConflictError, void> {
+    const decidable = this.decidable(actor)
+    if (decidable.isLeft()) return decidable
+    this.props.approval = {
+      ...this.props.approval,
+      state: 'rejected',
+      decidedBy: actor,
+      decidedAt: now,
+      reason,
+    }
+    this.props.updatedAt = now
+    return right(undefined)
+  }
+
+  private decidable(actor: string): Either<ConflictError, void> {
+    if (this.props.status !== 'draft' || this.props.approval.state !== 'pending')
+      return left(new ConflictError('there is no pending approval to decide'))
+    if (this.props.approval.requestedBy === actor)
+      return left(new ConflictError('the person who requested approval cannot decide it'))
     return right(undefined)
   }
 
@@ -480,6 +555,12 @@ export class Title extends AggregateRoot<TitleProps> {
       postedAt: this.props.postedAt,
       closedAt: this.props.closure?.at ?? null,
       closureReason: this.props.closure?.reason.value ?? null,
+      approvalState: this.props.approval.state,
+      approvalRequestedBy: this.props.approval.requestedBy,
+      approvalRequestedAt: this.props.approval.requestedAt,
+      approvalDecidedBy: this.props.approval.decidedBy,
+      approvalDecidedAt: this.props.approval.decidedAt,
+      approvalReason: this.props.approval.reason?.value ?? null,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,
     })

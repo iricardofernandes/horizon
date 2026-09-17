@@ -17,10 +17,12 @@ import {
   type TitleStatus,
 } from '@/domain/entities/title'
 import type {
+  ApprovalPoliciesRepository,
   PartyProjectionRepository,
   TitlesRepository,
 } from '@/domain/repositories/title-repositories'
 import { BusinessDate, Currency, Money, Share } from '@/domain/value-objects/financial-values'
+import { APPROVAL_STATES, type ApprovalState } from '@/domain/value-objects/title-approval'
 import { DocumentNumber, Memo, Reason } from '@/domain/value-objects/title-values'
 import * as schema from './schema'
 
@@ -104,6 +106,14 @@ export function mapTitle(
       ),
       postedAt: row.postedAt,
       closure,
+      approval: {
+        state: oneOf<ApprovalState>(APPROVAL_STATES, row.approvalState, 'approval state'),
+        requestedBy: row.approvalRequestedBy,
+        requestedAt: row.approvalRequestedAt,
+        decidedBy: row.approvalDecidedBy,
+        decidedAt: row.approvalDecidedAt,
+        reason: row.approvalReason ? restored(Reason.create(row.approvalReason)) : null,
+      },
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     },
@@ -162,6 +172,12 @@ function titleRow(title: Title) {
     postedAt: snapshot.postedAt,
     closedAt: snapshot.closedAt,
     closureReason: snapshot.closureReason,
+    approvalState: snapshot.approvalState,
+    approvalRequestedBy: snapshot.approvalRequestedBy,
+    approvalRequestedAt: snapshot.approvalRequestedAt,
+    approvalDecidedBy: snapshot.approvalDecidedBy,
+    approvalDecidedAt: snapshot.approvalDecidedAt,
+    approvalReason: snapshot.approvalReason,
     createdAt: snapshot.createdAt,
     updatedAt: snapshot.updatedAt,
   }
@@ -337,6 +353,50 @@ export function partyProjection(tx: Transaction, tenantId: string): PartyProject
         .onConflictDoUpdate({
           target: [schema.partyProjection.tenantId, schema.partyProjection.partyId],
           set: { legalName: null, active: false, erased: true, updatedAt: now },
+        })
+    },
+  }
+}
+
+export function approvalPolicies(tx: Transaction, tenantId: string): ApprovalPoliciesRepository {
+  const map = (row: typeof schema.approvalPolicies.$inferSelect) => ({
+    direction: oneOf<TitleDirection>(TITLE_DIRECTIONS, row.direction, 'policy direction'),
+    currency: row.currency,
+    threshold: row.threshold,
+    updatedAt: row.updatedAt,
+  })
+  return {
+    find: async (direction, currency) => {
+      const [row] = await tx
+        .select()
+        .from(schema.approvalPolicies)
+        .where(
+          and(
+            eq(schema.approvalPolicies.direction, direction),
+            eq(schema.approvalPolicies.currency, currency),
+          ),
+        )
+      return row ? map(row) : null
+    },
+    list: async (direction) =>
+      (
+        await tx
+          .select()
+          .from(schema.approvalPolicies)
+          .where(eq(schema.approvalPolicies.direction, direction))
+          .orderBy(asc(schema.approvalPolicies.currency))
+      ).map(map),
+    save: async (policy) => {
+      await tx
+        .insert(schema.approvalPolicies)
+        .values({ tenantId, ...policy })
+        .onConflictDoUpdate({
+          target: [
+            schema.approvalPolicies.tenantId,
+            schema.approvalPolicies.direction,
+            schema.approvalPolicies.currency,
+          ],
+          set: { threshold: policy.threshold, updatedAt: policy.updatedAt },
         })
     },
   }

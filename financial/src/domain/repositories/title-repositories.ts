@@ -24,3 +24,21 @@ export abstract class PartyProjectionRepository {
   abstract record(party: Omit<ProjectedParty, 'erased'>, now: Date): Promise<'recorded' | 'ignored'>
   abstract forget(partyId: string, now: Date): Promise<void>
 }
+
+/**
+ * How large a title may be before a second person must approve it, per currency. A
+ * workspace with no policy for a currency approves every payable in it: the safe default
+ * is the strict one.
+ */
+export interface ApprovalPolicy {
+  readonly direction: TitleDirection
+  readonly currency: string
+  readonly threshold: bigint
+  readonly updatedAt: Date
+}
+
+export abstract class ApprovalPoliciesRepository {
+  abstract find(direction: TitleDirection, currency: string): Promise<ApprovalPolicy | null>
+  abstract list(direction: TitleDirection): Promise<readonly ApprovalPolicy[]>
+  abstract save(policy: ApprovalPolicy): Promise<void>
+}

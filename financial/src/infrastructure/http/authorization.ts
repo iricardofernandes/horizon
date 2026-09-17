@@ -11,7 +11,7 @@ import type { FinancialRuntime } from '@/main/financial-runtime'
 
 const PUBLIC = 'financial:public'
 const ACTION = 'financial:action'
-export type FinancialAction = 'read' | 'configure' | 'record' | 'reverse'
+export type FinancialAction = 'read' | 'configure' | 'record' | 'reverse' | 'approve'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
 export const RequireFinancialAction = (action: FinancialAction) => SetMetadata(ACTION, action)
 
@@ -34,10 +34,11 @@ export function tenantOf(request: FinancialRequest): string {
  * The static role map for this module (ADR 0023). Configuring the chart of categories,
  * dimensions and terms changes how every later title is classified, so it is admin-only.
  * Operators draft, post and settle titles. Reversing something already posted or settled
- * undoes a fact other contexts acted on, so it stays with admins (ADR 0042).
+ * undoes a fact other contexts acted on, so it stays with admins (ADR 0042), as does
+ * approving a payable — and the aggregate refuses an approval by whoever requested it.
  */
 const PERMITS: Readonly<Record<string, readonly FinancialAction[]>> = {
-  admin: ['read', 'configure', 'record', 'reverse'],
+  admin: ['read', 'configure', 'record', 'reverse', 'approve'],
   operator: ['read', 'record'],
   viewer: ['read'],
 }

@@ -7,17 +7,18 @@ its own lifecycle. It is reached through Kong at `/financial`, never directly, a
 shares no source with any other module (ADR 0001). Its boundary against `treasury/` and
 `ledger/` is ADR 0041.
 
-**Status: phase 17 — accounts receivable complete.** Payables and approvals reuse the same
-title kernel next.
+**Status: phase 18 — receivables and payables with approvals complete.**
 
 ---
 
 ## What this context owns today
 
-- **Titles** — receivables with installments, issue, competence and due dates, a revenue
+- **Titles** — receivables and payables with installments, issue, competence and due dates, a revenue
   category, allocations and an origin (manual or a sales order). A draft is revised or
   cancelled; a posted title is settled or reversed and never edited (ADR 0042).
-- **Settlements** — cash received against one installment, with discount, interest and
+- **Approvals** — a payable at or above the workspace policy's threshold posts only after a
+  financial admin other than the requester approves it; a rejection carries a reason.
+- **Settlements** — cash received or paid against one installment, with discount, interest and
   penalty. A settlement is reversed with a reason, never deleted.
 - **Audit** — a per-tenant hash-chained log of every transition, shown as each title's
   history (ADR 0025).
@@ -39,6 +40,7 @@ Every registry entry is deactivated, never deleted: documents keep what they use
 | Consumes | `sales.order.confirmed` | Raises one draft receivable per order |
 | Consumes | `sales.order.cancelled` | Cancels that draft if it was never posted |
 | Publishes | `financial.receivable.posted`, `.reversed` | A claim on a customer began or was undone |
+| Publishes | `financial.payable.posted`, `.reversed` | An obligation to a supplier began or was undone |
 | Publishes | `financial.settlement.recorded`, `.reversed` | Money was received, or a receipt was undone |
 
 Posting, settling and every reversal require an `Idempotency-Key` header (ADR 0028).
@@ -51,7 +53,7 @@ Posting, settling and every reversal require an `Idempotency-Key` header (ADR 00
 
 ## Authorization
 
-| Role | Reads | Drafts, posts, settles | Reverses | Configures registries |
+| Role | Reads | Drafts, posts, settles, requests approval | Reverses, approves | Configures registries and approval policy |
 |---|---|---|---|---|
 | `financial:admin` | yes | yes | yes | yes |
 | `financial:operator` | yes | yes | — | — |

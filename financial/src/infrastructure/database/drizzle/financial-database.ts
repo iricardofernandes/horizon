@@ -31,16 +31,17 @@ import {
   type PaymentMethodSnapshot,
 } from '@/domain/entities/payment-method'
 import { PaymentTerm, type PaymentTermSnapshot } from '@/domain/entities/payment-term'
+import type { TitleDirection } from '@/domain/entities/title'
 import { Code, Name, Share } from '@/domain/value-objects/financial-values'
-import {
-  listCustomers,
-  listReceivables,
-  type ReceivableQuery,
-  receivableDetail,
-  receivablesSummary,
-} from './receivable-reads'
 import * as schema from './schema'
-import { auditTrail, partyProjection, titlesRepository } from './title-store'
+import {
+  listCounterparties,
+  listTitles,
+  type TitleQuery,
+  titleDetail,
+  titlesSummary,
+} from './title-reads'
+import { approvalPolicies, auditTrail, partyProjection, titlesRepository } from './title-store'
 
 /** Carries a refused command out of its transaction, so nothing it wrote is kept. */
 class Refused<E> extends Error {
@@ -139,20 +140,24 @@ export class FinancialDatabase extends FinancialUnitOfWork {
     })
   }
 
-  listReceivables(tenantId: string, query: ReceivableQuery) {
-    return this.read(tenantId, (tx) => listReceivables(tx, query))
+  listTitles(tenantId: string, direction: TitleDirection, query: TitleQuery) {
+    return this.read(tenantId, (tx) => listTitles(tx, direction, query))
   }
 
-  receivableDetail(tenantId: string, id: string, today: string) {
-    return this.read(tenantId, (tx) => receivableDetail(tx, id, today))
+  titleDetail(tenantId: string, direction: TitleDirection, id: string, today: string) {
+    return this.read(tenantId, (tx) => titleDetail(tx, direction, id, today))
   }
 
-  receivablesSummary(tenantId: string, today: string) {
-    return this.read(tenantId, (tx) => receivablesSummary(tx, today))
+  titlesSummary(tenantId: string, direction: TitleDirection, today: string) {
+    return this.read(tenantId, (tx) => titlesSummary(tx, direction, today))
   }
 
-  listCustomers(tenantId: string) {
-    return this.read(tenantId, (tx) => listCustomers(tx))
+  listCounterparties(tenantId: string, role: 'customer' | 'supplier') {
+    return this.read(tenantId, (tx) => listCounterparties(tx, role))
+  }
+
+  listApprovalPolicies(tenantId: string) {
+    return this.inTenant(tenantId, (scope) => scope.approvalPolicies.list('payable'))
   }
 
   /** Read models for the HTTP boundary, ordered the way people scan them: by code. */
@@ -321,6 +326,7 @@ function makeScope(tx: Transaction, tenantId: string): FinancialScope {
     titles: titlesRepository(tx, tenantId),
     parties: partyProjection(tx, tenantId),
     audit: auditTrail(tx, tenantId),
+    approvalPolicies: approvalPolicies(tx, tenantId),
     categories: {
       findById: async (id) => {
         const [row] = await tx

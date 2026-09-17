@@ -59,6 +59,12 @@ export const titles = pgTable('titles', {
   postedAt: instant('posted_at'),
   closedAt: instant('closed_at'),
   closureReason: text('closure_reason'),
+  approvalState: text('approval_state').notNull(),
+  approvalRequestedBy: text('approval_requested_by'),
+  approvalRequestedAt: instant('approval_requested_at'),
+  approvalDecidedBy: text('approval_decided_by'),
+  approvalDecidedAt: instant('approval_decided_at'),
+  approvalReason: text('approval_reason'),
   createdAt: instant('created_at').notNull(),
   updatedAt: instant('updated_at').notNull(),
 })
@@ -160,4 +166,18 @@ export const inbox = pgTable(
     receivedAt: instant('received_at').notNull().defaultNow(),
   },
   (table) => [uniqueIndex('inbox_source_event_key').on(table.sourceModule, table.eventId)],
+)
+
+export const approvalPolicies = pgTable(
+  'approval_policies',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    direction: text('direction').notNull(),
+    currency: text('currency').notNull(),
+    threshold: minorUnits('threshold').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.direction, table.currency] })],
 )

@@ -7,6 +7,7 @@ import type {
   PaymentTermsRepository,
 } from '@/domain/repositories/dimension-repositories'
 import type {
+  ApprovalPoliciesRepository,
   PartyProjectionRepository,
   TitlesRepository,
 } from '@/domain/repositories/title-repositories'
@@ -15,7 +16,7 @@ import type {
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'title'
+  readonly subjectType: 'title' | 'approval-policy'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -34,6 +35,7 @@ export interface FinancialScope {
   readonly paymentTerms: PaymentTermsRepository
   readonly titles: TitlesRepository
   readonly parties: PartyProjectionRepository
+  readonly approvalPolicies: ApprovalPoliciesRepository
   readonly audit: AuditTrail
 }
 

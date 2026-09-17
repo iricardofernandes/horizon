@@ -1,6 +1,10 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { FinancialModuleEventHandlers } from '@/application/consume-module-events'
 import {
+  DecidePayableApprovalUseCase,
+  DefineApprovalPolicyUseCase,
+} from '@/application/use-cases/approve-payables'
+import {
   ChangeRegistryStatusUseCase,
   DefineCategoryUseCase,
   DefineDimensionUseCase,
@@ -10,17 +14,37 @@ import {
   PreviewScheduleUseCase,
 } from '@/application/use-cases/manage-dimensions'
 import {
-  CancelReceivableUseCase,
-  DraftReceivableUseCase,
-  PostReceivableUseCase,
+  CancelTitleUseCase,
+  DraftTitleUseCase,
+  PostTitleUseCase,
   RecordSettlementUseCase,
-  ReverseReceivableUseCase,
   ReverseSettlementUseCase,
-  ReviseReceivableUseCase,
-} from '@/application/use-cases/manage-receivables'
+  ReverseTitleUseCase,
+  ReviseTitleUseCase,
+} from '@/application/use-cases/manage-titles'
+import type { TitleDirection } from '@/domain/entities/title'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { FinancialDatabase } from '@/infrastructure/database/drizzle/financial-database'
 import type { FinancialEnvironment } from './environment'
+
+export type TitleCommands = ReturnType<typeof titleCommands>
+
+/** One set of title commands per direction, over the same kernel. */
+function titleCommands(
+  database: FinancialDatabase,
+  clock: { now(): Date },
+  direction: TitleDirection,
+) {
+  return {
+    draft: new DraftTitleUseCase(database, clock, direction),
+    revise: new ReviseTitleUseCase(database, clock, direction),
+    post: new PostTitleUseCase(database, clock, direction),
+    cancel: new CancelTitleUseCase(database, clock, direction),
+    reverse: new ReverseTitleUseCase(database, clock, direction),
+    settle: new RecordSettlementUseCase(database, clock, direction),
+    reverseSettlement: new ReverseSettlementUseCase(database, clock, direction),
+  }
+}
 
 /** Explicit composition: every dependency is visible in one place. */
 export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
@@ -33,13 +57,9 @@ export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
   readonly changeStatus: ChangeRegistryStatusUseCase
   readonly previewSchedule: PreviewScheduleUseCase
   readonly previewAllocation: PreviewAllocationUseCase
-  readonly draftReceivable: DraftReceivableUseCase
-  readonly reviseReceivable: ReviseReceivableUseCase
-  readonly postReceivable: PostReceivableUseCase
-  readonly cancelReceivable: CancelReceivableUseCase
-  readonly reverseReceivable: ReverseReceivableUseCase
-  readonly recordSettlement: RecordSettlementUseCase
-  readonly reverseSettlement: ReverseSettlementUseCase
+  readonly titles: Readonly<Record<TitleDirection, TitleCommands>>
+  readonly payableApprovals: DecidePayableApprovalUseCase
+  readonly defineApprovalPolicy: DefineApprovalPolicyUseCase
   readonly eventHandlers: FinancialModuleEventHandlers
 
   constructor(config: FinancialEnvironment) {
@@ -60,13 +80,12 @@ export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
     this.changeStatus = new ChangeRegistryStatusUseCase(this.database, clock)
     this.previewSchedule = new PreviewScheduleUseCase(this.database)
     this.previewAllocation = new PreviewAllocationUseCase(this.database)
-    this.draftReceivable = new DraftReceivableUseCase(this.database, clock)
-    this.reviseReceivable = new ReviseReceivableUseCase(this.database, clock)
-    this.postReceivable = new PostReceivableUseCase(this.database, clock)
-    this.cancelReceivable = new CancelReceivableUseCase(this.database, clock)
-    this.reverseReceivable = new ReverseReceivableUseCase(this.database, clock)
-    this.recordSettlement = new RecordSettlementUseCase(this.database, clock)
-    this.reverseSettlement = new ReverseSettlementUseCase(this.database, clock)
+    this.titles = {
+      receivable: titleCommands(this.database, clock, 'receivable'),
+      payable: titleCommands(this.database, clock, 'payable'),
+    }
+    this.payableApprovals = new DecidePayableApprovalUseCase(this.database, clock)
+    this.defineApprovalPolicy = new DefineApprovalPolicyUseCase(this.database, clock)
     this.eventHandlers = new FinancialModuleEventHandlers(this.database, clock)
   }
 

@@ -1,13 +1,21 @@
 import { and, asc, count, desc, eq, ilike, inArray, lt, ne, or, type SQL, sql } from 'drizzle-orm'
-import type { TitleSnapshot } from '@/domain/entities/title'
+import type { TitleDirection, TitleSnapshot } from '@/domain/entities/title'
 import * as schema from './schema'
 import { loadTitles, type Transaction } from './title-store'
 
-export const RECEIVABLE_VIEWS = ['all', 'draft', 'open', 'overdue', 'settled', 'closed'] as const
-export type ReceivableView = (typeof RECEIVABLE_VIEWS)[number]
+export const TITLE_VIEWS = [
+  'all',
+  'draft',
+  'awaiting-approval',
+  'open',
+  'overdue',
+  'settled',
+  'closed',
+] as const
+export type TitleView = (typeof TITLE_VIEWS)[number]
 
-export interface ReceivableQuery {
-  readonly view: ReceivableView
+export interface TitleQuery {
+  readonly view: TitleView
   readonly search?: string | undefined
   readonly partyId?: string | undefined
   /** The caller's calendar date: what is overdue depends on where "today" is (ADR 0043). */
@@ -16,7 +24,7 @@ export interface ReceivableQuery {
   readonly offset: number
 }
 
-export interface ReceivableRow {
+export interface TitleRow {
   readonly id: string
   readonly documentNumber: string
   readonly partyId: string
@@ -27,6 +35,7 @@ export interface ReceivableRow {
   readonly nextDueOn: string | null
   readonly status: string
   readonly settlementState: string
+  readonly approvalState: string
   readonly overdue: boolean
   readonly total: string
   readonly outstanding: string
@@ -34,11 +43,13 @@ export interface ReceivableRow {
 
 const titles = schema.titles
 
-function viewCondition(view: ReceivableView, today: string): SQL | undefined {
+function viewCondition(view: TitleView, today: string): SQL | undefined {
   const posted = eq(titles.status, 'posted')
   switch (view) {
     case 'draft':
       return eq(titles.status, 'draft')
+    case 'awaiting-approval':
+      return and(eq(titles.status, 'draft'), eq(titles.approvalState, 'pending'))
     case 'open':
       return and(posted, ne(titles.settlementState, 'settled'))
     case 'overdue':
@@ -56,14 +67,15 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`)
 }
 
-export async function listReceivables(
+export async function listTitles(
   tx: Transaction,
-  query: ReceivableQuery,
-): Promise<{ data: ReceivableRow[]; total: number }> {
+  direction: TitleDirection,
+  query: TitleQuery,
+): Promise<{ data: TitleRow[]; total: number }> {
   const search = query.search?.trim()
   const pattern = search ? `%${escapeLike(search)}%` : undefined
   const where = and(
-    eq(titles.direction, 'receivable'),
+    eq(titles.direction, direction),
     viewCondition(query.view, query.today),
     query.partyId ? eq(titles.partyId, query.partyId) : undefined,
     pattern
@@ -105,6 +117,7 @@ export async function listReceivables(
       nextDueOn: title.nextDueOn,
       status: title.status,
       settlementState: title.settlementState,
+      approvalState: title.approvalState,
       overdue:
         title.status === 'posted' && title.nextDueOn !== null && title.nextDueOn < query.today,
       total: title.total.toString(),
@@ -121,8 +134,9 @@ export interface TimelineEntry {
   readonly details: Readonly<Record<string, unknown>>
 }
 
-export async function receivableDetail(
+export async function titleDetail(
   tx: Transaction,
+  direction: TitleDirection,
   id: string,
   today: string,
 ): Promise<
@@ -136,7 +150,7 @@ export async function receivableDetail(
   const rows = await tx
     .select()
     .from(titles)
-    .where(and(eq(titles.id, id), eq(titles.direction, 'receivable')))
+    .where(and(eq(titles.id, id), eq(titles.direction, direction)))
     .limit(1)
   const [title] = await loadTitles(tx, rows)
   const row = rows[0]
@@ -166,8 +180,9 @@ export async function receivableDetail(
 
 export const AGING_BUCKETS = ['current', 'days1To30', 'days31To60', 'days61To90', 'over90'] as const
 
-export interface ReceivablesSummary {
+export interface TitlesSummary {
   readonly drafts: number
+  readonly awaitingApproval: number
   readonly currencies: readonly {
     readonly currency: string
     readonly outstanding: string
@@ -181,18 +196,22 @@ export interface ReceivablesSummary {
  * Aging of what customers still owe, by installment. Computed from the same stored balances
  * the list and the detail show, so the three always agree at the same `today`.
  */
-export async function receivablesSummary(
+export async function titlesSummary(
   tx: Transaction,
+  direction: TitleDirection,
   today: string,
-): Promise<ReceivablesSummary> {
+): Promise<TitlesSummary> {
   const installments = schema.titleInstallments
   const late = sql`(${today}::date - ${installments.dueOn})`
   const within = (condition: SQL) =>
     sql<string>`coalesce(sum(${installments.outstanding}) filter (where ${condition}), 0)::text`
   const [drafts] = await tx
-    .select({ value: count() })
+    .select({
+      value: count(),
+      awaitingApproval: sql<number>`count(*) filter (where ${titles.approvalState} = 'pending')::int`,
+    })
     .from(titles)
-    .where(and(eq(titles.direction, 'receivable'), eq(titles.status, 'draft')))
+    .where(and(eq(titles.direction, direction), eq(titles.status, 'draft')))
   const rows = await tx
     .select({
       currency: titles.currency,
@@ -212,7 +231,7 @@ export async function receivablesSummary(
     )
     .where(
       and(
-        eq(titles.direction, 'receivable'),
+        eq(titles.direction, direction),
         eq(titles.status, 'posted'),
         sql`${installments.outstanding} > 0`,
       ),
@@ -221,6 +240,7 @@ export async function receivablesSummary(
     .orderBy(asc(titles.currency))
   return {
     drafts: drafts?.value ?? 0,
+    awaitingApproval: drafts?.awaitingApproval ?? 0,
     currencies: rows.map((row) => ({
       currency: row.currency,
       outstanding: row.outstanding,
@@ -237,9 +257,10 @@ export async function receivablesSummary(
   }
 }
 
-/** Parties a receivable may name: customers still present in the registry. */
-export async function listCustomers(
+/** Parties a title may name: customers for receivables, suppliers for payables. */
+export async function listCounterparties(
   tx: Transaction,
+  role: 'customer' | 'supplier',
 ): Promise<readonly { partyId: string; legalName: string }[]> {
   const rows = await tx
     .select({
@@ -251,7 +272,7 @@ export async function listCustomers(
       and(
         eq(schema.partyProjection.erased, false),
         eq(schema.partyProjection.active, true),
-        sql`'customer' = any(${schema.partyProjection.roles})`,
+        sql`${role} = any(${schema.partyProjection.roles})`,
       ),
     )
     .orderBy(asc(schema.partyProjection.legalName))

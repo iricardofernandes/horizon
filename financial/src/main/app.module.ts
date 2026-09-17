@@ -2,7 +2,7 @@ import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { FinancialAuthGuard } from '@/infrastructure/http/authorization'
 import { DimensionsController } from '@/infrastructure/http/dimensions.controller'
-import { ReceivablesController } from '@/infrastructure/http/receivables.controller'
+import { PayablesController, ReceivablesController } from '@/infrastructure/http/titles.controller'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { FinancialEnvironment } from './environment'
 import { FinancialRuntime } from './financial-runtime'
@@ -44,7 +44,7 @@ export class AppModule {
       })
     return {
       module: AppModule,
-      controllers: [DimensionsController, ReceivablesController],
+      controllers: [DimensionsController, ReceivablesController, PayablesController],
       providers,
       exports: [FinancialRuntime],
     }

@@ -8,14 +8,14 @@ import {
   DefinePaymentMethodUseCase,
 } from '@/application/use-cases/manage-dimensions'
 import {
-  CancelReceivableUseCase,
-  DraftReceivableUseCase,
-  PostReceivableUseCase,
+  CancelTitleUseCase,
+  DraftTitleUseCase,
+  PostTitleUseCase,
   RecordSettlementUseCase,
-  ReverseReceivableUseCase,
   ReverseSettlementUseCase,
-} from '@/application/use-cases/manage-receivables'
-import type { TermsInput } from '@/application/use-cases/receivable-inputs'
+  ReverseTitleUseCase,
+} from '@/application/use-cases/manage-titles'
+import type { TermsInput } from '@/application/use-cases/title-inputs'
 import { FinancialDatabase } from '@/infrastructure/database/drizzle/financial-database'
 import { auditHash, GENESIS_HASH } from '@/infrastructure/database/drizzle/title-store'
 
@@ -122,7 +122,7 @@ async function outboxOf(tenantId: string) {
 describe('receivables', () => {
   it('drafts once per idempotency key and forgets a refused attempt', async () => {
     const { context, terms, tenantId } = await workspace()
-    const draft = new DraftReceivableUseCase(database, clock)
+    const draft = new DraftTitleUseCase(database, clock, 'receivable')
     const key = randomUUID()
 
     const refused = await draft.execute({
@@ -147,7 +147,7 @@ describe('receivables', () => {
     ])
     expect(new Set(racing.map((result) => value<{ id: string }>(result).id)).size).toBe(1)
 
-    const page = await database.listReceivables(tenantId, {
+    const page = await database.listTitles(tenantId, 'receivable', {
       view: 'draft',
       today: '2026-09-16',
       limit: 50,
@@ -167,7 +167,7 @@ describe('receivables', () => {
         nature: 'expense',
       }),
     ).id
-    const draft = new DraftReceivableUseCase(database, clock)
+    const draft = new DraftTitleUseCase(database, clock, 'receivable')
     expect(
       (
         await draft.execute({ context: context(), terms: { ...terms, categoryId: expense } })
@@ -189,13 +189,19 @@ describe('receivables', () => {
   it('posts, settles in parts, reverses a settlement and publishes each fact', async () => {
     const { context, terms, tenantId, paymentMethodId } = await workspace()
     const { id } = value<{ id: string }>(
-      await new DraftReceivableUseCase(database, clock).execute({ context: context(), terms }),
+      await new DraftTitleUseCase(database, clock, 'receivable').execute({
+        context: context(),
+        terms,
+      }),
     )
     value(
-      await new PostReceivableUseCase(database, clock).execute({ context: context(), titleId: id }),
+      await new PostTitleUseCase(database, clock, 'receivable').execute({
+        context: context(),
+        titleId: id,
+      }),
     )
 
-    const settle = new RecordSettlementUseCase(database, clock)
+    const settle = new RecordSettlementUseCase(database, clock, 'receivable')
     const key = randomUUID()
     const settlement = {
       installmentNumber: 1,
@@ -213,7 +219,7 @@ describe('receivables', () => {
     expect(replayed.settlementId).toBe(first.settlementId)
     expect(first.outstanding).toBe('4000')
 
-    const summary = await database.receivablesSummary(tenantId, '2026-10-20')
+    const summary = await database.titlesSummary(tenantId, 'receivable', '2026-10-20')
     expect(summary.currencies).toEqual([
       expect.objectContaining({ outstanding: '4000', overdue: '4000' }),
     ])
@@ -222,7 +228,7 @@ describe('receivables', () => {
     expect(aging).toMatchObject({ days1To30: '4000' })
     expect(
       (
-        await database.listReceivables(tenantId, {
+        await database.listTitles(tenantId, 'receivable', {
           view: 'overdue',
           today: '2026-10-20',
           limit: 50,
@@ -233,7 +239,7 @@ describe('receivables', () => {
 
     expect(
       (
-        await new ReverseReceivableUseCase(database, clock).execute({
+        await new ReverseTitleUseCase(database, clock, 'receivable').execute({
           context: context(),
           titleId: id,
           reason: 'Issued twice',
@@ -241,7 +247,7 @@ describe('receivables', () => {
       ).isLeft(),
     ).toBe(true)
     const reversed = value<{ outstanding: string }>(
-      await new ReverseSettlementUseCase(database, clock).execute({
+      await new ReverseSettlementUseCase(database, clock, 'receivable').execute({
         context: context(),
         titleId: id,
         settlementId: first.settlementId,
@@ -250,7 +256,7 @@ describe('receivables', () => {
     )
     expect(reversed.outstanding).toBe('10000')
 
-    const detail = await database.receivableDetail(tenantId, id, '2026-09-16')
+    const detail = await database.titleDetail(tenantId, 'receivable', id, '2026-09-16')
     expect(detail?.settlements).toEqual([
       expect.objectContaining({ id: first.settlementId, reversalReason: 'Payment bounced' }),
     ])
@@ -276,13 +282,19 @@ describe('receivables', () => {
   it('keeps posted history immutable in the database, not only in the aggregate', async () => {
     const { context, terms, tenantId } = await workspace()
     const { id } = value<{ id: string }>(
-      await new DraftReceivableUseCase(database, clock).execute({ context: context(), terms }),
+      await new DraftTitleUseCase(database, clock, 'receivable').execute({
+        context: context(),
+        terms,
+      }),
     )
     value(
-      await new PostReceivableUseCase(database, clock).execute({ context: context(), titleId: id }),
+      await new PostTitleUseCase(database, clock, 'receivable').execute({
+        context: context(),
+        titleId: id,
+      }),
     )
     value(
-      await new RecordSettlementUseCase(database, clock).execute({
+      await new RecordSettlementUseCase(database, clock, 'receivable').execute({
         context: context(),
         titleId: id,
         settlement: { installmentNumber: 1, settledOn: '2026-09-02', received: '100' },
@@ -308,10 +320,13 @@ describe('receivables', () => {
   it('chains every audit entry to the one before it', async () => {
     const { context, terms, tenantId } = await workspace()
     const { id } = value<{ id: string }>(
-      await new DraftReceivableUseCase(database, clock).execute({ context: context(), terms }),
+      await new DraftTitleUseCase(database, clock, 'receivable').execute({
+        context: context(),
+        terms,
+      }),
     )
     value(
-      await new CancelReceivableUseCase(database, clock).execute({
+      await new CancelTitleUseCase(database, clock, 'receivable').execute({
         context: context(),
         titleId: id,
         reason: 'Wrong customer',
@@ -358,16 +373,16 @@ describe('receivables', () => {
   it('never shows one workspace the receivables of another', async () => {
     const owner = await workspace()
     const { id } = value<{ id: string }>(
-      await new DraftReceivableUseCase(database, clock).execute({
+      await new DraftTitleUseCase(database, clock, 'receivable').execute({
         context: owner.context(),
         terms: owner.terms,
       }),
     )
     const other = await workspace()
-    expect(await database.receivableDetail(other.tenantId, id, '2026-09-16')).toBeNull()
+    expect(await database.titleDetail(other.tenantId, 'receivable', id, '2026-09-16')).toBeNull()
     expect(
       (
-        await new PostReceivableUseCase(database, clock).execute({
+        await new PostTitleUseCase(database, clock, 'receivable').execute({
           context: other.context(),
           titleId: id,
         })
@@ -402,7 +417,7 @@ describe('following sales and parties', () => {
     await deliver(tenantId, 'sales.order.confirmed', confirmed, eventId)
     await deliver(tenantId, 'sales.order.confirmed', confirmed, eventId)
     await deliver(tenantId, 'sales.order.confirmed', confirmed)
-    const drafts = await database.listReceivables(tenantId, {
+    const drafts = await database.listTitles(tenantId, 'receivable', {
       view: 'draft',
       today: '2026-09-16',
       limit: 50,
@@ -426,7 +441,7 @@ describe('following sales and parties', () => {
     })
     expect(
       (
-        await database.listReceivables(tenantId, {
+        await database.listTitles(tenantId, 'receivable', {
           view: 'closed',
           today: '2026-09-16',
           limit: 50,
@@ -445,10 +460,13 @@ describe('following sales and parties', () => {
       roles: ['customer'],
       active: true,
     })
-    expect(await database.listCustomers(tenantId)).toEqual([])
+    expect(await database.listCounterparties(tenantId, 'customer')).toEqual([])
     expect(
       (
-        await new DraftReceivableUseCase(database, clock).execute({ context: context(), terms })
+        await new DraftTitleUseCase(database, clock, 'receivable').execute({
+          context: context(),
+          terms,
+        })
       ).isLeft(),
     ).toBe(true)
   })
