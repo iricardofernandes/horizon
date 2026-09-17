@@ -238,3 +238,36 @@ undone rather than deleted.
 A proposed reconciliation built deterministically from amount, date, document number,
 counterparty and description, with a score and the reasons behind it. It is never confirmed
 without a person.
+
+---
+
+## Ledger
+
+### chart of accounts
+The tree of accounts a workspace keeps its books in. Each account has a dotted code that is
+its place in the tree — `1.01.001` belongs to `1.01` and nowhere else — and one of five
+types: asset, liability, equity, revenue or expense.
+
+### postable account
+A leaf that takes lines. A parent is not postable: it exists to total its children. An
+account that already takes lines can never be given children, so no total is ever counted
+twice.
+
+### normal balance
+The side that increases an account, fixed by its type: debit for assets and expenses,
+credit for liabilities, equity and revenue. Every balance in every report uses it, so a
+credit account with a positive balance means what an accountant expects it to mean.
+
+### journal transaction
+A balanced set of lines posted on one date in one currency: at least two lines, and debits
+equal to credits. It is never edited; a correction is a mirror transaction with every side
+swapped (ADR 0042).
+
+### accounting period
+A calendar month, derived from the posting date rather than chosen. Closing one refuses
+every posting into it and every reversal inside it; reopening it keeps who did it and why.
+
+### trial balance
+Per account, the opening balance, the debits and credits inside a range and the closing
+balance. Its two totals are equal, or the ledger is wrong — which is the whole reason the
+report exists.

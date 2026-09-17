@@ -977,6 +977,64 @@ proves the money arrived, in one trace, with the amounts asserted at every step.
 
 ---
 
+## Phase 22 — The general ledger: chart, journal, periods and trial balance
+
+**Complete.** The first slice of Phase F of the [expansion plan](erp-expansion-plan.md).
+`financial/` knows what is owed and `treasury/` knows where the cash is; neither knows what
+any of it means in accounting terms. This is the module that does, and it is delivered
+before the automatic postings that will feed it, so those have a book to post into that is
+already proven balanced.
+
+**Deliverables**
+
+- `ledger/` (port 3009, Kong `/ledger`), a service with its own database, container and
+  lifecycle, registered in `scripts/modules.json`, the Makefile, compose, the gateway and
+  every workflow.
+- **Chart of accounts** — asset, liability, equity, revenue and expense accounts in a tree
+  whose shape is the dotted code itself. Only a leaf is postable; a parent totals its
+  children and takes no lines. The domain refuses a misplaced account and a database
+  trigger refuses one written around the domain.
+- **Balanced journal** — a transaction is one currency, at least two lines and debits equal
+  to credits, checked in the aggregate and again by a deferred database constraint. Lines
+  are append-only under both the application role and the owner.
+- **Reversal by mirror** — a correction swaps every side and leaves every account where it
+  was (ADR 0042). A transaction is reversed once, a mirror is never reversed, and a mirror
+  may be dated into a later month when the original's month is already reported.
+- **Accounting periods** — calendar months derived from the posting date. Closing refuses
+  postings into the month and reversals inside it; reopening keeps who and why. A month
+  nobody closed has no record at all.
+- **Reports** — the chart with per-account balances and subtree roll-ups, the trial balance
+  (opening, movement, closing, and the two totals it exists to compare) and one account's
+  lines with the balance each left behind.
+- `@horizon/contracts@0.11.0`: `ledger.account.opened`, `ledger.transaction.posted`,
+  `ledger.transaction.reversed`, `ledger.period.closed` and `ledger.period.reopened`, plus
+  the `ledger` module with roles admin, accountant and viewer. Every service moved to it.
+
+**Exit criteria**
+
+- Every journal transaction balances to zero in its currency: asserted in the aggregate, in
+  a property test across random postings and reversals, and by a deferred constraint that
+  refuses an unbalanced transaction written directly (integration test).
+- The trial balance's debit and credit totals are equal after any sequence of postings and
+  reversals.
+- A closed month refuses a posting and a reversal until it is reopened with a reason, and a
+  later month is untouched by it.
+- A posted transaction cannot be edited or deleted, and a line cannot be updated, by the
+  application role or the owner.
+- One workspace's chart, journal and reports are invisible to another (cross-tenant test).
+
+**Non-goals**
+
+- Postings raised automatically from `financial/` and `treasury/` events, and the forecast
+  receivables and payables that sales and purchasing will raise (the next slice of Phase F).
+- Multi-currency translation inside one transaction; a transaction is expressed in one
+  currency, and translation is a later, separate decision.
+- Cash flow, DRE and the drill-down reports Phase F closes with.
+- A ledger screen in the web application, which arrives with the postings that make one
+  worth opening.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

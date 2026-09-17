@@ -478,6 +478,12 @@ confirmation stays out until acceptance data justifies it.
 
 ### Phase F — automatic financial integration and ledger
 
+**Progress:** `ledger/` itself — the chart of accounts, the balanced journal, accounting
+periods and the trial balance — is delivered as
+[plan phase 22](plan.md#phase-22--the-general-ledger-chart-journal-periods-and-trial-balance).
+The posting rules and the idempotent consumers that will feed it, the sales and purchasing
+forecasts, and the cash flow, DRE and drill-down reports remain.
+
 **Deliverables**
 
 - Implement `ledger/`: chart of accounts, posting rules, balanced entries, journal,
@@ -718,5 +724,7 @@ The first executable backlog, in order, is:
 12. Extend the golden path to order → receivable → settlement → bank reconciliation and
     require one joined trace plus reconciled numeric assertions in CI.
 
-**Status:** items 1 to 12 are delivered as plan phases 14 to 21; the next work is Phase F.
+**Status:** items 1 to 12 are delivered as plan phases 14 to 21. Phase F is under way: its
+first slice, `ledger/` itself, is delivered as plan phase 22; what remains of Phase F is the
+automatic postings, the forecasts and the reports.
 
