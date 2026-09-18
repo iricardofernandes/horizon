@@ -180,8 +180,9 @@ try {
   await page.getByRole('button', { name: 'Close dialog' }).click()
   assert(orderTraceId, 'the order request did not carry traceparent')
 
-  // The confirmed order reaches Financial as a draft receivable; a person classifies it,
-  // posts it and records the payment (ADR 0041, ADR 0042).
+  // The confirmed order reaches Financial as a forecast, and invoicing turns that same
+  // title into an effective receivable; a person then classifies it, posts it and records
+  // the payment (ADR 0041, ADR 0042).
   assert(placedOrderId, 'the placed order id was not captured')
   const receivableNumber = `SO-${placedOrderId.slice(-8).toUpperCase()}`
   await page.getByRole('link', { name: 'Receivables' }).click()
@@ -195,9 +196,20 @@ try {
         const { data } = await response.json()
         return data.some((row) => row.origin.orderId === orderId)
       }, placedOrderId),
-    'the draft receivable raised from the placed order',
+    'the forecast raised from the placed order, realised by invoicing',
   )
   await page.reload({ waitUntil: 'domcontentloaded' })
+  // The forecast became the receivable rather than sitting beside it, so nothing is
+  // expected any more and the same money is never counted twice.
+  await page
+    .getByRole('article')
+    .filter({ hasText: 'Expected' })
+    .getByText('—', { exact: true })
+    .waitFor()
+  assert(
+    (await page.getByRole('tab', { name: /^Forecasts/ }).innerText()).includes('0'),
+    'a forecast was left behind after invoicing',
+  )
   await page.getByRole('button', { name: `Open receivable ${receivableNumber}` }).click()
   const receivableDialog = page.getByRole('dialog', { name: `Receivable ${receivableNumber}` })
   await receivableDialog.getByRole('button', { name: 'Save classification' }).click()

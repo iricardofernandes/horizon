@@ -222,13 +222,30 @@ function TitleActions({
   const t = useTranslations(namespaceOf(direction))
   const [closing, setClosing] = useState(false)
   const draft = detail.status === 'draft'
+  const forecast = detail.stage === 'forecast'
   // Settlements in force are reversed first, so the title offers reversal only once none remain.
   const reversible =
     detail.status === 'posted' && detail.settlementState === 'open' && abilities.canReverse
   if (!(draft && abilities.canRecord) && !reversible) return null
   return (
     <div className="receivable-actions">
-      {draft && abilities.canRecord && canPost ? (
+      {forecast && draft && abilities.canRecord ? (
+        <Button
+          disabled={busy}
+          onClick={async () => {
+            if (
+              await command(`financial.${direction}.realise`, '/realise', {}, { idempotent: false })
+            )
+              setNotice(t('realised'))
+          }}
+          title={t('realiseHelp')}
+          type="button"
+          variant="primary"
+        >
+          {t('realise')}
+        </Button>
+      ) : null}
+      {!forecast && draft && abilities.canRecord && canPost ? (
         <Button
           disabled={busy}
           onClick={async () => {

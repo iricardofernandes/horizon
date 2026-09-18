@@ -19,12 +19,28 @@ const row = (overrides: Partial<TitleRow>): TitleRow => ({
   issuedOn: '2026-09-01',
   nextDueOn: '2026-09-10',
   status: 'posted',
+  stage: 'effective',
   settlementState: 'open',
   approvalState: 'none',
   overdue: false,
   total: '100',
   outstanding: '100',
   ...overrides,
+})
+
+describe('the forecast partition', () => {
+  it('keeps expected money out of every view but its own', () => {
+    const forecast = row({ stage: 'forecast', status: 'draft' })
+    expect(inView(forecast, 'forecast')).toBe(true)
+    for (const view of ['all', 'draft', 'open', 'overdue', 'settled'] as const)
+      expect(inView(forecast, view)).toBe(false)
+    // A withdrawn forecast is history, and history is where it shows.
+    expect(inView(row({ stage: 'forecast', status: 'cancelled' }), 'closed')).toBe(true)
+    expect(inView(row({ stage: 'forecast', status: 'cancelled' }), 'forecast')).toBe(false)
+    // An effective draft is not a forecast, however much it looks like one.
+    expect(inView(row({ status: 'draft' }), 'forecast')).toBe(false)
+    expect(inView(row({ status: 'draft' }), 'draft')).toBe(true)
+  })
 })
 
 describe('receivable presentation helpers', () => {

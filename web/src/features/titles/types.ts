@@ -33,6 +33,7 @@ export type TitleRow = {
   issuedOn: string
   nextDueOn: string | null
   status: TitleStatus
+  stage: TitleStage
   settlementState: SettlementState
   approvalState: ApprovalState
   overdue: boolean
@@ -87,6 +88,8 @@ export const AGING_BUCKETS = ['current', 'days1To30', 'days31To60', 'days61To90'
 export type TitlesSummary = {
   drafts: number
   awaitingApproval: number
+  forecasts: number
+  expected: { currency: string; total: string }[]
   currencies: {
     currency: string
     outstanding: string
@@ -113,8 +116,12 @@ export type TitlesData = {
   paymentTerms: PaymentTerm[]
 }
 
+/** A forecast is money expected; an effective title is money owed. */
+export type TitleStage = 'forecast' | 'effective'
+
 export const TITLE_VIEWS = [
   'all',
+  'forecast',
   'draft',
   'awaiting-approval',
   'open',
@@ -129,14 +136,23 @@ export function viewsOf(direction: Direction): readonly TitleView[] {
   return TITLE_VIEWS.filter((view) => direction === 'payable' || view !== 'awaiting-approval')
 }
 
-/** The same partition the API applies to `?view=`, over rows already loaded. */
+/**
+ * The same partition the API applies to `?view=`, over rows already loaded.
+ *
+ * A forecast belongs to no view but its own, `all` included: it is money expected rather
+ * than owed, and reading it as a receivable is how a workspace believes it is owed more
+ * than it is. A withdrawn one still shows under `closed`, where history lives.
+ */
 export function inView(row: TitleRow, view: TitleView): boolean {
-  const posted = row.status === 'posted'
+  const effective = row.stage === 'effective'
+  const posted = effective && row.status === 'posted'
   switch (view) {
+    case 'forecast':
+      return row.stage === 'forecast' && row.status === 'draft'
     case 'draft':
-      return row.status === 'draft'
+      return effective && row.status === 'draft'
     case 'awaiting-approval':
-      return row.status === 'draft' && row.approvalState === 'pending'
+      return effective && row.status === 'draft' && row.approvalState === 'pending'
     case 'open':
       return posted && row.settlementState !== 'settled'
     case 'overdue':
@@ -146,7 +162,7 @@ export function inView(row: TitleRow, view: TitleView): boolean {
     case 'closed':
       return row.status === 'cancelled' || row.status === 'reversed'
     default:
-      return true
+      return effective
   }
 }
 

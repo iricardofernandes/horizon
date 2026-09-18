@@ -152,6 +152,15 @@ function SummaryCards({ data }: { data: TitlesData }) {
           <span>{t('dueWithin7Days')}</span>
           <strong>{sum((entry) => entry.dueWithin7Days)}</strong>
         </article>
+        {/* Kept beside what is owed, never added into it: this money is expected, not due. */}
+        <article className="customer-summary-card">
+          <span>{t('expected')}</span>
+          <strong>
+            {data.summary.expected.length
+              ? data.summary.expected.map((entry) => money(entry.total, entry.currency)).join(' · ')
+              : '—'}
+          </strong>
+        </article>
         {direction === 'payable' ? (
           <article className="customer-summary-card">
             <span>{t('awaitingApproval')}</span>
