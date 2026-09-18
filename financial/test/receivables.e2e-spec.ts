@@ -391,6 +391,75 @@ describe('receivables', () => {
   })
 })
 
+describe('the cash flow outlook', () => {
+  it('keeps what is owed apart from what is merely expected', async () => {
+    const { tenantId, context, terms } = await workspace()
+    const drafting = new DraftTitleUseCase(database, clock, 'receivable')
+    const draft = async (stage: 'forecast' | 'effective', dueOn: string, amount: string) =>
+      value<{ id: string }>(
+        await drafting.execute({
+          context: context(),
+          terms: {
+            ...terms,
+            documentNumber: `NF-${dueOn}-${amount}`,
+            installments: [{ dueOn, amount }],
+          },
+          stage,
+        }),
+      ).id
+
+    const owed = await draft('effective', '2026-10-15', '30000')
+    value(
+      await new PostTitleUseCase(database, clock, 'receivable').execute({
+        context: context(),
+        titleId: owed,
+      }),
+    )
+    await draft('forecast', '2026-10-20', '50000')
+    await draft('forecast', '2026-11-05', '70000')
+
+    const outlook = await database.cashFlowOutlook(
+      tenantId,
+      { from: '2026-10-01', to: '2026-12-31' },
+      'month',
+    )
+    expect(outlook.buckets).toHaveLength(3)
+    expect(outlook.buckets[0]).toMatchObject({
+      startsOn: '2026-10-01',
+      committedIn: '30000',
+      forecastIn: '50000',
+      net: '80000',
+    })
+    expect(outlook.buckets[1]).toMatchObject({ startsOn: '2026-11-01', forecastIn: '70000' })
+    // A quiet month is present and empty, not missing.
+    expect(outlook.buckets[2]).toMatchObject({ startsOn: '2026-12-01', net: '0' })
+    // The two kinds are totalled apart and never merged into one figure.
+    expect(outlook).toMatchObject({ committedIn: '30000', forecastIn: '120000', net: '150000' })
+  })
+
+  it('reports what fell due before the range rather than losing it', async () => {
+    const { tenantId, context, terms } = await workspace()
+    const late = value<{ id: string }>(
+      await new DraftTitleUseCase(database, clock, 'receivable').execute({
+        context: context(),
+        terms: { ...terms, installments: [{ dueOn: '2026-09-01', amount: '4000' }] },
+      }),
+    ).id
+    value(
+      await new PostTitleUseCase(database, clock, 'receivable').execute({
+        context: context(),
+        titleId: late,
+      }),
+    )
+    const outlook = await database.cashFlowOutlook(
+      tenantId,
+      { from: '2026-10-01', to: '2026-10-31' },
+      'month',
+    )
+    expect(outlook).toMatchObject({ overdueIn: '4000', committedIn: '0' })
+  })
+})
+
 describe('following sales and parties', () => {
   it('raises one forecast per confirmed order and withdraws it when the order is cancelled', async () => {
     const { tenantId, partyId } = await workspace()

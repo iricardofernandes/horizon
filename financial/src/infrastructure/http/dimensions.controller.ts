@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -17,6 +18,7 @@ import { DIMENSION_KINDS } from '@/domain/entities/analytic-dimension'
 import { CATEGORY_NATURES } from '@/domain/entities/financial-category'
 import { PAYMENT_METHOD_KINDS } from '@/domain/entities/payment-method'
 import { MAX_INSTALLMENTS } from '@/domain/entities/payment-term'
+import { OUTLOOK_GRAINS } from '@/infrastructure/database/drizzle/outlook-reads'
 import { FinancialRuntime } from '@/main/financial-runtime'
 import {
   type FinancialRequest,
@@ -59,6 +61,12 @@ const allocationInput = z.strictObject({
     .max(50),
 })
 
+const outlookQuery = z.object({
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  grain: z.enum(OUTLOOK_GRAINS).default('month'),
+})
+
 @Controller()
 export class DimensionsController {
   constructor(@Inject(FinancialRuntime) private readonly runtime: FinancialRuntime) {}
@@ -74,6 +82,20 @@ export class DimensionsController {
   async ready() {
     await this.runtime.database.ping()
     return { status: 'ok' }
+  }
+
+  /**
+   * What is still expected to come in and go out, by the date it falls due. Read beside
+   * the ledger's realised cash flow, which reports what actually moved.
+   */
+  @Get('cash-flow-outlook')
+  @RequireFinancialAction('read')
+  async cashFlowOutlook(@Query() query: Record<string, unknown>, @Req() request: FinancialRequest) {
+    const input = parse(outlookQuery, query)
+    const to = input.to ?? new Date().toISOString().slice(0, 10)
+    const from = input.from ?? to
+    if (from > to) throw new BadRequestException('from: must not be after to')
+    return this.runtime.database.cashFlowOutlook(tenantOf(request), { from, to }, input.grain)
   }
 
   @Get('categories')

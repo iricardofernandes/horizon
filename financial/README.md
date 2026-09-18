@@ -7,8 +7,8 @@ its own lifecycle. It is reached through Kong at `/financial`, never directly, a
 shares no source with any other module (ADR 0001). Its boundary against `treasury/` and
 `ledger/` is ADR 0041.
 
-**Status: phase 24 — receivables and payables with approvals, and forecasts that
-invoicing turns into effective titles.**
+**Status: phase 25 — receivables and payables with approvals, forecasts that invoicing
+turns into effective titles, and the cash flow outlook they feed.**
 
 ---
 
@@ -26,6 +26,9 @@ invoicing turns into effective titles.**
   financial admin other than the requester approves it; a rejection carries a reason.
 - **Settlements** — cash received or paid against one installment, with discount, interest and
   penalty. A settlement is reversed with a reason, never deleted.
+- **Cash flow outlook** — what is still expected to come in and go out, by the date it
+  falls due, with what is owed reported apart from what is merely forecast. Read beside the
+  ledger's realised cash flow, which reports what actually moved.
 - **Audit** — a per-tenant hash-chained log of every transition, shown as each title's
   history (ADR 0025).
 - **Financial categories** — a revenue and expense tree, at most four levels deep, where a

@@ -33,6 +33,7 @@ import {
 import { PaymentTerm, type PaymentTermSnapshot } from '@/domain/entities/payment-term'
 import type { TitleDirection } from '@/domain/entities/title'
 import { Code, Name, Share } from '@/domain/value-objects/financial-values'
+import { cashFlowOutlook, type OutlookGrain } from './outlook-reads'
 import * as schema from './schema'
 import {
   listCounterparties,
@@ -146,6 +147,10 @@ export class FinancialDatabase extends FinancialUnitOfWork {
 
   titleDetail(tenantId: string, direction: TitleDirection, id: string, today: string) {
     return this.read(tenantId, (tx) => titleDetail(tx, direction, id, today))
+  }
+
+  cashFlowOutlook(tenantId: string, range: { from: string; to: string }, grain: OutlookGrain) {
+    return this.read(tenantId, (tx) => cashFlowOutlook(tx, range, grain))
   }
 
   titlesSummary(tenantId: string, direction: TitleDirection, today: string) {
