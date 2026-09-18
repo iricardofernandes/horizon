@@ -2395,3 +2395,55 @@ tbody tr.reconciliation-selected td {
   background: var(--jade-3);
   color: var(--jade-11);
 }
+.ledger-toolbar {
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.ledger-field {
+  display: grid;
+  gap: 4px;
+}
+.ledger-field-label {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ledger-report {
+  padding: 8px 22px 22px;
+}
+.ledger-section-title {
+  margin: 18px 0 0;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+/* A group totals its children and takes no lines of its own, so it reads as a heading. */
+.ledger-group {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+.ledger-note {
+  margin: 10px 0 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+.ledger-result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 22px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--sage-6);
+  gap: 16px;
+}
+.ledger-result strong {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.ledger-result-negative strong {
+  color: var(--red-11);
+}
+.ledger-dialog {
+  width: min(880px, calc(100vw - 32px));
+}

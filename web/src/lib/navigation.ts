@@ -2,6 +2,7 @@ import type { Icon } from '@phosphor-icons/react'
 import {
   AddressBook,
   Bank,
+  BookOpen,
   Books,
   ChartBar,
   CheckSquareOffset,
@@ -115,6 +116,13 @@ export const navigation: readonly NavigationGroup[] = [
         labelKey: 'treasury',
         icon: Bank,
         module: 'treasury',
+        demo: false,
+      },
+      {
+        href: '/app/finance/ledger',
+        labelKey: 'ledger',
+        icon: BookOpen,
+        module: 'ledger',
         demo: false,
       },
       {

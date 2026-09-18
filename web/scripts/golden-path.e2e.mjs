@@ -222,6 +222,24 @@ try {
   await receivableDialog.getByText('settled', { exact: true }).first().waitFor()
   await receivableDialog.getByRole('button', { name: 'Close dialog' }).click()
 
+  // The books were written by the events those steps published, without anyone typing an
+  // entry. The trial balance is the assertion: it balances, or the ledger is wrong.
+  await page.getByRole('link', { name: 'The books' }).click()
+  await page.waitForURL(`${appUrl}/app/finance/ledger`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'The books', exact: true }).waitFor()
+  await page.getByRole('tab', { name: 'Trial balance' }).click()
+  await page.getByText('Debits equal credits').waitFor()
+
+  // And a figure in a report leads back to the fact behind it, which is what makes the
+  // books auditable rather than merely arithmetically consistent.
+  await page.getByRole('button', { name: 'Open the lines of account 1.01' }).first().click()
+  const ledgerDialog = page.getByRole('dialog')
+  await ledgerDialog.getByText('Receivable', { exact: true }).first().waitFor()
+  await ledgerDialog.getByText('Settlement', { exact: true }).first().waitFor()
+  await ledgerDialog.getByRole('button', { name: 'Close dialog' }).click()
+  await page.getByRole('link', { name: 'Receivables' }).click()
+  await page.waitForURL(`${appUrl}/app/finance/receivables`, { waitUntil: 'domcontentloaded' })
+
   // A supplier invoice waits for a second person: whoever requests approval cannot give it.
   const supplierGrant = await page.evaluate(
     async (partyId) =>
