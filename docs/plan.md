@@ -1089,6 +1089,56 @@ Phase 22 delivered a book proven balanced; this fills it without anyone typing a
 
 ---
 
+## Phase 24 — Forecasts: a confirmed order is money expected, invoicing makes it owed
+
+**Complete.** The third slice of Phase F of the [expansion plan](erp-expansion-plan.md), and
+the last of Phase C's deferred scope.
+
+Until now a confirmed sales order became a draft receivable, which read as a claim on a
+customer who had not been billed. It is now a forecast, and invoicing turns it into the
+claim.
+
+**Deliverables**
+
+- **A stage on every title**: `forecast` or `effective`. A forecast never posts, so it never
+  counts as a receivable or a payable and never reaches the ledger, and it appears in no
+  view but its own — `all` included, because that list is what everyone reads as "the
+  receivables".
+- **Realisation in place.** Invoicing changes the stage of the same title rather than
+  closing it and raising a second one, which is what makes duplication impossible rather
+  than merely unlikely. When the invoice differs from the order, its total replaces the
+  forecast's.
+- **Either order.** Sales emits the confirmation and the invoicing request from the same
+  operation, so they race through the queue. Whichever arrives first raises the title — the
+  confirmation as a forecast, invoicing as effective — and the other finds it already there.
+- **Expected money reported apart**: the summary counts forecasts and totals them per
+  currency beside what is owed, never inside it.
+- A title may also be drafted as a forecast by hand, and realised by hand when the invoice
+  will not come. Procurement will raise payable forecasts the same way in Phase G.
+- Web: a Forecasts view, an Expected card, and the action that realises one.
+
+**Exit criteria**
+
+- A confirmed order raises exactly one forecast, and invoicing leaves exactly one effective
+  title — in either delivery order, and however often either event is redelivered
+  (integration tests).
+- A forecast cannot be posted, and what it expects appears in no view, summary or ledger
+  posting that reports what is owed.
+- The browser golden path asserts that nothing is expected once the order is invoiced, which
+  is the duplication the design exists to prevent.
+- Everything that existed before the column is effective, so no history became a forecast.
+
+**Non-goals**
+
+- Payable forecasts raised from purchasing, which arrive with `procurement/` in Phase G.
+- Partial invoicing: one order raises one title, and an invoice for part of an order is a
+  fiscal concern (Phase J).
+- Rescheduling a forecast from the invoice: an invoice that differs replaces the total of a
+  single-installment forecast, and a schedule a person built is theirs to change.
+- Cash flow, DRE and drill-down reports, which close Phase F.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

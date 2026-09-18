@@ -400,7 +400,8 @@ re-invent a table or a settlement dialog.
 **Progress:** receivables delivered as [plan phase 17](plan.md#phase-17--accounts-receivable)
 (backlog item 8), payables and approvals as
 [plan phase 18](plan.md#phase-18--accounts-payable-and-approvals) (backlog item 9).
-Recurrence, bulk actions, attachments, forecasts, fees, credits and refunds remain.
+Forecasts arrived with [plan phase 24](plan.md#phase-24--forecasts-a-confirmed-order-is-money-expected-invoicing-makes-it-owed).
+Recurrence, bulk actions, attachments, fees, credits and refunds remain.
 
 **Deliverables**
 
@@ -484,7 +485,10 @@ periods and the trial balance — is delivered as
 and the posting rules and idempotent consumers that fill it from `financial/` and
 `treasury/` facts as
 [plan phase 23](plan.md#phase-23--automatic-postings-financial-and-treasury-facts-become-journal-transactions).
-The sales and purchasing forecasts, and the cash flow, DRE and drill-down reports, remain.
+The sales forecasts are
+[plan phase 24](plan.md#phase-24--forecasts-a-confirmed-order-is-money-expected-invoicing-makes-it-owed).
+The purchasing forecasts wait for `procurement/` in Phase G; the cash flow, DRE and
+drill-down reports remain.
 
 **Deliverables**
 
@@ -727,6 +731,6 @@ The first executable backlog, in order, is:
     require one joined trace plus reconciled numeric assertions in CI.
 
 **Status:** items 1 to 12 are delivered as plan phases 14 to 21. Phase F is under way:
-`ledger/` is plan phase 22 and its automatic postings are plan phase 23; what remains of
-Phase F is the sales and purchasing forecasts and the reports.
+`ledger/` is plan phase 22, its automatic postings are plan phase 23 and the sales forecasts
+are plan phase 24; what remains of Phase F is the reports.
 

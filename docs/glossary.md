@@ -200,6 +200,16 @@ discounts, over the settlements still in force. Never below zero.
 Outstanding balances grouped by how late they are at a given calendar date: not yet due,
 1–30, 31–60, 61–90 and over 90 days.
 
+### forecast
+A title for money the workspace expects rather than is owed: a confirmed sales order before
+it is invoiced. A forecast never posts, so it counts as neither a receivable nor a payable
+and never reaches the ledger. Invoicing realises it.
+
+### realisation
+Turning a forecast into an effective title, in place. The stage of the same title changes
+rather than the forecast being closed and a second title raised, so the expected money and
+the claim on the party are never both counted at once.
+
 ### approval policy
 The amount, per currency, from which a payable needs a second person before it posts.
 Below it a payable posts directly and is recorded as exempt; with no policy every payable
