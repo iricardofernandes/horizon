@@ -1,7 +1,12 @@
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
-import { Title, type TitleDirection } from '@/domain/entities/title'
+import {
+  Title,
+  type TitleDirection,
+  type TitleStage,
+  type TitleTerms,
+} from '@/domain/entities/title'
 import type { Clock } from '../ports/clock'
 import type { FinancialScope, FinancialUnitOfWork } from '../ports/unit-of-work'
 import {
@@ -84,11 +89,14 @@ export class DraftTitleUseCase extends TitleCommand {
   async execute(request: {
     context: IdempotentContext
     terms: TermsInput
+    /** A forecast is money expected rather than owed; it posts only once realised. */
+    stage?: TitleStage
   }): Outcome<{ id: string }> {
     const terms = termsOf(request.terms)
     if (terms.isLeft()) return left(terms.value)
     const { context } = request
-    return this.once(context, 'draft', request.terms, async (scope) => {
+    const stage = request.stage ?? 'effective'
+    return this.once(context, 'draft', { ...request.terms, stage }, async (scope) => {
       const party = await checkParty(scope, this.direction, terms.value.partyId)
       if (party.isLeft()) return left(party.value)
       const classification = await checkClassification(scope, this.direction, terms.value)
@@ -99,6 +107,7 @@ export class DraftTitleUseCase extends TitleCommand {
         direction: this.direction,
         origin: { type: 'manual' },
         terms: terms.value,
+        stage,
         now,
       })
       if (title.isLeft()) return left(title.value)
@@ -107,8 +116,50 @@ export class DraftTitleUseCase extends TitleCommand {
         documentNumber: terms.value.documentNumber.value,
         total: title.value.total().amount,
         currency: terms.value.currency.value,
+        stage,
       })
       return right({ id: title.value.id.toString() })
+    })
+  }
+}
+
+/**
+ * Turn a forecast into an effective title.
+ *
+ * The same title changes stage rather than being closed and replaced, so the expected
+ * money and the claim on the customer are never both counted at once. Terms may be given
+ * when what was invoiced differs from what was ordered.
+ */
+export class RealiseForecastUseCase extends TitleCommand {
+  async execute(request: {
+    context: CommandContext
+    titleId: string
+    terms?: TermsInput | undefined
+  }): Outcome<void> {
+    let terms: TitleTerms | null = null
+    if (request.terms) {
+      const parsed = termsOf(request.terms)
+      if (parsed.isLeft()) return left(parsed.value)
+      terms = parsed.value
+    }
+    return this.unitOfWork.inTenant(request.context.tenantId, async (scope): Outcome<void> => {
+      const title = await this.load(scope, request.titleId)
+      if (title.isLeft()) return left(title.value)
+      if (terms) {
+        const party = await checkParty(scope, this.direction, terms.partyId)
+        if (party.isLeft()) return left(party.value)
+        const classification = await checkClassification(scope, this.direction, terms)
+        if (classification.isLeft()) return left(classification.value)
+      }
+      const now = this.clock.now()
+      const realised = title.value.realise(terms, now)
+      if (realised.isLeft()) return left(realised.value)
+      await scope.titles.save(title.value)
+      await audit(scope, request.context, title.value, `${this.direction}.realised`, now, {
+        total: title.value.total().amount,
+        revised: terms !== null,
+      })
+      return right(undefined)
     })
   }
 }

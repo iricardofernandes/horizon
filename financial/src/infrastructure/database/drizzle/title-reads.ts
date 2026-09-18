@@ -5,6 +5,7 @@ import { loadTitles, type Transaction } from './title-store'
 
 export const TITLE_VIEWS = [
   'all',
+  'forecast',
   'draft',
   'awaiting-approval',
   'open',
@@ -34,6 +35,7 @@ export interface TitleRow {
   readonly issuedOn: string
   readonly nextDueOn: string | null
   readonly status: string
+  readonly stage: string
   readonly settlementState: string
   readonly approvalState: string
   readonly overdue: boolean
@@ -43,13 +45,22 @@ export interface TitleRow {
 
 const titles = schema.titles
 
+/**
+ * A forecast is money expected, not owed, so it belongs to no view but its own — including
+ * `all`, which is what everyone reads as "the receivables". Seeing expected money mixed
+ * into that list is how a workspace ends up believing it is owed more than it is.
+ */
+const effective = eq(titles.stage, 'effective')
+
 function viewCondition(view: TitleView, today: string): SQL | undefined {
-  const posted = eq(titles.status, 'posted')
+  const posted = and(effective, eq(titles.status, 'posted'))
   switch (view) {
+    case 'forecast':
+      return and(eq(titles.stage, 'forecast'), eq(titles.status, 'draft'))
     case 'draft':
-      return eq(titles.status, 'draft')
+      return and(effective, eq(titles.status, 'draft'))
     case 'awaiting-approval':
-      return and(eq(titles.status, 'draft'), eq(titles.approvalState, 'pending'))
+      return and(effective, eq(titles.status, 'draft'), eq(titles.approvalState, 'pending'))
     case 'open':
       return and(posted, ne(titles.settlementState, 'settled'))
     case 'overdue':
@@ -57,9 +68,11 @@ function viewCondition(view: TitleView, today: string): SQL | undefined {
     case 'settled':
       return and(posted, eq(titles.settlementState, 'settled'))
     case 'closed':
+      // A title that went nowhere is history whichever stage it was in, so a withdrawn
+      // forecast is found here rather than vanishing.
       return inArray(titles.status, ['cancelled', 'reversed'])
     default:
-      return undefined
+      return effective
   }
 }
 
@@ -116,6 +129,7 @@ export async function listTitles(
       issuedOn: title.issuedOn,
       nextDueOn: title.nextDueOn,
       status: title.status,
+      stage: title.stage,
       settlementState: title.settlementState,
       approvalState: title.approvalState,
       overdue:
@@ -183,6 +197,9 @@ export const AGING_BUCKETS = ['current', 'days1To30', 'days31To60', 'days61To90'
 export interface TitlesSummary {
   readonly drafts: number
   readonly awaitingApproval: number
+  /** How many forecasts are open, and what they add up to per currency. */
+  readonly forecasts: number
+  readonly expected: readonly { readonly currency: string; readonly total: string }[]
   readonly currencies: readonly {
     readonly currency: string
     readonly outstanding: string
@@ -211,7 +228,30 @@ export async function titlesSummary(
       awaitingApproval: sql<number>`count(*) filter (where ${titles.approvalState} = 'pending')::int`,
     })
     .from(titles)
-    .where(and(eq(titles.direction, direction), eq(titles.status, 'draft')))
+    .where(
+      and(
+        eq(titles.direction, direction),
+        eq(titles.status, 'draft'),
+        eq(titles.stage, 'effective'),
+      ),
+    )
+  // Expected money is counted apart from what is owed, and never added into it.
+  const expected = await tx
+    .select({
+      currency: titles.currency,
+      total: sql<string>`coalesce(sum(${titles.total}), 0)::text`,
+      value: count(),
+    })
+    .from(titles)
+    .where(
+      and(
+        eq(titles.direction, direction),
+        eq(titles.status, 'draft'),
+        eq(titles.stage, 'forecast'),
+      ),
+    )
+    .groupBy(titles.currency)
+    .orderBy(asc(titles.currency))
   const rows = await tx
     .select({
       currency: titles.currency,
@@ -233,6 +273,7 @@ export async function titlesSummary(
       and(
         eq(titles.direction, direction),
         eq(titles.status, 'posted'),
+        eq(titles.stage, 'effective'),
         sql`${installments.outstanding} > 0`,
       ),
     )
@@ -241,6 +282,8 @@ export async function titlesSummary(
   return {
     drafts: drafts?.value ?? 0,
     awaitingApproval: drafts?.awaitingApproval ?? 0,
+    forecasts: expected.reduce((sum, row) => sum + row.value, 0),
+    expected: expected.map((row) => ({ currency: row.currency, total: row.total })),
     currencies: rows.map((row) => ({
       currency: row.currency,
       outstanding: row.outstanding,

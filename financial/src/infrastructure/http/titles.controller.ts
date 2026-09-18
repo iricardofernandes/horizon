@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common'
 import { z } from 'zod'
 import type { CommandContext, IdempotentContext } from '@/application/use-cases/title-inputs'
-import { MAX_TITLE_INSTALLMENTS, type TitleDirection } from '@/domain/entities/title'
+import { MAX_TITLE_INSTALLMENTS, TITLE_STAGES, type TitleDirection } from '@/domain/entities/title'
 import { TITLE_VIEWS } from '@/infrastructure/database/drizzle/title-reads'
 import { FinancialRuntime } from '@/main/financial-runtime'
 import { actorOf, type FinancialRequest, RequireFinancialAction, tenantOf } from './authorization'
@@ -42,6 +42,11 @@ const termsInput = z.strictObject({
     .max(50)
     .optional(),
 })
+
+/** A title may be drafted as a forecast: money expected rather than owed. */
+const draftInput = termsInput.extend({ stage: z.enum(TITLE_STAGES).default('effective') })
+
+const realiseInput = z.strictObject({ terms: termsInput.optional() })
 
 const settlementInput = z.strictObject({
   installmentNumber: z.number().int().min(1).max(MAX_TITLE_INSTALLMENTS),
@@ -147,10 +152,28 @@ abstract class TitlesController {
   @Post()
   @RequireFinancialAction('record')
   async draft(@Body() body: unknown, @Req() request: FinancialRequest) {
-    return unwrap(
-      await this.commands.draft.execute({
-        context: idempotent(request),
-        terms: parse(termsInput, body),
+    const { stage, ...terms } = parse(draftInput, body)
+    return unwrap(await this.commands.draft.execute({ context: idempotent(request), terms, stage }))
+  }
+
+  /**
+   * Turn a forecast into an effective title, on revised terms when what was invoiced
+   * differs from what was expected. The same title changes stage, so nothing is duplicated.
+   */
+  @Post(':id/realise')
+  @RequireFinancialAction('record')
+  @HttpCode(204)
+  async realise(
+    @Param('id') titleId: string,
+    @Body() body: unknown,
+    @Req() request: FinancialRequest,
+  ) {
+    const input = parse(realiseInput, body)
+    unwrap(
+      await this.commands.realise.execute({
+        context: context(request),
+        titleId: id(titleId),
+        terms: input.terms,
       }),
     )
   }

@@ -392,7 +392,7 @@ describe('receivables', () => {
 })
 
 describe('following sales and parties', () => {
-  it('raises one draft per confirmed order and withdraws it when the order is cancelled', async () => {
+  it('raises one forecast per confirmed order and withdraws it when the order is cancelled', async () => {
     const { tenantId, partyId } = await workspace()
     const orderId = randomUUID()
     const confirmed = {
@@ -417,20 +417,32 @@ describe('following sales and parties', () => {
     await deliver(tenantId, 'sales.order.confirmed', confirmed, eventId)
     await deliver(tenantId, 'sales.order.confirmed', confirmed, eventId)
     await deliver(tenantId, 'sales.order.confirmed', confirmed)
-    const drafts = await database.listTitles(tenantId, 'receivable', {
-      view: 'draft',
-      today: '2026-09-16',
-      limit: 50,
-      offset: 0,
-    })
-    expect(drafts.data).toEqual([
+    const list = (view: 'draft' | 'forecast' | 'all' | 'closed') =>
+      database.listTitles(tenantId, 'receivable', {
+        view,
+        today: '2026-09-16',
+        limit: 50,
+        offset: 0,
+      })
+    const forecasts = await list('forecast')
+    expect(forecasts.data).toEqual([
       expect.objectContaining({
         origin: { type: 'sales-order', orderId },
         issuedOn: '2026-09-15',
         total: '2500',
+        stage: 'forecast',
         documentNumber: `SO-${orderId.slice(-8).toUpperCase()}`,
       }),
     ])
+    // A confirmed order is not yet a claim on anyone, so it is in neither of these.
+    expect((await list('draft')).total).toBe(0)
+    expect((await list('all')).total).toBe(0)
+    const summary = await database.titlesSummary(tenantId, 'receivable', '2026-09-16')
+    expect(summary).toMatchObject({
+      drafts: 0,
+      forecasts: 1,
+      expected: [{ currency: 'BRL', total: '2500' }],
+    })
 
     await deliver(tenantId, 'sales.order.cancelled', {
       orderId,
@@ -449,6 +461,107 @@ describe('following sales and parties', () => {
         })
       ).total,
     ).toBe(1)
+  })
+
+  it('turns the forecast into an effective receivable when the order is invoiced', async () => {
+    const { tenantId, partyId } = await workspace()
+    const orderId = randomUUID()
+    const line = {
+      lineId: randomUUID(),
+      itemId: randomUUID(),
+      quantity: '2',
+      description: 'Coffee',
+      unitPrice: { amount: '1250', currency: 'BRL' },
+      lineTotal: { amount: '2500', currency: 'BRL' },
+    }
+    await deliver(tenantId, 'sales.order.confirmed', {
+      orderId,
+      orderVersion: 2,
+      customerId: partyId,
+      reservationId: randomUUID(),
+      confirmedAt: '2026-09-15T21:30:00.000Z',
+      lines: [line],
+      total: { amount: '2500', currency: 'BRL' },
+    })
+    const invoicing = {
+      orderId,
+      orderVersion: 3,
+      customerId: partyId,
+      confirmedAt: '2026-09-15T21:30:00.000Z',
+      lines: [line],
+      total: { amount: '2700', currency: 'BRL' },
+    }
+    const eventId = randomUUID()
+    await deliver(tenantId, 'sales.invoicing.requested', invoicing, eventId)
+    await deliver(tenantId, 'sales.invoicing.requested', invoicing, eventId)
+    await deliver(tenantId, 'sales.invoicing.requested', invoicing)
+
+    const list = (view: 'draft' | 'forecast') =>
+      database.listTitles(tenantId, 'receivable', {
+        view,
+        today: '2026-09-16',
+        limit: 50,
+        offset: 0,
+      })
+    // The same title changed stage: there is one, not a forecast beside a receivable.
+    expect((await list('forecast')).total).toBe(0)
+    const drafts = await list('draft')
+    expect(drafts.total).toBe(1)
+    // The invoice differed from the order, and its total is what is now owed.
+    expect(drafts.data[0]).toMatchObject({ stage: 'effective', total: '2700' })
+    expect(await database.titlesSummary(tenantId, 'receivable', '2026-09-16')).toMatchObject({
+      drafts: 1,
+      forecasts: 0,
+      expected: [],
+    })
+  })
+
+  it('ends with one effective receivable whichever of the two events arrives first', async () => {
+    const line = {
+      lineId: randomUUID(),
+      itemId: randomUUID(),
+      quantity: '1',
+      description: 'Coffee',
+      unitPrice: { amount: '900', currency: 'BRL' },
+      lineTotal: { amount: '900', currency: 'BRL' },
+    }
+    // Sales emits both from the same operation, so either can be handled first.
+    const play = async (order: readonly ('confirmed' | 'invoicing')[]) => {
+      const { tenantId, partyId } = await workspace()
+      const orderId = randomUUID()
+      const shared = {
+        orderId,
+        orderVersion: 2,
+        customerId: partyId,
+        confirmedAt: '2026-09-15T21:30:00.000Z',
+        lines: [line],
+        total: { amount: '900', currency: 'BRL' },
+      }
+      for (const step of order)
+        await deliver(
+          tenantId,
+          step === 'confirmed' ? 'sales.order.confirmed' : 'sales.invoicing.requested',
+          step === 'confirmed' ? { ...shared, reservationId: randomUUID() } : shared,
+        )
+      const drafts = await database.listTitles(tenantId, 'receivable', {
+        view: 'draft',
+        today: '2026-09-16',
+        limit: 50,
+        offset: 0,
+      })
+      return { drafts, tenantId }
+    }
+    for (const order of [
+      ['confirmed', 'invoicing'],
+      ['invoicing', 'confirmed'],
+    ] as const) {
+      const { drafts, tenantId } = await play(order)
+      expect(drafts.total).toBe(1)
+      expect(drafts.data[0]).toMatchObject({ stage: 'effective', total: '900' })
+      expect(await database.titlesSummary(tenantId, 'receivable', '2026-09-16')).toMatchObject({
+        forecasts: 0,
+      })
+    }
   })
 
   it('destroys the projected name of an erased party and never restores it', async () => {

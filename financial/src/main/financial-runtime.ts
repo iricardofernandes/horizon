@@ -17,6 +17,7 @@ import {
   CancelTitleUseCase,
   DraftTitleUseCase,
   PostTitleUseCase,
+  RealiseForecastUseCase,
   RecordSettlementUseCase,
   ReverseSettlementUseCase,
   ReverseTitleUseCase,
@@ -38,6 +39,7 @@ function titleCommands(
   return {
     draft: new DraftTitleUseCase(database, clock, direction),
     revise: new ReviseTitleUseCase(database, clock, direction),
+    realise: new RealiseForecastUseCase(database, clock, direction),
     post: new PostTitleUseCase(database, clock, direction),
     cancel: new CancelTitleUseCase(database, clock, direction),
     reverse: new ReverseTitleUseCase(database, clock, direction),

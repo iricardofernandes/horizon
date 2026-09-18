@@ -3,6 +3,7 @@ import {
   partyErased,
   partyRegistered,
   partyUpdated,
+  salesInvoicingRequested,
   salesOrderCancelled,
   salesOrderConfirmed,
 } from '@horizon/contracts'
@@ -11,6 +12,7 @@ import type { Clock } from './ports/clock'
 import type { FinancialUnitOfWork, ReceivedEvent } from './ports/unit-of-work'
 import {
   RaiseReceivableFromOrderUseCase,
+  RealiseForecastFromInvoicingUseCase,
   WithdrawReceivableOfOrderUseCase,
 } from './use-cases/follow-sales-and-parties'
 
@@ -19,6 +21,7 @@ type SourceModule = 'parties' | 'sales'
 export class FinancialModuleEventHandlers {
   readonly handlers: Readonly<Record<string, EventHandler>>
   private readonly raise: RaiseReceivableFromOrderUseCase
+  private readonly realise: RealiseForecastFromInvoicingUseCase
   private readonly withdraw: WithdrawReceivableOfOrderUseCase
 
   constructor(
@@ -26,6 +29,7 @@ export class FinancialModuleEventHandlers {
     private readonly clock: Clock,
   ) {
     this.raise = new RaiseReceivableFromOrderUseCase(clock)
+    this.realise = new RealiseForecastFromInvoicingUseCase(clock)
     this.withdraw = new WithdrawReceivableOfOrderUseCase(clock)
     this.handlers = {
       'parties.party.registered': (event) => this.partyRegistered(event),
@@ -33,6 +37,7 @@ export class FinancialModuleEventHandlers {
       'parties.party.erased': (event) => this.partyErased(event),
       'sales.order.confirmed': (event) => this.orderConfirmed(event),
       'sales.order.cancelled': (event) => this.orderCancelled(event),
+      'sales.invoicing.requested': (event) => this.invoicingRequested(event),
     }
   }
 
@@ -65,6 +70,16 @@ export class FinancialModuleEventHandlers {
       parsed.tenantId,
       received(parsed, 'sales'),
       (scope) => this.raise.executeInScope(scope, parsed.payload),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
+  }
+
+  private async invoicingRequested(event: EventEnvelope): Promise<void> {
+    const parsed = salesInvoicingRequested.envelope.parse(event)
+    const outcome = await this.unitOfWork.processEvent(
+      parsed.tenantId,
+      received(parsed, 'sales'),
+      (scope) => this.realise.executeInScope(scope, parsed.payload),
     )
     if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
   }

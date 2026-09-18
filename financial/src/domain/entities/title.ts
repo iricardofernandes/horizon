@@ -27,6 +27,18 @@ export type TitleDirection = (typeof TITLE_DIRECTIONS)[number]
 export const TITLE_STATUSES = ['draft', 'posted', 'cancelled', 'reversed'] as const
 export type TitleStatus = (typeof TITLE_STATUSES)[number]
 
+/**
+ * How firm the title is.
+ *
+ * A forecast is money the workspace expects: an order confirmed but not yet invoiced, a
+ * cost committed but not yet incurred. It is not a claim on anyone, so it never posts,
+ * never counts as a receivable or a payable, and never reaches the ledger — it exists to
+ * be seen in what is coming. Invoicing turns the same title effective rather than raising
+ * a second one, which is what makes duplication impossible rather than merely unlikely.
+ */
+export const TITLE_STAGES = ['forecast', 'effective'] as const
+export type TitleStage = (typeof TITLE_STAGES)[number]
+
 export const SETTLEMENT_STATES = ['open', 'partially-settled', 'settled'] as const
 export type SettlementState = (typeof SETTLEMENT_STATES)[number]
 
@@ -97,6 +109,8 @@ interface TitleProps {
   installments: readonly Installment[]
   allocations: readonly AllocationEntry[]
   status: TitleStatus
+  stage: TitleStage
+  realisedAt: Date | null
   settlements: readonly Settlement[]
   postedAt: Date | null
   closure: { readonly at: Date; readonly reason: Reason } | null
@@ -141,6 +155,8 @@ export interface TitleSnapshot {
   readonly issuedOn: string
   readonly competenceOn: string
   readonly status: TitleStatus
+  readonly stage: TitleStage
+  readonly realisedAt: Date | null
   readonly settlementState: SettlementState
   readonly total: string
   readonly outstanding: string
@@ -180,6 +196,7 @@ export class Title extends AggregateRoot<TitleProps> {
       direction: TitleDirection
       origin: TitleOrigin
       terms: TitleTerms
+      stage?: TitleStage
       now: Date
     },
     id?: UniqueEntityID,
@@ -195,6 +212,8 @@ export class Title extends AggregateRoot<TitleProps> {
           ...termsProps(props.terms),
           installments: installments.value,
           status: 'draft',
+          stage: props.stage ?? 'effective',
+          realisedAt: null,
           settlements: [],
           postedAt: null,
           closure: null,
@@ -217,6 +236,28 @@ export class Title extends AggregateRoot<TitleProps> {
 
   get direction(): TitleDirection {
     return this.props.direction
+  }
+
+  /** The terms as they stand, ready to be handed back with one of them changed. */
+  termsOf(): TitleTerms {
+    return {
+      partyId: this.props.partyId,
+      documentNumber: this.props.documentNumber,
+      description: this.props.description,
+      currency: this.props.currency,
+      categoryId: this.props.categoryId,
+      issuedOn: this.props.issuedOn,
+      competenceOn: this.props.competenceOn,
+      installments: this.props.installments.map((installment) => ({
+        dueOn: installment.dueOn,
+        amount: installment.amount,
+      })),
+      allocations: this.props.allocations,
+    }
+  }
+
+  get stage(): TitleStage {
+    return this.props.stage
   }
 
   get status(): TitleStatus {
@@ -260,12 +301,41 @@ export class Title extends AggregateRoot<TitleProps> {
   }
 
   /**
+   * Turn a forecast into an effective title, optionally on revised terms.
+   *
+   * It is the same aggregate throughout: the forecast is not closed and a second title
+   * raised beside it, so there is never a moment when both exist and the same money is
+   * counted twice. Invoicing may change the amount and the schedule, which is why terms
+   * may be given.
+   */
+  realise(terms: TitleTerms | null, now: Date): Either<InvalidInputError | ConflictError, void> {
+    if (this.props.stage !== 'forecast')
+      return left(new ConflictError('this title is already effective'))
+    if (this.props.status !== 'draft')
+      return left(new ConflictError(`a ${this.props.status} forecast cannot be realised`))
+    if (terms) {
+      const installments = scheduleOf(terms)
+      if (installments.isLeft()) return left(installments.value)
+      Object.assign(this.props, termsProps(terms), { installments: installments.value })
+      this.props.approval = NO_APPROVAL
+    }
+    this.props.stage = 'effective'
+    this.props.realisedAt = now
+    this.props.updatedAt = now
+    return right(undefined)
+  }
+
+  /**
    * `approvalRequired` is the workspace policy's verdict on this title. A title that needs
    * approval posts only once approved; one that does not is recorded as exempt.
    */
   post(now: Date, policy: { approvalRequired: boolean }): Either<ConflictError, void> {
     if (this.props.status !== 'draft')
       return left(new ConflictError(`a ${this.props.status} title cannot be posted`))
+    if (this.props.stage === 'forecast')
+      return left(
+        new ConflictError('a forecast is not a claim on anyone; realise it before posting it'),
+      )
     if (this.props.categoryId === null)
       return left(new ConflictError('classify the title with a category before posting it'))
     if (policy.approvalRequired && this.props.approval.state !== 'approved')
@@ -524,6 +594,8 @@ export class Title extends AggregateRoot<TitleProps> {
       issuedOn: this.props.issuedOn.value,
       competenceOn: this.props.competenceOn.value,
       status: this.props.status,
+      stage: this.props.stage,
+      realisedAt: this.props.realisedAt,
       settlementState: this.settlementState(),
       total: this.total().amount.toString(),
       outstanding: this.outstanding().amount.toString(),

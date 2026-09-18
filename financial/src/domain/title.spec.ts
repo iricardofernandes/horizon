@@ -180,6 +180,67 @@ describe('a receivable title', () => {
   })
 })
 
+describe('a forecast', () => {
+  function forecast() {
+    return valid(
+      Title.draft({
+        tenantId: 't',
+        direction: 'receivable',
+        origin: { type: 'sales-order', orderId: '0192a3b4-0000-7000-8000-00000000000e' },
+        terms: terms(),
+        stage: 'forecast',
+        now,
+      }),
+    )
+  }
+
+  it('is money expected, so it cannot be posted until it is realised', () => {
+    const expected = forecast()
+    expect(snapshotOf(expected)).toMatchObject({ stage: 'forecast', realisedAt: null })
+    const refused = expected.post(now, exempt)
+    expect(refused.isLeft() && refused.value.message).toMatch(/realise it before posting/)
+    expect(expected.pullDomainEvents()).toHaveLength(0)
+
+    valid(expected.realise(null, now))
+    expect(snapshotOf(expected)).toMatchObject({ stage: 'effective', realisedAt: now })
+    valid(expected.post(now, exempt))
+    expect(expected.pullDomainEvents().map((event) => event.eventType)).toEqual([
+      'financial.receivable.posted',
+    ])
+  })
+
+  it('becomes effective on the invoiced terms when they differ from the ordered ones', () => {
+    const expected = forecast()
+    const invoiced = terms({ installments: [{ dueOn: date('2026-10-16'), amount: money(12000) }] })
+    valid(expected.realise(invoiced, now))
+    expect(snapshotOf(expected)).toMatchObject({ stage: 'effective', total: '12000' })
+  })
+
+  it('is realised once, and only while it is still a draft', () => {
+    const expected = forecast()
+    valid(expected.realise(null, now))
+    expect(expected.realise(null, now).isLeft()).toBe(true)
+
+    const cancelled = forecast()
+    valid(cancelled.cancel(reason, now))
+    expect(cancelled.realise(null, now).isLeft()).toBe(true)
+  })
+
+  it('is effective by default, so nothing that existed before became a forecast', () => {
+    const ordinary = valid(
+      Title.draft({
+        tenantId: 't',
+        direction: 'receivable',
+        origin: { type: 'manual' },
+        terms: terms(),
+        now,
+      }),
+    )
+    expect(snapshotOf(ordinary).stage).toBe('effective')
+    expect(ordinary.realise(null, now).isLeft()).toBe(true)
+  })
+})
+
 describe('a payable awaiting approval', () => {
   function payableDraft() {
     return valid(

@@ -7,7 +7,8 @@ its own lifecycle. It is reached through Kong at `/financial`, never directly, a
 shares no source with any other module (ADR 0001). Its boundary against `treasury/` and
 `ledger/` is ADR 0041.
 
-**Status: phase 18 — receivables and payables with approvals complete.**
+**Status: phase 24 — receivables and payables with approvals, and forecasts that
+invoicing turns into effective titles.**
 
 ---
 
@@ -16,6 +17,11 @@ shares no source with any other module (ADR 0001). Its boundary against `treasur
 - **Titles** — receivables and payables with installments, issue, competence and due dates, a revenue
   category, allocations and an origin (manual or a sales order). A draft is revised or
   cancelled; a posted title is settled or reversed and never edited (ADR 0042).
+- **Forecasts** — money the workspace expects rather than is owed: a confirmed sales order
+  becomes a forecast receivable, and invoicing turns *that same title* effective. Because
+  the stage changes in place, the expected money and the claim on the customer are never
+  both counted at once. A forecast never posts, so it never counts as a receivable, never
+  reaches the ledger, and appears in no view but its own.
 - **Approvals** — a payable at or above the workspace policy's threshold posts only after a
   financial admin other than the requester approves it; a rejection carries a reason.
 - **Settlements** — cash received or paid against one installment, with discount, interest and

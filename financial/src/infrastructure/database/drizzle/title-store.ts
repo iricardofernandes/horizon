@@ -10,10 +10,12 @@ import type { DomainEvent } from '@/core/events/domain-event'
 import {
   type Settlement,
   TITLE_DIRECTIONS,
+  TITLE_STAGES,
   TITLE_STATUSES,
   Title,
   type TitleDirection,
   type TitleOrigin,
+  type TitleStage,
   type TitleStatus,
 } from '@/domain/entities/title'
 import type {
@@ -84,6 +86,8 @@ export function mapTitle(
         share: restored(Share.fromBasisPoints(entry.basisPoints)),
       })),
       status: oneOf<TitleStatus>(TITLE_STATUSES, row.status, 'title status'),
+      stage: oneOf<TitleStage>(TITLE_STAGES, row.stage, 'title stage'),
+      realisedAt: row.realisedAt,
       settlements: settlements.map(
         (settlement): Settlement => ({
           id: settlement.id,
@@ -166,6 +170,8 @@ function titleRow(title: Title) {
     competenceOn: snapshot.competenceOn,
     allocations: [...snapshot.allocations],
     status: snapshot.status,
+    stage: snapshot.stage,
+    realisedAt: snapshot.realisedAt,
     settlementState: snapshot.settlementState,
     total: BigInt(snapshot.total),
     outstanding: BigInt(snapshot.outstanding),

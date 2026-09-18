@@ -52,6 +52,8 @@ export const titles = pgTable('titles', {
     .$type<{ dimensionId: string; basisPoints: number }[]>()
     .notNull(),
   status: text('status').notNull(),
+  stage: text('stage').notNull(),
+  realisedAt: timestamp('realised_at', { withTimezone: true, mode: 'date' }),
   settlementState: text('settlement_state').notNull(),
   total: minorUnits('total').notNull(),
   outstanding: minorUnits('outstanding').notNull(),
