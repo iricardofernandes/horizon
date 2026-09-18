@@ -7,6 +7,7 @@ const roots = new Set([
   'sales',
   'treasury',
   'ledger',
+  'procurement',
   'webhooks',
 ])
 

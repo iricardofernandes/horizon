@@ -512,6 +512,11 @@ and the cash flow, the result of the period and the drill-down to source facts a
 
 ### Phase G — purchasing and supplier lifecycle
 
+**In progress.** Requisitions, supplier quotations and their comparison, approval thresholds
+and purchase orders are delivered as
+[plan phase 26](plan.md#phase-26--purchasing-a-need-what-suppliers-would-charge-and-what-the-company-committed-to).
+Receiving and the returns, inventory movements and payables it produces follow.
+
 **Deliverables**
 
 - Implement `procurement/`: purchase requisitions, supplier quotations, comparisons,

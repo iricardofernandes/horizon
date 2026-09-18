@@ -319,3 +319,46 @@ deciding whether next month is affordable needs to know which of the two a figur
 Following a figure in a report back to the fact behind it: the report to the account, the
 account to its lines, and each line to the receivable, settlement or transfer it accounts
 for. It is what makes the books auditable rather than merely arithmetically consistent.
+
+---
+
+## Purchasing
+
+### purchase requisition
+A request to buy something, carrying no prices. What it asserts is a need — this item, this
+quantity, by this date, for this warehouse — and a need is approved or refused on its
+merits. What it will cost is discovered afterwards, by asking suppliers.
+
+### supplier quotation
+What one supplier said it would charge to meet a requisition: a price per line, plus tax,
+freight, other charges and a discount, with payment terms and a lead time. It is a record
+of an answer, not a commitment, and it is never revised — a supplier that changes its mind
+sends another one, and both stay.
+
+### quotation comparison
+Every offer against every line of a requisition, side by side, with the cheapest unit price
+per line marked. The mark is per line and is deliberately not a verdict on a quotation as a
+whole: freight, lead time and payment terms are part of the decision and a person weighs
+them.
+
+### purchase order
+The company's commitment to buy: this supplier, these goods, this money, these dates. It
+holds its own copy of everything it says, so a price change or a rename afterwards cannot
+rewrite what was agreed. A draft may be revised; an approved order is frozen, and a change
+of mind is a cancellation.
+
+### approval threshold
+The value, per currency, at or above which a purchase order needs a second person. Below it
+an order is committed on the spot and records that nobody was asked, so an audit can tell
+an exemption from an oversight. A currency with no threshold asks somebody about every
+order.
+
+### four eyes
+The rule that whoever asked for something cannot be the one who agrees to it: the person
+who submits a requisition does not decide it, and the person who places an order does not
+approve it.
+
+### payment terms
+When a supplier expects to be paid, as days after the order is issued — `30/60/90`. Days
+rather than dates, because the terms are agreed before anyone knows which day the order
+will be issued on; the dates are derived when the payable is raised.

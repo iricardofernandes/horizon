@@ -38,6 +38,7 @@ jobs:
           - { name: financial, context: financial }
           - { name: treasury, context: treasury }
           - { name: ledger, context: ledger }
+          - { name: procurement, context: procurement }
           - { name: web, context: web }
           - { name: gateway, context: gateway }
     steps:

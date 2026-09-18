@@ -124,6 +124,18 @@ services:
           - /ledger
         strip_path: true
 
+  - name: procurement
+    url: http://procurement:3010
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: procurement-api
+        paths:
+          - /procurement
+        strip_path: true
+
   - name: webhooks
     url: http://webhooks:3005
     retries: 3

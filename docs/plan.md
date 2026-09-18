@@ -1188,6 +1188,69 @@ books is a set of books nobody can check.
 
 ---
 
+## Phase 26 — Purchasing: a need, what suppliers would charge, and what the company committed to
+
+**Complete.** The first slice of Phase G of the [expansion plan](erp-expansion-plan.md).
+Everything Horizon has bought until now arrived in inventory without anyone having decided
+to buy it. This is the module where that decision is made, and made visibly: who asked, who
+agreed, what was offered, and what was committed.
+
+**Deliverables**
+
+- `procurement/` (port 3010, Kong `/procurement`), a service with its own database,
+  container and lifecycle, registered in `scripts/modules.json`, the Makefile, compose, the
+  gateway and every workflow.
+- **Requisitions** — a request to buy, deliberately free of money. What it asserts is a
+  need: this item, this quantity, by this date, for this warehouse. A need is approved on
+  its merits and what it costs is discovered afterwards, which is what makes the approval of
+  a need auditable separately from the approval of a commitment.
+- **Quotations and their comparison** — what each supplier said it would charge, against
+  the lines that were actually asked for. A quotation is never revised; a supplier that
+  changes its mind sends another one and both stay. The comparison marks the cheapest unit
+  price per line and deliberately passes no verdict on a quotation as a whole, because
+  freight, lead time and payment terms are part of the decision and a person weighs them.
+  Selecting one offer declines the rest in the same transaction.
+- **Purchase orders** — the commitment, holding its own copy of everything: the supplier's
+  name, each line's description and price, the tax, the freight, the payment terms. A draft
+  is a working document; from approval onward the order is frozen and a change of mind is a
+  cancellation, not an edit.
+- **Approval thresholds** — the value per currency at or above which an order needs a second
+  person. Below it the order is committed on the spot and records that nobody was asked, so
+  an audit can tell an exemption from an oversight. A currency with no policy asks somebody
+  about every order.
+- **Four eyes on both documents** — whoever submitted a requisition cannot decide it, and
+  whoever placed an order cannot approve it, in the aggregate and again as a database
+  constraint. The role map keeps `buyer` and `approver` apart for the same reason.
+- `@horizon/contracts@0.13.0`: seven `procurement.*` events and the `procurement` module
+  with roles admin, buyer, approver and viewer. Every service moved to it before the role
+  was granted anywhere.
+
+**Exit criteria**
+
+- A requisition is answered by at most one order: a second attempt is refused by the domain
+  and by a partial unique index, and a rejected or cancelled order frees the requisition
+  again (integration test).
+- Repeating the request that creates a document creates one document, not two.
+- An order at or above the threshold waits for somebody else; one below it is committed and
+  records that nobody was asked.
+- `procurement.order.approved` carries a dated payment schedule that adds up to the order
+  total, validated against the published contract from the outbox row itself.
+- The lines of a committed order cannot change under the application role or the owner.
+- One workspace's requisitions, quotations and orders are invisible to another.
+
+**Non-goals**
+
+- Receiving: goods receipts, partial and over-receipt, returns and the inventory movement
+  and payable they produce (the next slice of Phase G).
+- Purchasing screens — the requisition and order boards, the approval inbox, the supplier
+  comparison and the purchase history — which follow the receiving they would show.
+- Purchase suggestions from min/max stock, which the expansion plan defers until inventory
+  availability projections are trustworthy.
+- Contracted prices and supplier catalogues: a quotation is priced by hand, because a price
+  list per supplier is a registry of its own and nobody has needed one yet.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

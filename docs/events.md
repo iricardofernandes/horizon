@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.12.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.13.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -459,6 +459,113 @@ A party’s identifying details, roles or active state changed. Consumers replac
 | `address` | string | yes | min length 5. max length 500 |
 | `roles` | array | yes | — |
 | `active` | boolean | yes | — |
+
+## `procurement`
+
+### `procurement.order.approved` — v1
+
+The company committed to buy. This is the fact a payable forecast is raised from: `installments` is the schedule the agreed payment terms imply, already dated, so no consumer has to know how the terms were expressed.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `orderId` | string | yes | Purchase order identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `orderVersion` | integer | yes | — |
+| `approvedBy` | string | yes | min length 1. max length 255 |
+| `approvalRequired` | boolean | yes | — |
+| `installments` | array | yes | — |
+| `supplierId` | string | yes | The party the goods are being bought from. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `supplierName` | string | yes | min length 2. max length 160 |
+| `requisitionId` | any | yes | — |
+| `warehouseId` | string | yes | Where the goods are to be delivered. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `issuedOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `expectedOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `total` | object | yes | — |
+| `lines` | array | yes | — |
+### `procurement.order.cancelled` — v1
+
+A purchase order was withdrawn. `wasApproved` tells a consumer whether anything had been committed on the strength of it and therefore has to be withdrawn too.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `orderId` | string | yes | Purchase order identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `orderVersion` | integer | yes | — |
+| `reason` | string | yes | min length 3. max length 300 |
+| `wasApproved` | boolean | yes | — |
+### `procurement.order.placed` — v1
+
+A purchase order was submitted. `approvalRequired` says whether the workspace threshold sends it to a second person; when it is false the order is committed in the same operation and `procurement.order.approved` follows immediately.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `orderId` | string | yes | Purchase order identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `orderVersion` | integer | yes | — |
+| `placedBy` | string | yes | min length 1. max length 255 |
+| `approvalRequired` | boolean | yes | — |
+| `supplierId` | string | yes | The party the goods are being bought from. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `supplierName` | string | yes | min length 2. max length 160 |
+| `requisitionId` | any | yes | — |
+| `warehouseId` | string | yes | Where the goods are to be delivered. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `issuedOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `expectedOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `total` | object | yes | — |
+| `lines` | array | yes | — |
+### `procurement.order.rejected` — v1
+
+An order waiting for approval was refused. Nothing was committed, so nothing has to be undone.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `orderId` | string | yes | Purchase order identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `orderVersion` | integer | yes | — |
+| `rejectedBy` | string | yes | min length 1. max length 255 |
+| `reason` | string | yes | min length 3. max length 300 |
+### `procurement.requisition.approved` — v1
+
+The need was agreed by somebody other than whoever submitted it. Nothing is committed and no supplier has been chosen; the requisition is now open to being answered by an order.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `requisitionId` | string | yes | Purchase requisition identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `requisitionVersion` | integer | yes | — |
+| `approvedBy` | string | yes | min length 1. max length 255 |
+| `warehouseId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+### `procurement.requisition.rejected` — v1
+
+The need was refused, with the reason it was refused for.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `requisitionId` | string | yes | Purchase requisition identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `requisitionVersion` | integer | yes | — |
+| `rejectedBy` | string | yes | min length 1. max length 255 |
+| `reason` | string | yes | min length 3. max length 300 |
+### `procurement.requisition.submitted` — v1
+
+Somebody asked for something to be bought and sent the request for a decision. A requisition carries no prices: what it asserts is a need, and what it will cost is discovered afterwards by asking suppliers.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `requisitionId` | string | yes | Purchase requisition identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `requisitionVersion` | integer | yes | — |
+| `requestedBy` | string | yes | min length 1. max length 255 |
+| `submittedBy` | string | yes | min length 1. max length 255 |
+| `warehouseId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `neededBy` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `lines` | array | yes | — |
 
 ## `sales`
 

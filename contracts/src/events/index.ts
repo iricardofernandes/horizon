@@ -37,6 +37,15 @@ import {
   partyUpdated,
 } from './parties'
 import {
+  procurementOrderApproved,
+  procurementOrderCancelled,
+  procurementOrderPlaced,
+  procurementOrderRejected,
+  procurementRequisitionApproved,
+  procurementRequisitionRejected,
+  procurementRequisitionSubmitted,
+} from './procurement'
+import {
   salesInvoicingRequested,
   salesOrderCancelled,
   salesOrderConfirmed,
@@ -59,6 +68,7 @@ export * from './identity'
 export * from './inventory'
 export * from './ledger'
 export * from './parties'
+export * from './procurement'
 export * from './sales'
 export * from './treasury'
 
@@ -110,6 +120,13 @@ export const EVENTS: readonly EventDefinition[] = [
   ledgerTransactionReversed,
   ledgerPeriodClosed,
   ledgerPeriodReopened,
+  procurementRequisitionSubmitted,
+  procurementRequisitionApproved,
+  procurementRequisitionRejected,
+  procurementOrderPlaced,
+  procurementOrderApproved,
+  procurementOrderRejected,
+  procurementOrderCancelled,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

@@ -322,6 +322,35 @@ services:
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_ledger
       DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_ledger
 
+  procurement-migrate:
+    <<: *service
+    build:
+      context: ../procurement
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_procurement
+    command: ["npm", "run", "db:migrate"]
+
+  procurement:
+    <<: *service
+    build:
+      context: ../procurement
+      network: host
+    container_name: horizon-procurement
+    depends_on:
+      procurement-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      <<: *env
+      PORT: '3010'
+      OTEL_SERVICE_NAME: procurement
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_procurement
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_procurement
+
   webhooks-migrate:
     <<: *service
     build:

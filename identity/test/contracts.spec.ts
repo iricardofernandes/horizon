@@ -21,6 +21,7 @@ describe('published role contract', () => {
         'identity',
         'inventory',
         'parties',
+        'procurement',
         'sales',
         'treasury',
         'ledger',
