@@ -155,7 +155,7 @@ vendored side by side, and a cross-module import cannot resolve.
 | [`parties/`](parties/) | Organizations and people, their roles, tax identifiers and erasure | 3006 | 15 |
 | [`financial/`](financial/) | Receivables and payables with approvals, settlements and reversals; categories, departments and projects, payment methods and terms | 3007 | 16–18 |
 | [`treasury/`](treasury/) | Bank and cash accounts, their append-only journal, balances, transfers, statement import and reconciliation | 3008 | 19, 20 |
-| [`ledger/`](ledger/) | Chart of accounts, balanced double-entry journal, accounting periods, trial balance, automatic postings from financial and treasury facts | 3009 | 22, 23 |
+| [`ledger/`](ledger/) | Chart of accounts, balanced double-entry journal, accounting periods, automatic postings from financial and treasury facts, trial balance, result of the period, cash flow and drill-down | 3009 | 22–25 |
 | [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, retry, DLQ, replay | 3005 | 9 |
 | [`web/`](web/) | Next.js frontend, routed and bilingual | 3000 | 10, 14 |
 | [`contracts/`](contracts/) | Published package: versioned Zod event and API schemas | — | 3 |

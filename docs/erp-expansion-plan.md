@@ -479,16 +479,18 @@ confirmation stays out until acceptance data justifies it.
 
 ### Phase F — automatic financial integration and ledger
 
-**Progress:** `ledger/` itself — the chart of accounts, the balanced journal, accounting
+**Complete**, apart from the purchasing forecasts, which wait for `procurement/` in Phase G.
+
+`ledger/` itself — the chart of accounts, the balanced journal, accounting
 periods and the trial balance — is delivered as
 [plan phase 22](plan.md#phase-22--the-general-ledger-chart-journal-periods-and-trial-balance),
 and the posting rules and idempotent consumers that fill it from `financial/` and
 `treasury/` facts as
 [plan phase 23](plan.md#phase-23--automatic-postings-financial-and-treasury-facts-become-journal-transactions).
 The sales forecasts are
-[plan phase 24](plan.md#phase-24--forecasts-a-confirmed-order-is-money-expected-invoicing-makes-it-owed).
-The purchasing forecasts wait for `procurement/` in Phase G; the cash flow, DRE and
-drill-down reports remain.
+[plan phase 24](plan.md#phase-24--forecasts-a-confirmed-order-is-money-expected-invoicing-makes-it-owed),
+and the cash flow, the result of the period and the drill-down to source facts are
+[plan phase 25](plan.md#phase-25--the-reports-the-books-exist-to-produce-and-the-way-back-to-the-facts).
 
 **Deliverables**
 
@@ -730,7 +732,7 @@ The first executable backlog, in order, is:
 12. Extend the golden path to order → receivable → settlement → bank reconciliation and
     require one joined trace plus reconciled numeric assertions in CI.
 
-**Status:** items 1 to 12 are delivered as plan phases 14 to 21. Phase F is under way:
-`ledger/` is plan phase 22, its automatic postings are plan phase 23 and the sales forecasts
-are plan phase 24; what remains of Phase F is the reports.
+**Status:** items 1 to 12 are delivered as plan phases 14 to 21, and Phase F as plan phases
+22 to 25. The next work is Phase G, `procurement/`, which also brings the payable forecasts
+Phase F left waiting for it.
 

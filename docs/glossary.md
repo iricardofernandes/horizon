@@ -300,3 +300,22 @@ balances and the fact is not lost; an accountant reclassifies it later with a ma
 A fact the ledger received but could not post — nothing mapped, or the month already
 closed. It waits with the numbers it arrived with and is replayed once the workspace fixes
 what blocked it, so the queue never stops and nothing is dropped.
+
+### result of the period
+Revenue less expense over a range, by account — an income statement, or DRE. Every figure
+is the movement inside the range and never a balance carried into it, which is what makes
+two consecutive statements add up to the one that spans both.
+
+### realised cash flow
+Cash that actually moved, as the ledger recorded it, over the accounts mapped to the `cash`
+part of the postings. Its counterpart is the cash flow outlook.
+
+### cash flow outlook
+What is still expected to come in and go out, by the date it falls due. What a posted title
+says is owed is reported apart from what a forecast merely expects, because a reader
+deciding whether next month is affordable needs to know which of the two a figure is.
+
+### drill-down
+Following a figure in a report back to the fact behind it: the report to the account, the
+account to its lines, and each line to the receivable, settlement or transfer it accounts
+for. It is what makes the books auditable rather than merely arithmetically consistent.

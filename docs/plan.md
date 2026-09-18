@@ -1139,6 +1139,55 @@ claim.
 
 ---
 
+## Phase 25 — The reports the books exist to produce, and the way back to the facts
+
+**Complete.** The last slice of Phase F of the [expansion plan](erp-expansion-plan.md), and
+the phase's close. It is also the first screen `ledger/` has ever had: a headless set of
+books is a set of books nobody can check.
+
+**Deliverables**
+
+- **Result of a period**, by account. Revenue and expense both read positive — an account
+  moving the way its type expects is not a negative number — and a group shows what
+  everything under it adds up to while only the leaves are totalled, so nothing is counted
+  twice.
+- **Realised cash flow**, by day, week or month, over the accounts the workspace mapped to
+  the `cash` part of its postings. What counts as cash is not guessed from account names,
+  so a report and a posting can never disagree about it. Every bucket in the range is
+  present, including the empty ones.
+- **Expected cash flow**, from `financial/`: what is still due, by the date it falls due,
+  with what a posted title says is owed reported apart from what a forecast merely expects.
+  What fell due before the range and is still unpaid is reported too, rather than dropped.
+- **Drill-down**. Every ledger line names the fact it accounts for, so a figure in a report
+  leads to the account, the account to its lines, and each line back out to the receivable,
+  the settlement or the transfer behind it.
+- **Web**: Finance → The books, with the result, cash flow expected beside realised, the
+  trial balance, the chart, and the drill-down dialog. A banner when facts are still
+  pending, because a report is only as complete as what has been posted.
+
+**Exit criteria**
+
+- The reports reconcile with the facts they were built from: revenue equals what was
+  invoiced, closing cash equals what was collected, and the receivables account holds
+  exactly the difference (integration test).
+- Two consecutive periods add up to the one that spans both, because every figure is the
+  movement inside its range and never a balance carried into it.
+- A transfer between two accounts that both map to one cash account nets to nothing; its
+  fee does not.
+- Every line of an account names the fact that put it there, asserted in the integration
+  test and again in the browser golden path, which also asserts the trial balance balances.
+- A workspace that has mapped no cash account gets an empty report rather than a wrong one.
+
+**Non-goals**
+
+- A `reporting/` module with its own store and scheduled extracts, which is Phase M.
+- Charts: these are tables, and a chart is worth adding once someone has read the tables
+  enough to know which shape they want.
+- Budgets and variance, and comparison against a prior period.
+- Multi-currency reporting: every report states one currency, because a transaction does.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.
