@@ -9,8 +9,8 @@ source with any other module (ADR 0001). Its boundary against `financial/` and `
 is ADR 0041: those two own what is owed and where the cash is, and the ledger owns what all
 of it means in accounting terms.
 
-**Status: phase 23 — chart of accounts, balanced journal, periods, trial balance, and the
-automatic postings raised from `financial/` and `treasury/` facts.**
+**Status: phase 25 — chart of accounts, balanced journal, periods, the automatic postings
+raised from `financial/` and `treasury/` facts, and the reports they add up to.**
 
 ---
 
@@ -41,9 +41,14 @@ automatic postings raised from `financial/` and `treasury/` facts.**
 - **Pending facts** — a fact the workspace cannot post yet, because a category has no
   account or the month is closed, waits with the numbers it arrived with and is replayed
   once the workspace fixes it. The queue never blocks, and nothing is lost.
-- **Reports** — the chart with each account's balance and its subtree's total, the trial
+- **Reports** — the chart with each account's balance and its subtree's total; the trial
   balance (opening, movement and closing per account, with the two totals it exists to
-  compare), and one account's lines with the balance each left behind.
+  compare); the result of a period by account, revenue and expense both reading positive;
+  realised cash flow by day, week or month over the accounts mapped as cash; and one
+  account's lines with the balance each left behind.
+- **Drill-down** — every line names the fact it accounts for, so a figure in a report leads
+  to the account, the account to its lines, and each line back out to the receivable,
+  settlement or transfer behind it.
 
 Every balance is computed from the lines by posting date. There is no stored balance to
 drift, so a backdated transaction moves every later balance deterministically.
@@ -116,6 +121,12 @@ npm run dev
 every posting and every reversal across the whole chart, and that every combination of
 cash, discount, interest and penalty a settlement can carry plans a balanced transaction.
 
+The reports are read at query time from the lines, never from a stored total, so two
+consecutive periods always add up to the one that spans both — which is asserted rather
+than assumed. What counts as cash is not guessed from account names: it is exactly the
+accounts mapped to the `cash` part of the postings, so a report and a posting can never
+disagree about what cash is.
+
 `npm run test:e2e` starts PostgreSQL with Testcontainers and proves the chart's tree and its
 roll-ups, the trial balance, idempotent commands, the running balance of an account,
 reversal into a later month, a closed month refusing postings and reversals until reopened,
@@ -124,4 +135,7 @@ owner role, tenant isolation — and, for the automatic postings, that a fact po
 one transaction however often its event is delivered, that a fact the workspace cannot post
 yet waits and then posts on replay, that a fact reversed while pending is never posted at
 all, and that replaying every event into an empty ledger, in any order and twice over,
-produces the same balances.
+produces the same balances — and that the reports reconcile with the facts they were built
+from: revenue equals what was invoiced, closing cash equals what was collected, the
+receivables account holds exactly the difference, and every line of it names the fact that
+put it there.

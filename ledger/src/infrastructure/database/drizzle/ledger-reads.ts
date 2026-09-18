@@ -182,6 +182,9 @@ export interface LedgerLine {
   readonly amount: string
   readonly memo: string | null
   readonly status: string
+  /** The fact this line accounts for, so a reader can follow it back out of the books. */
+  readonly sourceType: string
+  readonly sourceId: string | null
   /** The account balance right after this line, in the account's own sign convention. */
   readonly runningBalance: string
 }
@@ -206,6 +209,8 @@ type LedgerRow = {
   amount: string
   memo: string | null
   status: string
+  source_type: string
+  source_id: string | null
   running: string
 }
 
@@ -241,7 +246,7 @@ export async function accountLedger(
     else case when l.side = 'credit' then l.amount else -l.amount end end`)
   const rows = await tx.execute<LedgerRow>(sql`
     select l.transaction_id, l.line_number, t.reference, l.posted_on::text as posted_on,
-      l.side, l.amount::text as amount, l.memo, t.status,
+      l.side, l.amount::text as amount, l.memo, t.status, t.source_type, t.source_id,
       (${account.opening}::numeric + sum(${effect}) over (
         order by l.posted_on, t.posted_at, l.transaction_id, l.line_number
         rows between unbounded preceding and current row
@@ -268,6 +273,8 @@ export async function accountLedger(
     amount: row.amount,
     memo: row.memo,
     status: row.status,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
     runningBalance: row.running,
   }))
   return {

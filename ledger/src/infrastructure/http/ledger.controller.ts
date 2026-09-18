@@ -15,6 +15,7 @@ import {
 import { z } from 'zod'
 import { POSTING_ROLES } from '@/domain/entities/account-mapping'
 import { ACCOUNT_TYPES, ENTRY_SIDES } from '@/domain/entities/ledger-account'
+import { CASH_FLOW_GRAINS } from '@/infrastructure/database/drizzle/ledger-reports'
 import { LedgerRuntime } from '@/main/ledger-runtime'
 import { type LedgerRequest, PublicRoute, RequireLedgerAction, tenantOf } from './authorization'
 import { context, idempotent, rangeOf, today } from './command-context'
@@ -143,6 +144,23 @@ export class LedgerController {
   async trialBalance(@Query() query: Record<string, unknown>, @Req() request: LedgerRequest) {
     const range = rangeOf({ from: query.from, to: query.to })
     return this.runtime.database.trialBalance(tenantOf(request), range)
+  }
+
+  /** What the period earned and spent, by account, with the result it adds up to. */
+  @Get('income-statement')
+  @RequireLedgerAction('read')
+  async incomeStatement(@Query() query: Record<string, unknown>, @Req() request: LedgerRequest) {
+    const range = rangeOf({ from: query.from, to: query.to })
+    return this.runtime.database.incomeStatement(tenantOf(request), range)
+  }
+
+  /** Cash in and out of the accounts the workspace mapped as cash, bucket by bucket. */
+  @Get('cash-flow')
+  @RequireLedgerAction('read')
+  async cashFlow(@Query() query: Record<string, unknown>, @Req() request: LedgerRequest) {
+    const range = rangeOf({ from: query.from, to: query.to })
+    const grain = parse(z.enum(CASH_FLOW_GRAINS).default('day'), query.grain)
+    return this.runtime.database.cashFlow(tenantOf(request), range, grain)
   }
 
   @Get('transactions')

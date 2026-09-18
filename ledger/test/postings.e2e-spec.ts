@@ -421,6 +421,148 @@ describe('replaying every event into an empty ledger', () => {
   })
 })
 
+describe('the reports', () => {
+  it('states the result of the period, and rolls it up the tree', async () => {
+    const space = await workspace()
+    const title = receivablePosted()
+    await deliver(space.tenantId, 'financial.receivable.posted', title)
+    await deliver(
+      space.tenantId,
+      'financial.settlement.recorded',
+      settlementRecorded(title.titleId, {
+        received: brl('99000'),
+        discount: brl('2000'),
+        interest: brl('1000'),
+      }),
+    )
+
+    const statement = await database.incomeStatement(space.tenantId, FULL_YEAR)
+    const line = (code: string) =>
+      [...statement.revenue, ...statement.expense].find((row) => row.code === code)
+    // Both read positive: an account moving the way its type expects is not a negative number.
+    expect(line('3.01')).toMatchObject({ type: 'revenue', amount: '100000' })
+    expect(line('3.03')).toMatchObject({ type: 'revenue', amount: '1000' })
+    expect(line('4.02')).toMatchObject({ type: 'expense', amount: '2000' })
+    // The group totals its children without being counted itself.
+    expect(line('3')).toMatchObject({ postable: false, amount: '0', rollUp: '101000' })
+    expect(statement).toMatchObject({
+      totalRevenue: '101000',
+      totalExpense: '2000',
+      result: '99000',
+    })
+  })
+
+  it('reports only the movement inside its range, so consecutive periods add up', async () => {
+    const space = await workspace()
+    const may = receivablePosted({ competenceOn: '2026-05-10' })
+    const june = receivablePosted({ competenceOn: '2026-06-10', total: brl('40000') })
+    await deliver(space.tenantId, 'financial.receivable.posted', may)
+    await deliver(space.tenantId, 'financial.receivable.posted', june)
+
+    const first = await database.incomeStatement(space.tenantId, {
+      from: '2026-05-01',
+      to: '2026-05-31',
+    })
+    const second = await database.incomeStatement(space.tenantId, {
+      from: '2026-06-01',
+      to: '2026-06-30',
+    })
+    const both = await database.incomeStatement(space.tenantId, {
+      from: '2026-05-01',
+      to: '2026-06-30',
+    })
+    expect(first.result).toBe('100000')
+    expect(second.result).toBe('40000')
+    expect(BigInt(first.result) + BigInt(second.result)).toBe(BigInt(both.result))
+  })
+
+  it('follows cash in and out of the accounts mapped as cash, bucket by bucket', async () => {
+    const space = await workspace()
+    const title = receivablePosted()
+    await deliver(space.tenantId, 'financial.receivable.posted', title)
+    await deliver(
+      space.tenantId,
+      'financial.settlement.recorded',
+      settlementRecorded(title.titleId),
+    )
+    await deliver(space.tenantId, 'treasury.transfer.posted', {
+      transferId: randomUUID(),
+      fromAccountId: randomUUID(),
+      toAccountId: randomUUID(),
+      amount: brl('20000'),
+      fee: brl('500'),
+      valueOn: '2026-07-10',
+      postedAt: '2026-07-10T12:00:00.000Z',
+    })
+
+    const monthly = await database.cashFlow(space.tenantId, FULL_YEAR, 'month')
+    expect(monthly.accounts).toEqual([{ code: '1.02', name: 'Bancos' }])
+    // Every month of the range is present, including the ones nothing happened in.
+    expect(monthly.buckets).toHaveLength(12)
+    const at = (month: string) => monthly.buckets.find((bucket) => bucket.startsOn === month)
+    expect(at('2026-06-01')).toMatchObject({ inflow: '100000', outflow: '0', net: '100000' })
+    // A transfer between two accounts that both map to this one nets to nothing; its fee does not.
+    expect(at('2026-07-01')).toMatchObject({ inflow: '20000', outflow: '20500', net: '-500' })
+    expect(at('2026-01-01')).toMatchObject({ inflow: '0', net: '0', closing: '0' })
+    expect(monthly.opening).toBe('0')
+    expect(monthly.closing).toBe('99500')
+    expect(BigInt(monthly.opening) + BigInt(monthly.net)).toBe(BigInt(monthly.closing))
+  })
+
+  it('has nothing to say about cash before the workspace says which accounts are cash', async () => {
+    const space = await workspace({ mapped: false })
+    expect(await database.cashFlow(space.tenantId, FULL_YEAR, 'day')).toMatchObject({
+      accounts: [],
+      buckets: [],
+      closing: '0',
+    })
+  })
+
+  /**
+   * The exit criterion of the phase: what the books say must be reconcilable with the facts
+   * the other modules reported, and every figure must be traceable back to one of them.
+   */
+  it('reconciles with the facts it was built from, and every line names the one it came from', async () => {
+    const space = await workspace()
+    const title = receivablePosted()
+    const settlement = settlementRecorded(title.titleId)
+    await deliver(space.tenantId, 'financial.receivable.posted', title)
+    await deliver(space.tenantId, 'financial.settlement.recorded', settlement)
+
+    // What the subsystems reported.
+    const invoiced = BigInt(title.total.amount)
+    const collected = BigInt(settlement.received.amount)
+
+    const statement = await database.incomeStatement(space.tenantId, FULL_YEAR)
+    expect(BigInt(statement.totalRevenue)).toBe(invoiced)
+
+    const cash = await database.cashFlow(space.tenantId, FULL_YEAR, 'month')
+    expect(BigInt(cash.closing)).toBe(collected)
+
+    const trial = await database.trialBalance(space.tenantId, FULL_YEAR)
+    const closingOf = (code: string) =>
+      BigInt(trial.rows.find((row) => row.code === code)?.closing ?? '0')
+    // Invoiced but not yet collected is exactly what the receivables account still holds.
+    expect(closingOf('1.01')).toBe(invoiced - collected)
+    expect(trial.totalDebits).toBe(trial.totalCredits)
+
+    // And every line of the account leads back out to the fact that caused it.
+    const receivables = (await database.chartOfAccounts(space.tenantId, '2026-12-31')).find(
+      (account) => account.code === '1.01',
+    )
+    expect(receivables).toBeDefined()
+    const drill = await database.accountLedger(space.tenantId, receivables?.id ?? '', {
+      ...FULL_YEAR,
+      limit: 50,
+      offset: 0,
+    })
+    expect(drill?.data.map((line) => [line.sourceType, line.sourceId])).toEqual([
+      ['receivable', title.titleId],
+      ['settlement', settlement.settlementId],
+    ])
+  })
+})
+
 describe('the database itself', () => {
   it('refuses a second transaction against a fact that already posted one', async () => {
     const space = await workspace()

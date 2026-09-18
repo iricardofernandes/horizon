@@ -21,6 +21,7 @@ import {
   transactionDetail,
   trialBalance,
 } from './ledger-reads'
+import { type CashFlowGrain, cashFlow, incomeStatement } from './ledger-reports'
 import { makeScope, type Transaction } from './ledger-store'
 import * as schema from './schema'
 
@@ -147,6 +148,14 @@ export class LedgerDatabase extends LedgerUnitOfWork {
 
   listPeriods(tenantId: string, limit: number) {
     return this.read(tenantId, (tx) => listPeriods(tx, limit))
+  }
+
+  incomeStatement(tenantId: string, range: { from: string; to: string }) {
+    return this.read(tenantId, (tx) => incomeStatement(tx, range))
+  }
+
+  cashFlow(tenantId: string, range: { from: string; to: string }, grain: CashFlowGrain) {
+    return this.read(tenantId, (tx) => cashFlow(tx, range, grain))
   }
 
   listMappings(tenantId: string) {
