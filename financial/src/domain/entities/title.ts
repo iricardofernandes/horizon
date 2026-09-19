@@ -6,6 +6,7 @@ import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import {
   moneyPayload,
+  originPayload,
   SettlementRecordedEvent,
   SettlementReversedEvent,
   TitlePostedEvent,
@@ -44,7 +45,24 @@ export type SettlementState = (typeof SETTLEMENT_STATES)[number]
 
 export const MAX_TITLE_INSTALLMENTS = 120
 
-export type TitleOrigin = { type: 'manual' } | { type: 'sales-order'; orderId: string }
+/**
+ * The document this title came from, when it came from one.
+ *
+ * A sales order and a purchase order raise a forecast; a goods receipt raises what is
+ * actually owed for what arrived. The identifier is the document's own, so a redelivery of
+ * the event that announced it always resolves to the same title.
+ */
+export const TITLE_ORIGINS = [
+  'manual',
+  'sales-order',
+  'purchase-order',
+  'purchase-receipt',
+] as const
+export type TitleOriginType = (typeof TITLE_ORIGINS)[number]
+
+export type TitleOrigin =
+  | { readonly type: 'manual' }
+  | { readonly type: Exclude<TitleOriginType, 'manual'>; readonly documentId: string }
 
 export interface Installment {
   readonly number: number
@@ -349,7 +367,7 @@ export class Title extends AggregateRoot<TitleProps> {
       new TitlePostedEvent(this.id, this.props.tenantId, now, this.props.direction, {
         partyId: this.props.partyId,
         documentNumber: this.props.documentNumber.value,
-        origin: this.props.origin,
+        origin: originPayload(this.props.origin),
         categoryId: this.props.categoryId,
         issuedOn: this.props.issuedOn.value,
         competenceOn: this.props.competenceOn.value,
@@ -423,6 +441,25 @@ export class Title extends AggregateRoot<TitleProps> {
       return left(new ConflictError('only a draft can be cancelled; reverse a posted title'))
     this.props.status = 'cancelled'
     this.props.closure = { at: now, reason }
+    this.props.updatedAt = now
+    return right(undefined)
+  }
+
+  /**
+   * A withdrawn draft that is wanted again.
+   *
+   * Only ever a draft, and only ever one that was cancelled: nothing was posted, so nothing
+   * anybody acted on is being rewritten (ADR 0042). It exists because a commitment can come
+   * back — a delivery returned to its supplier is a delivery the supplier still owes — and
+   * the alternative would be a second title for the same document.
+   */
+  reinstate(now: Date): Either<ConflictError, void> {
+    if (this.props.status !== 'cancelled')
+      return left(new ConflictError(`a ${this.props.status} title cannot be reinstated`))
+    if (this.props.postedAt !== null)
+      return left(new ConflictError('a title that was once posted is reversed, never reinstated'))
+    this.props.status = 'draft'
+    this.props.closure = null
     this.props.updatedAt = now
     return right(undefined)
   }

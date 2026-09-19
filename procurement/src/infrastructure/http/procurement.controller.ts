@@ -96,6 +96,17 @@ const fromQuotationInput = z.strictObject({
   notes: z.string().max(500).optional(),
 })
 
+const deliveryInput = z.strictObject({
+  orderId: z.uuid(),
+  receivedOn: businessDate,
+  lines: z
+    .array(z.strictObject({ lineId: z.uuid(), quantity }))
+    .min(1)
+    .max(200),
+  notes: z.string().max(500).optional(),
+  overrideReason: z.string().trim().min(3).max(300).optional(),
+})
+
 const policyInput = z.strictObject({ currency, threshold: minorUnits })
 
 @Controller()
@@ -341,6 +352,59 @@ export class ProcurementController {
   ) {
     const { reason } = parse(reasonInput, body)
     return unwrap(await this.runtime.decideOrder.cancel(context(request), id(orderId), reason))
+  }
+
+  @Post('orders/:id/close')
+  @RequireProcurementAction('commit')
+  async closeOrder(
+    @Param('id') orderId: string,
+    @Body() body: unknown,
+    @Req() request: ProcurementRequest,
+  ) {
+    const { reason } = parse(reasonInput, body)
+    return unwrap(
+      await this.runtime.closeOrder.execute({
+        context: context(request),
+        orderId: id(orderId),
+        reason,
+      }),
+    )
+  }
+
+  @Get('orders/:id/receipts')
+  @RequireProcurementAction('read')
+  receipts(@Param('id') orderId: string, @Req() request: ProcurementRequest) {
+    return this.runtime.database.listReceipts(tenantOf(request), id(orderId))
+  }
+
+  /** Conference: what arrived against the order, and what the order is still waiting for. */
+  @Post('receipts')
+  @RequireProcurementAction('write')
+  async receiveGoods(@Body() body: unknown, @Req() request: ProcurementRequest) {
+    return unwrap(
+      await this.runtime.receiveGoods.execute({
+        context: idempotent(request),
+        delivery: parse(deliveryInput, body),
+      }),
+    )
+  }
+
+  @Post('receipts/:id/return')
+  @RequireProcurementAction('write')
+  @HttpCode(204)
+  async returnGoods(
+    @Param('id') receiptId: string,
+    @Body() body: unknown,
+    @Req() request: ProcurementRequest,
+  ) {
+    const { reason } = parse(reasonInput, body)
+    unwrap(
+      await this.runtime.returnGoods.execute({
+        context: context(request),
+        receiptId: id(receiptId),
+        reason,
+      }),
+    )
   }
 
   @Get('suppliers')

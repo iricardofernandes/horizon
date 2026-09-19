@@ -162,6 +162,7 @@ export const orders = pgTable('orders', {
   approvalDecidedAt: instant('approval_decided_at'),
   approvalReason: text('approval_reason'),
   closureReason: text('closure_reason'),
+  receipts: integer('receipts').notNull().default(0),
   version: integer('version').notNull(),
   createdAt: instant('created_at').notNull(),
   updatedAt: instant('updated_at').notNull(),
@@ -180,8 +181,47 @@ export const orderLines = pgTable(
     quantity: micros('quantity').notNull(),
     unitPrice: minorUnits('unit_price').notNull(),
     lineTotal: minorUnits('line_total').notNull(),
+    /** Cumulative across every delivery; the one thing about a committed line that moves. */
+    received: micros('received').notNull().default(0n),
   },
   (table) => [primaryKey({ columns: [table.tenantId, table.orderId, table.lineId] })],
+)
+
+export const receipts = pgTable('receipts', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  orderId: uuid('order_id').notNull(),
+  warehouseId: uuid('warehouse_id').notNull(),
+  receivedOn: businessDate('received_on').notNull(),
+  receivedBy: text('received_by').notNull(),
+  currency: text('currency').notNull(),
+  value: minorUnits('value').notNull(),
+  notes: text('notes'),
+  overrideReason: text('override_reason'),
+  status: text('status').notNull(),
+  returnedBy: text('returned_by'),
+  returnedAt: instant('returned_at'),
+  returnReason: text('return_reason'),
+  createdAt: instant('created_at').notNull(),
+})
+
+export const receiptLines = pgTable(
+  'receipt_lines',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    receiptId: uuid('receipt_id').notNull(),
+    lineId: uuid('line_id').notNull(),
+    itemId: uuid('item_id').notNull(),
+    description: text('description').notNull(),
+    quantity: micros('quantity').notNull(),
+    unitPrice: minorUnits('unit_price').notNull(),
+    lineTotal: minorUnits('line_total').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.receiptId, table.lineId] })],
 )
 
 export const approvalPolicies = pgTable(

@@ -17,6 +17,11 @@ import {
   OpenRequisitionUseCase,
   ReviseRequisitionUseCase,
 } from '@/application/use-cases/manage-requisitions'
+import {
+  CloseOrderUseCase,
+  ReceiveGoodsUseCase,
+  ReturnGoodsUseCase,
+} from '@/application/use-cases/receive-goods'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { ProcurementDatabase } from '@/infrastructure/database/drizzle/procurement-database'
 import type { ProcurementEnvironment } from './environment'
@@ -35,6 +40,9 @@ export class ProcurementRuntime implements OnModuleInit, OnModuleDestroy {
   readonly draftOrderFromQuotation: DraftOrderFromQuotationUseCase
   readonly reviseOrder: ReviseOrderUseCase
   readonly decideOrder: DecideOrderUseCase
+  readonly receiveGoods: ReceiveGoodsUseCase
+  readonly returnGoods: ReturnGoodsUseCase
+  readonly closeOrder: CloseOrderUseCase
   readonly defineApprovalPolicy: DefineApprovalPolicyUseCase
   readonly eventHandlers: ProcurementModuleEventHandlers
 
@@ -59,6 +67,9 @@ export class ProcurementRuntime implements OnModuleInit, OnModuleDestroy {
     this.draftOrderFromQuotation = new DraftOrderFromQuotationUseCase(this.database, clock)
     this.reviseOrder = new ReviseOrderUseCase(this.database, clock)
     this.decideOrder = new DecideOrderUseCase(this.database, clock)
+    this.receiveGoods = new ReceiveGoodsUseCase(this.database, clock)
+    this.returnGoods = new ReturnGoodsUseCase(this.database, clock)
+    this.closeOrder = new CloseOrderUseCase(this.database, clock)
     this.defineApprovalPolicy = new DefineApprovalPolicyUseCase(this.database, clock)
     this.eventHandlers = new ProcurementModuleEventHandlers(this.database, clock)
   }

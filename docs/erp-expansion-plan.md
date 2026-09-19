@@ -514,8 +514,11 @@ and the cash flow, the result of the period and the drill-down to source facts a
 
 **In progress.** Requisitions, supplier quotations and their comparison, approval thresholds
 and purchase orders are delivered as
-[plan phase 26](plan.md#phase-26--purchasing-a-need-what-suppliers-would-charge-and-what-the-company-committed-to).
-Receiving and the returns, inventory movements and payables it produces follow.
+[plan phase 26](plan.md#phase-26--purchasing-a-need-what-suppliers-would-charge-and-what-the-company-committed-to),
+and receiving — partial and over-receipt, returns, the inventory movement and the payable
+they produce — as
+[plan phase 27](plan.md#phase-27--receiving-the-goods-on-the-shelf-and-the-money-owed-for-them-from-one-fact).
+The purchasing screens close the phase.
 
 **Deliverables**
 

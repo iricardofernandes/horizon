@@ -36,6 +36,13 @@
       "when": 1790600000000,
       "tag": "0004_forecasts",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790960000000,
+      "tag": "0005_purchasing",
+      "breakpoints": true
     }
   ]
 }

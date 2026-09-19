@@ -27,6 +27,7 @@ import { BusinessDate, Currency, Money, Share } from '@/domain/value-objects/fin
 import { APPROVAL_STATES, type ApprovalState } from '@/domain/value-objects/title-approval'
 import { DocumentNumber, Memo, Reason } from '@/domain/value-objects/title-values'
 import * as schema from './schema'
+import { originOf } from './title-origin'
 
 type Database = PostgresJsDatabase<typeof schema>
 export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
@@ -54,10 +55,7 @@ export function mapTitle(
 ): Title {
   const currency = restored(Currency.create(row.currency))
   const money = (amount: bigint) => Money.of(amount, currency)
-  const origin: TitleOrigin =
-    row.originType === 'sales-order' && row.originOrderId
-      ? { type: 'sales-order', orderId: row.originOrderId }
-      : { type: 'manual' }
+  const origin: TitleOrigin = originOf(row.originType, row.originDocumentId)
   const closure =
     row.closedAt && row.closureReason
       ? { at: row.closedAt, reason: restored(Reason.create(row.closureReason)) }
@@ -160,7 +158,7 @@ function titleRow(title: Title) {
     tenantId: snapshot.tenantId,
     direction: snapshot.direction,
     originType: snapshot.origin.type,
-    originOrderId: snapshot.origin.type === 'sales-order' ? snapshot.origin.orderId : null,
+    originDocumentId: snapshot.origin.type === 'manual' ? null : snapshot.origin.documentId,
     partyId: snapshot.partyId,
     documentNumber: snapshot.documentNumber,
     description: snapshot.description,
@@ -285,12 +283,15 @@ export function titlesRepository(tx: Transaction, tenantId: string): TitlesRepos
   }
   return {
     findForUpdate: (id) => lockedOne(eq(schema.titles.id, id)),
-    findByOrderForUpdate: async (direction, orderId) => {
+    findByOriginForUpdate: async (direction, documentId) => {
       const rows = await tx
         .select()
         .from(schema.titles)
         .where(
-          and(eq(schema.titles.direction, direction), eq(schema.titles.originOrderId, orderId)),
+          and(
+            eq(schema.titles.direction, direction),
+            eq(schema.titles.originDocumentId, documentId),
+          ),
         )
         .limit(1)
         .for('update')

@@ -186,7 +186,7 @@ describe('a forecast', () => {
       Title.draft({
         tenantId: 't',
         direction: 'receivable',
-        origin: { type: 'sales-order', orderId: '0192a3b4-0000-7000-8000-00000000000e' },
+        origin: { type: 'sales-order', documentId: '0192a3b4-0000-7000-8000-00000000000e' },
         terms: terms(),
         stage: 'forecast',
         now,

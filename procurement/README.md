@@ -8,8 +8,8 @@ own lifecycle. It is reached through Kong at `/procurement`, never directly, and
 no source with any other module (ADR 0001). Suppliers come from `parties/` and items from
 `catalog/`, as projections it keeps for itself (ADR 0040); it owns neither.
 
-**Status: phase 26 — requisitions, supplier quotations and their comparison, approval
-thresholds and purchase orders.**
+**Status: phase 27 — requisitions, supplier quotations and their comparison, approval
+thresholds, purchase orders, and the receiving that turns them into stock and money.**
 
 ---
 
@@ -44,6 +44,21 @@ thresholds and purchase orders.**
 - **Four eyes** — whoever submitted a requisition cannot decide it, and whoever placed an
   order cannot approve it. Both are enforced in the aggregate, and the order's is checked
   again by a database constraint.
+- **Receiving** — a delivery against an order, in part or in full. What the goods make owed
+  is their share of the order's total, because tax, freight and the discount were agreed
+  for the order as a whole; the share is taken cumulatively, so the parts always add back
+  up to the whole and the last delivery of a complete order leaves nothing behind. More may
+  arrive than was ordered, and sometimes that is fine — but never silently: it takes a
+  reason, and the reason is kept, because a delivery nobody agreed to is a cost nobody
+  agreed to.
+- **Returns** — a delivery sent back. The goods leave stock again, what they made owed is
+  withdrawn, and what the order still expects goes back up by the same amount, because a
+  rejected delivery is a delivery the supplier still owes. The receipt and the return both
+  stay in the record; neither replaces the other (ADR 0042).
+- **Closing** — an order stops expecting anything more, either because everything arrived
+  or because a person said so, with a reason. Whatever was still committed stops being
+  expected. An order that has taken delivery is closed rather than cancelled: cancelling
+  something that already happened is not a thing anyone can do.
 
 ## Events
 
@@ -56,6 +71,9 @@ thresholds and purchase orders.**
 | `procurement.order.approved` | The company committed to buy, with the dated payment schedule |
 | `procurement.order.rejected` | An order waiting for approval was refused |
 | `procurement.order.cancelled` | An order was withdrawn, saying whether anything was committed |
+| `procurement.receipt.recorded` | Goods arrived: what they are worth, what is still committed |
+| `procurement.receipt.returned` | A delivery went back, and what the order expects again |
+| `procurement.order.closed` | Nothing more is expected, complete or closed short |
 
 It consumes `parties.party.registered`, `parties.party.updated` and `parties.party.erased`
 to keep its supplier projection, and `catalog.item.created` and `catalog.item.deactivated`
@@ -63,6 +81,10 @@ to know what an item is called.
 
 `procurement.order.approved` carries the payment schedule the agreed terms imply, already
 dated, so no consumer has to know that the terms were expressed as day offsets.
+`procurement.receipt.recorded` carries two such schedules: one for what the delivery made
+owed, and one for what is still committed and has not arrived. `inventory/` moves the stock
+from it and `financial/` raises the payable from it, so the goods on the shelf and the money
+owed for them can never disagree about what arrived.
 
 Every command that creates a document requires an `Idempotency-Key` header (ADR 0028); a
 decision on a document that already exists does not, because repeating one is refused by
@@ -96,9 +118,12 @@ is built from lines, tax, charges and a discount, how payment terms split a tota
 not divide evenly without losing a minor unit, and the four-eyes rule on both documents.
 
 `npm run test:e2e` starts PostgreSQL with Testcontainers and proves the path from a need to
-a commitment — requisition, approval, two quotations, the comparison, the selection that
-declines the other, and the order written from what was chosen — as well as idempotent
-creation, a requisition being answered by at most one order, a threshold committing one
-order and holding another, the published `procurement.order.approved` payload matching the
-contract, the lines of a committed order refusing to change under any role, one workspace
-being invisible to another, and the audit log refusing to be rewritten.
+a commitment to a delivery — requisition, approval, two quotations, the comparison, the
+selection that declines the other, the order written from what was chosen, and two partial
+deliveries whose values add back up to the order exactly. It also proves idempotent
+creation and idempotent receiving, a requisition being answered by at most one order, a
+threshold committing one order and holding another, an over-receipt refused until somebody
+says why, a return putting back what it took away, the published payloads matching their
+contracts, the lines of a committed order refusing to change under any role, goods refused
+against an order nobody committed to, one workspace being invisible to another, and the
+audit log refusing to be rewritten.

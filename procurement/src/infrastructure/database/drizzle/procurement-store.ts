@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { asc, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { AuditRecord, AuditTrail, ProcurementScope } from '@/application/ports/unit-of-work'
 import { canonicalJson } from '@/core/audit/canonical-json'
 import type { Either } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
+import { GoodsReceipt, RECEIPT_STATUSES, type ReceiptStatus } from '@/domain/entities/goods-receipt'
 import {
   APPROVAL_STATES,
   type ApprovalState,
@@ -206,9 +207,47 @@ function mapOrder(
         reason: row.approvalReason ? restored(Reason.create(row.approvalReason)) : null,
       },
       closure: row.closureReason ? restored(Reason.create(row.closureReason)) : null,
+      received: lineRows
+        .filter((line) => line.received > 0n)
+        .map((line) => ({ lineId: line.lineId, quantity: Quantity.fromMicros(line.received) })),
+      receipts: row.receipts,
       version: row.version,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
+function mapReceipt(
+  row: typeof schema.receipts.$inferSelect,
+  lineRows: readonly (typeof schema.receiptLines.$inferSelect)[],
+): GoodsReceipt {
+  const currency = restored(Currency.create(row.currency))
+  return GoodsReceipt.rehydrate(
+    {
+      tenantId: row.tenantId,
+      orderId: row.orderId,
+      warehouseId: row.warehouseId,
+      receivedOn: restored(BusinessDate.create(row.receivedOn)),
+      receivedBy: row.receivedBy,
+      currency,
+      lines: lineRows.map((line) => ({
+        lineId: line.lineId,
+        itemId: line.itemId,
+        description: line.description,
+        quantity: Quantity.fromMicros(line.quantity),
+        unitPrice: Money.of(line.unitPrice, currency),
+        lineTotal: Money.of(line.lineTotal, currency),
+      })),
+      value: Money.of(row.value, currency),
+      notes: restored(Memo.create(row.notes ?? undefined)),
+      overrideReason: row.overrideReason ? restored(Reason.create(row.overrideReason)) : null,
+      status: oneOf<ReceiptStatus>(RECEIPT_STATUSES, row.status, 'receipt status'),
+      returnedBy: row.returnedBy,
+      returnedAt: row.returnedAt,
+      returnReason: row.returnReason ? restored(Reason.create(row.returnReason)) : null,
+      createdAt: row.createdAt,
     },
     new UniqueEntityID(row.id),
   )
@@ -306,6 +345,18 @@ async function loadQuotation(
     .where(eq(schema.quotationLines.quotationId, row.id))
     .orderBy(asc(schema.quotationLines.lineId))
   return mapQuotation(row, lines)
+}
+
+async function loadReceipt(
+  tx: Transaction,
+  row: typeof schema.receipts.$inferSelect,
+): Promise<GoodsReceipt> {
+  const lines = await tx
+    .select()
+    .from(schema.receiptLines)
+    .where(eq(schema.receiptLines.receiptId, row.id))
+    .orderBy(asc(schema.receiptLines.lineId))
+  return mapReceipt(row, lines)
 }
 
 async function loadOrder(
@@ -586,6 +637,7 @@ export function makeScope(tx: Transaction, tenantId: string): ProcurementScope {
           approvalDecidedAt: row.approvalDecidedAt,
           approvalReason: row.approvalReason,
           closureReason: row.closureReason,
+          receipts: row.receipts,
           version: row.version,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
@@ -619,11 +671,96 @@ export function makeScope(tx: Transaction, tenantId: string): ProcurementScope {
             approvalDecidedAt: row.approvalDecidedAt,
             approvalReason: row.approvalReason,
             closureReason: row.closureReason,
+            receipts: row.receipts,
             version: row.version,
             updatedAt: row.updatedAt,
           })
           .where(eq(schema.orders.id, row.id))
+        for (const line of row.lines)
+          await tx
+            .update(schema.orderLines)
+            .set({ received: microsOf(line.received) })
+            .where(
+              and(eq(schema.orderLines.orderId, row.id), eq(schema.orderLines.lineId, line.lineId)),
+            )
         await publishAll(tx, tenantId, order)
+      },
+    },
+    receipts: {
+      findById: async (id) => {
+        const [row] = await tx
+          .select()
+          .from(schema.receipts)
+          .where(eq(schema.receipts.id, id))
+          .limit(1)
+        return row ? loadReceipt(tx, row) : null
+      },
+      findForUpdate: async (id) => {
+        const [row] = await tx
+          .select()
+          .from(schema.receipts)
+          .where(eq(schema.receipts.id, id))
+          .limit(1)
+          .for('update')
+        return row ? loadReceipt(tx, row) : null
+      },
+      listForOrder: async (orderId) => {
+        const rows = await tx
+          .select()
+          .from(schema.receipts)
+          .where(eq(schema.receipts.orderId, orderId))
+          .orderBy(asc(schema.receipts.receivedOn), asc(schema.receipts.id))
+        const found: GoodsReceipt[] = []
+        for (const row of rows) found.push(await loadReceipt(tx, row))
+        return found
+      },
+      create: async (receipt) => {
+        const row = receipt.toSnapshot()
+        assertTenant(row.tenantId)
+        await tx.insert(schema.receipts).values({
+          id: row.id,
+          tenantId: row.tenantId,
+          orderId: row.orderId,
+          warehouseId: row.warehouseId,
+          receivedOn: row.receivedOn,
+          receivedBy: row.receivedBy,
+          currency: row.currency,
+          value: BigInt(row.value),
+          notes: row.notes,
+          overrideReason: row.overrideReason,
+          status: row.status,
+          returnedBy: row.returnedBy,
+          returnedAt: row.returnedAt,
+          returnReason: row.returnReason,
+          createdAt: row.createdAt,
+        })
+        await tx.insert(schema.receiptLines).values(
+          row.lines.map((line) => ({
+            tenantId: row.tenantId,
+            receiptId: row.id,
+            lineId: line.lineId,
+            itemId: line.itemId,
+            description: line.description,
+            quantity: microsOf(line.quantity),
+            unitPrice: BigInt(line.unitPrice),
+            lineTotal: BigInt(line.lineTotal),
+          })),
+        )
+        await publishAll(tx, tenantId, receipt)
+      },
+      save: async (receipt) => {
+        const row = receipt.toSnapshot()
+        assertTenant(row.tenantId)
+        await tx
+          .update(schema.receipts)
+          .set({
+            status: row.status,
+            returnedBy: row.returnedBy,
+            returnedAt: row.returnedAt,
+            returnReason: row.returnReason,
+          })
+          .where(eq(schema.receipts.id, row.id))
+        await publishAll(tx, tenantId, receipt)
       },
     },
     policies: {

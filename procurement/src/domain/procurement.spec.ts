@@ -380,3 +380,181 @@ describe('purchase order', () => {
     expect(snapshot.total).toBe('25000')
   })
 })
+
+describe('receiving', () => {
+  const RECEIVED_ON = date('2026-09-20')
+
+  /** Ten units at 25.00, plus 100.00 of freight: a total that does not divide evenly. */
+  function delivering(terms: number[] = [30]) {
+    return valid(
+      PurchaseOrder.draft({
+        tenantId,
+        supplier: { supplierId: SUPPLIER, name: supplierName },
+        requisitionId: null,
+        quotationId: null,
+        warehouseId: WAREHOUSE,
+        currency: brl,
+        lines: [{ ...line(LINE_A, PAPER, '10'), unitPrice: money(2500) }],
+        charges: { ...noCharges(brl), freight: money(10_000) },
+        paymentTerms: valid(PaymentTerms.create(terms)),
+        issuedOn: date('2026-09-16'),
+        expectedOn: date('2026-09-26'),
+        notes: null,
+        now,
+      }),
+    )
+  }
+
+  function approvedOrder(terms?: number[]) {
+    const order = delivering(terms)
+    valid(order.place(BUYER, now, { approvalRequired: false }))
+    order.pullDomainEvents()
+    return order
+  }
+
+  it('carries the order charges in proportion to the goods in the delivery', () => {
+    const order = approvedOrder()
+    const half = valid(
+      order.receive(
+        {
+          receivedOn: RECEIVED_ON,
+          lines: [{ lineId: LINE_A, quantity: quantity('5') }],
+          override: null,
+        },
+        now,
+      ),
+    )
+    // Half the goods carry half the freight: 12500 + 5000.
+    expect(half.value.amount).toBe(17_500n)
+    expect(half.remaining.amount).toBe(17_500n)
+    expect(half.complete).toBe(false)
+  })
+
+  it('leaves nothing behind when the last delivery completes the order', () => {
+    const order = approvedOrder()
+    const first = valid(
+      order.receive(
+        {
+          receivedOn: RECEIVED_ON,
+          lines: [{ lineId: LINE_A, quantity: quantity('3') }],
+          override: null,
+        },
+        now,
+      ),
+    )
+    const second = valid(
+      order.receive(
+        {
+          receivedOn: RECEIVED_ON,
+          lines: [{ lineId: LINE_A, quantity: quantity('7') }],
+          override: null,
+        },
+        now,
+      ),
+    )
+    expect(first.value.plus(second.value).amount).toBe(order.total().amount)
+    expect(second.remaining.isZero()).toBe(true)
+    expect(second.complete).toBe(true)
+    expect(order.status).toBe('received')
+  })
+
+  it('refuses more than was ordered until somebody says why', () => {
+    const order = approvedOrder()
+    const refused = order.receive(
+      {
+        receivedOn: RECEIVED_ON,
+        lines: [{ lineId: LINE_A, quantity: quantity('11') }],
+        override: null,
+      },
+      now,
+    )
+    expect(refused.isLeft()).toBe(true)
+    const accepted = valid(
+      order.receive(
+        {
+          receivedOn: RECEIVED_ON,
+          lines: [{ lineId: LINE_A, quantity: quantity('11') }],
+          override: reason,
+        },
+        now,
+      ),
+    )
+    // More arrived than was ordered, so more is owed than the order total, and nothing
+    // is still expected.
+    expect(accepted.value.amount).toBeGreaterThan(order.total().amount)
+    expect(accepted.remaining.isZero()).toBe(true)
+    expect(accepted.overReceipt).toBe(true)
+  })
+
+  it('will not take delivery against an order nobody committed to', () => {
+    const drafted = delivering()
+    expect(
+      drafted
+        .receive(
+          {
+            receivedOn: RECEIVED_ON,
+            lines: [{ lineId: LINE_A, quantity: quantity('1') }],
+            override: null,
+          },
+          now,
+        )
+        .isLeft(),
+    ).toBe(true)
+  })
+
+  it('puts back what a return takes away', () => {
+    const order = approvedOrder()
+    valid(
+      order.receive(
+        {
+          receivedOn: RECEIVED_ON,
+          lines: [{ lineId: LINE_A, quantity: quantity('10') }],
+          override: null,
+        },
+        now,
+      ),
+    )
+    expect(order.status).toBe('received')
+    const undone = valid(order.unreceive([{ lineId: LINE_A, quantity: quantity('10') }], now))
+    expect(undone.remaining.amount).toBe(order.total().amount)
+    expect(order.status).toBe('approved')
+    expect(order.unreceive([{ lineId: LINE_A, quantity: quantity('1') }], now).isLeft()).toBe(true)
+  })
+
+  it('cannot be cancelled once goods have arrived, only closed', () => {
+    const order = approvedOrder()
+    valid(
+      order.receive(
+        {
+          receivedOn: RECEIVED_ON,
+          lines: [{ lineId: LINE_A, quantity: quantity('1') }],
+          override: null,
+        },
+        now,
+      ),
+    )
+    expect(order.cancel(reason, now).isLeft()).toBe(true)
+    valid(order.close(reason, now))
+    expect(order.status).toBe('closed')
+    const closed = order.pullDomainEvents().at(-1)
+    expect(closed?.eventType).toBe('procurement.order.closed')
+    expect(closed?.payloadOf().complete).toBe(false)
+  })
+
+  it('splits what a delivery owes across the order payment terms', () => {
+    const order = approvedOrder([0, 30])
+    const plan = valid(
+      order.receive(
+        {
+          receivedOn: RECEIVED_ON,
+          lines: [{ lineId: LINE_A, quantity: quantity('10') }],
+          override: null,
+        },
+        now,
+      ),
+    )
+    expect(plan.installments.map((part) => part.dueOn.value)).toEqual(['2026-09-20', '2026-10-20'])
+    const sum = plan.installments.reduce((total, part) => total + part.amount.amount, 0n)
+    expect(sum).toBe(plan.value.amount)
+  })
+})

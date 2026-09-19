@@ -3,7 +3,11 @@ import type { Title, TitleDirection } from '../entities/title'
 export abstract class TitlesRepository {
   /** Loads the title and locks it for the rest of the transaction. */
   abstract findForUpdate(id: string): Promise<Title | null>
-  abstract findByOrderForUpdate(direction: TitleDirection, orderId: string): Promise<Title | null>
+  /** The title raised from one document, whichever kind of document it was. */
+  abstract findByOriginForUpdate(
+    direction: TitleDirection,
+    documentId: string,
+  ): Promise<Title | null>
   abstract create(title: Title): Promise<void>
   /** Persists the state and publishes the pending events in the same transaction. */
   abstract save(title: Title): Promise<void>

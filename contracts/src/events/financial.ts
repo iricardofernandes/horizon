@@ -8,10 +8,22 @@ export const TITLE_DIRECTIONS = ['receivable', 'payable'] as const
 const titleId = uuidSchema.describe('Financial title identifier')
 const reason = z.string().trim().min(3).max(500)
 
-/** Where a title came from. A title raised from a sales order names the order. */
+/**
+ * Where a title came from: the document that raised it.
+ *
+ * `documentId` is the field to read, whatever the kind. A sales order also carries the
+ * same value as `orderId`, which is what this schema published first and therefore cannot
+ * stop publishing (ADR 0030); the two are always equal.
+ */
 const originSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('manual') }),
-  z.object({ type: z.literal('sales-order'), orderId: uuidSchema }),
+  z.object({
+    type: z.literal('sales-order'),
+    orderId: uuidSchema,
+    documentId: uuidSchema.optional(),
+  }),
+  z.object({ type: z.literal('purchase-order'), documentId: uuidSchema }),
+  z.object({ type: z.literal('purchase-receipt'), documentId: uuidSchema }),
 ])
 
 /** Shared by both directions, so a receivable and a payable carry the same shape. */

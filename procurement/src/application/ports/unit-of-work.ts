@@ -5,6 +5,7 @@ import type {
   CatalogItemsRepository,
   PurchaseOrdersRepository,
   QuotationsRepository,
+  ReceiptsRepository,
   RequisitionsRepository,
   SuppliersRepository,
 } from '@/domain/repositories/procurement-repositories'
@@ -13,7 +14,7 @@ import type {
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'requisition' | 'quotation' | 'order' | 'policy' | 'supplier'
+  readonly subjectType: 'requisition' | 'quotation' | 'order' | 'receipt' | 'policy' | 'supplier'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -29,6 +30,7 @@ export interface ProcurementScope {
   readonly requisitions: RequisitionsRepository
   readonly quotations: QuotationsRepository
   readonly orders: PurchaseOrdersRepository
+  readonly receipts: ReceiptsRepository
   readonly suppliers: SuppliersRepository
   readonly catalogItems: CatalogItemsRepository
   readonly policies: ApprovalPoliciesRepository

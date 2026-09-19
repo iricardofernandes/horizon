@@ -19,6 +19,11 @@ import {
   OpenRequisitionUseCase,
   ReviseRequisitionUseCase,
 } from '@/application/use-cases/manage-requisitions'
+import {
+  CloseOrderUseCase,
+  ReceiveGoodsUseCase,
+  ReturnGoodsUseCase,
+} from '@/application/use-cases/receive-goods'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { Supplier } from '@/domain/entities/supplier'
 import { LineDescription, PartyName } from '@/domain/value-objects/procurement-values'
@@ -160,6 +165,9 @@ async function workspace() {
     revising: new ReviseRequisitionUseCase(database, clock),
     revisingOrder: new ReviseOrderUseCase(database, clock),
     declining: new DeclineQuotationUseCase(database, clock),
+    receiving: new ReceiveGoodsUseCase(database, clock),
+    returning: new ReturnGoodsUseCase(database, clock),
+    closing: new CloseOrderUseCase(database, clock),
     policies: new DefineApprovalPolicyUseCase(database, clock),
   }
 }
@@ -418,5 +426,231 @@ describe('what the database refuses', () => {
     await expect(
       administrator`update audit_log set actor = 'nobody' where tenant_id = ${shop.tenantId}::uuid`,
     ).rejects.toThrow(/append-only/)
+  })
+})
+
+describe('receiving', () => {
+  async function committedOrder(
+    shop: Awaited<ReturnType<typeof workspace>>,
+    options: { quantity?: string; freight?: string; terms?: number[] } = {},
+  ) {
+    value(
+      await shop.policies.execute({
+        context: shop.context(MANAGER),
+        currency: 'BRL',
+        threshold: '100000000',
+      }),
+    )
+    const lineId = randomUUID()
+    const order = value<{ id: string; total: string }>(
+      await shop.drafting.execute({
+        context: shop.idempotent(),
+        order: {
+          supplierId: shop.supplierId,
+          warehouseId: shop.warehouseId,
+          currency: 'BRL',
+          issuedOn: '2026-09-16',
+          expectedOn: '2026-09-30',
+          paymentTermDays: options.terms ?? [30],
+          charges: options.freight ? { freight: options.freight } : undefined,
+          lines: [
+            {
+              lineId,
+              itemId: shop.paper,
+              quantity: options.quantity ?? '10',
+              unitPrice: '2500',
+            },
+          ],
+        },
+      }),
+    )
+    value(await shop.decidingOrder.place(shop.context(), order.id))
+    return { ...order, lineId }
+  }
+
+  it('takes delivery in parts, and the parts add back up to the order', async () => {
+    const shop = await workspace()
+    const order = await committedOrder(shop, { freight: '10000' })
+    const first = value<{ id: string; value: string; complete: boolean }>(
+      await shop.receiving.execute({
+        context: shop.idempotent(),
+        delivery: {
+          orderId: order.id,
+          receivedOn: '2026-09-20',
+          lines: [{ lineId: order.lineId, quantity: '3' }],
+        },
+      }),
+    )
+    expect(first.complete).toBe(false)
+    const second = value<{ value: string; complete: boolean }>(
+      await shop.receiving.execute({
+        context: shop.idempotent(),
+        delivery: {
+          orderId: order.id,
+          receivedOn: '2026-09-25',
+          lines: [{ lineId: order.lineId, quantity: '7' }],
+        },
+      }),
+    )
+    expect(second.complete).toBe(true)
+    expect(BigInt(first.value) + BigInt(second.value)).toBe(BigInt(order.total))
+
+    const detail = await database.orderDetail(shop.tenantId, order.id)
+    expect(detail?.status).toBe('received')
+    expect(detail?.receipts).toBe(2)
+    expect(detail?.data[0]?.received).toBe('10')
+    expect(detail?.data[0]?.outstanding).toBe('0')
+    const receipts = await database.listReceipts(shop.tenantId, order.id)
+    expect(receipts.map((one) => one.status)).toEqual(['recorded', 'recorded'])
+  })
+
+  it('receives the same delivery once, however often the request is retried', async () => {
+    const shop = await workspace()
+    const order = await committedOrder(shop)
+    const key = randomUUID()
+    const delivery = {
+      orderId: order.id,
+      receivedOn: '2026-09-20',
+      lines: [{ lineId: order.lineId, quantity: '4' }],
+    }
+    const first = value<{ id: string }>(
+      await shop.receiving.execute({ context: shop.idempotent(BUYER, key), delivery }),
+    )
+    const again = value<{ id: string }>(
+      await shop.receiving.execute({ context: shop.idempotent(BUYER, key), delivery }),
+    )
+    expect(again.id).toBe(first.id)
+    expect((await database.listReceipts(shop.tenantId, order.id)).length).toBe(1)
+    expect((await database.orderDetail(shop.tenantId, order.id))?.data[0]?.received).toBe('4')
+  })
+
+  it('refuses more than was ordered until somebody says why', async () => {
+    const shop = await workspace()
+    const order = await committedOrder(shop)
+    const refused = await shop.receiving.execute({
+      context: shop.idempotent(),
+      delivery: {
+        orderId: order.id,
+        receivedOn: '2026-09-20',
+        lines: [{ lineId: order.lineId, quantity: '12' }],
+      },
+    })
+    expect(refused.isLeft()).toBe(true)
+    value(
+      await shop.receiving.execute({
+        context: shop.idempotent(),
+        delivery: {
+          orderId: order.id,
+          receivedOn: '2026-09-20',
+          lines: [{ lineId: order.lineId, quantity: '12' }],
+          overrideReason: 'The supplier shipped a full pallet and we kept it',
+        },
+      }),
+    )
+    const receipts = await database.listReceipts(shop.tenantId, order.id)
+    expect(receipts[0]?.overrideReason).toContain('full pallet')
+  })
+
+  it('puts back what a return takes away, and says what is expected again', async () => {
+    const shop = await workspace()
+    const order = await committedOrder(shop)
+    const receipt = value<{ id: string }>(
+      await shop.receiving.execute({
+        context: shop.idempotent(),
+        delivery: {
+          orderId: order.id,
+          receivedOn: '2026-09-20',
+          lines: [{ lineId: order.lineId, quantity: '10' }],
+        },
+      }),
+    )
+    value(
+      await shop.returning.execute({
+        context: shop.context(),
+        receiptId: receipt.id,
+        reason: 'The paper arrived damaged',
+      }),
+    )
+    const detail = await database.orderDetail(shop.tenantId, order.id)
+    expect(detail?.status).toBe('approved')
+    expect(detail?.data[0]?.received).toBe('0')
+    const returned = await database.listReceipts(shop.tenantId, order.id)
+    expect(returned[0]?.status).toBe('returned')
+
+    const events = await administrator`
+      select event_type, payload from outbox where tenant_id = ${shop.tenantId}
+      order by created_at`
+    const back = events.find((row) => row.event_type === 'procurement.receipt.returned')
+    const definition = findEvent('procurement.receipt.returned', 1)
+    expect(definition?.payload.safeParse(back?.payload).success).toBe(true)
+    const returnedPayload = back?.payload as { remaining: { amount: string } } | undefined
+    expect(returnedPayload?.remaining.amount).toBe(order.total)
+  })
+
+  it('publishes a receipt that matches the contract, with both schedules dated', async () => {
+    const shop = await workspace()
+    const order = await committedOrder(shop, { freight: '10000', terms: [0, 30] })
+    value(
+      await shop.receiving.execute({
+        context: shop.idempotent(),
+        delivery: {
+          orderId: order.id,
+          receivedOn: '2026-09-20',
+          lines: [{ lineId: order.lineId, quantity: '5' }],
+        },
+      }),
+    )
+    const events = await administrator`
+      select event_type, payload from outbox where tenant_id = ${shop.tenantId}
+      order by created_at`
+    const recorded = events.find((row) => row.event_type === 'procurement.receipt.recorded')
+    const definition = findEvent('procurement.receipt.recorded', 1)
+    expect(definition?.payload.safeParse(recorded?.payload).success).toBe(true)
+    const payload = recorded?.payload as {
+      value: { amount: string }
+      remaining: { amount: string }
+      installments: { dueOn: string; amount: { amount: string } }[]
+      remainingInstallments: { dueOn: string }[]
+    }
+    // Half the goods carry half the freight, and what is left is the other half.
+    expect(payload.value.amount).toBe('17500')
+    expect(payload.remaining.amount).toBe('17500')
+    expect(payload.installments.map((one) => one.dueOn)).toEqual(['2026-09-20', '2026-10-20'])
+    expect(payload.remainingInstallments.map((one) => one.dueOn)).toEqual([
+      '2026-09-16',
+      '2026-10-16',
+    ])
+  })
+
+  it('refuses goods against an order nobody committed to, under any role', async () => {
+    const shop = await workspace()
+    const drafted = value<{ id: string }>(
+      await shop.drafting.execute({
+        context: shop.idempotent(),
+        order: {
+          supplierId: shop.supplierId,
+          warehouseId: shop.warehouseId,
+          currency: 'BRL',
+          issuedOn: '2026-09-16',
+          expectedOn: '2026-09-30',
+          lines: [{ lineId: randomUUID(), itemId: shop.paper, quantity: '1', unitPrice: '1000' }],
+        },
+      }),
+    )
+    const refused = await shop.receiving.execute({
+      context: shop.idempotent(),
+      delivery: {
+        orderId: drafted.id,
+        receivedOn: '2026-09-20',
+        lines: [{ lineId: randomUUID(), quantity: '1' }],
+      },
+    })
+    expect(refused.isLeft()).toBe(true)
+    await expect(
+      administrator`insert into receipts
+        (id, tenant_id, order_id, warehouse_id, received_on, received_by, currency, value, status, created_at)
+        values (${randomUUID()}::uuid, ${shop.tenantId}::uuid, ${drafted.id}::uuid,
+          ${shop.warehouseId}::uuid, '2026-09-20', 'nobody', 'BRL', 0, 'recorded', now())`,
+    ).rejects.toThrow(/is not receiving goods/)
   })
 })

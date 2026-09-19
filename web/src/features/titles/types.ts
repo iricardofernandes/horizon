@@ -18,7 +18,9 @@ export function natureOf(direction: Direction): 'revenue' | 'expense' {
 
 export type ApprovalState = 'none' | 'pending' | 'approved' | 'rejected' | 'not-required'
 
-export type Origin = { type: 'manual' } | { type: 'sales-order'; orderId: string }
+export type Origin =
+  | { type: 'manual' }
+  | { type: 'sales-order' | 'purchase-order' | 'purchase-receipt'; documentId: string }
 
 export type TitleStatus = 'draft' | 'posted' | 'cancelled' | 'reversed'
 export type SettlementState = 'open' | 'partially-settled' | 'settled'

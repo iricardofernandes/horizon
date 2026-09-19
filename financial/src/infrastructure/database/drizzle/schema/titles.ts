@@ -40,7 +40,7 @@ export const titles = pgTable('titles', {
     .references(() => tenants.id),
   direction: text('direction').notNull(),
   originType: text('origin_type').notNull(),
-  originOrderId: uuid('origin_order_id'),
+  originDocumentId: uuid('origin_document_id'),
   partyId: uuid('party_id').notNull(),
   documentNumber: text('document_number').notNull(),
   description: text('description'),

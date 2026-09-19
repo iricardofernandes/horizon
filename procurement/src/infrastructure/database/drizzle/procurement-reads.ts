@@ -228,6 +228,7 @@ export type OrderRow = {
   readonly expectedOn: string
   readonly status: string
   readonly approvalState: string
+  readonly receipts: number
   readonly lines: number
   readonly updatedAt: string
 }
@@ -245,7 +246,7 @@ export async function listOrders(
     select o.id, o.supplier_id as "supplierId", o.supplier_name as "supplierName",
       o.requisition_id as "requisitionId", o.warehouse_id as "warehouseId", o.currency,
       o.total::text, o.issued_on as "issuedOn", o.expected_on as "expectedOn",
-      o.status, o.approval_state as "approvalState",
+      o.status, o.approval_state as "approvalState", o.receipts,
       (select count(*)::int from order_lines l where l.order_id = o.id) as lines,
       o.updated_at as "updatedAt",
       count(*) over ()::int as total_rows
@@ -280,6 +281,8 @@ export type OrderDetail = OrderRow & {
     readonly quantity: string
     readonly unitPrice: string
     readonly lineTotal: string
+    readonly received: string
+    readonly outstanding: string
   }[]
 }
 
@@ -293,7 +296,7 @@ export async function orderDetail(tx: Transaction, id: string): Promise<OrderDet
       o.expected_on as "expectedOn", o.notes, o.status, o.approval_state as "approvalState",
       o.approval_requested_by as "approvalRequestedBy",
       o.approval_decided_by as "approvalDecidedBy", o.approval_reason as "approvalReason",
-      o.closure_reason as "closureReason", o.version,
+      o.closure_reason as "closureReason", o.version, o.receipts,
       (select count(*)::int from order_lines l where l.order_id = o.id) as lines,
       o.updated_at as "updatedAt"
     from orders o where o.id = ${id}::uuid
@@ -302,10 +305,64 @@ export async function orderDetail(tx: Transaction, id: string): Promise<OrderDet
   const data = await tx.execute<OrderDetail['data'][number]>(sql`
     select l.line_id as "lineId", l.item_id as "itemId", l.description,
       ${quantity('l.quantity')} as quantity,
-      l.unit_price::text as "unitPrice", l.line_total::text as "lineTotal"
+      l.unit_price::text as "unitPrice", l.line_total::text as "lineTotal",
+      ${quantity('l.received')} as received,
+      ${quantity('greatest(l.quantity - l.received, 0)')} as outstanding
     from order_lines l where l.order_id = ${id}::uuid order by l.line_id
   `)
   return { ...head, data }
+}
+
+export type ReceiptRow = {
+  readonly id: string
+  readonly orderId: string
+  readonly receivedOn: string
+  readonly receivedBy: string
+  readonly currency: string
+  readonly value: string
+  readonly status: string
+  readonly notes: string | null
+  readonly overrideReason: string | null
+  readonly returnReason: string | null
+  readonly lines: readonly {
+    readonly lineId: string
+    readonly itemId: string
+    readonly description: string
+    readonly quantity: string
+  }[]
+}
+
+/** Every delivery against one order, oldest first: the conference a buyer reads. */
+export async function listReceipts(
+  tx: Transaction,
+  orderId: string,
+): Promise<readonly ReceiptRow[]> {
+  const heads = await tx.execute<Omit<ReceiptRow, 'lines'>>(sql`
+    select r.id, r.order_id as "orderId", r.received_on as "receivedOn",
+      r.received_by as "receivedBy", r.currency, r.value::text, r.status, r.notes,
+      r.override_reason as "overrideReason", r.return_reason as "returnReason"
+    from receipts r where r.order_id = ${orderId}::uuid
+    order by r.received_on, r.id
+  `)
+  if (heads.length === 0) return []
+  const lines = await tx.execute<{
+    receiptId: string
+    lineId: string
+    itemId: string
+    description: string
+    quantity: string
+  }>(sql`
+    select l.receipt_id as "receiptId", l.line_id as "lineId", l.item_id as "itemId",
+      l.description, ${quantity('l.quantity')} as quantity
+    from receipt_lines l
+    join receipts r on r.id = l.receipt_id
+    where r.order_id = ${orderId}::uuid
+    order by l.receipt_id, l.line_id
+  `)
+  return heads.map((head) => ({
+    ...head,
+    lines: lines.filter((line) => line.receiptId === head.id),
+  }))
 }
 
 export type SupplierRow = {

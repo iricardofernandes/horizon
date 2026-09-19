@@ -1,5 +1,6 @@
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
+import type { TitleOrigin } from '../entities/title'
 import type { Money } from '../value-objects/financial-values'
 
 abstract class FinancialEvent implements DomainEvent {
@@ -11,6 +12,20 @@ abstract class FinancialEvent implements DomainEvent {
     readonly occurredAt: Date,
   ) {}
   abstract payloadOf(): Readonly<Record<string, unknown>>
+}
+
+/**
+ * The origin as the published schema renders it.
+ *
+ * A sales order carries its identifier twice, as `orderId` and as `documentId`: the first
+ * is what the schema published before purchasing existed and cannot be withdrawn without
+ * breaking a consumer (ADR 0030), and the second is what every kind of origin now uses.
+ */
+export const originPayload = (origin: TitleOrigin) => {
+  if (origin.type === 'manual') return { type: origin.type }
+  if (origin.type === 'sales-order')
+    return { type: origin.type, orderId: origin.documentId, documentId: origin.documentId }
+  return { type: origin.type, documentId: origin.documentId }
 }
 
 export const moneyPayload = (money: Money) => ({

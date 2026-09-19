@@ -137,3 +137,60 @@ export const procurementOrderCancelled = defineEvent({
     wasApproved: z.boolean(),
   }),
 })
+
+export const procurementReceiptRecorded = defineEvent({
+  type: 'procurement.receipt.recorded',
+  version: 1,
+  description:
+    'Goods arrived against a purchase order. `value` is the share of the order total these goods carry — tax, freight and the discount were agreed for the order as a whole, so a partial delivery carries them in proportion — and `remaining` is what is still committed and has not arrived. Both come with their schedules already dated, so a consumer never has to know how the payment terms were expressed. `overReceipt` says more arrived than was ordered, which is only ever accepted deliberately and with a reason.',
+  payload: z.object({
+    orderId,
+    orderVersion: documentVersion,
+    receiptId: uuidSchema.describe('Goods receipt identifier'),
+    receivedBy: z.string().min(1).max(255),
+    receivedOn: dateSchema,
+    supplierId: uuidSchema,
+    supplierName: z.string().min(2).max(160),
+    warehouseId: uuidSchema.describe('Where the goods physically arrived'),
+    notes: z.string().max(500).nullable(),
+    overReceipt: z.boolean(),
+    complete: z.boolean().describe('Everything the order asked for has now arrived'),
+    value: moneySchema,
+    installments: z.array(installmentSchema),
+    remaining: moneySchema,
+    remainingInstallments: z.array(installmentSchema),
+    lines: z.array(orderLineSchema).min(1),
+  }),
+})
+
+export const procurementReceiptReturned = defineEvent({
+  type: 'procurement.receipt.returned',
+  version: 1,
+  description:
+    'A delivery was sent back. The goods leave stock again and what they made owed is withdrawn, while what the order still expects goes back up by the same amount — `remaining` is that figure after the return, on the same terms. The receipt and the return both stay in the record; neither replaces the other (ADR 0042).',
+  payload: z.object({
+    orderId,
+    orderVersion: documentVersion,
+    receiptId: uuidSchema,
+    returnedBy: z.string().min(1).max(255),
+    reason: z.string().min(3).max(300),
+    warehouseId: uuidSchema,
+    remaining: moneySchema,
+    remainingInstallments: z.array(installmentSchema),
+    lines: z.array(requestedLineSchema).min(1),
+  }),
+})
+
+export const procurementOrderClosed = defineEvent({
+  type: 'procurement.order.closed',
+  version: 1,
+  description:
+    'Nothing more is expected against this order. `complete` distinguishes an order that received everything it asked for from one a person closed short; either way, whatever was still committed stops being expected.',
+  payload: z.object({
+    orderId,
+    orderVersion: documentVersion,
+    reason: z.string().min(3).max(300),
+    complete: z.boolean(),
+    receipts: z.number().int().min(0),
+  }),
+})

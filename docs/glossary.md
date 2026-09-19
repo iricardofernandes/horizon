@@ -362,3 +362,22 @@ approve it.
 When a supplier expects to be paid, as days after the order is issued — `30/60/90`. Days
 rather than dates, because the terms are agreed before anyone knows which day the order
 will be issued on; the dates are derived when the payable is raised.
+
+### goods receipt
+One delivery against a purchase order, in part or in full: what arrived, on what day, and
+what it made owed. It is the record of a physical event, so it is never edited; a delivery
+that turns out to be wrong is returned, and both the receipt and the return stay.
+
+### receipt share
+What a delivery makes owed. Tax, freight and the discount are agreed for the order as a
+whole, so a partial delivery carries them in proportion to the goods in it. The share is
+taken cumulatively and the earlier one subtracted, so the parts always add back up to the
+whole and the last delivery of a complete order leaves nothing behind.
+
+### over-receipt
+More arriving than was ordered. It is accepted only deliberately and only with a reason,
+which is kept: a delivery nobody agreed to is a cost nobody agreed to.
+
+### outstanding quantity
+How much of an order line has not arrived. Zero once it all has; what a closed order leaves
+outstanding is what it will now never receive.

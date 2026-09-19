@@ -93,6 +93,20 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     this.recordMovement('shipment', quantity, this.props.averageUnitCost, now)
     return right(undefined)
   }
+  /**
+   * Goods leave stock without having been sold — a delivery sent back to its supplier.
+   *
+   * What was reserved for somebody else is untouchable: refusing here is what stops a
+   * return from quietly cancelling a promise already made to a customer.
+   */
+  giveBack(quantity: Quantity, now: Date): Either<ConflictError, void> {
+    if (quantity.isZero()) return left(new ConflictError('movement quantity must be positive'))
+    if (this.available().isLessThan(quantity))
+      return left(new ConflictError('these goods are no longer available to return'))
+    this.props.onHand = this.props.onHand.minus(quantity)
+    this.recordMovement('adjustment-out', quantity, this.props.averageUnitCost, now)
+    return right(undefined)
+  }
   belongsTo(tenantId: string): boolean {
     return this.props.tenantId === tenantId
   }
@@ -114,7 +128,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     })
   }
   private recordMovement(
-    kind: 'receipt' | 'shipment',
+    kind: 'receipt' | 'shipment' | 'adjustment-out',
     quantity: Quantity,
     unitCost: Money | null,
     now: Date,

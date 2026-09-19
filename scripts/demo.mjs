@@ -18,6 +18,7 @@ const partiesRequire = createRequire(join(root, 'parties/package.json'))
 const financialRequire = createRequire(join(root, 'financial/package.json'))
 const treasuryRequire = createRequire(join(root, 'treasury/package.json'))
 const ledgerRequire = createRequire(join(root, 'ledger/package.json'))
+const procurementRequire = createRequire(join(root, 'procurement/package.json'))
 const postgres = salesRequire('postgres')
 const { drizzle } = salesRequire('drizzle-orm/postgres-js')
 const { migrate } = salesRequire('drizzle-orm/postgres-js/migrator')
@@ -40,6 +41,18 @@ const DEMO = Object.freeze({
   unitPrice: '1250',
   revenueCategory: '1.01',
   treasuryAccount: 'Demo checking',
+  supplierTaxId: '12345678000199',
+  purchaseQuantity: '20',
+  purchaseUnitPrice: '800',
+  purchaseFreight: '2000',
+  purchaseReceived: '12',
+})
+
+const DEMO_SUPPLIER = Object.freeze({
+  legalName: 'Horizon Coffee Roasters',
+  email: 'vendas@roasters.local',
+  phone: '+5511988887777',
+  address: 'Rua do Cafe, 200, Santos - SP',
 })
 
 const DEMO_CUSTOMER = Object.freeze({
@@ -82,6 +95,7 @@ try {
   const financialTracer = makeServiceTracer('financial')
   const treasuryTracer = makeServiceTracer('treasury')
   const ledgerTracer = makeServiceTracer('ledger')
+  const procurementTracer = makeServiceTracer('procurement')
 
   const modules = loadModules()
   const clock = { now: () => new Date() }
@@ -94,6 +108,7 @@ try {
   const financialUrls = moduleUrls('financial')
   const treasuryUrls = moduleUrls('treasury')
   const ledgerUrls = moduleUrls('ledger')
+  const procurementUrls = moduleUrls('procurement')
   const blindIndexKey = Buffer.from(
     (await readFile(join(root, 'infra/keys/blind-index.key'), 'utf8')).trim(),
     'hex',
@@ -124,9 +139,13 @@ try {
   const treasuryDb = new modules.TreasuryDatabase({ url: treasuryUrls.app })
   const treasuryAdmin = postgres(treasuryUrls.admin, { max: 1 })
   const ledgerDb = new modules.LedgerDatabase({ url: ledgerUrls.app })
+  const procurementDb = new modules.ProcurementDatabase({ url: procurementUrls.app })
+  const procurementAdmin = postgres(procurementUrls.admin, { max: 1 })
   resources.push(() => treasuryDb.close())
   resources.push(() => treasuryAdmin.end())
   resources.push(() => ledgerDb.close())
+  resources.push(() => procurementDb.close())
+  resources.push(() => procurementAdmin.end())
   const webhooksDb = new modules.WebhookDatabase({
     appUrl: webhooksUrls.app,
     workerUrl: webhooksUrls.relay,
@@ -167,8 +186,14 @@ try {
   const financialHandlers = new modules.FinancialModuleEventHandlers(financialDb, clock)
   const treasuryHandlers = new modules.TreasuryModuleEventHandlers(treasuryDb, clock)
   const ledgerHandlers = new modules.LedgerModuleEventHandlers(ledgerDb, clock)
+  const procurementHandlers = new modules.ProcurementModuleEventHandlers(procurementDb, clock)
+  const inventoryPurchaseHandlers = new modules.InventoryProcurementEventHandlers(
+    inventoryDb,
+    clock,
+  )
   const treasuryQueue = 'horizon.demo.treasury'
   const ledgerQueue = 'horizon.demo.ledger'
+  const procurementQueue = 'horizon.demo.procurement'
   const inventoryQueue = 'horizon.demo.inventory'
   const salesQueue = 'horizon.demo.sales'
   const webhooksQueue = 'horizon.demo.webhooks'
@@ -176,7 +201,10 @@ try {
   const inventoryConsumer = new modules.InventoryConsumer({
     url: rabbitUrl,
     queue: inventoryQueue,
-    handlers: tracedHandlers(inventoryHandlers.handlers, inventoryTracer),
+    handlers: tracedHandlers(
+      { ...inventoryHandlers.handlers, ...inventoryPurchaseHandlers.handlers },
+      inventoryTracer,
+    ),
     prefetch: 5,
   })
   const salesConsumer = new modules.SalesConsumer({
@@ -203,6 +231,12 @@ try {
     handlers: tracedHandlers(ledgerHandlers.handlers, ledgerTracer),
     prefetch: 5,
   })
+  const procurementConsumer = new modules.ProcurementConsumer({
+    url: rabbitUrl,
+    queue: procurementQueue,
+    handlers: tracedHandlers(procurementHandlers.handlers, procurementTracer),
+    prefetch: 5,
+  })
   const webhooksConsumer = new modules.WebhookEventConsumer({
     url: rabbitUrl,
     queue: webhooksQueue,
@@ -215,6 +249,7 @@ try {
     financialConsumer.start(),
     treasuryConsumer.start(),
     ledgerConsumer.start(),
+    procurementConsumer.start(),
     webhooksConsumer.start(),
   ])
   resources.push(() =>
@@ -227,6 +262,8 @@ try {
       `${treasuryQueue}.dlq`,
       ledgerQueue,
       `${ledgerQueue}.dlq`,
+      procurementQueue,
+      `${procurementQueue}.dlq`,
       webhooksQueue,
       `${webhooksQueue}.dlq`,
     ]),
@@ -236,6 +273,7 @@ try {
   resources.push(() => financialConsumer.close())
   resources.push(() => treasuryConsumer.close())
   resources.push(() => ledgerConsumer.close())
+  resources.push(() => procurementConsumer.close())
   resources.push(() => webhooksConsumer.close())
 
   const callback = await startStubReceiver()
@@ -294,8 +332,13 @@ try {
   const salesRelay = new modules.SalesOutboxRelay(salesUrls.relay, salesPublisher)
   const partiesRelay = new modules.PartiesOutboxRelay(partiesUrls.relay, salesPublisher)
   const financialRelay = new modules.FinancialOutboxRelay(financialUrls.relay, salesPublisher)
+  const procurementRelay = new modules.ProcurementOutboxRelay(
+    procurementUrls.relay,
+    salesPublisher,
+  )
   resources.push(() => partiesRelay.close())
   resources.push(() => financialRelay.close())
+  resources.push(() => procurementRelay.close())
   resources.push(() => catalogRelay.close())
   resources.push(() => inventoryRelay.close())
   resources.push(() => salesRelay.close())
@@ -325,6 +368,19 @@ try {
     'the Financial projection of the demo customer',
   )
 
+  const supplierId = await seedSupplier(modules, partiesDb, procurementAdmin, identity.tenantId, clock)
+  await flushUntil(
+    partiesRelay,
+    () =>
+      rowOrNull(procurementAdmin`select id from suppliers
+        where tenant_id = ${identity.tenantId} and id = ${supplierId} and status = 'active'`),
+    'the Procurement projection of the demo supplier',
+  )
+  // Procurement names an order line from the catalogue, so it has to know the item. The
+  // consumer fills this from `catalog.item.created`; a workspace whose item predates
+  // Procurement has no such event left to replay, so the projection is seeded as Sales' is.
+  await seedProcurementProjection(procurementAdmin, identity.tenantId, catalog.itemId)
+
   const [before] = await inventoryAdmin`select on_hand from stock_balances
     where tenant_id = ${identity.tenantId} and item_id = ${catalog.itemId}
       and warehouse_id = ${warehouseId}`
@@ -333,6 +389,21 @@ try {
   let receivable = { titleId: '', status: '', outstanding: '' }
   let bank = { accountId: '', entryAmount: '', statementLineStatus: '', reconciliationId: '' }
   let books = { reference: '', raised: [], settled: [], totalDebits: '0', totalCredits: '0', pending: 0 }
+  let soldStock = { onHand: '0', reserved: '0' }
+  let purchase = {
+    requisitionId: '',
+    orderId: '',
+    receiptId: '',
+    approvalWaited: false,
+    orderTotal: '0',
+    receiptValue: '0',
+    complete: false,
+    outstanding: '0',
+    onHandAfter: '0',
+    payableTotal: '0',
+    forecastTotal: '0',
+    forecastStatus: '',
+  }
   let traceId = ''
   await trace.getTracer('horizon.demo').startActiveSpan('golden-path', async (span) => {
     traceId = span.spanContext().traceId
@@ -391,6 +462,48 @@ try {
       )
       books = await ledgerBooks(ledgerDb, identity.tenantId, receivable)
 
+      // What the sale left on the shelf, before the purchase puts goods back on it.
+      const [shipped] = await inventoryAdmin`select on_hand, reserved from stock_balances
+        where tenant_id = ${identity.tenantId} and item_id = ${catalog.itemId}
+          and warehouse_id = ${warehouseId}`
+      soldStock = { onHand: shipped.on_hand, reserved: shipped.reserved }
+
+      purchase = await purchaseGoods(modules, {
+        database: procurementDb,
+        relay: procurementRelay,
+        tenantId: identity.tenantId,
+        supplierId,
+        warehouseId,
+        itemId: catalog.itemId,
+        clock,
+        tracer: procurementTracer,
+      })
+      // The goods reach the shelf and the money reaches the books from the same receipt.
+      const stockAfterPurchase = await flushUntil(
+        procurementRelay,
+        () =>
+          rowOrNull(inventoryAdmin`select on_hand from stock_balances
+            where tenant_id = ${identity.tenantId} and item_id = ${catalog.itemId}
+              and warehouse_id = ${warehouseId}
+              and on_hand > ${(stockBefore - BigInt(DEMO.quantity) * 1_000_000n).toString()}`),
+        'the purchased goods on the shelf',
+      )
+      purchase.onHandAfter = stockAfterPurchase.on_hand
+      const payable = await flushUntil(
+        procurementRelay,
+        () =>
+          rowOrNull(financialAdmin`select id, total, stage from titles
+            where tenant_id = ${identity.tenantId} and direction = 'payable'
+              and origin_type = 'purchase-receipt' and origin_document_id = ${purchase.receiptId}`),
+        'the payable the delivery made owed',
+      )
+      purchase.payableTotal = payable.total
+      const [forecast] = await financialAdmin`select total, status from titles
+        where tenant_id = ${identity.tenantId} and direction = 'payable'
+          and origin_type = 'purchase-order' and origin_document_id = ${purchase.orderId}`
+      purchase.forecastTotal = forecast?.total ?? '0'
+      purchase.forecastStatus = forecast?.status ?? 'missing'
+
       const confirmedEvent = await waitFor(
         () =>
           observedEvents.find(
@@ -423,16 +536,13 @@ try {
     }
   })
 
-  const [balance] = await inventoryAdmin`select on_hand, reserved from stock_balances
-    where tenant_id = ${identity.tenantId} and item_id = ${catalog.itemId}
-      and warehouse_id = ${warehouseId}`
   const [order] = await salesAdmin`select status, total, currency from sales_orders
     where tenant_id = ${identity.tenantId} and id = ${orderId}`
   assert.equal(order.status, 'confirmed')
   assert.equal(order.total, '5000')
   assert.equal(order.currency, 'BRL')
-  assert.equal(BigInt(balance.on_hand), stockBefore - 4_000_000n)
-  assert.equal(balance.reserved, '0')
+  assert.equal(BigInt(soldStock.onHand), stockBefore - 4_000_000n)
+  assert.equal(soldStock.reserved, '0')
   assert.equal(receivable.status, 'posted')
   assert.equal(receivable.settlementState, 'settled')
   assert.equal(receivable.outstanding, '0')
@@ -458,13 +568,42 @@ try {
   assert.equal(books.totalDebits, books.totalCredits)
   assert.equal(books.pending, 0)
 
+  // The purchase: a need became a commitment, part of it arrived, and the goods and the
+  // money agree about exactly how much did.
+  assert(purchase.approvalWaited, 'the purchase order should have waited for a second person')
+  // 20 units at 8.00 plus 20.00 of freight.
+  assert.equal(purchase.orderTotal, '18000')
+  // 12 of the 20 units carry 12/20 of the freight: 9600 + 1200.
+  assert.equal(purchase.receiptValue, '10800')
+  assert.equal(purchase.payableTotal, purchase.receiptValue)
+  assert.equal(purchase.complete, false)
+  assert.equal(purchase.outstanding, '8')
+  // What has not arrived is still expected, and never counted as owed at the same time.
+  assert.equal(purchase.forecastStatus, 'draft')
+  assert.equal(
+    BigInt(purchase.payableTotal) + BigInt(purchase.forecastTotal),
+    BigInt(purchase.orderTotal),
+  )
+  assert.equal(
+    BigInt(purchase.onHandAfter),
+    stockBefore - BigInt(DEMO.quantity) * 1_000_000n + BigInt(DEMO.purchaseReceived) * 1_000_000n,
+  )
+
   await closeAll()
   await shutdownServiceProviders()
   await telemetry.shutdown()
   telemetry = undefined
   const traceUrl = `http://localhost:${jaegerPort}/trace/${traceId}`
   const traceServices = await waitForJaeger(jaegerPort, traceId)
-  for (const service of ['sales', 'inventory', 'webhooks', 'financial', 'treasury', 'ledger'])
+  for (const service of [
+    'sales',
+    'inventory',
+    'webhooks',
+    'financial',
+    'treasury',
+    'ledger',
+    'procurement',
+  ])
     assert(traceServices.includes(service), `Trace is missing the ${service} service`)
 
   console.log(
@@ -478,12 +617,19 @@ try {
           itemId: catalog.itemId,
           warehouseId,
           customerId,
+          supplierId,
         },
         order: { orderId, status: order.status, total: order.total, currency: order.currency },
-        stock: { before: stockBefore.toString(), after: balance.on_hand, reserved: balance.reserved },
+        stock: {
+          before: stockBefore.toString(),
+          afterSale: soldStock.onHand,
+          reserved: soldStock.reserved,
+          afterPurchase: purchase.onHandAfter,
+        },
         receivable,
         books,
         bank,
+        purchase,
         callback: {
           signed: true,
           implementation: 'webhooks',
@@ -563,6 +709,7 @@ function loadModules() {
   const inventory = {
     ...from(inventoryRequire, 'inventory/dist/infrastructure/database/drizzle/inventory-database.js'),
     ...from(inventoryRequire, 'inventory/dist/application/consume-sales-events.js'),
+    ...from(inventoryRequire, 'inventory/dist/application/consume-procurement-events.js'),
   }
   const inventoryTransport = from(
     inventoryRequire,
@@ -609,6 +756,22 @@ function loadModules() {
     ...from(ledgerRequire, 'ledger/dist/application/use-cases/map-accounts.js'),
     ...from(ledgerRequire, 'ledger/dist/application/use-cases/replay-pending.js'),
   }
+  const procurement = {
+    ...from(
+      procurementRequire,
+      'procurement/dist/infrastructure/database/drizzle/procurement-database.js',
+    ),
+    ...from(procurementRequire, 'procurement/dist/application/consume-module-events.js'),
+    ...from(procurementRequire, 'procurement/dist/application/use-cases/manage-requisitions.js'),
+    ...from(procurementRequire, 'procurement/dist/application/use-cases/manage-quotations.js'),
+    ...from(procurementRequire, 'procurement/dist/application/use-cases/manage-orders.js'),
+    ...from(procurementRequire, 'procurement/dist/application/use-cases/receive-goods.js'),
+    ...from(procurementRequire, 'procurement/dist/application/use-cases/define-policies.js'),
+  }
+  const procurementTransport = from(
+    procurementRequire,
+    'procurement/dist/infrastructure/messaging/rabbitmq-transport.js',
+  )
   const ledgerTransport = from(
     ledgerRequire,
     'ledger/dist/infrastructure/messaging/rabbitmq-transport.js',
@@ -643,6 +806,7 @@ function loadModules() {
     CatalogOutboxRelay,
     InventoryDatabase: inventory.InventoryDatabase,
     InventorySalesEventHandlers: inventory.InventorySalesEventHandlers,
+    InventoryProcurementEventHandlers: inventory.InventoryProcurementEventHandlers,
     InventoryConsumer: inventoryTransport.RabbitMqEventConsumer,
     InventoryPublisher: inventoryTransport.RabbitMqEventPublisher,
     InventoryOutboxRelay: inventoryTransport.OutboxRelay,
@@ -680,6 +844,18 @@ function loadModules() {
     OpenLedgerAccountUseCase: ledger.OpenAccountUseCase,
     DefineAccountMappingUseCase: ledger.DefineAccountMappingUseCase,
     ReplayPendingFactsUseCase: ledger.ReplayPendingFactsUseCase,
+    ProcurementDatabase: procurement.ProcurementDatabase,
+    ProcurementModuleEventHandlers: procurement.ProcurementModuleEventHandlers,
+    ProcurementConsumer: procurementTransport.RabbitMqEventConsumer,
+    ProcurementOutboxRelay: procurementTransport.OutboxRelay,
+    OpenRequisitionUseCase: procurement.OpenRequisitionUseCase,
+    DecideRequisitionUseCase: procurement.DecideRequisitionUseCase,
+    RecordQuotationUseCase: procurement.RecordQuotationUseCase,
+    SelectQuotationUseCase: procurement.SelectQuotationUseCase,
+    DraftOrderFromQuotationUseCase: procurement.DraftOrderFromQuotationUseCase,
+    DecideOrderUseCase: procurement.DecideOrderUseCase,
+    ReceiveGoodsUseCase: procurement.ReceiveGoodsUseCase,
+    DefinePurchaseApprovalPolicyUseCase: procurement.DefineApprovalPolicyUseCase,
     WebhookDatabase: webhooks.WebhookDatabase,
     CreateSubscriptionUseCase: webhooks.CreateSubscriptionUseCase,
     WebhookDispatcher: webhooks.WebhookDispatcher,
@@ -894,6 +1070,178 @@ async function seedSalesProjection(admin, tenantId, itemId) {
       updated_at = now()`
 }
 
+async function seedProcurementProjection(admin, tenantId, itemId) {
+  await admin`insert into catalog_items (tenant_id, item_id, description, active, updated_at)
+    values (${tenantId}, ${itemId}, 'Roasted coffee', true, now())
+    on conflict (tenant_id, item_id) do update set description = excluded.description,
+      active = true, updated_at = now()`
+}
+
+/**
+ * Register the supplier the demo buys from, and wait for Procurement to project it.
+ *
+ * Procurement never registers a supplier; it follows the registry like every other
+ * context (ADR 0040), so the demo proves the projection rather than seeding around it.
+ */
+async function seedSupplier(modules, parties, procurementAdmin, tenantId, clock) {
+  const existing = await parties.inTenant(tenantId, (scope) =>
+    scope.parties.findByTaxId(DEMO.supplierTaxId),
+  )
+  if (existing) {
+    const partyId = existing.id.toString()
+    const described = await new modules.DescribePartyUseCase(parties, clock).execute({
+      tenantId,
+      partyId,
+      ...DEMO_SUPPLIER,
+    })
+    if (described.isLeft()) throw described.value
+    return partyId
+  }
+  const registered = await new modules.RegisterPartyUseCase(parties, clock).execute({
+    tenantId,
+    kind: 'organization',
+    taxId: DEMO.supplierTaxId,
+    ...DEMO_SUPPLIER,
+    roles: ['supplier'],
+  })
+  if (registered.isLeft()) throw registered.value
+  return registered.value.partyId
+}
+
+/**
+ * The purchasing path, end to end: a need, an offer, a commitment, a delivery.
+ *
+ * Each hop is asserted where it lands rather than where it started — the requisition in
+ * Procurement, the goods in Inventory, the money in Financial — because what the phase
+ * claims is that those three agree about one delivery.
+ */
+function purchaseGoods(modules, context) {
+  // The purchase is the buyer's work, so it belongs to Procurement in the trace, the same
+  // way each consumer's work belongs to the service that does it.
+  return context.tracer.startActiveSpan('procurement.purchase', async (span) => {
+    try {
+      return await runPurchase(modules, context)
+    } finally {
+      span.end()
+    }
+  })
+}
+
+async function runPurchase(modules, context) {
+  const { database, relay, tenantId, supplierId, warehouseId, itemId, clock } = context
+  const buyer = { tenantId, actor: 'demo:buyer', requestId: null }
+  const manager = { tenantId, actor: 'demo:manager', requestId: null }
+  const keyed = (actor) => ({ ...actor, idempotencyKey: randomUUID() })
+  const value = (result) => {
+    if (result.isLeft()) throw result.value
+    return result.value
+  }
+
+  // Every purchase asks somebody: the threshold is zero, so nothing slips through.
+  value(
+    await new modules.DefinePurchaseApprovalPolicyUseCase(database, clock).execute({
+      context: manager,
+      currency: 'BRL',
+      threshold: '0',
+    }),
+  )
+
+  const lineId = randomUUID()
+  const requisitionId = value(
+    await new modules.OpenRequisitionUseCase(database, clock).execute({
+      context: keyed(buyer),
+      requisition: {
+        warehouseId,
+        neededBy: addDays(today(), 30),
+        justification: 'The golden path drank the last of it',
+        lines: [{ lineId, itemId, quantity: DEMO.purchaseQuantity }],
+      },
+    }),
+  ).id
+  const requisitions = new modules.DecideRequisitionUseCase(database, clock)
+  value(await requisitions.submit(buyer, requisitionId))
+  value(await requisitions.approve(manager, requisitionId))
+
+  const quotation = value(
+    await new modules.RecordQuotationUseCase(database, clock).execute({
+      context: keyed(buyer),
+      quotation: {
+        requisitionId,
+        supplierId,
+        reference: `COT-${requisitionId.slice(-6).toUpperCase()}`,
+        quotedOn: today(),
+        currency: 'BRL',
+        leadTimeDays: 7,
+        paymentTermDays: [30],
+        charges: { freight: DEMO.purchaseFreight },
+        lines: [
+          {
+            lineId,
+            itemId,
+            quantity: DEMO.purchaseQuantity,
+            unitPrice: DEMO.purchaseUnitPrice,
+          },
+        ],
+      },
+    }),
+  )
+  value(
+    await new modules.SelectQuotationUseCase(database, clock).execute({
+      context: buyer,
+      quotationId: quotation.id,
+    }),
+  )
+  const order = value(
+    await new modules.DraftOrderFromQuotationUseCase(database, clock).execute({
+      context: keyed(buyer),
+      quotationId: quotation.id,
+      issuedOn: today(),
+    }),
+  )
+  const orders = new modules.DecideOrderUseCase(database, clock)
+  const placed = value(await orders.place(buyer, order.id))
+  // Four eyes: the buyer placed it, so the buyer cannot be the one who approves it.
+  value(await orders.approve(manager, order.id))
+  await flushAll(relay)
+
+  const receipt = value(
+    await new modules.ReceiveGoodsUseCase(database, clock).execute({
+      context: keyed(buyer),
+      delivery: {
+        orderId: order.id,
+        receivedOn: today(),
+        lines: [{ lineId, quantity: DEMO.purchaseReceived }],
+      },
+    }),
+  )
+  await flushAll(relay)
+
+  const detail = await database.orderDetail(tenantId, order.id)
+  return {
+    requisitionId,
+    quotationId: quotation.id,
+    orderId: order.id,
+    receiptId: receipt.id,
+    approvalWaited: placed.status === 'pending',
+    orderTotal: order.total,
+    receiptValue: receipt.value,
+    complete: receipt.complete,
+    outstanding: detail?.data?.[0]?.outstanding ?? '?',
+  }
+}
+
+/** Today, and a date a number of days out, as the calendar dates a document carries. */
+function today() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function addDays(date, days) {
+  const moved = new Date(`${date}T00:00:00Z`)
+  moved.setUTCDate(moved.getUTCDate() + days)
+  return moved.toISOString().slice(0, 10)
+}
+
+
 async function seedCustomer(modules, parties, salesAdmin, tenantId, clock) {
   const existing = await parties.inTenant(tenantId, (scope) =>
     scope.parties.findByTaxId(DEMO.customerTaxId),
@@ -940,7 +1288,7 @@ async function collectReceivable(
   const draft = await waitFor(
     () =>
       rowOrNull(admin`select id from titles
-        where tenant_id = ${tenantId} and origin_order_id = ${orderId}`),
+        where tenant_id = ${tenantId} and origin_document_id = ${orderId}`),
     'the draft receivable raised from the confirmed order',
   )
   const categories = await database.listCategories(tenantId)

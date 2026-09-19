@@ -1,3 +1,4 @@
+import type { GoodsReceipt } from '../entities/goods-receipt'
 import type { PurchaseOrder } from '../entities/purchase-order'
 import type { PurchaseRequisition } from '../entities/purchase-requisition'
 import type { Supplier } from '../entities/supplier'
@@ -25,6 +26,14 @@ export abstract class PurchaseOrdersRepository {
   abstract findForUpdate(id: string): Promise<PurchaseOrder | null>
   abstract create(order: PurchaseOrder): Promise<void>
   abstract save(order: PurchaseOrder): Promise<void>
+}
+
+export abstract class ReceiptsRepository {
+  abstract findById(id: string): Promise<GoodsReceipt | null>
+  abstract findForUpdate(id: string): Promise<GoodsReceipt | null>
+  abstract listForOrder(orderId: string): Promise<readonly GoodsReceipt[]>
+  abstract create(receipt: GoodsReceipt): Promise<void>
+  abstract save(receipt: GoodsReceipt): Promise<void>
 }
 
 /** A projection fed by `parties/`; Procurement never registers a supplier (ADR 0040). */

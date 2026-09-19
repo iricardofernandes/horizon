@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest'
 import {
   procurementOrderApproved,
   procurementOrderCancelled,
+  procurementOrderClosed,
   procurementOrderPlaced,
+  procurementReceiptRecorded,
+  procurementReceiptReturned,
   procurementRequisitionApproved,
   procurementRequisitionRejected,
   procurementRequisitionSubmitted,
@@ -138,5 +141,78 @@ describe('procurement event contracts', () => {
       requisitionId: null,
     }
     expect(procurementOrderPlaced.payload.safeParse(placed).success).toBe(true)
+  })
+})
+
+describe('receiving event contracts', () => {
+  const orderLine = () => ({
+    lineId: randomUUID(),
+    itemId: randomUUID(),
+    description: 'Papel A4 75g, resma',
+    quantity: '4',
+    unitPrice: brl('2500'),
+    lineTotal: brl('10000'),
+  })
+
+  it('records a partial delivery with what it owes and what is still committed', () => {
+    const recorded = {
+      orderId: randomUUID(),
+      orderVersion: 3,
+      receiptId: randomUUID(),
+      receivedBy: 'user:warehouse',
+      receivedOn: '2026-09-20',
+      supplierId: randomUUID(),
+      supplierName: 'Papelaria Central Ltda',
+      warehouseId: randomUUID(),
+      notes: null,
+      overReceipt: false,
+      complete: false,
+      value: brl('10000'),
+      installments: [{ number: 1, dueOn: '2026-10-20', amount: brl('10000') }],
+      remaining: brl('15000'),
+      remainingInstallments: [{ number: 1, dueOn: '2026-10-10', amount: brl('15000') }],
+      lines: [orderLine()],
+    }
+    expect(procurementReceiptRecorded.payload.safeParse(recorded).success).toBe(true)
+    // A complete delivery leaves nothing committed, and an empty schedule says so.
+    expect(
+      procurementReceiptRecorded.payload.safeParse({
+        ...recorded,
+        complete: true,
+        remaining: brl('0'),
+        remainingInstallments: [],
+      }).success,
+    ).toBe(true)
+    expect(procurementReceiptRecorded.payload.safeParse({ ...recorded, lines: [] }).success).toBe(
+      false,
+    )
+  })
+
+  it('returns a delivery with the quantities that go back, and why', () => {
+    expect(
+      procurementReceiptReturned.payload.safeParse({
+        orderId: randomUUID(),
+        orderVersion: 4,
+        receiptId: randomUUID(),
+        returnedBy: 'user:warehouse',
+        reason: 'The paper arrived damaged',
+        warehouseId: randomUUID(),
+        remaining: brl('25000'),
+        remainingInstallments: [{ number: 1, dueOn: '2026-10-10', amount: brl('25000') }],
+        lines: [{ lineId: randomUUID(), itemId: randomUUID(), quantity: '4' }],
+      }).success,
+    ).toBe(true)
+  })
+
+  it('closes an order, saying whether it got everything it asked for', () => {
+    expect(
+      procurementOrderClosed.payload.safeParse({
+        orderId: randomUUID(),
+        orderVersion: 5,
+        reason: 'The supplier cannot deliver the rest',
+        complete: false,
+        receipts: 1,
+      }).success,
+    ).toBe(true)
   })
 })

@@ -8,6 +8,13 @@
       "when": 1790900000000,
       "tag": "0000_procurement",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790950000000,
+      "tag": "0001_receiving",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ import {
   listOrders,
   listPolicies,
   listQuotations,
+  listReceipts,
   listRequisitions,
   listSuppliers,
   orderDetail,
@@ -142,6 +143,10 @@ export class ProcurementDatabase extends ProcurementUnitOfWork {
     filter: { status: string | null; supplierId: string | null; limit: number; offset: number },
   ) {
     return this.read(tenantId, (tx) => listOrders(tx, filter))
+  }
+
+  listReceipts(tenantId: string, orderId: string) {
+    return this.read(tenantId, (tx) => listReceipts(tx, orderId))
   }
 
   orderDetail(tenantId: string, id: string) {

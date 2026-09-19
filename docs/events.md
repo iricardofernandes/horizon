@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.13.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.16.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -495,6 +495,19 @@ A purchase order was withdrawn. `wasApproved` tells a consumer whether anything 
 | `orderVersion` | integer | yes | — |
 | `reason` | string | yes | min length 3. max length 300 |
 | `wasApproved` | boolean | yes | — |
+### `procurement.order.closed` — v1
+
+Nothing more is expected against this order. `complete` distinguishes an order that received everything it asked for from one a person closed short; either way, whatever was still committed stops being expected.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `orderId` | string | yes | Purchase order identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `orderVersion` | integer | yes | — |
+| `reason` | string | yes | min length 3. max length 300 |
+| `complete` | boolean | yes | — |
+| `receipts` | integer | yes | — |
 ### `procurement.order.placed` — v1
 
 A purchase order was submitted. `approvalRequired` says whether the workspace threshold sends it to a second person; when it is false the order is committed in the same operation and `procurement.order.approved` follows immediately.
@@ -527,6 +540,47 @@ An order waiting for approval was refused. Nothing was committed, so nothing has
 | `orderVersion` | integer | yes | — |
 | `rejectedBy` | string | yes | min length 1. max length 255 |
 | `reason` | string | yes | min length 3. max length 300 |
+### `procurement.receipt.recorded` — v1
+
+Goods arrived against a purchase order. `value` is the share of the order total these goods carry — tax, freight and the discount were agreed for the order as a whole, so a partial delivery carries them in proportion — and `remaining` is what is still committed and has not arrived. Both come with their schedules already dated, so a consumer never has to know how the payment terms were expressed. `overReceipt` says more arrived than was ordered, which is only ever accepted deliberately and with a reason.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `orderId` | string | yes | Purchase order identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `orderVersion` | integer | yes | — |
+| `receiptId` | string | yes | Goods receipt identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `receivedBy` | string | yes | min length 1. max length 255 |
+| `receivedOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `supplierId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `supplierName` | string | yes | min length 2. max length 160 |
+| `warehouseId` | string | yes | Where the goods physically arrived. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `notes` | any | yes | — |
+| `overReceipt` | boolean | yes | — |
+| `complete` | boolean | yes | Everything the order asked for has now arrived |
+| `value` | object | yes | — |
+| `installments` | array | yes | — |
+| `remaining` | object | yes | — |
+| `remainingInstallments` | array | yes | — |
+| `lines` | array | yes | — |
+### `procurement.receipt.returned` — v1
+
+A delivery was sent back. The goods leave stock again and what they made owed is withdrawn, while what the order still expects goes back up by the same amount — `remaining` is that figure after the return, on the same terms. The receipt and the return both stay in the record; neither replaces the other (ADR 0042).
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `orderId` | string | yes | Purchase order identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `orderVersion` | integer | yes | — |
+| `receiptId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `returnedBy` | string | yes | min length 1. max length 255 |
+| `reason` | string | yes | min length 3. max length 300 |
+| `warehouseId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `remaining` | object | yes | — |
+| `remainingInstallments` | array | yes | — |
+| `lines` | array | yes | — |
 ### `procurement.requisition.approved` — v1
 
 The need was agreed by somebody other than whoever submitted it. Nothing is committed and no supplier has been chosen; the requisition is now open to being answered by an order.

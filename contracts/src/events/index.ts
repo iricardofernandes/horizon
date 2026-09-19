@@ -39,8 +39,11 @@ import {
 import {
   procurementOrderApproved,
   procurementOrderCancelled,
+  procurementOrderClosed,
   procurementOrderPlaced,
   procurementOrderRejected,
+  procurementReceiptRecorded,
+  procurementReceiptReturned,
   procurementRequisitionApproved,
   procurementRequisitionRejected,
   procurementRequisitionSubmitted,
@@ -127,6 +130,9 @@ export const EVENTS: readonly EventDefinition[] = [
   procurementOrderApproved,
   procurementOrderRejected,
   procurementOrderCancelled,
+  procurementReceiptRecorded,
+  procurementReceiptReturned,
+  procurementOrderClosed,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

@@ -3,6 +3,11 @@ import {
   partyErased,
   partyRegistered,
   partyUpdated,
+  procurementOrderApproved,
+  procurementOrderCancelled,
+  procurementOrderClosed,
+  procurementReceiptRecorded,
+  procurementReceiptReturned,
   salesInvoicingRequested,
   salesOrderCancelled,
   salesOrderConfirmed,
@@ -11,18 +16,28 @@ import type { EventHandler } from '@/infrastructure/messaging/rabbitmq-transport
 import type { Clock } from './ports/clock'
 import type { FinancialUnitOfWork, ReceivedEvent } from './ports/unit-of-work'
 import {
+  RaisePayableForecastUseCase,
+  RecordPayableFromReceiptUseCase,
+  WithdrawPayableForecastUseCase,
+  WithdrawPayableOfReceiptUseCase,
+} from './use-cases/follow-purchasing'
+import {
   RaiseReceivableFromOrderUseCase,
   RealiseForecastFromInvoicingUseCase,
   WithdrawReceivableOfOrderUseCase,
 } from './use-cases/follow-sales-and-parties'
 
-type SourceModule = 'parties' | 'sales'
+type SourceModule = 'parties' | 'sales' | 'procurement'
 
 export class FinancialModuleEventHandlers {
   readonly handlers: Readonly<Record<string, EventHandler>>
   private readonly raise: RaiseReceivableFromOrderUseCase
   private readonly realise: RealiseForecastFromInvoicingUseCase
   private readonly withdraw: WithdrawReceivableOfOrderUseCase
+  private readonly forecastPayable: RaisePayableForecastUseCase
+  private readonly payableFromReceipt: RecordPayableFromReceiptUseCase
+  private readonly withdrawReceiptPayable: WithdrawPayableOfReceiptUseCase
+  private readonly withdrawForecast: WithdrawPayableForecastUseCase
 
   constructor(
     private readonly unitOfWork: FinancialUnitOfWork,
@@ -31,6 +46,10 @@ export class FinancialModuleEventHandlers {
     this.raise = new RaiseReceivableFromOrderUseCase(clock)
     this.realise = new RealiseForecastFromInvoicingUseCase(clock)
     this.withdraw = new WithdrawReceivableOfOrderUseCase(clock)
+    this.forecastPayable = new RaisePayableForecastUseCase(clock)
+    this.payableFromReceipt = new RecordPayableFromReceiptUseCase(clock)
+    this.withdrawReceiptPayable = new WithdrawPayableOfReceiptUseCase(clock)
+    this.withdrawForecast = new WithdrawPayableForecastUseCase(clock)
     this.handlers = {
       'parties.party.registered': (event) => this.partyRegistered(event),
       'parties.party.updated': (event) => this.partyUpdated(event),
@@ -38,6 +57,11 @@ export class FinancialModuleEventHandlers {
       'sales.order.confirmed': (event) => this.orderConfirmed(event),
       'sales.order.cancelled': (event) => this.orderCancelled(event),
       'sales.invoicing.requested': (event) => this.invoicingRequested(event),
+      'procurement.order.approved': (event) => this.purchaseApproved(event),
+      'procurement.order.cancelled': (event) => this.purchaseWithdrawn(event, 'cancelled'),
+      'procurement.order.closed': (event) => this.purchaseWithdrawn(event, 'closed'),
+      'procurement.receipt.recorded': (event) => this.goodsReceived(event),
+      'procurement.receipt.returned': (event) => this.goodsReturned(event),
     }
   }
 
@@ -89,6 +113,79 @@ export class FinancialModuleEventHandlers {
     await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'sales'), (scope) =>
       this.withdraw.executeInScope(scope, parsed.payload.orderId),
     )
+  }
+
+  private async purchaseApproved(event: EventEnvelope): Promise<void> {
+    const parsed = procurementOrderApproved.envelope.parse(event)
+    const { payload } = parsed
+    const outcome = await this.unitOfWork.processEvent(
+      parsed.tenantId,
+      received(parsed, 'procurement'),
+      (scope) =>
+        this.forecastPayable.executeInScope(scope, {
+          orderId: payload.orderId,
+          supplierId: payload.supplierId,
+          issuedOn: payload.issuedOn,
+          total: payload.total,
+          installments: payload.installments,
+        }),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
+  }
+
+  private async purchaseWithdrawn(
+    event: EventEnvelope,
+    why: 'cancelled' | 'closed',
+  ): Promise<void> {
+    const definition = why === 'cancelled' ? procurementOrderCancelled : procurementOrderClosed
+    const parsed = definition.envelope.parse(event)
+    await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'procurement'), (scope) =>
+      this.withdrawForecast.executeInScope(
+        scope,
+        parsed.payload.orderId,
+        why === 'cancelled'
+          ? 'The purchase order was cancelled'
+          : 'Nothing more is expected against this purchase order',
+      ),
+    )
+  }
+
+  private async goodsReceived(event: EventEnvelope): Promise<void> {
+    const parsed = procurementReceiptRecorded.envelope.parse(event)
+    const { payload } = parsed
+    const outcome = await this.unitOfWork.processEvent(
+      parsed.tenantId,
+      received(parsed, 'procurement'),
+      (scope) =>
+        this.payableFromReceipt.executeInScope(scope, {
+          orderId: payload.orderId,
+          receiptId: payload.receiptId,
+          supplierId: payload.supplierId,
+          receivedOn: payload.receivedOn,
+          value: payload.value,
+          installments: payload.installments,
+          remaining: payload.remaining,
+          remainingInstallments: payload.remainingInstallments,
+        }),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
+  }
+
+  private async goodsReturned(event: EventEnvelope): Promise<void> {
+    const parsed = procurementReceiptReturned.envelope.parse(event)
+    const { payload } = parsed
+    const outcome = await this.unitOfWork.processEvent(
+      parsed.tenantId,
+      received(parsed, 'procurement'),
+      (scope) =>
+        this.withdrawReceiptPayable.executeInScope(scope, {
+          orderId: payload.orderId,
+          receiptId: payload.receiptId,
+          remaining: payload.remaining,
+          remainingInstallments: payload.remainingInstallments,
+        }),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
   }
 }
 

@@ -1251,6 +1251,83 @@ agreed, what was offered, and what was committed.
 
 ---
 
+## Phase 27 — Receiving: the goods on the shelf and the money owed for them, from one fact
+
+**Complete.** The second slice of Phase G of the [expansion plan](erp-expansion-plan.md),
+and the payable forecasts Phase F left waiting.
+
+A purchase order is a promise. This is the phase where the promise meets a loading bay: part
+of it arrives, stock goes up, money becomes owed, and what has not arrived is still
+expected — three statements that have to agree, and now do, because all three follow from
+one event.
+
+**Deliverables**
+
+- **Deliveries, partial or complete.** What the goods make owed is their *share* of the
+  order's total: tax, freight and the discount were agreed for the order as a whole, so a
+  partial delivery carries them in proportion. The share is taken cumulatively and the
+  earlier one subtracted, so rounding never accumulates and the last delivery of a complete
+  order leaves nothing behind.
+- **Over-receipt, deliberately.** More may arrive than was ordered, and sometimes that is
+  fine — but never silently. It takes a reason, the reason is kept, and what is owed rises
+  above the order total accordingly, because a delivery nobody agreed to is a cost nobody
+  agreed to.
+- **Returns.** A delivery sent back leaves stock again, its payable is withdrawn, and what
+  the order still expects goes back up by the same amount: a rejected delivery is a delivery
+  the supplier still owes. The receipt and the return both stay in the record (ADR 0042).
+- **Closing.** An order that received everything, or that a person closes short with a
+  reason, stops expecting anything more, and whatever was still committed lapses. An order
+  that has taken delivery is closed rather than cancelled.
+- **Stock, from the receipt.** `inventory/` brings each line in at the price the order
+  agreed, and takes it back out on a return — refusing to, if somebody has already promised
+  those goods to a customer.
+- **Payables, from the same receipt.** An approved order raises a payable **forecast** for
+  its whole value; each delivery raises an **effective** payable for what it carries and
+  reduces the forecast to what is still committed. The two are never both counted, which is
+  what the forecast stage has existed for since phase 24. A forecast withdrawn when the
+  order completed is reinstated if a return brings the commitment back, rather than a second
+  title being raised beside it.
+- **One origin for every title.** `financial/` titles now name the document they came from —
+  a sales order, a purchase order or a goods receipt — through one `documentId` instead of a
+  column named after sales. The published `origin` carries it for every kind, and a sales
+  order keeps its `orderId` alongside, because that field is published and cannot be
+  withdrawn (ADR 0030).
+- `@horizon/contracts@0.16.0`: `procurement.receipt.recorded`, `procurement.receipt.returned`
+  and `procurement.order.closed`, each carrying its schedules already dated so no consumer
+  has to know how payment terms were expressed.
+- `make demo` runs the purchase: a need, a quotation, an approval by a second person, a
+  partial delivery — and asserts that the stock, the payable and the forecast agree about
+  exactly how much arrived, inside the same trace as the sale.
+
+**Exit criteria**
+
+- Requisition → approval → purchase order → partial receipt → inventory movement → payable
+  runs in `make demo`, in one trace that names `procurement`, and CI runs it twice.
+- A delivery moves stock once and raises one payable, however often its event is
+  redelivered, and a retried receiving request receives the goods once.
+- The values of every delivery against a complete order add up to the order total exactly,
+  freight and tax included (domain property and integration test).
+- What a delivery makes owed plus what the order still expects always equals the order
+  total, and a forecast never appears in any view that reports what is owed.
+- An over-receipt is refused until somebody says why; a return puts back what it took away,
+  in the stock, in the payable and in the forecast.
+- Goods cannot arrive against an order nobody committed to, under the application role or
+  the owner.
+
+**Non-goals**
+
+- Purchasing screens — the requisition and order boards, the approval inbox, the supplier
+  comparison and the receipt conference — which close Phase G.
+- Partial returns: a delivery is returned whole, because a partial return of a partial
+  delivery is a quantity puzzle nobody has asked for yet.
+- Landed cost: stock enters at the price the order agreed for the line. Apportioning freight
+  and tax into inventory valuation is a costing decision, and it belongs with the valuation
+  work in Phase I.
+- Supplier invoices and the three-way match against them, which arrive with fiscal documents
+  in Phase J. Until then the receipt is what makes a payable.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

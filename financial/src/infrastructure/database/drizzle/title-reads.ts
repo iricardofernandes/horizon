@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, ilike, inArray, lt, ne, or, type SQL, sql } from 'drizzle-orm'
 import type { TitleDirection, TitleSnapshot } from '@/domain/entities/title'
 import * as schema from './schema'
+import { originOf } from './title-origin'
 import { loadTitles, type Transaction } from './title-store'
 
 export const TITLE_VIEWS = [
@@ -121,10 +122,7 @@ export async function listTitles(
       documentNumber: title.documentNumber,
       partyId: title.partyId,
       partyName,
-      origin:
-        title.originType === 'sales-order' && title.originOrderId
-          ? { type: 'sales-order', orderId: title.originOrderId }
-          : { type: 'manual' },
+      origin: originOf(title.originType, title.originDocumentId),
       currency: title.currency,
       issuedOn: title.issuedOn,
       nextDueOn: title.nextDueOn,

@@ -30,7 +30,7 @@ export class RaiseReceivableFromOrderUseCase {
     scope: FinancialScope,
     order: ConfirmedOrder,
   ): Promise<Either<InvalidInputError, 'raised' | 'ignored'>> {
-    if (await scope.titles.findByOrderForUpdate('receivable', order.orderId))
+    if (await scope.titles.findByOriginForUpdate('receivable', order.orderId))
       return right('ignored')
     return raise(scope, order, 'forecast', this.clock.now())
   }
@@ -61,7 +61,7 @@ async function raise(
   const title = Title.draft({
     tenantId: scope.tenantId,
     direction: 'receivable',
-    origin: { type: 'sales-order', orderId: order.orderId },
+    origin: { type: 'sales-order', documentId: order.orderId },
     terms: {
       partyId: order.customerId,
       documentNumber: documentNumber.value,
@@ -117,7 +117,7 @@ export class RealiseForecastFromInvoicingUseCase {
     scope: FinancialScope,
     invoicing: RequestedInvoicing,
   ): Promise<Either<InvalidInputError, 'realised' | 'raised' | 'ignored'>> {
-    const title = await scope.titles.findByOrderForUpdate('receivable', invoicing.orderId)
+    const title = await scope.titles.findByOriginForUpdate('receivable', invoicing.orderId)
     // Invoicing is what makes a receivable real, so when it wins the race with the
     // confirmation it raises the title effective and the confirmation then finds it.
     if (!title) return raise(scope, invoicing, 'effective', this.clock.now())
@@ -165,7 +165,7 @@ export class WithdrawReceivableOfOrderUseCase {
   constructor(private readonly clock: Clock) {}
 
   async executeInScope(scope: FinancialScope, orderId: string): Promise<'withdrawn' | 'ignored'> {
-    const title = await scope.titles.findByOrderForUpdate('receivable', orderId)
+    const title = await scope.titles.findByOriginForUpdate('receivable', orderId)
     if (title?.status !== 'draft') return 'ignored'
     const reason = Reason.create('Sales order cancelled')
     if (reason.isLeft()) throw reason.value

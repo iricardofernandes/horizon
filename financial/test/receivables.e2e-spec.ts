@@ -496,7 +496,7 @@ describe('following sales and parties', () => {
     const forecasts = await list('forecast')
     expect(forecasts.data).toEqual([
       expect.objectContaining({
-        origin: { type: 'sales-order', orderId },
+        origin: { type: 'sales-order', documentId: orderId },
         issuedOn: '2026-09-15',
         total: '2500',
         stage: 'forecast',
