@@ -532,6 +532,56 @@ describe('following sales and parties', () => {
     ).toBe(1)
   })
 
+  it('expects the money on the schedule the customer agreed to', async () => {
+    const { tenantId, partyId } = await workspace()
+    const orderId = randomUUID()
+    // The order was issued on the 14th and confirmed on the 15th; the terms are 0/30/60
+    // from issue, so the first instalment already fell due before Financial heard of it.
+    await deliver(tenantId, 'sales.order.confirmed', {
+      orderId,
+      orderVersion: 2,
+      customerId: partyId,
+      reservationId: randomUUID(),
+      confirmedAt: '2026-09-15T21:30:00.000Z',
+      lines: [
+        {
+          lineId: randomUUID(),
+          itemId: randomUUID(),
+          quantity: '2',
+          description: 'Coffee',
+          unitPrice: { amount: '1250', currency: 'BRL' },
+          lineTotal: { amount: '2500', currency: 'BRL' },
+        },
+      ],
+      total: { amount: '2500', currency: 'BRL' },
+      installments: [
+        { number: 1, dueOn: '2026-09-14', amount: { amount: '834', currency: 'BRL' } },
+        { number: 2, dueOn: '2026-10-14', amount: { amount: '833', currency: 'BRL' } },
+        { number: 3, dueOn: '2026-11-13', amount: { amount: '833', currency: 'BRL' } },
+      ],
+    })
+    const [forecast] = (
+      await database.listTitles(tenantId, 'receivable', {
+        view: 'forecast',
+        today: '2026-09-16',
+        limit: 50,
+        offset: 0,
+      })
+    ).data
+    expect(forecast).toMatchObject({ total: '2500', stage: 'forecast', issuedOn: '2026-09-14' })
+    const detail = await database.titleDetail(
+      tenantId,
+      'receivable',
+      String(forecast?.id),
+      '2026-09-16',
+    )
+    expect(detail?.installments).toMatchObject([
+      { number: 1, dueOn: '2026-09-14', amount: '834' },
+      { number: 2, dueOn: '2026-10-14', amount: '833' },
+      { number: 3, dueOn: '2026-11-13', amount: '833' },
+    ])
+  })
+
   it('turns the forecast into an effective receivable when the order is invoiced', async () => {
     const { tenantId, partyId } = await workspace()
     const orderId = randomUUID()

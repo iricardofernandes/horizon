@@ -322,6 +322,37 @@ for. It is what makes the books auditable rather than merely arithmetically cons
 
 ---
 
+## Selling
+
+### quote
+An offer to a customer: these goods, at this price, until this date. It is priced from the
+catalogue as it stands when it is written and then held, so a price list that moves
+afterwards does not change what the customer was offered.
+
+### quote version
+A sent quote is never rewritten. Answering one produces a new version beside it, which
+supersedes the last and shares the first one's identifier — that shared root is what makes
+them one offer rather than several unrelated ones. Exactly one version of an offer is
+current at any moment.
+
+### discount allowance
+How deep a discount a seller may give without asking anybody, in basis points against the
+goods. A discount is judged as a share of what is being sold rather than as an amount: ten
+percent off is the same decision on a small order as on a large one. Beyond the allowance
+the offer waits for a second person, under [four eyes](#four-eyes); within it, the quote
+records that nobody was asked.
+
+### conversion
+Turning an accepted quote into the order that delivers it: the same lines, at the prices
+that were agreed, under the terms that were negotiated. An accepted quote becomes at most
+one order, and the order is confirmed at the quoted price even if the catalogue has moved
+in between.
+
+### commercial terms
+What a quote or an order says beyond the goods themselves — the seller, the discount, the
+freight, the carrier, the payment terms and the notes. They are copied onto the order at
+conversion, so the order says what was agreed rather than pointing at the offer.
+
 ## Purchasing
 
 ### purchase requisition

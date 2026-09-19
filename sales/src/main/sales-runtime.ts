@@ -1,6 +1,11 @@
 import { type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
 import { SalesModuleEventHandlers } from '@/application/consume-module-events'
-import { AcceptQuoteUseCase, CreateQuoteUseCase } from '@/application/use-cases/manage-quotes'
+import { ConvertQuoteUseCase } from '@/application/use-cases/convert-quote'
+import {
+  DecideQuoteUseCase,
+  ReviseQuoteUseCase,
+  WriteQuoteUseCase,
+} from '@/application/use-cases/manage-quotes'
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
@@ -10,8 +15,10 @@ import type { SalesEnvironment } from './environment'
 export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
   readonly database: SalesDatabase
   readonly eventHandlers: SalesModuleEventHandlers
-  readonly createQuote: CreateQuoteUseCase
-  readonly acceptQuote: AcceptQuoteUseCase
+  readonly writeQuote: WriteQuoteUseCase
+  readonly reviseQuote: ReviseQuoteUseCase
+  readonly decideQuote: DecideQuoteUseCase
+  readonly convertQuote: ConvertQuoteUseCase
   readonly placeOrder: PlaceOrderUseCase
   readonly accessTokens: AccessTokenVerifier
 
@@ -31,12 +38,18 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
     )
     this.eventHandlers = new SalesModuleEventHandlers(this.database, clock)
-    this.createQuote = new CreateQuoteUseCase(
+    this.writeQuote = new WriteQuoteUseCase(
       this.database,
       clock,
       config.QUOTE_DEFAULT_VALIDITY_DAYS,
     )
-    this.acceptQuote = new AcceptQuoteUseCase(this.database, clock)
+    this.reviseQuote = new ReviseQuoteUseCase(
+      this.database,
+      clock,
+      config.QUOTE_DEFAULT_VALIDITY_DAYS,
+    )
+    this.decideQuote = new DecideQuoteUseCase(this.database, clock)
+    this.convertQuote = new ConvertQuoteUseCase(this.database, clock)
     this.placeOrder = new PlaceOrderUseCase(this.database, clock)
   }
 

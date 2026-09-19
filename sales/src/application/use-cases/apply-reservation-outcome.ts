@@ -47,7 +47,15 @@ export class ApplyStockReservedUseCase {
     order: SalesOrder,
   ): Promise<Either<ResourceNotFoundError | ConflictError, readonly CommercialLineInput[]>> {
     const lines: CommercialLineInput[] = []
+    const agreed = new Map(order.agreedLines().map((line) => [line.lineId, line]))
     for (const requested of order.requestedLines()) {
+      // An order converted from an accepted quote is confirmed at the price the customer
+      // agreed to; only a line nobody quoted is priced from the catalogue as it stands.
+      const negotiated = agreed.get(requested.lineId)
+      if (negotiated) {
+        lines.push(negotiated)
+        continue
+      }
       const item = await scope.catalogItems.findById(requested.itemId)
       if (!item) return left(new ResourceNotFoundError('catalog item projection was not found'))
       if (!item.active) return left(new ConflictError('catalog item is inactive'))

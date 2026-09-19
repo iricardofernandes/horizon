@@ -46,7 +46,7 @@ async function projectItem(handlers: SalesModuleEventHandlers, tenantId: string,
 
 async function placedOrder(unitOfWork: InMemorySalesUnitOfWork, tenantId: string, itemId: string) {
   const placed = await new PlaceOrderUseCase(unitOfWork, clock).execute({
-    tenantId,
+    context: { tenantId, actor: 'ana', requestId: null, idempotencyKey: randomUUID() },
     customerId: randomUUID(),
     fulfillmentWarehouseId: randomUUID(),
     lines: [{ lineId: randomUUID(), itemId, quantity: '2' }],

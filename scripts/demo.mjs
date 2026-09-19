@@ -39,6 +39,9 @@ const DEMO = Object.freeze({
   initialStockMicros: 1_000_000_000_000n,
   quantity: '4',
   unitPrice: '1250',
+  quoteFreight: '500',
+  quoteDiscount: '300',
+  quotePaymentTermDays: [30],
   revenueCategory: '1.01',
   treasuryAccount: 'Demo checking',
   supplierTaxId: '12345678000199',
@@ -386,6 +389,7 @@ try {
       and warehouse_id = ${warehouseId}`
   const stockBefore = BigInt(before.on_hand)
   let orderId = ''
+  let quote = { quoteId: '', version: 0, supersededId: '', total: '0', paymentTermDays: [] }
   let receivable = { titleId: '', status: '', outstanding: '' }
   let bank = { accountId: '', entryAmount: '', statementLineStatus: '', reconciliationId: '' }
   let books = { reference: '', raised: [], settled: [], totalDebits: '0', totalCredits: '0', pending: 0 }
@@ -408,14 +412,21 @@ try {
   await trace.getTracer('horizon.demo').startActiveSpan('golden-path', async (span) => {
     traceId = span.spanContext().traceId
     try {
-      const placed = await new modules.PlaceOrderUseCase(salesDb, clock).execute({
+      quote = await negotiateQuote(modules, {
+        database: salesDb,
+        admin: salesAdmin,
         tenantId: identity.tenantId,
         customerId,
-        fulfillmentWarehouseId: warehouseId,
-        lines: [{ lineId: randomUUID(), itemId: catalog.itemId, quantity: DEMO.quantity }],
+        itemId: catalog.itemId,
+        clock,
       })
-      if (placed.isLeft()) throw placed.value
-      orderId = placed.value.orderId
+      const converted = await new modules.ConvertQuoteUseCase(salesDb, clock).execute({
+        context: salesCommand(identity.tenantId, `convert-${quote.quoteId}`),
+        quoteId: quote.quoteId,
+        fulfillmentWarehouseId: warehouseId,
+      })
+      if (converted.isLeft()) throw converted.value
+      orderId = converted.value.orderId
 
       await flushUntil(salesRelay, async () =>
         rowOrNull(inventoryAdmin`select id from stock_reservations
@@ -536,10 +547,20 @@ try {
     }
   })
 
-  const [order] = await salesAdmin`select status, total, currency from sales_orders
+  const [order] = await salesAdmin`select status, total, currency, issued_on,
+      (issued_on + 30)::text as due_on from sales_orders
     where tenant_id = ${identity.tenantId} and id = ${orderId}`
   assert.equal(order.status, 'confirmed')
-  assert.equal(order.total, '5000')
+  // Four at 12.50 is 50.00 of goods, plus 5.00 of freight, less the 3.00 haggled off in
+  // the second version of the offer. The order is confirmed at what was negotiated.
+  assert.equal(order.total, '5200')
+  assert.equal(quote.version, 2)
+  assert.equal(quote.total, order.total)
+  // The receivable falls due on the terms the quote agreed, not on the day it was confirmed.
+  assert.deepEqual(
+    receivable.installments.map(({ number, dueOn }) => [number, dueOn]),
+    [[1, order.due_on]],
+  )
   assert.equal(order.currency, 'BRL')
   assert.equal(BigInt(soldStock.onHand), stockBefore - 4_000_000n)
   assert.equal(soldStock.reserved, '0')
@@ -619,7 +640,14 @@ try {
           customerId,
           supplierId,
         },
-        order: { orderId, status: order.status, total: order.total, currency: order.currency },
+        quote,
+        order: {
+          orderId,
+          quoteId: quote.quoteId,
+          status: order.status,
+          total: order.total,
+          currency: order.currency,
+        },
         stock: {
           before: stockBefore.toString(),
           afterSale: soldStock.onHand,
@@ -720,6 +748,8 @@ function loadModules() {
     ...from(salesRequire, 'sales/dist/infrastructure/cryptography/aes-gcm-secret-box.js'),
     ...from(salesRequire, 'sales/dist/application/consume-module-events.js'),
     ...from(salesRequire, 'sales/dist/application/use-cases/place-order.js'),
+    ...from(salesRequire, 'sales/dist/application/use-cases/manage-quotes.js'),
+    ...from(salesRequire, 'sales/dist/application/use-cases/convert-quote.js'),
   }
   const salesTransport = from(
     salesRequire,
@@ -819,6 +849,10 @@ function loadModules() {
     DescribePartyUseCase: parties.DescribePartyUseCase,
     PartiesOutboxRelay: partiesTransport.OutboxRelay,
     PlaceOrderUseCase: sales.PlaceOrderUseCase,
+    WriteQuoteUseCase: sales.WriteQuoteUseCase,
+    ReviseQuoteUseCase: sales.ReviseQuoteUseCase,
+    DecideQuoteUseCase: sales.DecideQuoteUseCase,
+    ConvertQuoteUseCase: sales.ConvertQuoteUseCase,
     SalesConsumer: salesTransport.RabbitMqEventConsumer,
     SalesPublisher: salesTransport.RabbitMqEventPublisher,
     SalesOutboxRelay: salesTransport.OutboxRelay,
@@ -1281,6 +1315,59 @@ async function seedCustomer(modules, parties, salesAdmin, tenantId, clock) {
  * post it and record the customer's payment; the demo does the same through the use cases
  * the HTTP API runs, with idempotency keys derived from the order so a rerun is harmless.
  */
+/** Who ran a Sales command, and the key it can be retried under. */
+function salesCommand(tenantId, step) {
+  return { tenantId, actor: 'system:demo', requestId: null, idempotencyKey: `demo-${step}` }
+}
+
+/**
+ * The conversation before the sale: an offer, a customer who haggles, and a second version
+ * of the same offer that is the one they accept. The first version is kept, superseded.
+ */
+async function negotiateQuote(modules, { database, admin, tenantId, customerId, itemId, clock }) {
+  const lineId = randomUUID()
+  const line = { lineId, itemId, quantity: DEMO.quantity }
+  const terms = { freight: DEMO.quoteFreight, paymentTermDays: [...DEMO.quotePaymentTermDays] }
+  const written = await new modules.WriteQuoteUseCase(database, clock, 15).execute({
+    context: salesCommand(tenantId, `quote-${lineId}`),
+    customerId,
+    quote: { lines: [line], terms },
+  })
+  if (written.isLeft()) throw written.value
+  const decide = new modules.DecideQuoteUseCase(database, clock)
+  const sent = await decide.send(salesCommand(tenantId, `send-${lineId}`), written.value.quoteId)
+  if (sent.isLeft()) throw sent.value
+
+  // The customer asks for something off. What they were shown is kept, superseded by this.
+  const revised = await new modules.ReviseQuoteUseCase(database, clock, 15).execute({
+    context: salesCommand(tenantId, `revise-${lineId}`),
+    quoteId: written.value.quoteId,
+    quote: { lines: [line], terms: { ...terms, discount: DEMO.quoteDiscount } },
+  })
+  if (revised.isLeft()) throw revised.value
+  const resent = await decide.send(salesCommand(tenantId, `resend-${lineId}`), revised.value.quoteId)
+  if (resent.isLeft()) throw resent.value
+  const accepted = await decide.accept(
+    salesCommand(tenantId, `accept-${lineId}`),
+    revised.value.quoteId,
+  )
+  if (accepted.isLeft()) throw accepted.value
+
+  const [superseded] = await admin`select status, superseded_by from quotes
+    where tenant_id = ${tenantId} and id = ${written.value.quoteId}`
+  assert.equal(superseded.status, 'superseded')
+  assert.equal(superseded.superseded_by, revised.value.quoteId)
+  const [current] = await admin`select total from quotes
+    where tenant_id = ${tenantId} and id = ${revised.value.quoteId}`
+  return {
+    quoteId: revised.value.quoteId,
+    version: revised.value.version,
+    supersededId: written.value.quoteId,
+    total: current.total,
+    paymentTermDays: [...DEMO.quotePaymentTermDays],
+  }
+}
+
 async function collectReceivable(
   modules,
   { database, admin, relay, tenantId, orderId, treasuryAccountId, clock },
@@ -1351,6 +1438,12 @@ async function collectReceivable(
     settlementState: detail.settlementState,
     total: detail.total,
     outstanding: detail.outstanding,
+    // The schedule the customer agreed to, carried from the quote through the order.
+    installments: detail.installments.map(({ number, dueOn, amount }) => ({
+      number,
+      dueOn,
+      amount,
+    })),
   }
 }
 

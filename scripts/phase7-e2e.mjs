@@ -197,7 +197,7 @@ try {
     requestTraceId = span.spanContext().traceId
     try {
       const placed = await new PlaceOrderUseCase(salesDb, { now: () => new Date() }).execute({
-        tenantId,
+        context: { tenantId, actor: 'system:phase7', requestId: null, idempotencyKey: randomUUID() },
         customerId: randomUUID(),
         fulfillmentWarehouseId: warehouseId,
         lines: [{ lineId: randomUUID(), itemId, quantity: '4' }],

@@ -1,26 +1,45 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { createHmac, randomBytes } from 'node:crypto'
+import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { eq, sql } from 'drizzle-orm'
+import { desc, eq, sql } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import type { EventOutcome, ReceivedEvent, SalesScope } from '@/application/ports/unit-of-work'
+import type {
+  AuditRecord,
+  AuditTrail,
+  CommandReceipt,
+  EventOutcome,
+  ReceivedEvent,
+  SalesScope,
+} from '@/application/ports/unit-of-work'
 import { SalesUnitOfWork } from '@/application/ports/unit-of-work'
-import type { Either } from '@/core/either'
+import { canonicalJson } from '@/core/audit/canonical-json'
+import { type Either, left, right } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DomainEvent } from '@/core/events/domain-event'
 import { Customer } from '@/domain/entities/customer'
-import { Quote } from '@/domain/entities/quote'
+import {
+  APPROVAL_STATES,
+  type ApprovalState,
+  QUOTE_STATUSES,
+  Quote,
+  type QuoteStatus,
+} from '@/domain/entities/quote'
 import { SalesOrder } from '@/domain/entities/sales-order'
 import type { SecretBox } from '@/domain/services/secret-box'
 import {
+  BusinessDate,
+  CarrierName,
   Currency,
   CustomerEmail,
   CustomerName,
   CustomerPhone,
   LineDescription,
   Money,
+  PaymentTerms,
   Quantity,
+  Reason,
   TaxId,
 } from '@/domain/value-objects/sales-values'
 import * as schema from './schema'
@@ -37,6 +56,16 @@ export interface SalesDatabaseOptions {
     readonly blindIndexKey: Uint8Array
   }
 }
+
+/** Carries a refused command out of its transaction, so nothing it wrote is kept. */
+class Refused<E> extends Error {
+  constructor(readonly failure: E) {
+    super('command refused')
+  }
+}
+
+/** The first link of a tenant's audit chain has no predecessor to hash (ADR 0025). */
+const GENESIS_HASH = '0'.repeat(64)
 
 export class SalesDatabase extends SalesUnitOfWork {
   readonly #client: ReturnType<typeof postgres>
@@ -74,6 +103,46 @@ export class SalesDatabase extends SalesUnitOfWork {
         work(makeScope(tx, tenantId, this.#customerPrivacy)),
       )
     })
+  }
+
+  async once<E, T>(
+    tenantId: string,
+    receipt: CommandReceipt,
+    work: (scope: SalesScope) => Promise<Either<E, T>>,
+  ): Promise<Either<E | ConflictError, T>> {
+    try {
+      return await this.inTenant(tenantId, async (scope) => {
+        const tx = this.currentTransaction()
+        // Claiming first makes a concurrent retry wait on this transaction, then see its
+        // receipt rather than write a second document.
+        const claimed = await tx
+          .insert(schema.commandReceipts)
+          .values({ tenantId, ...receipt, response: {} })
+          .onConflictDoNothing()
+          .returning({ key: schema.commandReceipts.idempotencyKey })
+        if (claimed.length === 0) {
+          const [previous] = await tx
+            .select()
+            .from(schema.commandReceipts)
+            .where(eq(schema.commandReceipts.idempotencyKey, receipt.idempotencyKey))
+          if (previous?.command !== receipt.command || previous.fingerprint !== receipt.fingerprint)
+            return left<E | ConflictError, T>(
+              new ConflictError('this Idempotency-Key was already used for a different request'),
+            )
+          return right<E | ConflictError, T>(previous.response as T)
+        }
+        const outcome = await work(scope)
+        if (outcome.isLeft()) throw new Refused(outcome.value)
+        await tx
+          .update(schema.commandReceipts)
+          .set({ response: outcome.value as object })
+          .where(eq(schema.commandReceipts.idempotencyKey, receipt.idempotencyKey))
+        return right<E | ConflictError, T>(outcome.value)
+      })
+    } catch (error) {
+      if (error instanceof Refused) return left(error.failure as E)
+      throw error
+    }
   }
 
   async processEvent<T>(
@@ -196,6 +265,55 @@ export class SalesDatabase extends SalesUnitOfWork {
   async close(): Promise<void> {
     await this.#client.end({ timeout: 5 })
   }
+
+  private currentTransaction(): Transaction {
+    const current = this.#transactions.getStore()
+    if (!current) throw new Error('This operation requires a tenant transaction')
+    return current.tx
+  }
+}
+
+/** `hash = sha256(previous_hash || canonical_json(entry))`, as identity's chain (ADR 0025). */
+export function auditHash(previousHash: string, entry: Record<string, unknown>): string {
+  return createHash('sha256')
+    .update(previousHash, 'utf8')
+    .update(canonicalJson(entry), 'utf8')
+    .digest('hex')
+}
+
+function auditTrail(tx: Transaction, tenantId: string): AuditTrail {
+  return {
+    append: async (record: AuditRecord) => {
+      // A per-tenant transaction lock serializes chain appends, including the first link.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`sales.audit:${tenantId}`}, 0))`,
+      )
+      const [last] = await tx
+        .select({ sequence: schema.auditLog.sequence, hash: schema.auditLog.hash })
+        .from(schema.auditLog)
+        .orderBy(desc(schema.auditLog.sequence))
+        .limit(1)
+      const entry = {
+        sequence: (last?.sequence ?? 0) + 1,
+        tenantId,
+        actor: record.actor,
+        subjectType: record.subjectType,
+        subjectId: record.subjectId,
+        action: record.action,
+        occurredAt: record.occurredAt,
+        requestId: record.requestId,
+        traceId: trace.getSpan(context.active())?.spanContext().traceId ?? null,
+        details: JSON.parse(canonicalJson(record.details)) as Record<string, unknown>,
+      }
+      const previousHash = last?.hash ?? GENESIS_HASH
+      await tx.insert(schema.auditLog).values({
+        id: new UniqueEntityID().toString(),
+        ...entry,
+        previousHash,
+        hash: auditHash(previousHash, entry),
+      })
+    },
+  }
 }
 
 function restored<E, T>(result: Either<E, T>): T {
@@ -220,7 +338,7 @@ function mapOrder(
     itemId: line.itemId,
     quantity: Quantity.fromMicros(line.quantity),
   }))
-  const confirmedLines = lines.flatMap((line) => {
+  const pricedLines = lines.flatMap((line) => {
     if (
       line.description === null ||
       line.unitPrice === null ||
@@ -240,15 +358,42 @@ function mapOrder(
       },
     ]
   })
+  // The same three columns hold two different facts: what the customer was quoted before
+  // the order is confirmed, and the snapshot the confirmation froze afterwards.
+  const confirmedLines = row.status === 'confirmed' ? pricedLines : []
+  const agreedLines =
+    row.status === 'confirmed'
+      ? []
+      : pricedLines.map((line) => ({
+          lineId: line.lineId,
+          itemId: line.itemId,
+          description: line.description,
+          unitPrice: line.unitPrice,
+        }))
   const currency = row.currency === null ? null : restored(Currency.create(row.currency))
+  // The terms are held in the order's own currency once it has one, and in the currency of
+  // the money they carry before that: an order without lines priced yet still has freight.
+  const termsCurrency = currency ?? restored(Currency.create('XXX'))
   return SalesOrder.rehydrate(
     {
       tenantId: row.tenantId,
       customerId: row.customerId,
       fulfillmentWarehouseId: row.fulfillmentWarehouseId,
+      quoteId: row.quoteId,
       requestedLines,
+      agreedLines,
       confirmedLines,
       reservationId: row.reservationId,
+      currency,
+      terms: {
+        sellerId: row.sellerId,
+        discount: Money.fromAmount(row.discount, termsCurrency),
+        freight: Money.fromAmount(row.freight, termsCurrency),
+        carrier: row.carrier ? restored(CarrierName.create(row.carrier)) : null,
+        paymentTerms: restored(PaymentTerms.create(row.paymentTermDays)),
+        notes: row.notes,
+      },
+      issuedOn: restored(BusinessDate.create(row.issuedOn)),
       total: row.total === null || currency === null ? null : Money.fromAmount(row.total, currency),
       status: row.status,
       version: row.version,
@@ -320,20 +465,46 @@ async function mapCustomer(
   )
 }
 
+function oneOf<T extends string>(allowed: readonly T[], value: string, what: string): T {
+  if (!allowed.includes(value as T)) throw new Error(`Invalid persisted ${what}`)
+  return value as T
+}
+
 function mapQuote(
   row: typeof schema.quotes.$inferSelect,
   lines: readonly (typeof schema.quoteLines.$inferSelect)[],
 ): Quote {
-  if (row.status !== 'draft' && row.status !== 'accepted' && row.status !== 'expired')
-    throw new Error('Invalid persisted quote status')
   const currency = restored(Currency.create(row.currency))
   return Quote.rehydrate(
     {
       tenantId: row.tenantId,
+      rootId: row.rootId,
+      version: row.version,
       customerId: row.customerId,
-      status: row.status,
-      total: Money.fromAmount(row.total, currency),
+      currency,
+      status: oneOf<QuoteStatus>(QUOTE_STATUSES, row.status, 'quote status'),
+      terms: {
+        sellerId: row.sellerId,
+        discount: Money.fromAmount(row.discount, currency),
+        freight: Money.fromAmount(row.freight, currency),
+        carrier: row.carrier ? restored(CarrierName.create(row.carrier)) : null,
+        paymentTerms: restored(PaymentTerms.create(row.paymentTermDays)),
+        notes: row.notes,
+      },
+      approval: {
+        state: oneOf<ApprovalState>(APPROVAL_STATES, row.approvalState, 'approval state'),
+        requestedBy: row.approvalRequestedBy,
+        requestedAt: row.approvalRequestedAt,
+        decidedBy: row.approvalDecidedBy,
+        decidedAt: row.approvalDecidedAt,
+        reason: row.approvalReason ? restored(Reason.create(row.approvalReason)) : null,
+      },
       expiresAt: row.expiresAt,
+      supersedes: row.supersedes,
+      supersededBy: row.supersededBy,
+      closure: row.closureReason ? restored(Reason.create(row.closureReason)) : null,
+      orderId: row.orderId,
+      sentAt: row.sentAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       lines: lines.map((line) => ({
@@ -347,6 +518,64 @@ function mapQuote(
     },
     new UniqueEntityID(row.id),
   )
+}
+
+async function publishAll(
+  tx: Transaction,
+  tenantId: string,
+  aggregate: { pullDomainEvents(): readonly DomainEvent[] },
+): Promise<void> {
+  for (const event of aggregate.pullDomainEvents()) await publish(tx, tenantId, event)
+}
+
+function writeQuoteLines(tx: Transaction, tenantId: string, row: ReturnType<Quote['toSnapshot']>) {
+  return tx.insert(schema.quoteLines).values(
+    row.lines.map((line) => ({
+      tenantId,
+      quoteId: row.id,
+      lineId: line.lineId,
+      itemId: line.itemId,
+      quantity: restored(Quantity.create(line.quantity)).micros,
+      description: line.description,
+      unitPrice: BigInt(line.unitPrice),
+      lineTotal: BigInt(line.lineTotal),
+    })),
+  )
+}
+
+/** Every column of a quote the store writes, derived from its snapshot. */
+function quoteRow(row: ReturnType<Quote['toSnapshot']>) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    rootId: row.rootId,
+    version: row.version,
+    customerId: row.customerId,
+    status: row.status,
+    net: BigInt(row.net),
+    total: BigInt(row.total),
+    currency: row.currency,
+    sellerId: row.sellerId,
+    discount: BigInt(row.discount),
+    freight: BigInt(row.freight),
+    carrier: row.carrier,
+    paymentTermDays: [...row.paymentTermDays],
+    notes: row.notes,
+    approvalState: row.approvalState,
+    approvalRequestedBy: row.approvalRequestedBy,
+    approvalRequestedAt: row.approvalRequestedAt,
+    approvalDecidedBy: row.approvalDecidedBy,
+    approvalDecidedAt: row.approvalDecidedAt,
+    approvalReason: row.approvalReason,
+    supersedes: row.supersedes,
+    supersededBy: row.supersededBy,
+    closureReason: row.closureReason,
+    orderId: row.orderId,
+    sentAt: row.sentAt,
+    expiresAt: row.expiresAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
 }
 
 async function publish(tx: Transaction, tenantId: string, event: DomainEvent): Promise<void> {
@@ -378,6 +607,7 @@ function makeScope(
   }
   return {
     tenantId,
+    audit: auditTrail(tx, tenantId),
     customers: {
       findById: async (id) => {
         const [row] = await tx
@@ -472,37 +702,45 @@ function makeScope(
       create: async (quote) => {
         const row = quote.toSnapshot()
         assertTenant(row.tenantId)
-        await tx.insert(schema.quotes).values({
-          id: row.id,
-          tenantId,
-          customerId: row.customerId,
-          status: row.status,
-          total: BigInt(row.total.amount),
-          currency: row.total.currency,
-          expiresAt: row.expiresAt,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-        })
-        await tx.insert(schema.quoteLines).values(
-          row.lines.map((line) => ({
-            tenantId,
-            quoteId: row.id,
-            lineId: line.lineId,
-            itemId: line.itemId,
-            quantity: restored(Quantity.create(line.quantity)).micros,
-            description: line.description,
-            unitPrice: BigInt(line.unitPrice),
-            lineTotal: BigInt(line.lineTotal),
-          })),
-        )
+        await tx.insert(schema.quotes).values(quoteRow(row))
+        await writeQuoteLines(tx, tenantId, row)
+        await publishAll(tx, tenantId, quote)
       },
       save: async (quote) => {
         const row = quote.toSnapshot()
         assertTenant(row.tenantId)
+        // A draft is still being written; everything else is a record of what was offered.
+        if (row.status === 'draft' || row.status === 'pending') {
+          await tx.delete(schema.quoteLines).where(eq(schema.quoteLines.quoteId, row.id))
+          await writeQuoteLines(tx, tenantId, row)
+        }
         await tx
           .update(schema.quotes)
-          .set({ status: row.status, updatedAt: row.updatedAt })
+          .set({
+            status: row.status,
+            net: BigInt(row.net),
+            total: BigInt(row.total),
+            sellerId: row.sellerId,
+            discount: BigInt(row.discount),
+            freight: BigInt(row.freight),
+            carrier: row.carrier,
+            paymentTermDays: [...row.paymentTermDays],
+            notes: row.notes,
+            approvalState: row.approvalState,
+            approvalRequestedBy: row.approvalRequestedBy,
+            approvalRequestedAt: row.approvalRequestedAt,
+            approvalDecidedBy: row.approvalDecidedBy,
+            approvalDecidedAt: row.approvalDecidedAt,
+            approvalReason: row.approvalReason,
+            supersededBy: row.supersededBy,
+            closureReason: row.closureReason,
+            orderId: row.orderId,
+            sentAt: row.sentAt,
+            expiresAt: row.expiresAt,
+            updatedAt: row.updatedAt,
+          })
           .where(eq(schema.quotes.id, row.id))
+        await publishAll(tx, tenantId, quote)
       },
     },
     orders: {
@@ -528,11 +766,19 @@ function makeScope(
           tenantId,
           customerId: row.customerId,
           fulfillmentWarehouseId: row.fulfillmentWarehouseId,
+          quoteId: row.quoteId,
+          sellerId: row.sellerId,
+          discount: BigInt(row.discount),
+          freight: BigInt(row.freight),
+          carrier: row.carrier,
+          paymentTermDays: [...row.paymentTermDays],
+          issuedOn: row.issuedOn,
+          notes: row.notes,
           status: row.status,
           version: row.version,
           reservationId: row.reservationId,
           total: row.total ? BigInt(row.total.amount) : null,
-          currency: row.total?.currency ?? null,
+          currency: row.currency,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
         })
@@ -543,6 +789,11 @@ function makeScope(
             lineId: line.lineId,
             itemId: line.itemId,
             quantity: restored(Quantity.create(line.quantity)).micros,
+            // Present only on an order converted from a quote: what the customer agreed to.
+            description: line.description ?? null,
+            unitPrice: line.unitPrice ? BigInt(line.unitPrice.amount) : null,
+            lineTotal: line.lineTotal ? BigInt(line.lineTotal.amount) : null,
+            currency: line.unitPrice?.currency ?? null,
           })),
         )
       },
@@ -555,8 +806,15 @@ function makeScope(
             status: row.status,
             version: row.version,
             reservationId: row.reservationId,
+            sellerId: row.sellerId,
+            discount: BigInt(row.discount),
+            freight: BigInt(row.freight),
+            carrier: row.carrier,
+            paymentTermDays: [...row.paymentTermDays],
+            issuedOn: row.issuedOn,
+            notes: row.notes,
             total: row.total ? BigInt(row.total.amount) : null,
-            currency: row.total?.currency ?? null,
+            currency: row.currency,
             updatedAt: row.updatedAt,
           })
           .where(eq(schema.salesOrders.id, row.id))

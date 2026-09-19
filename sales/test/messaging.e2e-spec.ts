@@ -99,7 +99,7 @@ it('projects catalog events and confirms an order from an inventory outcome exac
   })
 
   const placed = await new PlaceOrderUseCase(database, { now: () => new Date() }).execute({
-    tenantId,
+    context: { tenantId, actor: 'ana', requestId: null, idempotencyKey: randomUUID() },
     customerId: randomUUID(),
     fulfillmentWarehouseId: randomUUID(),
     lines: [{ lineId: randomUUID(), itemId, quantity: '2' }],
@@ -137,7 +137,7 @@ it('applies a reservation rejection once and ignores its redelivery', async () =
   const tenantId = randomUUID()
   await database.provisionTenant(tenantId)
   const placed = await new PlaceOrderUseCase(database, { now: () => new Date() }).execute({
-    tenantId,
+    context: { tenantId, actor: 'ana', requestId: null, idempotencyKey: randomUUID() },
     customerId: randomUUID(),
     fulfillmentWarehouseId: randomUUID(),
     lines: [{ lineId: randomUUID(), itemId: randomUUID(), quantity: '1' }],

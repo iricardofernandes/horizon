@@ -1379,6 +1379,76 @@ somebody can see it.
 
 ---
 
+## Phase 29 — The commercial document: an offer negotiated, and the order it becomes
+
+**Complete.** The first slice of Phase H of the [expansion plan](erp-expansion-plan.md).
+
+Until now a sale began with an order somebody had already decided on. Most sales do not
+begin there: they begin with a price somebody asked for, an answer, a counter-offer, and a
+yes. This is the phase where that conversation is a record rather than a memory — and where
+the yes carries into the order, the stock and the money without anybody retyping it.
+
+**Deliverables**
+
+- **An offer negotiated in versions.** A quote that has been sent is never rewritten.
+  Answering one produces a **new version** beside it, which supersedes the last and shares
+  its identifier, so the record shows what was actually put in front of the customer and
+  when, rather than only what was agreed in the end. A draft nobody has seen is simply
+  corrected. Exactly one version of an offer is current at any moment — a partial unique
+  index says so, not a convention.
+- **A discount deep enough to matter is somebody else's decision.** The workspace allows a
+  seller so many basis points against the goods; beyond that the offer waits, and **whoever
+  asked cannot be the one who grants it** (four eyes, in the aggregate and in a table
+  constraint). An allowance that was not exceeded is recorded as *not required*, so an audit
+  can tell an exemption from an oversight.
+- **What the offer says beyond the goods** — the seller, the discount, the freight, the
+  carrier, the payment terms and the notes — carried onto the order it becomes. Payment
+  terms are days from issue (`0/30/60`), because they are agreed before anybody knows which
+  day the order will be issued on; the dates are derived once, when the receivable is
+  raised.
+- **Conversion.** An accepted quote becomes **at most one** order: the same lines, at the
+  prices the customer agreed to, under the terms that were negotiated. The order is confirmed
+  at those prices even if the catalogue has moved in between, because a price list that
+  changed between the yes and the reservation is not a new agreement. A unique index makes
+  the second conversion impossible rather than merely unlikely.
+- **A receivable on the schedule that was agreed.** `sales.order.confirmed` now carries the
+  instalments, already dated, and `financial/` raises the forecast on them instead of on a
+  single payment it invented. A title cannot fall due before it is issued, so an order
+  issued the day before it was confirmed is issued on the earlier of the two dates.
+- **The audit log and the command receipts Sales never had.** Every decision on a quote and
+  every order placed is a line in the tenant's hash-chained log, naming who took it; every
+  command that creates a document takes an `Idempotency-Key` and is run at most once
+  (ADR 0025, ADR 0028).
+- `@horizon/contracts@0.17.0`: `sales.quote.sent`, `sales.quote.accepted`,
+  `sales.quote.rejected`, and `installments` **optional** on `sales.order.confirmed` — so a
+  consumer written before payment terms existed keeps parsing confirmations.
+
+**Exit criteria**
+
+- Quote → negotiation → acceptance → order → reservation → confirmation → receivable runs
+  in `make demo`, and the receivable it raises has the instalments the quote agreed.
+- A sent quote cannot be edited: the attempt is refused by the aggregate and, if it ever
+  got past it, by a trigger on the lines.
+- The person who asked for a discount cannot approve it, asserted in the domain and in the
+  database.
+- An accepted quote converts once; a retried conversion answers with the order it already
+  made, and no second order exists.
+- A converted order is confirmed at the quoted price after the catalogue price has changed.
+- Every quote decision appears in the audit chain, in order, under the actor who took it.
+
+**Non-goals**
+
+- Fulfilment and returns — picking, packing, shipping, partial delivery and the customer
+  return with its stock and financial reversal — which are the next slice of Phase H.
+- The screens: quotes, the negotiation history and the approval queue are driven through
+  the API here, and get a place to be seen in the slice that closes the phase.
+- Commissions and profitability. The seller is on the document; what they earn from it waits
+  for costs to be stable, which is Phase I.
+- Re-pricing a quote when the catalogue moves. An offer is a price held open until it
+  expires — that is what makes it an offer.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

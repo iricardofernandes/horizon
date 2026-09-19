@@ -4,7 +4,6 @@ import {
   ConflictException,
   Controller,
   Get,
-  HttpCode,
   Inject,
   NotFoundException,
   Param,
@@ -14,10 +13,12 @@ import {
 import { z } from 'zod'
 import { SalesRuntime } from '@/main/sales-runtime'
 import { PublicRoute, RequireSalesAction, type SalesRequest, tenantOf } from './authorization'
+import { context, idempotent } from './command-context'
 
 const placeOrderInput = z.strictObject({
   customerId: z.uuid(),
   fulfillmentWarehouseId: z.uuid(),
+  currency: z.string().length(3).optional(),
   lines: z
     .array(
       z.strictObject({
@@ -30,19 +31,49 @@ const placeOrderInput = z.strictObject({
     .max(100),
 })
 
+const quoteLines = z
+  .array(
+    z.strictObject({
+      lineId: z.uuid(),
+      itemId: z.uuid(),
+      quantity: z.string().regex(/^\d+(?:\.\d{1,6})?$/),
+    }),
+  )
+  .min(1)
+  .max(100)
+
+const quoteTerms = z.strictObject({
+  sellerId: z.uuid().optional(),
+  discount: z
+    .string()
+    .regex(/^\d{1,18}$/)
+    .optional(),
+  freight: z
+    .string()
+    .regex(/^\d{1,18}$/)
+    .optional(),
+  carrier: z.string().trim().min(2).max(120).optional(),
+  paymentTermDays: z.array(z.number().int().min(0).max(365)).min(1).max(12).optional(),
+  notes: z.string().max(500).optional(),
+})
+
 const createQuoteInput = z.strictObject({
   customerId: z.uuid(),
-  lines: z
-    .array(
-      z.strictObject({
-        lineId: z.uuid(),
-        itemId: z.uuid(),
-        quantity: z.string().regex(/^\d+(?:\.\d{1,6})?$/),
-      }),
-    )
-    .min(1)
-    .max(100),
+  lines: quoteLines,
+  terms: quoteTerms.optional(),
 })
+
+const reviseQuoteInput = z.strictObject({ lines: quoteLines, terms: quoteTerms.optional() })
+
+const convertQuoteInput = z.strictObject({ fulfillmentWarehouseId: z.uuid() })
+
+const reasonInput = z.strictObject({ reason: z.string().trim().min(1).max(500) })
+
+function quoteId(value: string): string {
+  const parsed = z.uuid().safeParse(value)
+  if (!parsed.success) throw new BadRequestException('Invalid quote id')
+  return parsed.data
+}
 
 @Controller()
 export class SalesController {
@@ -89,31 +120,95 @@ export class SalesController {
   async createQuote(@Body() body: unknown, @Req() request: SalesRequest) {
     const parsed = createQuoteInput.safeParse(body)
     if (!parsed.success) throw new BadRequestException('Invalid quote')
-    const result = await this.runtime.createQuote.execute({
-      ...parsed.data,
-      tenantId: tenantOf(request),
-    })
-    if (result.isRight()) return result.value
-    if (result.value.title === 'Conflict') throw new ConflictException(result.value.message)
-    if (result.value.title === 'Resource not found')
-      throw new NotFoundException(result.value.message)
-    throw new BadRequestException(result.value.message)
+    return this.unwrap(
+      await this.runtime.writeQuote.execute({
+        context: idempotent(request),
+        customerId: parsed.data.customerId,
+        quote: { lines: parsed.data.lines, terms: parsed.data.terms },
+      }),
+    )
+  }
+
+  /** A draft changes in place; a sent offer is answered with a new version of itself. */
+  @Post('quotes/:id/revise')
+  @RequireSalesAction('manage')
+  async reviseQuote(@Param('id') id: string, @Body() body: unknown, @Req() request: SalesRequest) {
+    const parsed = reviseQuoteInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid quote')
+    return this.unwrap(
+      await this.runtime.reviseQuote.execute({
+        context: idempotent(request),
+        quoteId: quoteId(id),
+        quote: parsed.data,
+      }),
+    )
+  }
+
+  @Post('quotes/:id/send')
+  @RequireSalesAction('manage')
+  async sendQuote(@Param('id') id: string, @Req() request: SalesRequest) {
+    return this.unwrap(await this.runtime.decideQuote.send(context(request), quoteId(id)))
+  }
+
+  @Post('quotes/:id/approve')
+  @RequireSalesAction('manage')
+  async approveQuote(@Param('id') id: string, @Req() request: SalesRequest) {
+    return this.unwrap(await this.runtime.decideQuote.approve(context(request), quoteId(id)))
+  }
+
+  @Post('quotes/:id/refuse')
+  @RequireSalesAction('manage')
+  async refuseQuote(@Param('id') id: string, @Body() body: unknown, @Req() request: SalesRequest) {
+    const parsed = reasonInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid reason')
+    return this.unwrap(
+      await this.runtime.decideQuote.refuse(context(request), quoteId(id), parsed.data.reason),
+    )
   }
 
   @Post('quotes/:id/accept')
   @RequireSalesAction('manage')
-  @HttpCode(204)
   async acceptQuote(@Param('id') id: string, @Req() request: SalesRequest) {
-    const parsed = z.uuid().safeParse(id)
-    if (!parsed.success) throw new BadRequestException('Invalid quote id')
-    const result = await this.runtime.acceptQuote.execute({
-      tenantId: tenantOf(request),
-      quoteId: parsed.data,
-    })
-    if (result.isRight()) return
-    if (result.value.title === 'Resource not found')
-      throw new NotFoundException(result.value.message)
-    throw new ConflictException(result.value.message)
+    return this.unwrap(await this.runtime.decideQuote.accept(context(request), quoteId(id)))
+  }
+
+  /** The offer the customer agreed to, made binding as the order that delivers it. */
+  @Post('quotes/:id/order')
+  @RequireSalesAction('manage')
+  async convertQuote(@Param('id') id: string, @Body() body: unknown, @Req() request: SalesRequest) {
+    const parsed = convertQuoteInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid conversion')
+    return this.unwrap(
+      await this.runtime.convertQuote.execute({
+        context: idempotent(request),
+        quoteId: quoteId(id),
+        fulfillmentWarehouseId: parsed.data.fulfillmentWarehouseId,
+      }),
+    )
+  }
+
+  @Post('quotes/:id/decline')
+  @RequireSalesAction('manage')
+  async declineQuote(@Param('id') id: string, @Body() body: unknown, @Req() request: SalesRequest) {
+    const parsed = reasonInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid reason')
+    return this.unwrap(
+      await this.runtime.decideQuote.decline(context(request), quoteId(id), parsed.data.reason),
+    )
+  }
+
+  @Post('quotes/:id/expire')
+  @RequireSalesAction('manage')
+  async expireQuote(@Param('id') id: string, @Req() request: SalesRequest) {
+    return this.unwrap(await this.runtime.decideQuote.expire(context(request), quoteId(id)))
+  }
+
+  private unwrap<T>(result: { isRight(): boolean; value: unknown }): T {
+    if (result.isRight()) return result.value as T
+    const failure = result.value as { title: string; message: string }
+    if (failure.title === 'Conflict') throw new ConflictException(failure.message)
+    if (failure.title === 'Resource not found') throw new NotFoundException(failure.message)
+    throw new BadRequestException(failure.message)
   }
 
   @Get('orders')
@@ -137,11 +232,11 @@ export class SalesController {
   async placeOrder(@Body() body: unknown, @Req() request: SalesRequest) {
     const parsed = placeOrderInput.safeParse(body)
     if (!parsed.success) throw new BadRequestException('Invalid sales order')
-    const result = await this.runtime.placeOrder.execute({
-      ...parsed.data,
-      tenantId: tenantOf(request),
-    })
-    if (result.isLeft()) throw new BadRequestException(result.value.message)
-    return result.value
+    return this.unwrap(
+      await this.runtime.placeOrder.execute({
+        ...parsed.data,
+        context: idempotent(request),
+      }),
+    )
   }
 }

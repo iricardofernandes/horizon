@@ -2,7 +2,12 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { ApplyStockReservedUseCase } from '@/application/use-cases/apply-reservation-outcome'
-import { AcceptQuoteUseCase, CreateQuoteUseCase } from '@/application/use-cases/manage-quotes'
+import { ConvertQuoteUseCase } from '@/application/use-cases/convert-quote'
+import {
+  DecideQuoteUseCase,
+  ReviseQuoteUseCase,
+  WriteQuoteUseCase,
+} from '@/application/use-cases/manage-quotes'
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
 import { ForgetPartyUseCase, ProjectPartyUseCase } from '@/application/use-cases/project-parties'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
@@ -29,6 +34,11 @@ afterAll(async () => {
   await Promise.allSettled([database?.close(), application?.end(), administrator?.end()])
 })
 
+/** Every committing command names who ran it and carries a key it can be retried under. */
+function commandOf(tenantId: string, actor = 'ana') {
+  return { tenantId, actor, requestId: null, idempotencyKey: randomUUID() }
+}
+
 async function seedCatalogItem() {
   const tenantId = randomUUID()
   const itemId = randomUUID()
@@ -41,7 +51,7 @@ async function seedCatalogItem() {
 
 async function placeOrder(fixture: { tenantId: string; itemId: string }) {
   const result = await new PlaceOrderUseCase(database, clock).execute({
-    tenantId: fixture.tenantId,
+    context: commandOf(fixture.tenantId),
     customerId: randomUUID(),
     fulfillmentWarehouseId: randomUUID(),
     lines: [{ lineId: randomUUID(), itemId: fixture.itemId, quantity: '2.5' }],
@@ -208,20 +218,32 @@ it('persists priced quotes and crypto-shreds customer personal data', async () =
   // The registry owns the tax identifier; the projection never receives it.
   expect(stored?.tax_id_ciphertext).toBeNull()
 
-  const quote = await new CreateQuoteUseCase(database, clock, 15).execute({
-    tenantId: fixture.tenantId,
+  const quote = await new WriteQuoteUseCase(database, clock, 15).execute({
+    context: commandOf(fixture.tenantId),
     customerId: created.value.customerId,
-    lines: [{ lineId: randomUUID(), itemId: fixture.itemId, quantity: '2.5' }],
+    quote: {
+      lines: [{ lineId: randomUUID(), itemId: fixture.itemId, quantity: '2.5' }],
+      terms: { freight: '500', paymentTermDays: [0, 30] },
+    },
   })
   if (quote.isLeft()) throw quote.value
-  const accepted = await new AcceptQuoteUseCase(database, clock).execute({
-    tenantId: fixture.tenantId,
-    quoteId: quote.value.quoteId,
-  })
+  const decide = new DecideQuoteUseCase(database, clock)
+  const decision = commandOf(fixture.tenantId)
+  expect((await decide.send(decision, quote.value.quoteId)).isRight()).toBe(true)
+  const accepted = await decide.accept(decision, quote.value.quoteId)
   expect(accepted.isRight()).toBe(true)
-  const [persistedQuote] = await administrator`select status, total, currency from quotes
-    where id = ${quote.value.quoteId}`
-  expect(persistedQuote).toEqual({ status: 'accepted', total: '3125', currency: 'BRL' })
+  const [persistedQuote] = await administrator`select status, net, total, currency, version,
+      root_id, payment_term_days from quotes where id = ${quote.value.quoteId}`
+  // The goods are 3125 and the freight is 500: an offer totals what it charges.
+  expect(persistedQuote).toEqual({
+    status: 'accepted',
+    net: '3125',
+    total: '3625',
+    currency: 'BRL',
+    version: 1,
+    root_id: quote.value.quoteId,
+    payment_term_days: [0, 30],
+  })
 
   const erased = await database.inTenant(fixture.tenantId, (scope) =>
     new ForgetPartyUseCase(clock).executeInScope(scope, created.value.customerId),
@@ -241,4 +263,123 @@ it('persists priced quotes and crypto-shreds customer personal data', async () =
   await database.inTenant(fixture.tenantId, async (scope) => {
     expect((await scope.customers.findById(created.value.customerId))?.isActive()).toBe(false)
   })
+})
+
+it('negotiates an offer in versions and makes the accepted one binding', async () => {
+  const fixture = await seedCatalogItem()
+  const tenantId = fixture.tenantId
+  const customerId = randomUUID()
+  const projected = await database.inTenant(tenantId, (scope) =>
+    new ProjectPartyUseCase(clock).executeInScope(scope, {
+      tenantId,
+      partyId: customerId,
+      legalName: 'Maria Silva',
+      email: 'maria@example.com',
+      phone: '+55 11 99999-9999',
+      address: 'Rua Um, 42, São Paulo',
+      roles: ['customer'],
+      active: true,
+    }),
+  )
+  if (projected.isLeft()) throw projected.value
+
+  const lineId = randomUUID()
+  const first = await new WriteQuoteUseCase(database, clock, 15).execute({
+    context: commandOf(tenantId),
+    customerId,
+    quote: {
+      lines: [{ lineId, itemId: fixture.itemId, quantity: '2' }],
+      terms: { freight: '500', paymentTermDays: [0, 30] },
+    },
+  })
+  if (first.isLeft()) throw first.value
+  const decide = new DecideQuoteUseCase(database, clock)
+  expect((await decide.send(commandOf(tenantId), first.value.quoteId)).isRight()).toBe(true)
+
+  // The customer haggles. What they were shown is kept; a new version stands beside it.
+  const second = await new ReviseQuoteUseCase(database, clock, 15).execute({
+    context: commandOf(tenantId),
+    quoteId: first.value.quoteId,
+    quote: {
+      lines: [{ lineId, itemId: fixture.itemId, quantity: '2' }],
+      terms: { freight: '500', discount: '250', paymentTermDays: [0, 30] },
+    },
+  })
+  if (second.isLeft()) throw second.value
+  expect(second.value.version).toBe(2)
+  const versions = await administrator`select id, version, status, superseded_by, supersedes,
+      root_id, total from quotes where tenant_id = ${tenantId} order by version`
+  expect(versions).toMatchObject([
+    { version: 1, status: 'superseded', superseded_by: second.value.quoteId, total: '3000' },
+    { version: 2, status: 'draft', supersedes: first.value.quoteId, total: '2750' },
+  ])
+  expect(versions.every((row) => row.root_id === first.value.quoteId)).toBe(true)
+
+  expect((await decide.send(commandOf(tenantId), second.value.quoteId)).isRight()).toBe(true)
+  expect((await decide.accept(commandOf(tenantId), second.value.quoteId)).isRight()).toBe(true)
+
+  const convert = new ConvertQuoteUseCase(database, clock)
+  const conversion = {
+    context: commandOf(tenantId),
+    quoteId: second.value.quoteId,
+    fulfillmentWarehouseId: randomUUID(),
+  }
+  const converted = await convert.execute(conversion)
+  if (converted.isLeft()) throw converted.value
+  // A retried command answers with the order it already made, and makes no second one.
+  const retried = await convert.execute(conversion)
+  if (retried.isLeft()) throw retried.value
+  expect(retried.value).toEqual(converted.value)
+
+  const orders = await administrator`select id, quote_id, discount, freight, payment_term_days,
+      status from sales_orders where tenant_id = ${tenantId}`
+  expect(orders).toMatchObject([
+    {
+      id: converted.value.orderId,
+      quote_id: second.value.quoteId,
+      discount: '250',
+      freight: '500',
+      payment_term_days: [0, 30],
+      status: 'placed',
+    },
+  ])
+
+  // The catalogue moves between the yes and the reservation. The agreement does not.
+  await administrator`update catalog_items set unit_price = 9999
+    where tenant_id = ${tenantId} and item_id = ${fixture.itemId}`
+  const confirmed = await new ApplyStockReservedUseCase(database, clock).execute({
+    tenantId,
+    orderId: converted.value.orderId,
+    orderVersion: 1,
+    reservationId: randomUUID(),
+  })
+  expect(confirmed.isRight()).toBe(true)
+  const [order] = await administrator`select status, total from sales_orders
+    where id = ${converted.value.orderId}`
+  // Two at 1250, plus 500 of freight, less the 250 that was agreed off.
+  expect(order).toMatchObject({ status: 'confirmed', total: '2750' })
+
+  const [event] = await administrator`select payload from outbox
+    where tenant_id = ${tenantId} and event_type = 'sales.order.confirmed'`
+  expect(event?.payload).toMatchObject({
+    installments: [
+      { number: 1, amount: { amount: '1375', currency: 'BRL' } },
+      { number: 2, amount: { amount: '1375', currency: 'BRL' } },
+    ],
+  })
+
+  // Every decision is in the tenant's chain, in the order it was taken.
+  const trail = await administrator`select sequence, actor, action, subject_type, previous_hash
+    from audit_log where tenant_id = ${tenantId} order by sequence`
+  expect(trail.map((row) => row.action)).toEqual([
+    'quote.written',
+    'quote.send',
+    'quote.versioned',
+    'quote.send',
+    'quote.accept',
+    'order.placed',
+    'quote.converted',
+  ])
+  expect(trail[0]?.previous_hash).toBe('0'.repeat(64))
+  expect(trail.every((row) => row.actor === 'ana')).toBe(true)
 })

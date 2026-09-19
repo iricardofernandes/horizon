@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { snapshotOf } from 'test/support/snapshot-of'
 import { SalesOrder } from './entities/sales-order'
 import {
-  CancellationReason,
+  BusinessDate,
   Currency,
   LineDescription,
   Money,
+  PaymentTerms,
   Quantity,
+  Reason,
 } from './value-objects/sales-values'
 
 function unwrap<T>(result: { isLeft(): boolean; value: T }): T {
@@ -18,11 +20,24 @@ const quantity = (value: string) => unwrap(Quantity.create(value))
 const currency = unwrap(Currency.create('BRL'))
 const money = (value: string) => unwrap(Money.create(value, currency))
 const description = (value: string) => unwrap(LineDescription.create(value))
+const brl = unwrap(Currency.create('BRL'))
+/** An order agreed on nothing in particular: no discount, no freight, paid on delivery. */
+const plainTerms = {
+  sellerId: null,
+  discount: Money.fromAmount(0n, brl),
+  freight: Money.fromAmount(0n, brl),
+  carrier: null,
+  paymentTerms: PaymentTerms.immediate(),
+  notes: null,
+}
+const issuedOn = unwrap(BusinessDate.create('2026-09-14'))
 
 function draft() {
   const line = { lineId: randomUUID(), itemId: randomUUID(), quantity: quantity('2.5') }
   const order = unwrap(
     SalesOrder.draft({
+      terms: plainTerms,
+      issuedOn,
       tenantId: randomUUID(),
       customerId: randomUUID(),
       fulfillmentWarehouseId: randomUUID(),
@@ -42,7 +57,7 @@ describe('sales domain', () => {
     expect(Money.create('-1', currency).isLeft()).toBe(true)
     expect(description('  Ground   coffee ').value).toBe('Ground coffee')
     expect(LineDescription.create(' ').isLeft()).toBe(true)
-    expect(CancellationReason.create(' ').isLeft()).toBe(true)
+    expect(Reason.create(' ').isLeft()).toBe(true)
     expect(money('125').multiply(quantity('2.5')).amount).toBe(313n)
     expect(money('100').plus(money('50')).amount).toBe(150n)
     const usd = unwrap(Currency.create('USD'))
@@ -58,7 +73,9 @@ describe('sales domain', () => {
       fulfillmentWarehouseId: randomUUID(),
       now: new Date(),
     }
-    expect(SalesOrder.draft({ ...common, lines: [] }).isLeft()).toBe(true)
+    expect(SalesOrder.draft({ ...common, terms: plainTerms, issuedOn, lines: [] }).isLeft()).toBe(
+      true,
+    )
     expect(
       SalesOrder.draft({
         ...common,
@@ -161,6 +178,8 @@ describe('sales domain', () => {
     const second = { lineId: randomUUID(), itemId: randomUUID(), quantity: quantity('1') }
     const order = unwrap(
       SalesOrder.draft({
+        terms: plainTerms,
+        issuedOn,
         tenantId: randomUUID(),
         customerId: randomUUID(),
         fulfillmentWarehouseId: randomUUID(),
@@ -233,7 +252,7 @@ describe('sales domain', () => {
     expect(
       order
         .cancel(
-          unwrap(CancellationReason.create('  customer   request ')),
+          unwrap(Reason.create('  customer   request ')),
           new Date('2026-09-14T20:01:00.000Z'),
         )
         .isRight(),

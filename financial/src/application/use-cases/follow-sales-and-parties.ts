@@ -8,11 +8,20 @@ import type { FinancialScope } from '../ports/unit-of-work'
 
 const SALES_ACTOR = 'system:sales'
 
+/** One payment the customer agreed to, as Sales published the order's terms. */
+export interface AgreedInstallment {
+  readonly number: number
+  readonly dueOn: string
+  readonly amount: { readonly amount: string; readonly currency: string }
+}
+
 export interface ConfirmedOrder {
   readonly orderId: string
   readonly customerId: string
   readonly confirmedAt: string
   readonly total: { readonly amount: string; readonly currency: string }
+  /** Absent from an order placed before payment terms existed, or by a consumer that omits them. */
+  readonly installments?: readonly AgreedInstallment[] | undefined
 }
 
 /**
@@ -54,8 +63,16 @@ async function raise(
   if (currency.isLeft()) return left(currency.value)
   const total = Money.create(order.total.amount, currency.value)
   if (total.isLeft()) return left(total.value)
-  const issuedOn = BusinessDate.create(order.confirmedAt.slice(0, 10), '/confirmedAt')
-  if (issuedOn.isLeft()) return left(issuedOn.value)
+  const confirmed = BusinessDate.create(order.confirmedAt.slice(0, 10), '/confirmedAt')
+  if (confirmed.isLeft()) return left(confirmed.value)
+  const confirmedOn = confirmed.value
+  const schedule = scheduleOf(order, total.value)
+  if (schedule.isLeft()) return left(schedule.value)
+  // A schedule is agreed from the day the order was issued, which can be the day before it
+  // was confirmed. The claim is not allowed to fall due before it exists, so the earlier
+  // of the two dates is the one the title is issued on.
+  const [first] = schedule.value
+  const issuedOn = first && first.dueOn.value < confirmedOn.value ? first.dueOn : confirmedOn
   const documentNumber = DocumentNumber.create(`SO-${order.orderId.slice(-8).toUpperCase()}`)
   if (documentNumber.isLeft()) return left(documentNumber.value)
   const title = Title.draft({
@@ -68,9 +85,9 @@ async function raise(
       description: null,
       currency: currency.value,
       categoryId: null,
-      issuedOn: issuedOn.value,
-      competenceOn: issuedOn.value,
-      installments: [{ dueOn: issuedOn.value, amount: total.value }],
+      issuedOn,
+      competenceOn: confirmedOn,
+      installments: schedule.value,
       allocations: [],
     },
     stage,
@@ -89,18 +106,49 @@ async function raise(
       orderId: order.orderId,
       total: total.value.amount,
       currency: currency.value.value,
+      installments: schedule.value.length,
       stage,
     },
   })
   return right('raised')
 }
 
-export interface RequestedInvoicing {
-  readonly orderId: string
-  readonly customerId: string
-  readonly confirmedAt: string
-  readonly total: { readonly amount: string; readonly currency: string }
+/**
+ * The schedule the order was confirmed under.
+ *
+ * Sales publishes what the customer actually agreed to — on delivery, thirty days, or three
+ * payments — and Financial raises the receivable on that. An order that carries no terms,
+ * because it predates them or came from a consumer that omits them, still expects its money
+ * once, on the day it was confirmed.
+ */
+function scheduleOf(
+  order: ConfirmedOrder,
+  total: Money,
+): Either<InvalidInputError, readonly { dueOn: BusinessDate; amount: Money }[]> {
+  const agreed = order.installments ?? []
+  const schedule: { dueOn: BusinessDate; amount: Money }[] = []
+  for (const [index, installment] of agreed.entries()) {
+    const dueOn = BusinessDate.create(installment.dueOn, `/installments/${index}/dueOn`)
+    if (dueOn.isLeft()) return left(dueOn.value)
+    const amountCurrency = Currency.create(installment.amount.currency)
+    if (amountCurrency.isLeft()) return left(amountCurrency.value)
+    const amount = Money.create(installment.amount.amount, amountCurrency.value)
+    if (amount.isLeft()) return left(amount.value)
+    // An instalment for nothing is not an instalment: an even split of a total smaller
+    // than the number of parts leaves the last ones empty, and they are simply not raised.
+    if (amount.value.amount === 0n) continue
+    schedule.push({ dueOn: dueOn.value, amount: amount.value })
+  }
+  if (schedule.length === 0) {
+    const dueOn = BusinessDate.create(order.confirmedAt.slice(0, 10), '/confirmedAt')
+    if (dueOn.isLeft()) return left(dueOn.value)
+    return right([{ dueOn: dueOn.value, amount: total }])
+  }
+  return right(schedule)
 }
+
+/** Invoicing describes the same order as its confirmation, and says the same things about it. */
+export type RequestedInvoicing = ConfirmedOrder
 
 /**
  * Invoicing turns the order's forecast into an effective receivable.
@@ -150,8 +198,9 @@ function revisedTerms(
   if (invoicing.total.amount === title.total().amount.toString()) return right(null)
   const total = Money.create(invoicing.total.amount, terms.currency)
   if (total.isLeft()) return left(total.value)
-  // Sales knows one amount and one date; a schedule a person already built is theirs to
-  // change, so an invoice that differs only replaces a single-installment forecast.
+  // An invoice worth something other than the order is a change nobody agreed a schedule
+  // for, so it only replaces a forecast that expects one payment. A schedule — whether a
+  // person built it or the quote's terms did — is not redistributed behind their back.
   const [first, ...rest] = terms.installments
   if (!first || rest.length > 0) return right(null)
   return right({ ...terms, installments: [{ dueOn: first.dueOn, amount: total.value }] })

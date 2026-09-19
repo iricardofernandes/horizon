@@ -1,5 +1,13 @@
-import type { EventOutcome, ReceivedEvent, SalesScope } from '@/application/ports/unit-of-work'
-import { SalesUnitOfWork } from '@/application/ports/unit-of-work'
+import type {
+  AuditRecord,
+  CommandReceipt,
+  EventOutcome,
+  ReceivedEvent,
+  SalesScope,
+} from '@/application/ports/unit-of-work'
+import { AuditTrail, SalesUnitOfWork } from '@/application/ports/unit-of-work'
+import { type Either, left, right } from '@/core/either'
+import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DomainEvent } from '@/core/events/domain-event'
 import type { Customer } from '@/domain/entities/customer'
 import type { Quote } from '@/domain/entities/quote'
@@ -137,10 +145,21 @@ class InMemoryCustomers extends CustomersRepository {
   }
 }
 
+class InMemoryAudit extends AuditTrail {
+  constructor(private readonly records: AuditRecord[]) {
+    super()
+  }
+  append(record: AuditRecord): Promise<void> {
+    this.records.push(record)
+    return Promise.resolve()
+  }
+}
+
 class InMemoryQuotes extends QuotesRepository {
   constructor(
     private readonly tenantId: string,
     private readonly records: Quote[],
+    private readonly events: DomainEvent[],
   ) {
     super()
   }
@@ -153,10 +172,12 @@ class InMemoryQuotes extends QuotesRepository {
   create(quote: Quote): Promise<void> {
     if (!quote.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
     this.records.push(quote)
+    this.events.push(...quote.pullDomainEvents())
     return Promise.resolve()
   }
   save(quote: Quote): Promise<void> {
     if (!quote.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    this.events.push(...quote.pullDomainEvents())
     return Promise.resolve()
   }
 }
@@ -171,6 +192,8 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
   readonly events: DomainEvent[] = []
   readonly customers: Customer[] = []
   readonly quotes: Quote[] = []
+  readonly auditRecords: AuditRecord[] = []
+  readonly receipts = new Map<string, { receipt: CommandReceipt; response: unknown }>()
   readonly provisionedTenants = new Set<string>()
   readonly consumedEvents = new Set<string>()
 
@@ -190,8 +213,32 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
       ),
       events: new InMemoryEvents(tenantId, this.events),
       customers: new InMemoryCustomers(tenantId, this.customers),
-      quotes: new InMemoryQuotes(tenantId, this.quotes),
+      quotes: new InMemoryQuotes(tenantId, this.quotes, this.events),
+      audit: new InMemoryAudit(this.auditRecords),
     })
+  }
+
+  async once<E, T>(
+    tenantId: string,
+    receipt: CommandReceipt,
+    work: (scope: SalesScope) => Promise<Either<E, T>>,
+  ): Promise<Either<E | ConflictError, T>> {
+    const key = `${tenantId}:${receipt.idempotencyKey}`
+    const previous = this.receipts.get(key)
+    if (previous) {
+      if (
+        previous.receipt.command !== receipt.command ||
+        previous.receipt.fingerprint !== receipt.fingerprint
+      )
+        return left(
+          new ConflictError('this Idempotency-Key was already used for a different request'),
+        )
+      return right(previous.response as T)
+    }
+    const outcome = await this.inTenant(tenantId, work)
+    // A refused command leaves no receipt, exactly as its transaction leaves no rows.
+    if (outcome.isRight()) this.receipts.set(key, { receipt, response: outcome.value })
+    return outcome
   }
 
   async processEvent<T>(

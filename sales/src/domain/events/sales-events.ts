@@ -1,6 +1,6 @@
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
-import type { LineDescription, Money, Quantity } from '../value-objects/sales-values'
+import type { BusinessDate, LineDescription, Money, Quantity } from '../value-objects/sales-values'
 
 abstract class SalesEvent implements DomainEvent {
   abstract readonly eventType: string
@@ -24,6 +24,24 @@ export interface ConfirmedOrderLine extends RequestedOrderLine {
   readonly unitPrice: Money
   readonly lineTotal: Money
 }
+
+/** One agreed payment of the order: when it falls due and how much of the total it is. */
+export interface AgreedInstallment {
+  readonly number: number
+  readonly dueOn: BusinessDate
+  readonly amount: Money
+}
+
+const moneyPayload = (money: Money) => ({
+  amount: money.amount.toString(),
+  currency: money.currency.value,
+})
+
+const installmentPayload = (installment: AgreedInstallment) => ({
+  number: installment.number,
+  dueOn: installment.dueOn.value,
+  amount: moneyPayload(installment.amount),
+})
 
 const confirmedLinePayload = (line: ConfirmedOrderLine) => ({
   lineId: line.lineId,
@@ -72,6 +90,7 @@ export class SalesOrderConfirmedEvent extends SalesEvent {
       reservationId: string
       lines: readonly ConfirmedOrderLine[]
       total: Money
+      installments: readonly AgreedInstallment[]
     },
   ) {
     super(orderId, tenantId, occurredAt)
@@ -88,6 +107,9 @@ export class SalesOrderConfirmedEvent extends SalesEvent {
         amount: this.order.total.amount.toString(),
         currency: this.order.total.currency.value,
       },
+      // What the customer agreed to pay and when, so Financial raises the receivable on
+      // the schedule rather than on one instalment it invented.
+      installments: this.order.installments.map(installmentPayload),
     }
   }
 }
@@ -103,6 +125,7 @@ export class SalesInvoicingRequestedEvent extends SalesEvent {
       customerId: string
       lines: readonly ConfirmedOrderLine[]
       total: Money
+      installments: readonly AgreedInstallment[]
     },
   ) {
     super(orderId, tenantId, occurredAt)
@@ -118,6 +141,7 @@ export class SalesInvoicingRequestedEvent extends SalesEvent {
         amount: this.order.total.amount.toString(),
         currency: this.order.total.currency.value,
       },
+      installments: this.order.installments.map(installmentPayload),
     }
   }
 }
@@ -143,6 +167,86 @@ export class SalesOrderCancelledEvent extends SalesEvent {
       reservationId: this.cancellation.reservationId,
       cancelledAt: this.occurredAt.toISOString(),
       reason: this.cancellation.reason,
+    }
+  }
+}
+
+export class QuoteSentEvent extends SalesEvent {
+  readonly eventType = 'sales.quote.sent'
+  constructor(
+    quoteId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly quote: {
+      quoteRoot: string
+      version: number
+      customerId: string
+      total: Money
+      expiresAt: Date
+    },
+  ) {
+    super(quoteId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      quoteId: this.aggregateId.toString(),
+      quoteRoot: this.quote.quoteRoot,
+      version: this.quote.version,
+      customerId: this.quote.customerId,
+      total: moneyPayload(this.quote.total),
+      expiresAt: this.quote.expiresAt.toISOString(),
+    }
+  }
+}
+
+export class QuoteAcceptedEvent extends SalesEvent {
+  readonly eventType = 'sales.quote.accepted'
+  constructor(
+    quoteId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly quote: {
+      quoteRoot: string
+      version: number
+      customerId: string
+      total: Money
+    },
+  ) {
+    super(quoteId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      quoteId: this.aggregateId.toString(),
+      quoteRoot: this.quote.quoteRoot,
+      version: this.quote.version,
+      customerId: this.quote.customerId,
+      total: moneyPayload(this.quote.total),
+    }
+  }
+}
+
+export class QuoteRejectedEvent extends SalesEvent {
+  readonly eventType = 'sales.quote.rejected'
+  constructor(
+    quoteId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly quote: {
+      quoteRoot: string
+      version: number
+      customerId: string
+      reason: string
+    },
+  ) {
+    super(quoteId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      quoteId: this.aggregateId.toString(),
+      quoteRoot: this.quote.quoteRoot,
+      version: this.quote.version,
+      customerId: this.quote.customerId,
+      reason: this.quote.reason,
     }
   }
 }

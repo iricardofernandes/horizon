@@ -44,7 +44,7 @@ async function placedFixture(unitOfWork: InMemorySalesUnitOfWork) {
   const itemId = randomUUID()
   const lineId = randomUUID()
   const placed = await new PlaceOrderUseCase(unitOfWork, clock).execute({
-    tenantId,
+    context: { tenantId, actor: 'ana', requestId: null, idempotencyKey: randomUUID() },
     customerId: randomUUID(),
     fulfillmentWarehouseId: randomUUID(),
     lines: [{ lineId, itemId, quantity: '2' }],
@@ -74,8 +74,9 @@ describe('sales application', () => {
   it('rejects malformed and duplicate product lines before persistence', async () => {
     const unitOfWork = new InMemorySalesUnitOfWork()
     const useCase = new PlaceOrderUseCase(unitOfWork, clock)
+    const tenantId = randomUUID()
     const base = {
-      tenantId: randomUUID(),
+      context: { tenantId, actor: 'ana', requestId: null, idempotencyKey: randomUUID() },
       customerId: randomUUID(),
       fulfillmentWarehouseId: randomUUID(),
     }

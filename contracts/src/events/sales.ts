@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { instantSchema, moneySchema, quantitySchema, uuidSchema } from '../common'
+import { dateSchema, instantSchema, moneySchema, quantitySchema, uuidSchema } from '../common'
 import { defineEvent } from './define'
 
 const placedLineSchema = z.object({
@@ -14,6 +14,17 @@ const confirmedLineSchema = placedLineSchema.extend({
   unitPrice: moneySchema,
   lineTotal: moneySchema,
 })
+
+/** One agreed payment: when it falls due and how much of the total it is for. */
+const installmentSchema = z.object({
+  number: z.number().int().positive(),
+  dueOn: dateSchema,
+  amount: moneySchema,
+})
+
+const quoteId = uuidSchema.describe('The identifier of this version of the offer')
+const quoteRoot = uuidSchema.describe('Shared by every version of one offer')
+const quoteVersion = z.number().int().positive()
 
 export const salesOrderPlaced = defineEvent({
   type: 'sales.order.placed',
@@ -42,6 +53,10 @@ export const salesOrderConfirmed = defineEvent({
     confirmedAt: instantSchema,
     lines: z.array(confirmedLineSchema).min(1),
     total: moneySchema,
+    // Optional so that a consumer written before payment terms existed keeps parsing
+    // confirmations, and one written after can raise the receivable on what was agreed
+    // rather than on a single instalment it invented (ADR 0030).
+    installments: z.array(installmentSchema).min(1).optional(),
   }),
 })
 
@@ -71,5 +86,51 @@ export const salesInvoicingRequested = defineEvent({
     confirmedAt: instantSchema,
     lines: z.array(confirmedLineSchema).min(1),
     total: moneySchema,
+    // The same schedule the confirmation carries. Either fact can be the first to reach a
+    // consumer, so they must not disagree about when the money was agreed to arrive.
+    installments: z.array(installmentSchema).min(1).optional(),
+  }),
+})
+
+export const salesQuoteSent = defineEvent({
+  type: 'sales.quote.sent',
+  version: 1,
+  description:
+    'This version of an offer was put in front of the customer, priced and dated. A quote sent is never rewritten: negotiating produces a new version beside it, sharing the same root.',
+  payload: z.object({
+    quoteId,
+    quoteRoot,
+    version: quoteVersion,
+    customerId: uuidSchema,
+    total: moneySchema,
+    expiresAt: instantSchema,
+  }),
+})
+
+export const salesQuoteAccepted = defineEvent({
+  type: 'sales.quote.accepted',
+  version: 1,
+  description:
+    'The customer agreed to this version of the offer. Nothing is committed and no stock is held until the quote is converted into an order.',
+  payload: z.object({
+    quoteId,
+    quoteRoot,
+    version: quoteVersion,
+    customerId: uuidSchema,
+    total: moneySchema,
+  }),
+})
+
+export const salesQuoteRejected = defineEvent({
+  type: 'sales.quote.rejected',
+  version: 1,
+  description:
+    'The customer declined this version of the offer, with the reason they gave. A refusal is worth as much to the record as a yes.',
+  payload: z.object({
+    quoteId,
+    quoteRoot,
+    version: quoteVersion,
+    customerId: uuidSchema,
+    reason: z.string().trim().min(1).max(500),
   }),
 })

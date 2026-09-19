@@ -24,6 +24,12 @@ export function tenantOf(request: SalesRequest): string {
   return request.principal.tenantId
 }
 
+/** Who is acting, so a decision can name them and four eyes can be told apart. */
+export function actorOf(request: SalesRequest): string {
+  if (!request.principal) throw new UnauthorizedException()
+  return request.principal.subject
+}
+
 export class SalesAuthGuard implements CanActivate {
   constructor(
     private readonly runtime: SalesRuntime,

@@ -70,9 +70,41 @@ export class Money extends ValueObject<{ amount: bigint; currency: Currency }> {
     if (!this.currency.equals(other.currency)) throw new RangeError('money currencies differ')
     return Money.fromAmount(this.amount + other.amount, this.currency)
   }
+  minus(other: Money): Money {
+    if (!this.currency.equals(other.currency)) throw new RangeError('money currencies differ')
+    return Money.fromAmount(this.amount - other.amount, this.currency)
+  }
   multiply(quantity: Quantity): Money {
     const rounded = (this.amount * quantity.micros + SCALE / 2n) / SCALE
     return Money.fromAmount(rounded, this.currency)
+  }
+  isZero(): boolean {
+    return this.amount === 0n
+  }
+  isLessThan(other: Money): boolean {
+    if (!this.currency.equals(other.currency)) throw new RangeError('money currencies differ')
+    return this.amount < other.amount
+  }
+  /**
+   * Divide into equal parts without losing or inventing a minor unit (ADR 0010). Each part
+   * gets its floor and the units left over go one each to the earliest parts, so the result
+   * is deterministic and always adds back up to the total.
+   */
+  split(parts: number): Money[] {
+    if (parts < 1) throw new RangeError('money is split into at least one part')
+    const count = BigInt(parts)
+    const floor = this.amount / count
+    let leftover = this.amount - floor * count
+    return Array.from({ length: parts }, () => {
+      const extra = leftover > 0n ? 1n : 0n
+      leftover -= extra
+      return Money.fromAmount(floor + extra, this.currency)
+    })
+  }
+  /** What share of `whole` this is, in basis points, rounded half-up. */
+  basisPointsOf(whole: Money): number {
+    if (whole.isZero()) return 0
+    return Number((this.amount * 20_000n + whole.amount) / (whole.amount * 2n))
   }
   protected componentsOf(): readonly unknown[] {
     return [this.amount, this.currency.value]
@@ -96,12 +128,12 @@ export class LineDescription extends ValueObject<{ value: string }> {
   }
 }
 
-export class CancellationReason extends ValueObject<{ value: string }> {
-  static create(value: string): Either<InvalidInputError, CancellationReason> {
+export class Reason extends ValueObject<{ value: string }> {
+  static create(value: string, field = '/reason'): Either<InvalidInputError, Reason> {
     const normalized = value.trim().replace(/\s+/g, ' ')
     if (normalized.length < 1 || normalized.length > 500)
-      return left(new InvalidInputError('/reason', 'must contain between 1 and 500 characters'))
-    return right(new CancellationReason({ value: normalized }))
+      return left(new InvalidInputError(field, 'must contain between 1 and 500 characters'))
+    return right(new Reason({ value: normalized }))
   }
   get value(): string {
     return this.props.value
@@ -162,6 +194,109 @@ export class CustomerPhone extends ValueObject<{ value: string }> {
     if (!/^\+?\d{8,15}$/.test(normalized))
       return left(new InvalidInputError('/phone', 'must contain 8 to 15 international digits'))
     return right(new CustomerPhone({ value: normalized }))
+  }
+  get value(): string {
+    return this.props.value
+  }
+  protected componentsOf(): readonly unknown[] {
+    return [this.value]
+  }
+}
+
+/** A calendar date with no time and no zone (ADR 0043). */
+export class BusinessDate extends ValueObject<{ value: string }> {
+  static create(value: string, field = '/date'): Either<InvalidInputError, BusinessDate> {
+    const trimmed = value.trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed))
+      return left(new InvalidInputError(field, 'must be a calendar date as YYYY-MM-DD'))
+    const parsed = new Date(`${trimmed}T00:00:00Z`)
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== trimmed)
+      return left(new InvalidInputError(field, 'is not a real calendar date'))
+    return right(new BusinessDate({ value: trimmed }))
+  }
+  static of(instant: Date): BusinessDate {
+    return new BusinessDate({ value: instant.toISOString().slice(0, 10) })
+  }
+  get value(): string {
+    return this.props.value
+  }
+  plusDays(days: number): BusinessDate {
+    const moved = new Date(`${this.value}T00:00:00Z`)
+    moved.setUTCDate(moved.getUTCDate() + days)
+    return new BusinessDate({ value: moved.toISOString().slice(0, 10) })
+  }
+  protected componentsOf(): readonly unknown[] {
+    return [this.value]
+  }
+}
+
+const MAX_PAYMENT_TERM_DAYS = 365
+const MAX_INSTALLMENTS = 12
+
+/**
+ * When the customer has agreed to pay, as days after the order is issued — `30/60/90`.
+ *
+ * Days rather than dates because the terms are agreed before anyone knows which day the
+ * order will be issued on. The dates are derived when the receivable is raised, which is
+ * the only moment they matter.
+ */
+export class PaymentTerms extends ValueObject<{ days: readonly number[] }> {
+  static create(
+    days: readonly number[],
+    field = '/paymentTermDays',
+  ): Either<InvalidInputError, PaymentTerms> {
+    if (days.length === 0)
+      return left(new InvalidInputError(field, 'must contain at least one installment'))
+    if (days.length > MAX_INSTALLMENTS)
+      return left(
+        new InvalidInputError(field, `must contain at most ${MAX_INSTALLMENTS} installments`),
+      )
+    if (days.some((day) => !Number.isInteger(day) || day < 0 || day > MAX_PAYMENT_TERM_DAYS))
+      return left(
+        new InvalidInputError(
+          field,
+          `each installment falls 0 to ${MAX_PAYMENT_TERM_DAYS} days out`,
+        ),
+      )
+    if (days.some((day, index) => index > 0 && day <= (days[index - 1] ?? 0)))
+      return left(new InvalidInputError(field, 'installments must be in increasing order of days'))
+    return right(new PaymentTerms({ days: [...days] }))
+  }
+
+  /** On delivery, the terms of an order nobody agreed anything else for. */
+  static immediate(): PaymentTerms {
+    return new PaymentTerms({ days: [0] })
+  }
+
+  get days(): readonly number[] {
+    return this.props.days
+  }
+
+  /** The total split evenly across the terms, each part dated from `issuedOn`. */
+  scheduleOf(
+    total: Money,
+    issuedOn: BusinessDate,
+  ): readonly { readonly number: number; readonly dueOn: BusinessDate; readonly amount: Money }[] {
+    const parts = total.split(this.props.days.length)
+    return this.props.days.map((day, index) => ({
+      number: index + 1,
+      dueOn: issuedOn.plusDays(day),
+      amount: parts[index] ?? Money.fromAmount(0n, total.currency),
+    }))
+  }
+
+  protected componentsOf(): readonly unknown[] {
+    return this.props.days
+  }
+}
+
+/** Who is carrying the goods. Free text: a carrier is not a party the registry knows yet. */
+export class CarrierName extends ValueObject<{ value: string }> {
+  static create(value: string): Either<InvalidInputError, CarrierName> {
+    const normalized = value.trim().replace(/\s+/g, ' ')
+    if (normalized.length < 2 || normalized.length > 120)
+      return left(new InvalidInputError('/carrier', 'must contain between 2 and 120 characters'))
+    return right(new CarrierName({ value: normalized }))
   }
   get value(): string {
     return this.props.value

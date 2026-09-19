@@ -53,6 +53,9 @@ import {
   salesOrderCancelled,
   salesOrderConfirmed,
   salesOrderPlaced,
+  salesQuoteAccepted,
+  salesQuoteRejected,
+  salesQuoteSent,
 } from './sales'
 import {
   treasuryAccountOpened,
@@ -133,6 +136,9 @@ export const EVENTS: readonly EventDefinition[] = [
   procurementReceiptRecorded,
   procurementReceiptReturned,
   procurementOrderClosed,
+  salesQuoteSent,
+  salesQuoteAccepted,
+  salesQuoteRejected,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

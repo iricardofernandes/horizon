@@ -6,8 +6,11 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 7 — complete.** The versioned choreography with Inventory is defined in
-`@horizon/contracts@0.3.0`. The domain owns customers, expiring quotes, monotonic order
+**Status: phase 29 — complete.** The versioned choreography with Inventory is defined in
+`@horizon/contracts@0.17.0`, which also carries the quote facts and the instalments a
+confirmed order was agreed under. A quote is negotiated in versions, a deep discount waits
+for a second person, and an accepted offer converts into exactly one order at the prices it
+agreed. The domain owns customers, expiring quotes, monotonic order
 transitions and immutable commercial snapshots with exact monetary arithmetic. Customer
 PII is authenticated-encrypted per subject and exact tax-id lookup uses a blind index;
 erasure destroys the subject key. Forced-RLS PostgreSQL persistence, inbox/outbox,
@@ -19,9 +22,12 @@ are all exercised by the phase 7 E2E flow.
 ## What this context owns
 
 - **The customer projection** — parties holding the `customer` role, fed by `parties/` events (ADR 0040). Sales no longer registers or erases customers.
-- **Quotes** — priced proposals with an expiry.
+- **Quotes** — priced offers with an expiry, negotiated in versions: a sent quote is never rewritten, and the version that answers it supersedes it while sharing its identifier.
+- **Discount approval** — how deep a discount a seller may give alone, and the four-eyes rule for anything deeper.
+- **Commercial terms** — the seller, discount, freight, carrier, payment terms and notes, on the quote and on the order it becomes.
 - **Sales orders** and their lines, including the price snapshotted at confirmation.
 - **Order lifecycle** — draft, placed, confirmed, cancelled — and the invariants of each transition.
+- **The audit trail** — every decision on a quote and every order placed, in the tenant's hash-chained log (ADR 0025).
 - **The invoicing trigger** — the event that says an order is ready to be invoiced.
 
 ## What it explicitly does not own
@@ -32,7 +38,7 @@ refusals.
 - **Stock availability.** Sales asks `inventory/` to reserve and reacts to the answer; it never reads a balance to decide for itself, because the answer would be stale by the time it acted on it.
 - **Product master data.** `catalog/` owns it. Sales holds a reference plus the price and description it snapshotted.
 - **The invoice document, and any tax calculation.** Sales emits `sales.invoicing.requested` and stops. Producing a fiscal document is `fiscal/` (roadmap).
-- **Receivables.** What the customer now owes is `financial/` (roadmap).
+- **Receivables.** What the customer owes, and when, is `financial/`. Sales publishes the schedule that was agreed; deciding how the money is collected is not its business.
 
 ---
 
@@ -43,9 +49,12 @@ refusals.
 | Event | Meaning |
 |---|---|
 | `sales.order.placed` | An order was submitted and is awaiting stock reservation. |
-| `sales.order.confirmed` | Stock is reserved and the order is committed. This is the event the golden path follows end to end. |
+| `sales.order.confirmed` | Stock is reserved and the order is committed, with the instalments it was agreed under. This is the event the golden path follows end to end. |
 | `sales.order.cancelled` | The order will not proceed; holders of related state should release it. |
 | `sales.invoicing.requested` | The order is ready to be invoiced. Consumed by `fiscal/` when it exists. |
+| `sales.quote.sent` | This version of an offer was put in front of the customer. |
+| `sales.quote.accepted` | The customer agreed to it. Nothing is committed until it is converted. |
+| `sales.quote.rejected` | The customer declined it, with the reason they gave. |
 
 ### Consumed
 
@@ -73,22 +82,31 @@ backward.
 
 ## Endpoints
 
-Every business endpoint requires a workspace-scoped Identity access token. Customer
-erasure is the irreversible crypto-shredding operation from ADR 0026; it is deliberately
-not presented as an ordinary row deletion.
+Every business endpoint requires a workspace-scoped Identity access token. Customers are
+registered and erased in `parties/`, so they are read here and written nowhere (ADR 0040).
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/customers` | List the workspace customer directory. |
-| `POST` | `/customers` | Create and encrypt a customer record. |
-| `DELETE` | `/customers/:id` | Permanently erase customer PII while preserving document references. |
+| `GET` | `/customers` | List the workspace customer directory, projected from `parties/`. |
 | `GET` | `/quotes` | List recent commercial quotes. |
-| `GET` | `/quotes/:id` | Read a quote and its immutable priced lines. |
-| `POST` | `/quotes` | Create a quote using current Catalog projections. |
-| `POST` | `/quotes/:id/accept` | Accept an open, unexpired quote. |
+| `GET` | `/quotes/:id` | Read a quote and its priced lines. |
+| `POST` | `/quotes` | Write a quote using current Catalog projections. |
+| `POST` | `/quotes/:id/revise` | Correct a draft, or answer a sent offer with a new version of it. |
+| `POST` | `/quotes/:id/send` | Put the offer in front of the customer, or ask for the discount to be approved. |
+| `POST` | `/quotes/:id/approve` | Grant a discount somebody else asked for. |
+| `POST` | `/quotes/:id/refuse` | Refuse it, with a reason, sending the offer back to draft. |
+| `POST` | `/quotes/:id/accept` | Record that the customer agreed to an open, unexpired offer. |
+| `POST` | `/quotes/:id/decline` | Record that they declined it, with the reason. |
+| `POST` | `/quotes/:id/expire` | Record that nobody answered in time. |
+| `POST` | `/quotes/:id/order` | Convert the accepted offer into the order that delivers it. |
 | `GET` | `/orders` | List recent sales orders. |
 | `GET` | `/orders/:id` | Read one order snapshot. |
 | `POST` | `/orders` | Place an order and start the Inventory choreography. |
+
+Every command that creates a document — a quote, a version of one, an order, a conversion —
+requires an `Idempotency-Key` header and runs at most once under it (ADR 0028). A decision
+on a document that already exists does not: repeating it is refused by the document's own
+state.
 
 ---
 

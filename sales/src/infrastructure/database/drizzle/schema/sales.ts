@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   bigint,
+  date,
   foreignKey,
   index,
   integer,
@@ -85,9 +86,30 @@ export const quotes = pgTable(
       .notNull()
       .references(() => tenants.id),
     customerId: uuid('customer_id').notNull(),
+    /** Every version of one offer shares the first version's identifier. */
+    rootId: uuid('root_id').notNull(),
+    version: integer('version').notNull(),
     status: text('status').notNull(),
+    net: bigint('net', { mode: 'bigint' }).notNull(),
     total: bigint('total', { mode: 'bigint' }).notNull(),
     currency: text('currency').notNull(),
+    sellerId: uuid('seller_id'),
+    discount: bigint('discount', { mode: 'bigint' }).notNull(),
+    freight: bigint('freight', { mode: 'bigint' }).notNull(),
+    carrier: text('carrier'),
+    paymentTermDays: jsonb('payment_term_days').$type<number[]>().notNull(),
+    notes: text('notes'),
+    approvalState: text('approval_state').notNull(),
+    approvalRequestedBy: text('approval_requested_by'),
+    approvalRequestedAt: timestamp('approval_requested_at', { withTimezone: true, mode: 'date' }),
+    approvalDecidedBy: text('approval_decided_by'),
+    approvalDecidedAt: timestamp('approval_decided_at', { withTimezone: true, mode: 'date' }),
+    approvalReason: text('approval_reason'),
+    supersedes: uuid('supersedes'),
+    supersededBy: uuid('superseded_by'),
+    closureReason: text('closure_reason'),
+    orderId: uuid('order_id'),
+    sentAt: timestamp('sent_at', { withTimezone: true, mode: 'date' }),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
@@ -146,6 +168,14 @@ export const salesOrders = pgTable(
     reservationId: uuid('reservation_id'),
     total: bigint('total', { mode: 'bigint' }),
     currency: text('currency'),
+    quoteId: uuid('quote_id'),
+    sellerId: uuid('seller_id'),
+    discount: bigint('discount', { mode: 'bigint' }).notNull(),
+    freight: bigint('freight', { mode: 'bigint' }).notNull(),
+    carrier: text('carrier'),
+    paymentTermDays: jsonb('payment_term_days').$type<number[]>().notNull(),
+    issuedOn: date('issued_on', { mode: 'string' }).notNull(),
+    notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
@@ -225,3 +255,36 @@ export const inbox = pgTable(
   },
   (table) => [uniqueIndex('inbox_source_event_key').on(table.sourceModule, table.eventId)],
 )
+
+export const commandReceipts = pgTable(
+  'command_receipts',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    idempotencyKey: text('idempotency_key').notNull(),
+    command: text('command').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    response: jsonb('response').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.idempotencyKey] })],
+)
+
+export const auditLog = pgTable('audit_log', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  sequence: bigint('sequence', { mode: 'number' }).notNull(),
+  actor: text('actor').notNull(),
+  subjectType: text('subject_type').notNull(),
+  subjectId: text('subject_id').notNull(),
+  action: text('action').notNull(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'date' }).notNull(),
+  requestId: text('request_id'),
+  traceId: text('trace_id'),
+  details: jsonb('details').$type<Record<string, unknown>>().notNull(),
+  previousHash: text('previous_hash').notNull(),
+  hash: text('hash').notNull(),
+})
