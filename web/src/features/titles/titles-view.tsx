@@ -229,9 +229,9 @@ function TitlesTable({
             <tr key={row.id}>
               <td>
                 <strong>{row.documentNumber}</strong>
-                {row.origin.type === 'sales-order' ? (
-                  <small className="receivable-origin">{t('fromSalesOrder')}</small>
-                ) : null}
+                {row.origin.type === 'manual' ? null : (
+                  <small className="receivable-origin">{t(`from.${row.origin.type}`)}</small>
+                )}
               </td>
               <td>{row.partyName ?? t('erasedParty')}</td>
               <td>{date(`${row.issuedOn}T12:00:00`)}</td>

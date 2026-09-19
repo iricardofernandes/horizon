@@ -228,6 +228,7 @@ export type OrderRow = {
   readonly expectedOn: string
   readonly status: string
   readonly approvalState: string
+  readonly approvalRequestedBy: string | null
   readonly receipts: number
   readonly lines: number
   readonly updatedAt: string
@@ -246,7 +247,8 @@ export async function listOrders(
     select o.id, o.supplier_id as "supplierId", o.supplier_name as "supplierName",
       o.requisition_id as "requisitionId", o.warehouse_id as "warehouseId", o.currency,
       o.total::text, o.issued_on as "issuedOn", o.expected_on as "expectedOn",
-      o.status, o.approval_state as "approvalState", o.receipts,
+      o.status, o.approval_state as "approvalState",
+      o.approval_requested_by as "approvalRequestedBy", o.receipts,
       (select count(*)::int from order_lines l where l.order_id = o.id) as lines,
       o.updated_at as "updatedAt",
       count(*) over ()::int as total_rows
@@ -269,7 +271,6 @@ export type OrderDetail = OrderRow & {
   readonly discount: string
   readonly paymentTermDays: readonly number[]
   readonly notes: string | null
-  readonly approvalRequestedBy: string | null
   readonly approvalDecidedBy: string | null
   readonly approvalReason: string | null
   readonly closureReason: string | null
@@ -294,7 +295,6 @@ export async function orderDetail(tx: Transaction, id: string): Promise<OrderDet
       o.other_charges::text as "otherCharges", o.discount::text, o.total::text,
       o.payment_term_days as "paymentTermDays", o.issued_on as "issuedOn",
       o.expected_on as "expectedOn", o.notes, o.status, o.approval_state as "approvalState",
-      o.approval_requested_by as "approvalRequestedBy",
       o.approval_decided_by as "approvalDecidedBy", o.approval_reason as "approvalReason",
       o.closure_reason as "closureReason", o.version, o.receipts,
       (select count(*)::int from order_lines l where l.order_id = o.id) as lines,

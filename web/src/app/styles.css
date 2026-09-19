@@ -2447,3 +2447,155 @@ tbody tr.reconciliation-selected td {
 .ledger-dialog {
   width: min(880px, calc(100vw - 32px));
 }
+
+/* --- purchasing ----------------------------------------------------------- */
+
+/*
+ * A board scrolls sideways rather than reflowing: the columns are a sequence work moves
+ * through, and a column that wrapped onto a second row would stop reading as one.
+ */
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(240px, 1fr);
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.board-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--sage-6);
+  border-radius: 12px;
+  background: var(--sage-2);
+  min-width: 0;
+}
+.board-column-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.board-column-heading h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.board-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+.board-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.board-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.board-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--sage-6);
+  border-radius: 10px;
+  background: var(--color-surface);
+  text-align: left;
+  cursor: pointer;
+}
+.board-card:hover {
+  border-color: var(--sage-8);
+}
+.board-card:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.board-card-title {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.board-card-line {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.purchasing-dialog {
+  width: min(920px, calc(100vw - 32px));
+}
+.purchasing-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: 16px 0 0;
+}
+.purchasing-facts dt {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.purchasing-facts dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+.purchasing-section-title {
+  margin: 22px 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.purchasing-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+/* The cheapest offer for a line. Marked by weight as well as colour, never colour alone. */
+.purchasing-best {
+  font-weight: 600;
+  color: var(--green-11);
+}
+.purchasing-quantity {
+  width: 88px;
+  text-align: right;
+}
+.purchasing-reason {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 220px;
+}
+.purchasing-receive {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+.purchasing-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.purchasing-timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}

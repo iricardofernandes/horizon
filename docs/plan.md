@@ -1328,6 +1328,57 @@ one event.
 
 ---
 
+## Phase 28 — The purchasing screens: what was asked for, what was committed, what arrived
+
+**Complete.** The last slice of Phase G of the [expansion plan](erp-expansion-plan.md), and
+the phase's close. Purchasing has been able to do everything since phase 27; this is where
+somebody can see it.
+
+**Deliverables**
+
+- **Boards, not lists.** Requisitions and orders each appear in the columns work actually
+  moves through, so "what needs doing" is a glance rather than a filter. A column that is
+  empty says so instead of disappearing: a buyer reading *nothing waiting for approval* has
+  learned something, and a board whose columns move about between visits cannot be read at
+  a glance.
+- **The approval inbox** — everything whose next step is a decision, and never the reader's
+  own document. It is deliberately not a fourth kind of record: it is the same requisitions
+  and orders, filtered, so deciding one there and finding it on its board afterwards is the
+  same object rather than a copy of it.
+- **The comparison** — every supplier's offer under the line it is for, read across a row
+  rather than between two documents. The cheapest unit price per line is marked by the API,
+  so the table and whoever reads the API agree about which it is, and choosing one offer
+  declines the rest in the same transaction.
+- **The conference** — each order line with what was ordered, what has come and what is
+  still outstanding, and a field per line that starts at the outstanding quantity, because
+  that is what a delivery usually is and a number somebody has to retype is a number
+  somebody mistypes. Accepting more than was ordered needs the reason typed in beside it.
+- **The history** — every delivery against the order, what it was worth, and what went back,
+  with the reason in both cases.
+- Bilingual copy in `en` and `pt-BR`, Base UI dialogs, and a role map that shows a buyer the
+  actions a buyer has and an approver the ones an approver has — visibility only; the
+  service still refuses what a role does not permit (ADR 0023, ADR 0045).
+
+**Exit criteria**
+
+- The browser golden path reaches the requisition the demo ordered, opens the order it
+  became, and asserts the conference says eight units are still expected — the same figure
+  the payable and the stock movement were derived from.
+- The approval inbox offers nobody their own document, asserted in the browser.
+- Every string is a message key in both locales, and the key-parity test covers them.
+
+**Non-goals**
+
+- Writing a requisition, recording a quotation or drafting an order by hand in the browser:
+  the screens read and decide, and the documents are created through the API. The forms are
+  worth building once somebody has used the boards enough to know what they need on them.
+- A goods receipts screen of its own and a suppliers screen: a delivery is read on the order
+  it arrived against, and a supplier is a party, in the registry that owns it.
+- Drag and drop between columns. A column is a state a document reaches by being decided,
+  not by being dragged, and a board that lets you drag would have to invent a decision.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

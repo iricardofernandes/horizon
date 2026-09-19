@@ -167,7 +167,7 @@ try {
   await page.getByRole('dialog', { name: 'Create warehouse' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('link', { name: 'Orders' }).click()
+  await page.getByRole('link', { name: 'Orders', exact: true }).click()
   await page.waitForURL(`${appUrl}/app/sales/orders`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Orders', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Add line' }).click()
@@ -185,8 +185,35 @@ try {
   // the payment (ADR 0041, ADR 0042).
   assert(placedOrderId, 'the placed order id was not captured')
   const receivableNumber = `SO-${placedOrderId.slice(-8).toUpperCase()}`
+  // Purchasing: the demo's requisition became an order and part of it arrived. The board
+  // shows where the work got to, and the order shows what is still expected — which is the
+  // same figure the payable and the stock were derived from.
+  await page.getByRole('link', { name: 'Requisitions' }).click()
+  await page.waitForURL(`${appUrl}/app/purchasing/requisitions`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Requisitions', exact: true }).waitFor()
+  await page.getByRole('region', { name: 'Ordered' }).getByRole('button').first().waitFor()
+
+  await page.getByRole('link', { name: 'Purchase orders' }).click()
+  await page.waitForURL(`${appUrl}/app/purchasing/orders`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Purchase orders', exact: true }).waitFor()
+  await page.getByRole('region', { name: 'Approved' }).getByRole('button').first().click()
+  const orderDialog = page.getByRole('dialog')
+  await orderDialog.getByRole('columnheader', { name: 'Still expected' }).waitFor()
+  // A delivery arrived, and the conference says how much of the order is still to come.
+  await orderDialog.getByText('recorded', { exact: true }).first().waitFor()
+  const outstanding = await orderDialog.locator('tbody tr td:nth-child(4)').first().innerText()
+  assert(outstanding === '8', `the order has ${outstanding} outstanding, not the 8 it should`)
+  await orderDialog.getByRole('button', { name: 'Close dialog' }).click()
+
+  // Nobody is waiting on this reader: the demo's approvals were decided by somebody else.
+  await page.getByRole('link', { name: 'Approvals' }).click()
+  await page.waitForURL(`${appUrl}/app/purchasing/approvals`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Approvals', exact: true }).waitFor()
+  await page.getByText('Nothing is waiting for you').waitFor()
+
   await page.getByRole('link', { name: 'Receivables' }).click()
   await page.waitForURL(`${appUrl}/app/finance/receivables`, { waitUntil: 'domcontentloaded' })
+
   await page.getByRole('heading', { name: 'Accounts receivable', exact: true }).waitFor()
   await waitUntil(
     () =>
@@ -194,7 +221,7 @@ try {
         const response = await fetch('/api/horizon/financial/receivables?view=draft&limit=100')
         if (!response.ok) return false
         const { data } = await response.json()
-        return data.some((row) => row.origin.orderId === orderId)
+        return data.some((row) => row.origin.documentId === orderId)
       }, placedOrderId),
     'the forecast raised from the placed order, realised by invoicing',
   )
