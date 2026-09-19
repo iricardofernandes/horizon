@@ -582,7 +582,7 @@ describe('following sales and parties', () => {
     ])
   })
 
-  it('turns the forecast into an effective receivable when the order is invoiced', async () => {
+  it('makes the money owed when the goods leave, a delivery at a time', async () => {
     const { tenantId, partyId } = await workspace()
     const orderId = randomUUID()
     const line = {
@@ -602,19 +602,6 @@ describe('following sales and parties', () => {
       lines: [line],
       total: { amount: '2500', currency: 'BRL' },
     })
-    const invoicing = {
-      orderId,
-      orderVersion: 3,
-      customerId: partyId,
-      confirmedAt: '2026-09-15T21:30:00.000Z',
-      lines: [line],
-      total: { amount: '2700', currency: 'BRL' },
-    }
-    const eventId = randomUUID()
-    await deliver(tenantId, 'sales.invoicing.requested', invoicing, eventId)
-    await deliver(tenantId, 'sales.invoicing.requested', invoicing, eventId)
-    await deliver(tenantId, 'sales.invoicing.requested', invoicing)
-
     const list = (view: 'draft' | 'forecast') =>
       database.listTitles(tenantId, 'receivable', {
         view,
@@ -622,20 +609,68 @@ describe('following sales and parties', () => {
         limit: 50,
         offset: 0,
       })
-    // The same title changed stage: there is one, not a forecast beside a receivable.
-    expect((await list('forecast')).total).toBe(0)
-    const drafts = await list('draft')
-    expect(drafts.total).toBe(1)
-    // The invoice differed from the order, and its total is what is now owed.
-    expect(drafts.data[0]).toMatchObject({ stage: 'effective', total: '2700' })
+    expect((await list('forecast')).total).toBe(1)
+    expect((await list('draft')).total).toBe(0)
+
+    const shipmentId = randomUUID()
+    const dispatched = {
+      orderId,
+      orderVersion: 3,
+      shipmentId,
+      customerId: partyId,
+      warehouseId: randomUUID(),
+      dispatchedBy: 'user:warehouse',
+      dispatchedOn: '2026-09-16',
+      carrier: null,
+      trackingCode: null,
+      lines: [{ ...line, quantity: '1', lineTotal: { amount: '1250', currency: 'BRL' } }],
+      value: { amount: '1250', currency: 'BRL' },
+      installments: [
+        { number: 1, dueOn: '2026-09-16', amount: { amount: '1250', currency: 'BRL' } },
+      ],
+      remaining: { amount: '1250', currency: 'BRL' },
+      remainingInstallments: [
+        { number: 1, dueOn: '2026-09-15', amount: { amount: '1250', currency: 'BRL' } },
+      ],
+      complete: false,
+    }
+    const eventId = randomUUID()
+    await deliver(tenantId, 'sales.shipment.dispatched', dispatched, eventId)
+    await deliver(tenantId, 'sales.shipment.dispatched', dispatched, eventId)
+
+    // Half went, so half is owed and half is still expected — never both at once.
+    const owed = await list('draft')
+    expect(owed.total).toBe(1)
+    expect(owed.data[0]).toMatchObject({
+      stage: 'effective',
+      total: '1250',
+      origin: { type: 'sales-shipment', documentId: shipmentId },
+    })
+    const expected = await list('forecast')
+    expect(expected.data[0]).toMatchObject({ stage: 'forecast', total: '1250' })
     expect(await database.titlesSummary(tenantId, 'receivable', '2026-09-16')).toMatchObject({
       drafts: 1,
-      forecasts: 0,
-      expected: [],
+      forecasts: 1,
+      expected: [{ currency: 'BRL', total: '1250' }],
     })
+
+    // The rest follows, and the order stops expecting anything.
+    await deliver(tenantId, 'sales.shipment.dispatched', {
+      ...dispatched,
+      orderVersion: 4,
+      shipmentId: randomUUID(),
+      remaining: { amount: '0', currency: 'BRL' },
+      remainingInstallments: [],
+      complete: true,
+    })
+    expect((await list('forecast')).total).toBe(0)
+    expect((await list('draft')).total).toBe(2)
   })
 
-  it('ends with one effective receivable whichever of the two events arrives first', async () => {
+  it('withdraws what a returned delivery made owed, and expects it again', async () => {
+    const { tenantId, partyId } = await workspace()
+    const orderId = randomUUID()
+    const shipmentId = randomUUID()
     const line = {
       lineId: randomUUID(),
       itemId: randomUUID(),
@@ -644,43 +679,66 @@ describe('following sales and parties', () => {
       unitPrice: { amount: '900', currency: 'BRL' },
       lineTotal: { amount: '900', currency: 'BRL' },
     }
-    // Sales emits both from the same operation, so either can be handled first.
-    const play = async (order: readonly ('confirmed' | 'invoicing')[]) => {
-      const { tenantId, partyId } = await workspace()
-      const orderId = randomUUID()
-      const shared = {
-        orderId,
-        orderVersion: 2,
-        customerId: partyId,
-        confirmedAt: '2026-09-15T21:30:00.000Z',
-        lines: [line],
-        total: { amount: '900', currency: 'BRL' },
-      }
-      for (const step of order)
-        await deliver(
-          tenantId,
-          step === 'confirmed' ? 'sales.order.confirmed' : 'sales.invoicing.requested',
-          step === 'confirmed' ? { ...shared, reservationId: randomUUID() } : shared,
-        )
-      const drafts = await database.listTitles(tenantId, 'receivable', {
-        view: 'draft',
-        today: '2026-09-16',
-        limit: 50,
-        offset: 0,
-      })
-      return { drafts, tenantId }
-    }
-    for (const order of [
-      ['confirmed', 'invoicing'],
-      ['invoicing', 'confirmed'],
-    ] as const) {
-      const { drafts, tenantId } = await play(order)
-      expect(drafts.total).toBe(1)
-      expect(drafts.data[0]).toMatchObject({ stage: 'effective', total: '900' })
-      expect(await database.titlesSummary(tenantId, 'receivable', '2026-09-16')).toMatchObject({
-        forecasts: 0,
-      })
-    }
+    await deliver(tenantId, 'sales.order.confirmed', {
+      orderId,
+      orderVersion: 2,
+      customerId: partyId,
+      reservationId: randomUUID(),
+      confirmedAt: '2026-09-15T21:30:00.000Z',
+      lines: [line],
+      total: { amount: '900', currency: 'BRL' },
+    })
+    await deliver(tenantId, 'sales.shipment.dispatched', {
+      orderId,
+      orderVersion: 3,
+      shipmentId,
+      customerId: partyId,
+      warehouseId: randomUUID(),
+      dispatchedBy: 'user:warehouse',
+      dispatchedOn: '2026-09-16',
+      carrier: null,
+      trackingCode: null,
+      lines: [line],
+      value: { amount: '900', currency: 'BRL' },
+      installments: [
+        { number: 1, dueOn: '2026-09-16', amount: { amount: '900', currency: 'BRL' } },
+      ],
+      remaining: { amount: '0', currency: 'BRL' },
+      remainingInstallments: [],
+      complete: true,
+    })
+    const summary = () => database.titlesSummary(tenantId, 'receivable', '2026-09-16')
+    expect(await summary()).toMatchObject({ drafts: 1, forecasts: 0 })
+
+    await deliver(tenantId, 'sales.shipment.returned', {
+      orderId,
+      orderVersion: 4,
+      shipmentId,
+      customerId: partyId,
+      warehouseId: randomUUID(),
+      returnedBy: 'user:warehouse',
+      returnedOn: '2026-09-18',
+      reason: 'Damaged in transit',
+      lines: [line],
+      value: { amount: '900', currency: 'BRL' },
+      remaining: { amount: '900', currency: 'BRL' },
+      remainingInstallments: [
+        { number: 1, dueOn: '2026-09-15', amount: { amount: '900', currency: 'BRL' } },
+      ],
+    })
+    // What the delivery made owed is gone, and the order expects to deliver it again.
+    expect(await summary()).toMatchObject({
+      drafts: 0,
+      forecasts: 1,
+      expected: [{ currency: 'BRL', total: '900' }],
+    })
+    const closed = await database.listTitles(tenantId, 'receivable', {
+      view: 'closed',
+      today: '2026-09-18',
+      limit: 50,
+      offset: 0,
+    })
+    expect(closed.total).toBe(1)
   })
 
   it('destroys the projected name of an erased party and never restores it', async () => {

@@ -10,6 +10,12 @@ import {
 } from '@/application/use-cases/manage-quotes'
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
 import { ForgetPartyUseCase, ProjectPartyUseCase } from '@/application/use-cases/project-parties'
+import {
+  DispatchShipmentUseCase,
+  PackShipmentUseCase,
+  PickShipmentUseCase,
+  ReturnShipmentUseCase,
+} from '@/application/use-cases/ship-orders'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
 
@@ -95,7 +101,6 @@ it('persists the order and immutable commercial snapshot with its outbox events'
   expect(events.map((event) => event.event_type)).toEqual([
     'sales.order.placed',
     'sales.order.confirmed',
-    'sales.invoicing.requested',
   ])
   expect(events[1]?.payload).toMatchObject({ orderId, orderVersion: 2, reservationId })
 })
@@ -382,4 +387,103 @@ it('negotiates an offer in versions and makes the accepted one binding', async (
   ])
   expect(trail[0]?.previous_hash).toBe('0'.repeat(64))
   expect(trail.every((row) => row.actor === 'ana')).toBe(true)
+})
+
+it('delivers an order in parts, and takes one delivery back', async () => {
+  const fixture = await seedCatalogItem()
+  const tenantId = fixture.tenantId
+  const lineId = randomUUID()
+  const placed = await new PlaceOrderUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId: randomUUID(),
+    fulfillmentWarehouseId: randomUUID(),
+    terms: { freight: '500', paymentTermDays: [30] },
+    lines: [{ lineId, itemId: fixture.itemId, quantity: '10' }],
+  })
+  if (placed.isLeft()) throw placed.value
+  const orderId = placed.value.orderId
+  const confirmed = await new ApplyStockReservedUseCase(database, clock).execute({
+    tenantId,
+    orderId,
+    orderVersion: 1,
+    reservationId: randomUUID(),
+  })
+  expect(confirmed.isRight()).toBe(true)
+  // Ten at 1250 plus 500 of freight: 13000 charged for the order as a whole.
+  const [order] = await administrator`select total, fulfillment from sales_orders
+    where id = ${orderId}`
+  expect(order).toMatchObject({ total: '13000', fulfillment: 'unfulfilled' })
+
+  const ship = async (quantity: string) => {
+    const picked = await new PickShipmentUseCase(database, clock).execute({
+      context: commandOf(tenantId),
+      orderId,
+      lines: [{ lineId, quantity }],
+    })
+    if (picked.isLeft()) throw picked.value
+    const packed = await new PackShipmentUseCase(database, clock).execute({
+      context: commandOf(tenantId),
+      shipmentId: picked.value.shipmentId,
+      consignment: { carrier: 'Correios', trackingCode: `BR-${quantity}` },
+    })
+    if (packed.isLeft()) throw packed.value
+    const dispatched = await new DispatchShipmentUseCase(database, clock).execute({
+      context: commandOf(tenantId),
+      shipmentId: picked.value.shipmentId,
+      dispatchedOn: '2026-09-20',
+    })
+    if (dispatched.isLeft()) throw dispatched.value
+    return dispatched.value
+  }
+
+  const first = await ship('4')
+  // Four of ten units of an order charged 13000: 5200 goes, 7800 is still expected.
+  expect(first).toMatchObject({ value: '5200', remaining: '7800', complete: false })
+  const second = await ship('6')
+  expect(second).toMatchObject({ value: '7800', remaining: '0', complete: true })
+
+  const [delivered] = await administrator`select fulfillment, shipments from sales_orders
+    where id = ${orderId}`
+  expect(delivered).toEqual({ fulfillment: 'fulfilled', shipments: 2 })
+  const shipmentRows = await administrator`select status, value, carrier, tracking_code,
+      dispatched_on from shipments where tenant_id = ${tenantId} order by created_at`
+  expect(shipmentRows).toMatchObject([
+    { status: 'dispatched', value: '5200', carrier: 'Correios', tracking_code: 'BR-4' },
+    { status: 'dispatched', value: '7800', tracking_code: 'BR-6' },
+  ])
+
+  // The lines of a delivery that has left are a record of a physical event.
+  await expect(
+    administrator`update shipment_lines set quantity = 1
+      where shipment_id = ${first.shipmentId}`,
+  ).rejects.toThrow(/cannot change once the goods have left/)
+
+  const returned = await new ReturnShipmentUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    shipmentId: first.shipmentId,
+    reason: 'Damaged in transit',
+    returnedOn: '2026-09-25',
+  })
+  if (returned.isLeft()) throw returned.value
+  expect(returned.value).toMatchObject({ value: '5200', remaining: '5200' })
+  const [afterReturn] = await administrator`select fulfillment, shipments from sales_orders
+    where id = ${orderId}`
+  expect(afterReturn).toEqual({ fulfillment: 'partial', shipments: 1 })
+  // Those four units are owed to the customer again, so they can be shipped again.
+  const [line] = await administrator`select quantity, shipped, allocated from sales_order_lines
+    where order_id = ${orderId}`
+  expect(line).toEqual({ quantity: '10000000', shipped: '6000000', allocated: '0' })
+
+  // Ordered by id as well: events published in one transaction share its timestamp.
+  const outbox = await administrator`select event_type from outbox
+    where tenant_id = ${tenantId} order by created_at, id`
+  expect(outbox.map((row) => row.event_type)).toEqual([
+    'sales.order.placed',
+    'sales.order.confirmed',
+    'sales.shipment.dispatched',
+    'sales.invoicing.requested',
+    'sales.shipment.dispatched',
+    'sales.invoicing.requested',
+    'sales.shipment.returned',
+  ])
 })

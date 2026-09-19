@@ -2,6 +2,7 @@ import type { DomainEvent } from '@/core/events/domain-event'
 import type { Customer } from '../entities/customer'
 import type { Quote } from '../entities/quote'
 import type { SalesOrder } from '../entities/sales-order'
+import type { Shipment } from '../entities/shipment'
 import type { LineDescription, Money } from '../value-objects/sales-values'
 
 export interface CatalogItemProjection {
@@ -24,6 +25,12 @@ export abstract class CustomersRepository {
   abstract create(customer: Customer): Promise<void>
   abstract save(customer: Customer): Promise<void>
   abstract erase(customer: Customer): Promise<void>
+}
+
+export abstract class ShipmentsRepository {
+  abstract findById(id: string): Promise<Shipment | null>
+  abstract create(shipment: Shipment): Promise<void>
+  abstract save(shipment: Shipment): Promise<void>
 }
 
 export abstract class QuotesRepository {

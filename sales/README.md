@@ -6,7 +6,11 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 29 — complete.** The versioned choreography with Inventory is defined in
+**Status: phase 30 — complete.** An order is picked, packed and sent — in parts if that is
+how it goes — and what comes back comes back. The stock leaves when a delivery leaves, and
+so does the money.
+
+**Phase 29 — complete.** The versioned choreography with Inventory is defined in
 `@horizon/contracts@0.17.0`, which also carries the quote facts and the instalments a
 confirmed order was agreed under. A quote is negotiated in versions, a deep discount waits
 for a second person, and an accepted offer converts into exactly one order at the prices it
@@ -27,6 +31,8 @@ are all exercised by the phase 7 E2E flow.
 - **Commercial terms** — the seller, discount, freight, carrier, payment terms and notes, on the quote and on the order it becomes.
 - **Sales orders** and their lines, including the price snapshotted at confirmation.
 - **Order lifecycle** — draft, placed, confirmed, cancelled — and the invariants of each transition.
+- **Shipments** — what is being picked for a customer, what left, and what came back, each carrying its share of the order's total.
+- **Fulfilment state** — how much of the order has reached the customer, and what it still has to deliver.
 - **The audit trail** — every decision on a quote and every order placed, in the tenant's hash-chained log (ADR 0025).
 - **The invoicing trigger** — the event that says an order is ready to be invoiced.
 
@@ -38,6 +44,7 @@ refusals.
 - **Stock availability.** Sales asks `inventory/` to reserve and reacts to the answer; it never reads a balance to decide for itself, because the answer would be stale by the time it acted on it.
 - **Product master data.** `catalog/` owns it. Sales holds a reference plus the price and description it snapshotted.
 - **The invoice document, and any tax calculation.** Sales emits `sales.invoicing.requested` and stops. Producing a fiscal document is `fiscal/` (roadmap).
+- **The stock itself.** `inventory/` holds and moves it; Sales says what left, and the movement follows.
 - **Receivables.** What the customer owes, and when, is `financial/`. Sales publishes the schedule that was agreed; deciding how the money is collected is not its business.
 
 ---
@@ -51,7 +58,9 @@ refusals.
 | `sales.order.placed` | An order was submitted and is awaiting stock reservation. |
 | `sales.order.confirmed` | Stock is reserved and the order is committed, with the instalments it was agreed under. This is the event the golden path follows end to end. |
 | `sales.order.cancelled` | The order will not proceed; holders of related state should release it. |
-| `sales.invoicing.requested` | The order is ready to be invoiced. Consumed by `fiscal/` when it exists. |
+| `sales.invoicing.requested` | A delivery is ready to be invoiced — an invoice is written for what was shipped. Consumed by `fiscal/` when it exists. |
+| `sales.shipment.dispatched` | Goods left for the customer: the stock comes out of its hold and the delivery's share of the order becomes owed. |
+| `sales.shipment.returned` | A delivery came back: the goods and what they made owed both go back. |
 | `sales.quote.sent` | This version of an offer was put in front of the customer. |
 | `sales.quote.accepted` | The customer agreed to it. Nothing is committed until it is converted. |
 | `sales.quote.rejected` | The customer declined it, with the reason they gave. |
@@ -99,6 +108,13 @@ registered and erased in `parties/`, so they are read here and written nowhere (
 | `POST` | `/quotes/:id/decline` | Record that they declined it, with the reason. |
 | `POST` | `/quotes/:id/expire` | Record that nobody answered in time. |
 | `POST` | `/quotes/:id/order` | Convert the accepted offer into the order that delivers it. |
+| `GET` | `/orders/:id/shipments` | Everything being picked, packed or gone for one order. |
+| `GET` | `/shipments/:id` | Read one delivery and what is in it. |
+| `POST` | `/shipments` | Pick goods for a customer; the quantities are held against the order. |
+| `POST` | `/shipments/:id/pack` | Close the box, and name the carrier. |
+| `POST` | `/shipments/:id/dispatch` | Send it: stock moves, and the delivery's share becomes owed. |
+| `POST` | `/shipments/:id/return` | Record that the customer sent it back, with the reason. |
+| `POST` | `/shipments/:id/abandon` | Undo a delivery that never left; its goods return to the order. |
 | `GET` | `/orders` | List recent sales orders. |
 | `GET` | `/orders/:id` | Read one order snapshot. |
 | `POST` | `/orders` | Place an order and start the Inventory choreography. |

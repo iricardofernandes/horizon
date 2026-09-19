@@ -3,6 +3,10 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { ConfirmReservationUseCase } from '@/application/use-cases/confirm-reservation'
 import { ReserveStockUseCase } from '@/application/use-cases/reserve-stock'
+import {
+  ReturnToStockUseCase,
+  ShipReservationUseCase,
+} from '@/application/use-cases/ship-reservation'
 import { Quantity } from '@/domain/value-objects/inventory-values'
 import { InventoryDatabase } from '@/infrastructure/database/drizzle/inventory-database'
 
@@ -58,21 +62,64 @@ it('persists reservations, shipments, movements and outbox events atomically', a
   })
   expect(confirmed.isRight()).toBe(true)
 
-  const [balance] = await administrator`select on_hand, reserved, version from stock_balances
+  // Committing the order holds the goods; nothing has left the warehouse yet.
+  const [held] = await administrator`select on_hand, reserved, version from stock_balances
     where id = ${fixture.balanceId}`
-  expect(balance).toEqual({ on_hand: '7000000', reserved: '0', version: 1 })
+  expect(held).toEqual({ on_hand: '10000000', reserved: '3000000', version: 0 })
   const [reservation] = await administrator`select status, order_version from stock_reservations
     where order_id = ${orderId}`
   expect(reservation).toEqual({ status: 'confirmed', order_version: 2 })
-  const movements = await administrator`select kind, quantity, balance_after, balance_version
-    from stock_movements where balance_id = ${fixture.balanceId}`
+
+  // Two units go, then the last one: each delivery takes its own stock out.
+  const ship = (quantity: string) =>
+    database.inTenant(fixture.tenantId, (scope) =>
+      new ShipReservationUseCase(clock).executeInScope(scope, {
+        tenantId: fixture.tenantId,
+        orderId,
+        lines: [{ lineId, quantity }],
+      }),
+    )
+  expect((await ship('2')).isRight()).toBe(true)
+  const [partly] = await administrator`select on_hand, reserved from stock_balances
+    where id = ${fixture.balanceId}`
+  expect(partly).toEqual({ on_hand: '8000000', reserved: '1000000' })
+  expect(
+    (await administrator`select status from stock_reservations where order_id = ${orderId}`)[0],
+  ).toEqual({ status: 'confirmed' })
+  expect((await ship('1')).isRight()).toBe(true)
+  const [gone] = await administrator`select on_hand, reserved from stock_balances
+    where id = ${fixture.balanceId}`
+  expect(gone).toEqual({ on_hand: '7000000', reserved: '0' })
+  expect(
+    (await administrator`select status from stock_reservations where order_id = ${orderId}`)[0],
+  ).toEqual({ status: 'shipped' })
+
+  // The customer sends one back: it returns to the shelf, and to its promise.
+  const returned = await database.inTenant(fixture.tenantId, (scope) =>
+    new ReturnToStockUseCase(clock).executeInScope(scope, {
+      tenantId: fixture.tenantId,
+      orderId,
+      lines: [{ lineId, quantity: '1' }],
+    }),
+  )
+  expect(returned.isRight()).toBe(true)
+  const [back] = await administrator`select on_hand, reserved from stock_balances
+    where id = ${fixture.balanceId}`
+  expect(back).toEqual({ on_hand: '8000000', reserved: '1000000' })
+
+  const movements = await administrator`select kind, quantity, balance_after
+    from stock_movements where balance_id = ${fixture.balanceId} order by balance_version`
   expect(movements).toEqual([
-    { kind: 'shipment', quantity: '3000000', balance_after: '7000000', balance_version: 1 },
+    { kind: 'shipment', quantity: '2000000', balance_after: '8000000' },
+    { kind: 'shipment', quantity: '1000000', balance_after: '7000000' },
+    { kind: 'return-in', quantity: '1000000', balance_after: '8000000' },
   ])
   const outbox = await administrator`select event_type from outbox
     where tenant_id = ${fixture.tenantId} order by created_at`
   expect(outbox.map((row) => row.event_type)).toEqual([
     'inventory.stock.reserved',
+    'inventory.stock.moved',
+    'inventory.stock.moved',
     'inventory.stock.moved',
   ])
 })

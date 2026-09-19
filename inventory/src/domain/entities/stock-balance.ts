@@ -94,6 +94,20 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     return right(undefined)
   }
   /**
+   * Goods come back from a customer, into the promise they were shipped against.
+   *
+   * They return at the cost they left at — a return is not a purchase, so it moves no
+   * average — and they go back to being held for the order, because the customer is still
+   * owed them until somebody decides otherwise.
+   */
+  takeBack(quantity: Quantity, now: Date): Either<ConflictError, void> {
+    if (quantity.isZero()) return left(new ConflictError('movement quantity must be positive'))
+    this.props.onHand = this.props.onHand.plus(quantity)
+    this.props.reserved = this.props.reserved.plus(quantity)
+    this.recordMovement('return-in', quantity, this.props.averageUnitCost, now)
+    return right(undefined)
+  }
+  /**
    * Goods leave stock without having been sold — a delivery sent back to its supplier.
    *
    * What was reserved for somebody else is untouchable: refusing here is what stops a
@@ -128,7 +142,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     })
   }
   private recordMovement(
-    kind: 'receipt' | 'shipment' | 'adjustment-out',
+    kind: 'receipt' | 'shipment' | 'adjustment-out' | 'return-in',
     quantity: Quantity,
     unitCost: Money | null,
     now: Date,

@@ -126,10 +126,10 @@ it('projects catalog events and confirms an order from an inventory outcome exac
   expect(await administrator`select * from inbox where tenant_id = ${tenantId}`).toHaveLength(3)
   const outbox = await administrator`select event_type from outbox
     where tenant_id = ${tenantId} order by created_at`
+  // The invoice is asked for when the goods leave, not when the order is committed.
   expect(outbox.map((event) => event.event_type)).toEqual([
     'sales.order.placed',
     'sales.order.confirmed',
-    'sales.invoicing.requested',
   ])
 })
 

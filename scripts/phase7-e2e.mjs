@@ -164,7 +164,7 @@ try {
   const broker = await connect(brokerUrl)
   const sink = await broker.createChannel()
   const sinkQueue = (await sink.assertQueue('', { exclusive: true })).queue
-  await sink.bindQueue(sinkQueue, 'horizon.events', 'sales.invoicing.requested')
+  await sink.bindQueue(sinkQueue, 'horizon.events', 'sales.order.confirmed')
   await sink.bindQueue(sinkQueue, 'horizon.events', 'inventory.stock.moved')
   resources.push(() => sink.close())
   resources.push(() => broker.close())
@@ -247,20 +247,21 @@ try {
     'duplicate inbox acknowledgement',
   )
 
-  assert.equal(await salesRelay.flush(), 2)
+  assert.equal(await salesRelay.flush(), 1)
   await waitFor(
     async () => {
       const [row] = await inventoryAdmin`select status from stock_reservations
         where tenant_id = ${tenantId} and order_id = ${orderId}`
       return row?.status === 'confirmed' ? row : null
     },
-    'Inventory shipment',
+    'Inventory hold committed',
   )
-  assert.equal(await inventoryRelay.flush(), 1)
 
+  // Committing the order commits the hold. The goods leave when a delivery leaves, which
+  // is the fulfilment choreography rather than this one.
   const [balance] = await inventoryAdmin`select on_hand, reserved, version from stock_balances
     where tenant_id = ${tenantId} and item_id = ${itemId}`
-  assert.deepEqual(balance, { on_hand: '6000000', reserved: '0', version: 1 })
+  assert.deepEqual(balance, { on_hand: '10000000', reserved: '4000000', version: 0 })
   const [order] = await salesAdmin`select status, version, total, currency from sales_orders
     where id = ${orderId}`
   assert.deepEqual(order, { status: 'confirmed', version: 2, total: '5000', currency: 'BRL' })
@@ -286,7 +287,7 @@ try {
       orderId,
       traceId: requestTraceId,
       salesInboxEffects: salesInbox.length,
-      finalStock: balance.on_hand,
+      heldStock: balance.reserved,
     }),
   )
 } finally {

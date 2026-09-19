@@ -62,7 +62,7 @@ export const inventoryStockMoved = defineEvent({
     movementId: uuidSchema,
     itemId: uuidSchema,
     warehouseId: uuidSchema,
-    kind: z.enum(['receipt', 'shipment', 'adjustment-in', 'adjustment-out']),
+    kind: z.enum(['receipt', 'shipment', 'adjustment-in', 'adjustment-out', 'return-in']),
     balanceVersion: z.number().int().positive(),
     quantity: quantitySchema,
     balanceAfter: quantitySchema,

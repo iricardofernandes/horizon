@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import type { EventOutcome, InventoryScope, ReceivedEvent } from '@/application/ports/unit-of-work'
@@ -150,7 +150,12 @@ function mapReservation(
   row: typeof schema.stockReservations.$inferSelect,
   lines: readonly (typeof schema.stockReservationLines.$inferSelect)[],
 ): StockReservation {
-  if (row.status !== 'active' && row.status !== 'confirmed' && row.status !== 'released')
+  if (
+    row.status !== 'active' &&
+    row.status !== 'confirmed' &&
+    row.status !== 'shipped' &&
+    row.status !== 'released'
+  )
     throw new Error('Invalid persisted reservation status')
   return StockReservation.rehydrate(
     {
@@ -167,6 +172,9 @@ function mapReservation(
         warehouseId: line.warehouseId,
         quantity: Quantity.fromMicros(line.quantity),
       })),
+      shipped: lines
+        .filter((line) => line.shipped > 0n)
+        .map((line) => ({ lineId: line.lineId, quantity: Quantity.fromMicros(line.shipped) })),
     },
     new UniqueEntityID(row.id),
   )
@@ -332,6 +340,7 @@ function makeScope(tx: Transaction, tenantId: string): InventoryScope {
             itemId: line.itemId,
             warehouseId: line.warehouseId,
             quantity: restored(Quantity.create(line.quantity)).micros,
+            shipped: restored(Quantity.create(line.shipped)).micros,
           })),
         )
       },
@@ -342,6 +351,17 @@ function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           .update(schema.stockReservations)
           .set({ orderVersion: row.orderVersion, status: row.status, updatedAt: row.updatedAt })
           .where(eq(schema.stockReservations.id, row.id))
+        // What has left moves line by line, because a delivery is rarely the whole order.
+        for (const line of row.lines)
+          await tx
+            .update(schema.stockReservationLines)
+            .set({ shipped: restored(Quantity.create(line.shipped)).micros })
+            .where(
+              and(
+                eq(schema.stockReservationLines.reservationId, row.id),
+                eq(schema.stockReservationLines.lineId, line.lineId),
+              ),
+            )
       },
     },
     events: { append: (event) => publish(tx, tenantId, event) },

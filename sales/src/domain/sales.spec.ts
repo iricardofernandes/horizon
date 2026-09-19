@@ -162,10 +162,7 @@ describe('sales domain', () => {
       total: { amount: '313', currency: 'BRL' },
     })
     const events = order.pullDomainEvents()
-    expect(events.map((event) => event.eventType)).toEqual([
-      'sales.order.confirmed',
-      'sales.invoicing.requested',
-    ])
+    expect(events.map((event) => event.eventType)).toEqual(['sales.order.confirmed'])
     expect(events[0]?.payloadOf()).toMatchObject({
       orderVersion: 2,
       confirmedAt: '2026-09-14T20:02:00.000Z',

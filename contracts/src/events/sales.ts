@@ -22,6 +22,11 @@ const installmentSchema = z.object({
   amount: moneySchema,
 })
 
+/** What left the warehouse against one line of the order, priced at what was agreed. */
+const shippedLineSchema = confirmedLineSchema
+
+const shipmentId = uuidSchema.describe('Shipment identifier')
+
 const quoteId = uuidSchema.describe('The identifier of this version of the offer')
 const quoteRoot = uuidSchema.describe('Shared by every version of one offer')
 const quoteVersion = z.number().int().positive()
@@ -89,6 +94,9 @@ export const salesInvoicingRequested = defineEvent({
     // The same schedule the confirmation carries. Either fact can be the first to reach a
     // consumer, so they must not disagree about when the money was agreed to arrive.
     installments: z.array(installmentSchema).min(1).optional(),
+    // Present once the order is invoiced per delivery: what was shipped is what is
+    // invoiced, and this names the delivery the document is for.
+    shipmentId: shipmentId.optional(),
   }),
 })
 
@@ -132,5 +140,52 @@ export const salesQuoteRejected = defineEvent({
     version: quoteVersion,
     customerId: uuidSchema,
     reason: z.string().trim().min(1).max(500),
+  }),
+})
+
+export const salesShipmentDispatched = defineEvent({
+  type: 'sales.shipment.dispatched',
+  version: 1,
+  description:
+    'Goods left the warehouse against a sales order, in part or in full. This is the fact that takes the stock out of its reservation and turns what was expected from the customer into what they owe: the delivery carries its share of the order total, and what the order has still to ship stays a forecast.',
+  payload: z.object({
+    orderId: uuidSchema,
+    orderVersion: z.number().int().positive(),
+    shipmentId,
+    customerId: uuidSchema,
+    warehouseId: uuidSchema.describe('The warehouse the goods left'),
+    dispatchedBy: z.string().min(1).max(255),
+    dispatchedOn: dateSchema,
+    carrier: z.string().min(2).max(120).nullable(),
+    trackingCode: z.string().min(1).max(120).nullable(),
+    lines: z.array(shippedLineSchema).min(1),
+    /** The share of the order's total these goods carry, and so what they made owed. */
+    value: moneySchema,
+    installments: z.array(installmentSchema).min(1),
+    /** What the order has still to deliver, and is therefore still only expected. */
+    remaining: moneySchema,
+    remainingInstallments: z.array(installmentSchema),
+    complete: z.boolean().describe('Whether this delivery completed the order'),
+  }),
+})
+
+export const salesShipmentReturned = defineEvent({
+  type: 'sales.shipment.returned',
+  version: 1,
+  description:
+    'A delivery came back from the customer. The goods return to stock, what they made owed is withdrawn, and the order expects to deliver them again — a returned delivery is a delivery the customer is still owed.',
+  payload: z.object({
+    orderId: uuidSchema,
+    orderVersion: z.number().int().positive(),
+    shipmentId,
+    customerId: uuidSchema,
+    warehouseId: uuidSchema,
+    returnedBy: z.string().min(1).max(255),
+    returnedOn: dateSchema,
+    reason: z.string().trim().min(1).max(500),
+    lines: z.array(shippedLineSchema).min(1),
+    value: moneySchema,
+    remaining: moneySchema,
+    remainingInstallments: z.array(installmentSchema),
   }),
 })

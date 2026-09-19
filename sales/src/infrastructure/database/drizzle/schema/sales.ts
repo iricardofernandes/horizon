@@ -164,6 +164,9 @@ export const salesOrders = pgTable(
     customerId: uuid('customer_id').notNull(),
     fulfillmentWarehouseId: uuid('fulfillment_warehouse_id').notNull(),
     status: text('status').notNull(),
+    fulfillment: text('fulfillment').notNull(),
+    shipments: integer('shipments').notNull(),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true, mode: 'date' }),
     version: integer('version').notNull(),
     reservationId: uuid('reservation_id'),
     total: bigint('total', { mode: 'bigint' }),
@@ -195,6 +198,8 @@ export const salesOrderLines = pgTable(
     lineId: uuid('line_id').notNull(),
     itemId: uuid('item_id').notNull(),
     quantity: bigint('quantity', { mode: 'bigint' }).notNull(),
+    shipped: bigint('shipped', { mode: 'bigint' }).notNull(),
+    allocated: bigint('allocated', { mode: 'bigint' }).notNull(),
     description: text('description'),
     unitPrice: bigint('unit_price', { mode: 'bigint' }),
     lineTotal: bigint('line_total', { mode: 'bigint' }),
@@ -288,3 +293,64 @@ export const auditLog = pgTable('audit_log', {
   previousHash: text('previous_hash').notNull(),
   hash: text('hash').notNull(),
 })
+
+export const shipments = pgTable(
+  'shipments',
+  {
+    id: uuid('id').primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    orderId: uuid('order_id').notNull(),
+    warehouseId: uuid('warehouse_id').notNull(),
+    status: text('status').notNull(),
+    value: bigint('value', { mode: 'bigint' }).notNull(),
+    currency: text('currency').notNull(),
+    carrier: text('carrier'),
+    trackingCode: text('tracking_code'),
+    pickedBy: text('picked_by').notNull(),
+    packedBy: text('packed_by'),
+    dispatchedBy: text('dispatched_by'),
+    dispatchedOn: date('dispatched_on', { mode: 'string' }),
+    returnedBy: text('returned_by'),
+    returnedOn: date('returned_on', { mode: 'string' }),
+    closureReason: text('closure_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('shipments_tenant_id_key').on(table.tenantId, table.id),
+    index('shipments_order_idx').on(table.tenantId, table.orderId, table.createdAt),
+    index('shipments_status_idx').on(table.tenantId, table.status, table.createdAt),
+    foreignKey({
+      name: 'shipments_order_fk',
+      columns: [table.tenantId, table.orderId],
+      foreignColumns: [salesOrders.tenantId, salesOrders.id],
+    }),
+  ],
+)
+
+export const shipmentLines = pgTable(
+  'shipment_lines',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    shipmentId: uuid('shipment_id').notNull(),
+    lineId: uuid('line_id').notNull(),
+    itemId: uuid('item_id').notNull(),
+    quantity: bigint('quantity', { mode: 'bigint' }).notNull(),
+    description: text('description').notNull(),
+    unitPrice: bigint('unit_price', { mode: 'bigint' }).notNull(),
+    lineTotal: bigint('line_total', { mode: 'bigint' }).notNull(),
+    currency: text('currency').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.shipmentId, table.lineId] }),
+    foreignKey({
+      name: 'shipment_lines_shipment_fk',
+      columns: [table.tenantId, table.shipmentId],
+      foreignColumns: [shipments.tenantId, shipments.id],
+    }),
+  ],
+)

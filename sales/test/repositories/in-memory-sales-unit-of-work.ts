@@ -12,6 +12,7 @@ import type { DomainEvent } from '@/core/events/domain-event'
 import type { Customer } from '@/domain/entities/customer'
 import type { Quote } from '@/domain/entities/quote'
 import type { SalesOrder } from '@/domain/entities/sales-order'
+import type { Shipment } from '@/domain/entities/shipment'
 import {
   type CatalogItemProjection,
   CatalogItemsRepository,
@@ -19,6 +20,7 @@ import {
   QuotesRepository,
   SalesEventsRepository,
   SalesOrdersRepository,
+  ShipmentsRepository,
 } from '@/domain/repositories/sales-repositories'
 
 class InMemoryOrders extends SalesOrdersRepository {
@@ -145,6 +147,31 @@ class InMemoryCustomers extends CustomersRepository {
   }
 }
 
+class InMemoryShipments extends ShipmentsRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: Shipment[],
+  ) {
+    super()
+  }
+  findById(id: string): Promise<Shipment | null> {
+    return Promise.resolve(
+      this.records.find(
+        (shipment) => shipment.belongsTo(this.tenantId) && shipment.id.toString() === id,
+      ) ?? null,
+    )
+  }
+  create(shipment: Shipment): Promise<void> {
+    if (!shipment.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    this.records.push(shipment)
+    return Promise.resolve()
+  }
+  save(shipment: Shipment): Promise<void> {
+    if (!shipment.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    return Promise.resolve()
+  }
+}
+
 class InMemoryAudit extends AuditTrail {
   constructor(private readonly records: AuditRecord[]) {
     super()
@@ -192,6 +219,7 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
   readonly events: DomainEvent[] = []
   readonly customers: Customer[] = []
   readonly quotes: Quote[] = []
+  readonly shipments: Shipment[] = []
   readonly auditRecords: AuditRecord[] = []
   readonly receipts = new Map<string, { receipt: CommandReceipt; response: unknown }>()
   readonly provisionedTenants = new Set<string>()
@@ -214,6 +242,7 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
       events: new InMemoryEvents(tenantId, this.events),
       customers: new InMemoryCustomers(tenantId, this.customers),
       quotes: new InMemoryQuotes(tenantId, this.quotes, this.events),
+      shipments: new InMemoryShipments(tenantId, this.shipments),
       audit: new InMemoryAudit(this.auditRecords),
     })
   }

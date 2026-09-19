@@ -43,6 +43,13 @@
       "when": 1790960000000,
       "tag": "0005_purchasing",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0006_shipments",
+      "breakpoints": true
     }
   ]
 }

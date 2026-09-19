@@ -24,6 +24,7 @@ const originSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('purchase-order'), documentId: uuidSchema }),
   z.object({ type: z.literal('purchase-receipt'), documentId: uuidSchema }),
+  z.object({ type: z.literal('sales-shipment'), documentId: uuidSchema }),
 ])
 
 /** Shared by both directions, so a receivable and a payable carry the same shape. */

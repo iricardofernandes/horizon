@@ -67,6 +67,42 @@ const reviseQuoteInput = z.strictObject({ lines: quoteLines, terms: quoteTerms.o
 
 const convertQuoteInput = z.strictObject({ fulfillmentWarehouseId: z.uuid() })
 
+const consignment = z.strictObject({
+  carrier: z.string().trim().min(2).max(120).optional(),
+  trackingCode: z.string().trim().min(1).max(120).optional(),
+})
+
+const pickShipmentInput = z.strictObject({
+  orderId: z.uuid(),
+  lines: z
+    .array(
+      z.strictObject({
+        lineId: z.uuid(),
+        quantity: z.string().regex(/^\d+(?:\.\d{1,6})?$/),
+      }),
+    )
+    .min(1)
+    .max(100),
+})
+
+const packShipmentInput = z.strictObject({ consignment: consignment.optional() })
+
+const dispatchShipmentInput = z.strictObject({
+  dispatchedOn: z.iso.date().optional(),
+  consignment: consignment.optional(),
+})
+
+const returnShipmentInput = z.strictObject({
+  reason: z.string().trim().min(1).max(500),
+  returnedOn: z.iso.date().optional(),
+})
+
+function shipmentId(value: string): string {
+  const parsed = z.uuid().safeParse(value)
+  if (!parsed.success) throw new BadRequestException('Invalid shipment id')
+  return parsed.data
+}
+
 const reasonInput = z.strictObject({ reason: z.string().trim().min(1).max(500) })
 
 function quoteId(value: string): string {
@@ -201,6 +237,112 @@ export class SalesController {
   @RequireSalesAction('manage')
   async expireQuote(@Param('id') id: string, @Req() request: SalesRequest) {
     return this.unwrap(await this.runtime.decideQuote.expire(context(request), quoteId(id)))
+  }
+
+  /** Everything being picked, packed or gone for one order. */
+  @Get('orders/:id/shipments')
+  @RequireSalesAction('read')
+  async shipmentsOfOrder(@Param('id') id: string, @Req() request: SalesRequest) {
+    const parsed = z.uuid().safeParse(id)
+    if (!parsed.success) throw new BadRequestException('Invalid order id')
+    return this.runtime.database.listShipmentSnapshots(tenantOf(request), parsed.data)
+  }
+
+  @Get('shipments/:id')
+  @RequireSalesAction('read')
+  async shipment(@Param('id') id: string, @Req() request: SalesRequest) {
+    const shipment = await this.runtime.database.findShipmentSnapshot(
+      tenantOf(request),
+      shipmentId(id),
+    )
+    if (!shipment) throw new NotFoundException('Shipment was not found')
+    return shipment
+  }
+
+  /** Take goods off the shelf for a customer; the quantities are held against the order. */
+  @Post('shipments')
+  @RequireSalesAction('manage')
+  async pickShipment(@Body() body: unknown, @Req() request: SalesRequest) {
+    const parsed = pickShipmentInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid shipment')
+    return this.unwrap(
+      await this.runtime.pickShipment.execute({
+        context: idempotent(request),
+        orderId: parsed.data.orderId,
+        lines: parsed.data.lines,
+      }),
+    )
+  }
+
+  @Post('shipments/:id/pack')
+  @RequireSalesAction('manage')
+  async packShipment(@Param('id') id: string, @Body() body: unknown, @Req() request: SalesRequest) {
+    const parsed = packShipmentInput.safeParse(body ?? {})
+    if (!parsed.success) throw new BadRequestException('Invalid consignment')
+    return this.unwrap(
+      await this.runtime.packShipment.execute({
+        context: context(request),
+        shipmentId: shipmentId(id),
+        consignment: parsed.data.consignment,
+      }),
+    )
+  }
+
+  /** The goods leave: stock moves, the customer owes this delivery's share of the order. */
+  @Post('shipments/:id/dispatch')
+  @RequireSalesAction('manage')
+  async dispatchShipment(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: SalesRequest,
+  ) {
+    const parsed = dispatchShipmentInput.safeParse(body ?? {})
+    if (!parsed.success) throw new BadRequestException('Invalid dispatch')
+    return this.unwrap(
+      await this.runtime.dispatchShipment.execute({
+        context: idempotent(request),
+        shipmentId: shipmentId(id),
+        dispatchedOn: parsed.data.dispatchedOn,
+        consignment: parsed.data.consignment,
+      }),
+    )
+  }
+
+  @Post('shipments/:id/return')
+  @RequireSalesAction('manage')
+  async returnShipment(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: SalesRequest,
+  ) {
+    const parsed = returnShipmentInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid return')
+    return this.unwrap(
+      await this.runtime.returnShipment.execute({
+        context: idempotent(request),
+        shipmentId: shipmentId(id),
+        reason: parsed.data.reason,
+        returnedOn: parsed.data.returnedOn,
+      }),
+    )
+  }
+
+  @Post('shipments/:id/abandon')
+  @RequireSalesAction('manage')
+  async abandonShipment(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: SalesRequest,
+  ) {
+    const parsed = reasonInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid reason')
+    return this.unwrap(
+      await this.runtime.abandonShipment.execute({
+        context: context(request),
+        shipmentId: shipmentId(id),
+        reason: parsed.data.reason,
+      }),
+    )
   }
 
   private unwrap<T>(result: { isRight(): boolean; value: unknown }): T {

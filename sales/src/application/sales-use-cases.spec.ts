@@ -103,7 +103,7 @@ describe('sales application', () => {
     expect(unitOfWork.orders).toHaveLength(0)
   })
 
-  it('confirms against current catalog projections and emits both durable facts', async () => {
+  it('confirms against current catalog projections and publishes the commitment', async () => {
     const unitOfWork = new InMemorySalesUnitOfWork()
     const fixture = await placedFixture(unitOfWork)
     unitOfWork.catalogItems.push(projection(fixture.tenantId, fixture.itemId))
@@ -122,10 +122,8 @@ describe('sales application', () => {
       reservationId,
       total: { amount: '2500', currency: 'BRL' },
     })
-    expect(unitOfWork.events.map((event) => event.eventType)).toEqual([
-      'sales.order.confirmed',
-      'sales.invoicing.requested',
-    ])
+    // Confirming commits the order; the invoice is asked for when the goods actually go.
+    expect(unitOfWork.events.map((event) => event.eventType)).toEqual(['sales.order.confirmed'])
   })
 
   it('does not confirm without an active local catalog projection', async () => {

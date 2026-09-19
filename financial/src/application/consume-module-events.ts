@@ -8,9 +8,10 @@ import {
   procurementOrderClosed,
   procurementReceiptRecorded,
   procurementReceiptReturned,
-  salesInvoicingRequested,
   salesOrderCancelled,
   salesOrderConfirmed,
+  salesShipmentDispatched,
+  salesShipmentReturned,
 } from '@horizon/contracts'
 import type { EventHandler } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { Clock } from './ports/clock'
@@ -23,8 +24,9 @@ import {
 } from './use-cases/follow-purchasing'
 import {
   RaiseReceivableFromOrderUseCase,
-  RealiseForecastFromInvoicingUseCase,
+  RecordReceivableFromShipmentUseCase,
   WithdrawReceivableOfOrderUseCase,
+  WithdrawReceivableOfShipmentUseCase,
 } from './use-cases/follow-sales-and-parties'
 
 type SourceModule = 'parties' | 'sales' | 'procurement'
@@ -32,7 +34,8 @@ type SourceModule = 'parties' | 'sales' | 'procurement'
 export class FinancialModuleEventHandlers {
   readonly handlers: Readonly<Record<string, EventHandler>>
   private readonly raise: RaiseReceivableFromOrderUseCase
-  private readonly realise: RealiseForecastFromInvoicingUseCase
+  private readonly receivableFromShipment: RecordReceivableFromShipmentUseCase
+  private readonly withdrawShipmentReceivable: WithdrawReceivableOfShipmentUseCase
   private readonly withdraw: WithdrawReceivableOfOrderUseCase
   private readonly forecastPayable: RaisePayableForecastUseCase
   private readonly payableFromReceipt: RecordPayableFromReceiptUseCase
@@ -44,7 +47,8 @@ export class FinancialModuleEventHandlers {
     private readonly clock: Clock,
   ) {
     this.raise = new RaiseReceivableFromOrderUseCase(clock)
-    this.realise = new RealiseForecastFromInvoicingUseCase(clock)
+    this.receivableFromShipment = new RecordReceivableFromShipmentUseCase(clock)
+    this.withdrawShipmentReceivable = new WithdrawReceivableOfShipmentUseCase(clock)
     this.withdraw = new WithdrawReceivableOfOrderUseCase(clock)
     this.forecastPayable = new RaisePayableForecastUseCase(clock)
     this.payableFromReceipt = new RecordPayableFromReceiptUseCase(clock)
@@ -56,7 +60,8 @@ export class FinancialModuleEventHandlers {
       'parties.party.erased': (event) => this.partyErased(event),
       'sales.order.confirmed': (event) => this.orderConfirmed(event),
       'sales.order.cancelled': (event) => this.orderCancelled(event),
-      'sales.invoicing.requested': (event) => this.invoicingRequested(event),
+      'sales.shipment.dispatched': (event) => this.shipmentDispatched(event),
+      'sales.shipment.returned': (event) => this.shipmentReturned(event),
       'procurement.order.approved': (event) => this.purchaseApproved(event),
       'procurement.order.cancelled': (event) => this.purchaseWithdrawn(event, 'cancelled'),
       'procurement.order.closed': (event) => this.purchaseWithdrawn(event, 'closed'),
@@ -98,12 +103,24 @@ export class FinancialModuleEventHandlers {
     if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
   }
 
-  private async invoicingRequested(event: EventEnvelope): Promise<void> {
-    const parsed = salesInvoicingRequested.envelope.parse(event)
+  /** Goods left: what they carried is owed, and the order expects only what is left. */
+  private async shipmentDispatched(event: EventEnvelope): Promise<void> {
+    const parsed = salesShipmentDispatched.envelope.parse(event)
     const outcome = await this.unitOfWork.processEvent(
       parsed.tenantId,
       received(parsed, 'sales'),
-      (scope) => this.realise.executeInScope(scope, parsed.payload),
+      (scope) => this.receivableFromShipment.executeInScope(scope, parsed.payload),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
+  }
+
+  /** The delivery came back: what it made owed goes with it, and the order expects it again. */
+  private async shipmentReturned(event: EventEnvelope): Promise<void> {
+    const parsed = salesShipmentReturned.envelope.parse(event)
+    const outcome = await this.unitOfWork.processEvent(
+      parsed.tenantId,
+      received(parsed, 'sales'),
+      (scope) => this.withdrawShipmentReceivable.executeInScope(scope, parsed.payload),
     )
     if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
   }

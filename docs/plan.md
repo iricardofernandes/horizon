@@ -1449,6 +1449,77 @@ the yes carries into the order, the stock and the money without anybody retyping
 
 ---
 
+## Phase 30 — Getting the goods there: picking, partial delivery, and what comes back
+
+**Complete.** The second slice of Phase H of the [expansion plan](erp-expansion-plan.md).
+
+A sale used to end when the order was confirmed: the stock left the shelf at that moment,
+the invoice was asked for at that moment, and the whole order was owed at that moment. Real
+orders do not behave like that. They are picked, packed and sent — sometimes in parts,
+sometimes late, sometimes back again. This is the phase where confirming an order and
+delivering it stop being the same event.
+
+**Deliverables**
+
+- **The delivery is the fact.** Confirming an order now *holds* the stock; it is the
+  dispatch that takes it out. The reservation finally means what its name says: between the
+  commitment and the van, the goods are on the shelf and spoken for.
+- **Picking, packing, dispatch.** A shipment exists before it leaves, because picking and
+  packing take time and the warehouse needs somewhere to write down what it is doing.
+  Picking *holds* the quantities against the order, so two boxes being prepared at once
+  cannot promise the same unit. A box nobody closed cannot be sent, and one that never left
+  can be abandoned — its goods go back to the order, to be promised again.
+- **Partial delivery.** What a delivery makes owed is its **share** of the order's total,
+  because freight and the discount were agreed for the order as a whole. The share is taken
+  cumulatively and the earlier one subtracted, so rounding never accumulates and the
+  delivery that completes an order leaves nothing behind — the same arithmetic the buying
+  side has used since phase 27.
+- **The money follows the goods.** A confirmed order raises a **forecast** receivable for
+  the whole of it; each dispatch raises an **effective** receivable for what it carried and
+  reduces the forecast to what has still to be delivered. The two are never both counted,
+  which is what the forecast stage has existed for since phase 24. An invoice is asked for
+  per delivery, because an invoice is written for what was actually shipped.
+- **Customer returns.** A delivery that comes back puts the goods on the shelf at the cost
+  they left at and *back into their promise* — the customer is still owed them, so they are
+  held for the order rather than becoming free stock somebody else can be sold. What the
+  delivery made owed is withdrawn, what the order still has to deliver goes back up, and
+  both the dispatch and the return stay in the record (ADR 0042).
+- `@horizon/contracts@0.18.0`: `sales.shipment.dispatched` and `sales.shipment.returned`,
+  each carrying its schedules already dated; `return-in` as a stock movement kind; and
+  `sales-shipment` as the origin a receivable can come from.
+- `make demo` picks, packs and sends the order it sold, and only then collects the money —
+  in the same trace, with the stock, the receivable and the books agreeing about what left.
+
+**Exit criteria**
+
+- Quote → order → reservation → dispatch → receivable runs in `make demo`, in one trace,
+  and the money is not owed until the goods have gone.
+- A partial delivery and the delivery that completes the order add up to the order total
+  exactly, freight and discount included (domain property and integration test).
+- What a delivery makes owed plus what the order still has to deliver always equals the
+  order total, and a forecast never appears in any view that reports what is owed.
+- The same unit is never promised to two deliveries, asserted in the aggregate and by a
+  table constraint.
+- A returned delivery puts back what it took away, in the stock, in the receivable and in
+  the forecast, and the order owes those goods again.
+- A delivery that has left cannot be edited: the attempt is refused by the aggregate and by
+  a trigger on its lines.
+
+**Non-goals**
+
+- Sales screens — the shipment board, the picking list and the returns view — which close
+  Phase H.
+- Partial returns: a delivery goes back whole, exactly as on the buying side, because a
+  partial return of a partial delivery is a quantity puzzle nobody has asked for yet.
+- Closing an order short. An order that will never be delivered in full needs a person to
+  say so, and what that should do to the hold and the forecast is a decision worth taking
+  with the screens rather than before them.
+- Carrier integrations. The carrier and the tracking code are what the warehouse typed;
+  asking a carrier where the parcel is belongs with fiscal documents and logistics.
+- Costing the return at anything other than what it left at. Valuation is Phase I.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

@@ -30,8 +30,9 @@ as `make demo`:
 1. Sales writes an order and its transactional outbox event.
 2. RabbitMQ delivers `sales.order.placed` to Inventory's inbox.
 3. Inventory reserves stock and emits its outcome through its outbox.
-4. Sales confirms the order, emits `sales.order.confirmed` and requests invoicing.
-5. Inventory confirms the reservation and writes the stock movement.
+4. Sales confirms the order and emits `sales.order.confirmed`.
+5. Inventory commits the hold; the goods leave, and the stock movement is written, when a
+   delivery is dispatched.
 6. Webhooks consumes the broker copy of `sales.order.confirmed`, inserts its inbox/event
    and delivery rows, claims it through the cross-tenant worker, signs the exact payload
    and receives a 2xx from the HMAC-verifying callback before the load request succeeds.

@@ -23,6 +23,15 @@ export class Quantity extends ValueObject<{ micros: bigint }> {
   isZero(): boolean {
     return this.micros === 0n
   }
+  isLessThan(other: Quantity): boolean {
+    return this.micros < other.micros
+  }
+  plus(other: Quantity): Quantity {
+    return Quantity.fromMicros(this.micros + other.micros)
+  }
+  minus(other: Quantity): Quantity {
+    return Quantity.fromMicros(this.micros - other.micros)
+  }
   override toString(): string {
     const whole = this.micros / SCALE
     const fraction = (this.micros % SCALE).toString().padStart(6, '0').replace(/0+$/, '')
@@ -220,6 +229,9 @@ export class BusinessDate extends ValueObject<{ value: string }> {
   get value(): string {
     return this.props.value
   }
+  isBefore(other: BusinessDate): boolean {
+    return this.value < other.value
+  }
   plusDays(days: number): BusinessDate {
     const moved = new Date(`${this.value}T00:00:00Z`)
     moved.setUTCDate(moved.getUTCDate() + days)
@@ -287,6 +299,24 @@ export class PaymentTerms extends ValueObject<{ days: readonly number[] }> {
 
   protected componentsOf(): readonly unknown[] {
     return this.props.days
+  }
+}
+
+/** How the customer follows the parcel. Free text: every carrier numbers its own way. */
+export class TrackingCode extends ValueObject<{ value: string }> {
+  static create(value: string): Either<InvalidInputError, TrackingCode> {
+    const normalized = value.trim().replace(/\s+/g, ' ')
+    if (normalized.length < 1 || normalized.length > 120)
+      return left(
+        new InvalidInputError('/trackingCode', 'must contain between 1 and 120 characters'),
+      )
+    return right(new TrackingCode({ value: normalized }))
+  }
+  get value(): string {
+    return this.props.value
+  }
+  protected componentsOf(): readonly unknown[] {
+    return [this.value]
   }
 }
 

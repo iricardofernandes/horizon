@@ -6,8 +6,11 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 7 — complete.** The versioned choreography with Sales is defined in
-`@horizon/contracts@0.3.0`. Forced-RLS PostgreSQL persistence locks every requested
+**Status: phase 30 — complete.** A reservation is consumed when the goods leave, not when
+the order is confirmed, so a partial delivery takes out exactly what went and leaves the
+rest held.
+
+The versioned choreography with Sales is defined in `@horizon/contracts@0.18.0`. Forced-RLS PostgreSQL persistence locks every requested
 balance and either holds all lines or publishes one complete rejection; confirmation
 atomically converts holds into append-only shipment movements. Its inbox, outbox relay,
 RabbitMQ consumer, bounded retry, circuit breaker, metrics and trace propagation are
@@ -53,7 +56,9 @@ refusals.
 | `catalog.item.created` | Projects products as stockable; services are deliberately ignored. |
 | `catalog.item.deactivated` | Blocks new reservations for the item. |
 | `sales.order.placed` | Attempts one atomic reservation for every order line and publishes either reserved or rejected. |
-| `sales.order.confirmed` | Converts the order's reservation into an outbound movement. |
+| `sales.order.confirmed` | Commits the reservation. The goods stay on the shelf, held for that customer. |
+| `sales.shipment.dispatched` | The goods left: takes exactly what left out of its hold, in part or in full. |
+| `sales.shipment.returned` | The delivery came back: returns the goods at the cost they left at, and to their hold. |
 | `sales.order.cancelled` | Releases the order's reservation. |
 
 Every published event is written to the `outbox` table inside the same transaction as

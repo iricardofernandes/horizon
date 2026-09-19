@@ -348,6 +348,32 @@ that were agreed, under the terms that were negotiated. An accepted quote become
 one order, and the order is confirmed at the quoted price even if the catalogue has moved
 in between.
 
+### shipment
+One delivery against a sales order: what is being picked for the customer, what left, and
+what it was worth. It exists before it leaves, because picking and packing take time; until
+it leaves it is a plan and may be abandoned, and the moment it leaves it is the record of a
+physical event and is never edited.
+
+### picking
+Taking goods off the shelf for a particular delivery. It *holds* the quantities against the
+order, so two boxes being prepared at once cannot promise the same unit. Nothing has moved
+and nothing is owed yet.
+
+### delivery share
+What one delivery makes owed. Freight and the discount were agreed for the order as a
+whole, so a partial delivery carries them in proportion to the goods in it. The share is
+taken cumulatively and the earlier one subtracted, so the parts always add back up to the
+whole and the delivery that completes an order leaves nothing behind.
+
+### fulfilment state
+How much of an order has reached the customer: nothing, part of it, or all of it. Derived
+from what has been delivered and not returned, never set by hand.
+
+### customer return
+A delivery sent back, whole. The goods return to stock at the cost they left at and to the
+promise they were shipped against — the customer is still owed them — and what the delivery
+made owed is withdrawn. The dispatch and the return both stay in the record.
+
 ### commercial terms
 What a quote or an order says beyond the goods themselves — the seller, the discount, the
 freight, the carrier, the payment terms and the notes. They are copied onto the order at

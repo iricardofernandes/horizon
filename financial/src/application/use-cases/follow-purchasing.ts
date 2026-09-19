@@ -1,23 +1,13 @@
 import { type Either, left, right } from '@/core/either'
 import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
-import { Title, type TitleOrigin, type TitleTerms } from '@/domain/entities/title'
-import { BusinessDate, Currency, Money } from '@/domain/value-objects/financial-values'
-import { DocumentNumber, Reason } from '@/domain/value-objects/title-values'
+import { Reason } from '@/domain/value-objects/title-values'
 import type { Clock } from '../ports/clock'
 import type { FinancialScope } from '../ports/unit-of-work'
+import { append, raise, reduceForecast, type WireInstallment, type WireMoney } from './title-flows'
 
 const PROCUREMENT_ACTOR = 'system:procurement'
 
-export interface WireMoney {
-  readonly amount: string
-  readonly currency: string
-}
-
-export interface WireInstallment {
-  readonly number: number
-  readonly dueOn: string
-  readonly amount: WireMoney
-}
+export type { WireInstallment, WireMoney }
 
 export interface ApprovedPurchaseOrder {
   readonly orderId: string
@@ -43,6 +33,8 @@ export class RaisePayableForecastUseCase {
   ): Promise<Either<InvalidInputError, 'raised' | 'ignored'>> {
     if (await scope.titles.findByOriginForUpdate('payable', order.orderId)) return right('ignored')
     return raise(scope, {
+      direction: 'payable',
+      actor: PROCUREMENT_ACTOR,
       origin: { type: 'purchase-order', documentId: order.orderId },
       reference: `PO-${order.orderId.slice(-8).toUpperCase()}`,
       partyId: order.supplierId,
@@ -85,18 +77,14 @@ export class RecordPayableFromReceiptUseCase {
     receipt: RecordedReceipt,
   ): Promise<Either<InvalidInputError, 'raised' | 'ignored'>> {
     const now = this.clock.now()
-    const reduced = await reduceForecast(
-      scope,
-      receipt.orderId,
-      receipt.remaining,
-      receipt.remainingInstallments,
-      now,
-    )
+    const reduced = await reduceForecast(scope, forecastOf(receipt.orderId, receipt, now))
     if (reduced.isLeft()) return left(reduced.value)
     if (await scope.titles.findByOriginForUpdate('payable', receipt.receiptId))
       return right('ignored')
     if (receipt.installments.length === 0) return right('ignored')
     return raise(scope, {
+      direction: 'payable',
+      actor: PROCUREMENT_ACTOR,
       origin: { type: 'purchase-receipt', documentId: receipt.receiptId },
       reference: `GR-${receipt.receiptId.slice(-8).toUpperCase()}`,
       partyId: receipt.supplierId,
@@ -133,13 +121,7 @@ export class WithdrawPayableOfReceiptUseCase {
     returned: ReturnedReceipt,
   ): Promise<Either<InvalidInputError, 'withdrawn' | 'ignored'>> {
     const now = this.clock.now()
-    const restored = await reduceForecast(
-      scope,
-      returned.orderId,
-      returned.remaining,
-      returned.remainingInstallments,
-      now,
-    )
+    const restored = await reduceForecast(scope, forecastOf(returned.orderId, returned, now))
     if (restored.isLeft()) return left(restored.value)
     const title = await scope.titles.findByOriginForUpdate('payable', returned.receiptId)
     if (title?.status !== 'draft') return right('ignored')
@@ -148,10 +130,14 @@ export class WithdrawPayableOfReceiptUseCase {
     const cancelled = title.cancel(reason.value, now)
     if (cancelled.isLeft()) return right('ignored')
     await scope.titles.save(title)
-    await append(scope, 'payable.withdrawn-with-return', title.id.toString(), now, {
-      orderId: returned.orderId,
-      receiptId: returned.receiptId,
-    })
+    await append(
+      scope,
+      PROCUREMENT_ACTOR,
+      'payable.withdrawn-with-return',
+      title.id.toString(),
+      now,
+      { orderId: returned.orderId, receiptId: returned.receiptId },
+    )
     return right('withdrawn')
   }
 }
@@ -173,136 +159,27 @@ export class WithdrawPayableForecastUseCase {
     const cancelled = title.cancel(reason.value, now)
     if (cancelled.isLeft()) return 'ignored'
     await scope.titles.save(title)
-    await append(scope, 'payable.forecast-withdrawn', title.id.toString(), now, { orderId })
+    await append(scope, PROCUREMENT_ACTOR, 'payable.forecast-withdrawn', title.id.toString(), now, {
+      orderId,
+    })
     return 'withdrawn'
   }
 }
 
-/**
- * Leave the order's forecast showing exactly what is still committed and has not arrived.
- *
- * When nothing is left it is cancelled rather than kept at zero, because a forecast of
- * nothing is not something anybody needs to read.
- */
-async function reduceForecast(
-  scope: FinancialScope,
+/** What the order still expects after a delivery, or after one came back. */
+function forecastOf(
   orderId: string,
-  remaining: WireMoney,
-  installments: readonly WireInstallment[],
+  movement: { remaining: WireMoney; remainingInstallments: readonly WireInstallment[] },
   now: Date,
-): Promise<Either<InvalidInputError, 'reduced' | 'withdrawn' | 'ignored'>> {
-  const forecast = await scope.titles.findByOriginForUpdate('payable', orderId)
-  if (!forecast || forecast.stage !== 'forecast') return right('ignored')
-  const wanted = remaining.amount !== '0' && installments.length > 0
-  // A commitment can come back: goods returned to a supplier are goods it still owes.
-  if (wanted && forecast.status === 'cancelled' && forecast.reinstate(now).isLeft())
-    return right('ignored')
-  if (forecast.status !== 'draft') return right('ignored')
-  if (!wanted) {
-    const reason = Reason.create('Everything this order committed to has arrived')
-    if (reason.isLeft()) return left(reason.value)
-    const cancelled = forecast.cancel(reason.value, now)
-    if (cancelled.isLeft()) return right('ignored')
-    await scope.titles.save(forecast)
-    await append(scope, 'payable.forecast-withdrawn', forecast.id.toString(), now, { orderId })
-    return right('withdrawn')
-  }
-  const schedule = scheduleOf(installments, forecast.currency)
-  if (schedule.isLeft()) return left(schedule.value)
-  const revised = forecast.revise({ ...forecast.termsOf(), installments: schedule.value }, now)
-  if (revised.isLeft()) return right('ignored')
-  await scope.titles.save(forecast)
-  await append(scope, 'payable.forecast-reduced', forecast.id.toString(), now, {
-    orderId,
-    remaining: remaining.amount,
-  })
-  return right('reduced')
-}
-
-interface RaiseInput {
-  readonly origin: TitleOrigin
-  readonly reference: string
-  readonly partyId: string
-  readonly issuedOn: string
-  readonly currency: string
-  readonly installments: readonly WireInstallment[]
-  readonly stage: 'forecast' | 'effective'
-  readonly action: string
-  readonly details: Readonly<Record<string, unknown>>
-  readonly now: Date
-}
-
-async function raise(
-  scope: FinancialScope,
-  input: RaiseInput,
-): Promise<Either<InvalidInputError, 'raised'>> {
-  const currency = Currency.create(input.currency)
-  if (currency.isLeft()) return left(currency.value)
-  const issuedOn = BusinessDate.create(input.issuedOn, '/issuedOn')
-  if (issuedOn.isLeft()) return left(issuedOn.value)
-  const documentNumber = DocumentNumber.create(input.reference)
-  if (documentNumber.isLeft()) return left(documentNumber.value)
-  const installments = scheduleOf(input.installments, currency.value)
-  if (installments.isLeft()) return left(installments.value)
-  const terms: TitleTerms = {
-    partyId: input.partyId,
-    documentNumber: documentNumber.value,
-    description: null,
-    currency: currency.value,
-    categoryId: null,
-    issuedOn: issuedOn.value,
-    competenceOn: issuedOn.value,
-    installments: installments.value,
-    allocations: [],
-  }
-  const title = Title.draft({
-    tenantId: scope.tenantId,
-    direction: 'payable',
-    origin: input.origin,
-    terms,
-    stage: input.stage,
-    now: input.now,
-  })
-  if (title.isLeft()) return left(title.value)
-  await scope.titles.create(title.value)
-  await append(scope, input.action, title.value.id.toString(), input.now, {
-    ...input.details,
-    total: title.value.total().amount.toString(),
-    currency: currency.value.value,
-    stage: input.stage,
-  })
-  return right('raised')
-}
-
-function scheduleOf(
-  installments: readonly WireInstallment[],
-  currency: Currency,
-): Either<InvalidInputError, TitleTerms['installments']> {
-  const parsed: { dueOn: BusinessDate; amount: Money }[] = []
-  for (const installment of installments) {
-    const dueOn = BusinessDate.create(installment.dueOn, '/dueOn')
-    if (dueOn.isLeft()) return left(dueOn.value)
-    const amount = Money.create(installment.amount.amount, currency)
-    if (amount.isLeft()) return left(amount.value)
-    parsed.push({ dueOn: dueOn.value, amount: amount.value })
-  }
-  return right(parsed)
-}
-
-function append(
-  scope: FinancialScope,
-  action: string,
-  subjectId: string,
-  occurredAt: Date,
-  details: Readonly<Record<string, unknown>>,
 ) {
-  return scope.audit.append({
+  return {
+    direction: 'payable' as const,
+    documentId: orderId,
+    remaining: movement.remaining,
+    installments: movement.remainingInstallments,
     actor: PROCUREMENT_ACTOR,
-    action,
-    subjectType: 'title',
-    subjectId,
-    occurredAt,
-    requestId: null,
-    details,
-  })
+    subject: 'payable',
+    settled: 'Everything this order committed to has arrived',
+    now,
+  }
 }

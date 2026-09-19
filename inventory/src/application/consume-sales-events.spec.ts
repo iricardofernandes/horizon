@@ -58,7 +58,7 @@ async function reserve(handlers: InventorySalesEventHandlers, fixture: ReturnTyp
 }
 
 describe('inventory sales event handlers', () => {
-  it('reserves and confirms a sales order exactly once', async () => {
+  it('holds the goods on confirmation and takes them out when they leave', async () => {
     const unitOfWork = new InMemoryInventoryUnitOfWork()
     const handlers = new InventorySalesEventHandlers(unitOfWork, clock, 900)
     const fixture = balance(unitOfWork)
@@ -85,8 +85,120 @@ describe('inventory sales event handlers', () => {
       total: { amount: '400', currency: 'BRL' },
     })
     await required(handlers.handlers[confirmed.eventType])(confirmed)
-    expect(snapshotOf(fixture.stock)).toMatchObject({ onHand: '6', reserved: '0' })
+    // Committing the order does not empty the shelf: the goods are promised, not gone.
+    expect(snapshotOf(fixture.stock)).toMatchObject({ onHand: '10', reserved: '4' })
     expect(snapshotOf(reservation)).toMatchObject({ status: 'confirmed', orderVersion: 2 })
+
+    const shipped = (quantity: string, complete: boolean) =>
+      envelope('sales.shipment.dispatched', fixture.tenantId, {
+        orderId: placed.orderId,
+        orderVersion: 3,
+        shipmentId: randomUUID(),
+        customerId: randomUUID(),
+        warehouseId: fixture.warehouseId,
+        dispatchedBy: 'user:warehouse',
+        dispatchedOn: '2026-09-14',
+        carrier: null,
+        trackingCode: null,
+        lines: [
+          {
+            lineId: placed.lineId,
+            itemId: fixture.itemId,
+            quantity,
+            description: 'Coffee',
+            unitPrice: { amount: '100', currency: 'BRL' },
+            lineTotal: { amount: '100', currency: 'BRL' },
+          },
+        ],
+        value: { amount: '100', currency: 'BRL' },
+        installments: [
+          { number: 1, dueOn: '2026-09-14', amount: { amount: '100', currency: 'BRL' } },
+        ],
+        remaining: { amount: '300', currency: 'BRL' },
+        remainingInstallments: [],
+        complete,
+      })
+
+    // Part of the order leaves: that part comes out of stock, the rest stays held.
+    const first = shipped('1', false)
+    await required(handlers.handlers[first.eventType])(first)
+    await required(handlers.handlers[first.eventType])(first)
+    expect(snapshotOf(fixture.stock)).toMatchObject({ onHand: '9', reserved: '3' })
+    expect(snapshotOf(reservation).status).toBe('confirmed')
+    expect(unitOfWork.events.at(-1)?.payloadOf()).toMatchObject({ kind: 'shipment' })
+
+    const rest = shipped('3', true)
+    await required(handlers.handlers[rest.eventType])(rest)
+    expect(snapshotOf(fixture.stock)).toMatchObject({ onHand: '6', reserved: '0' })
+    expect(snapshotOf(reservation).status).toBe('shipped')
+  })
+
+  it('puts a returned delivery back on the shelf, and back in its promise', async () => {
+    const unitOfWork = new InMemoryInventoryUnitOfWork()
+    const handlers = new InventorySalesEventHandlers(unitOfWork, clock, 900)
+    const fixture = balance(unitOfWork)
+    const placed = await reserve(handlers, fixture)
+    const reservation = required(unitOfWork.reservations[0])
+    const line = {
+      lineId: placed.lineId,
+      itemId: fixture.itemId,
+      quantity: '4',
+      description: 'Coffee',
+      unitPrice: { amount: '100', currency: 'BRL' },
+      lineTotal: { amount: '400', currency: 'BRL' },
+    }
+    const confirmed = envelope('sales.order.confirmed', fixture.tenantId, {
+      orderId: placed.orderId,
+      orderVersion: 2,
+      customerId: randomUUID(),
+      reservationId: reservation.id.toString(),
+      confirmedAt: now.toISOString(),
+      lines: [line],
+      total: { amount: '400', currency: 'BRL' },
+    })
+    await required(handlers.handlers[confirmed.eventType])(confirmed)
+    const shipmentId = randomUUID()
+    const dispatched = envelope('sales.shipment.dispatched', fixture.tenantId, {
+      orderId: placed.orderId,
+      orderVersion: 3,
+      shipmentId,
+      customerId: randomUUID(),
+      warehouseId: fixture.warehouseId,
+      dispatchedBy: 'user:warehouse',
+      dispatchedOn: '2026-09-14',
+      carrier: null,
+      trackingCode: null,
+      lines: [line],
+      value: { amount: '400', currency: 'BRL' },
+      installments: [
+        { number: 1, dueOn: '2026-09-14', amount: { amount: '400', currency: 'BRL' } },
+      ],
+      remaining: { amount: '0', currency: 'BRL' },
+      remainingInstallments: [],
+      complete: true,
+    })
+    await required(handlers.handlers[dispatched.eventType])(dispatched)
+    expect(snapshotOf(fixture.stock)).toMatchObject({ onHand: '6', reserved: '0' })
+
+    const returned = envelope('sales.shipment.returned', fixture.tenantId, {
+      orderId: placed.orderId,
+      orderVersion: 4,
+      shipmentId,
+      customerId: randomUUID(),
+      warehouseId: fixture.warehouseId,
+      returnedBy: 'user:warehouse',
+      returnedOn: '2026-09-16',
+      reason: 'Damaged in transit',
+      lines: [line],
+      value: { amount: '400', currency: 'BRL' },
+      remaining: { amount: '400', currency: 'BRL' },
+      remainingInstallments: [],
+    })
+    await required(handlers.handlers[returned.eventType])(returned)
+    // The customer is still owed these goods, so they come back held rather than free.
+    expect(snapshotOf(fixture.stock)).toMatchObject({ onHand: '10', reserved: '4', available: '6' })
+    expect(snapshotOf(reservation).status).toBe('confirmed')
+    expect(unitOfWork.events.at(-1)?.payloadOf()).toMatchObject({ kind: 'return-in' })
   })
 
   it('releases an active hold when the order is cancelled', async () => {

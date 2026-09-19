@@ -53,7 +53,8 @@ The highest-priority deliverable in this repository is not module count — it i
 that works end to end and stays working:
 
 **create sales order → reserve stock in `inventory` → confirm order → publish
-`sales.order.confirmed` → `webhooks` delivers an HMAC-signed callback.**
+`sales.order.confirmed` → `webhooks` delivers an HMAC-signed callback → dispatch the
+delivery, which takes the stock out and makes the money owed.**
 
 It runs with `make demo`, appears as a **single trace** in Jaeger crossing three services
 and RabbitMQ, and executes as a CI job on every push — so the screenshot below cannot
@@ -151,7 +152,7 @@ vendored side by side, and a cross-module import cannot resolve.
 | [`identity/`](identity/) | Tenants, users, authentication, sessions, API keys, JWKS, RBAC assignment | 3001 | 4 |
 | [`catalog/`](catalog/) | Products, services, units of measure, price lists, NCM classification | 3002 | 6 |
 | [`inventory/`](inventory/) | Stock balances, movements, warehouses, reservations, cost method | 3003 | 7 |
-| [`sales/`](sales/) | Customer projection, quotes, sales orders, invoicing trigger | 3004 | 7, 15 |
+| [`sales/`](sales/) | Customer projection, quotes, sales orders, shipments and returns | 3004 | 7, 15 |
 | [`parties/`](parties/) | Organizations and people, their roles, tax identifiers and erasure | 3006 | 15 |
 | [`financial/`](financial/) | Receivables and payables with approvals, settlements and reversals; categories, departments and projects, payment methods and terms | 3007 | 16–18 |
 | [`treasury/`](treasury/) | Bank and cash accounts, their append-only journal, balances, transfers, statement import and reconciliation | 3008 | 19, 20 |

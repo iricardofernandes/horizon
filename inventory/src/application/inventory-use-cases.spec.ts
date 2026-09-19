@@ -134,7 +134,7 @@ describe('inventory application', () => {
     )
   })
 
-  it('turns a confirmed reservation into one shipment movement per line', async () => {
+  it('commits the hold when the order is confirmed, without moving any stock', async () => {
     const unitOfWork = new InMemoryInventoryUnitOfWork()
     const tenantId = randomUUID()
     const warehouseId = randomUUID()
@@ -159,12 +159,13 @@ describe('inventory application', () => {
       reservationId: reserved.value.reservationId,
     })
     expect(confirmed.isRight()).toBe(true)
-    expect(snapshotOf(balance)).toMatchObject({ onHand: '6', reserved: '0', available: '6' })
+    // The goods are promised to this customer and stay on the shelf until they leave.
+    expect(snapshotOf(balance)).toMatchObject({ onHand: '10', reserved: '4', available: '6' })
     expect(snapshotOf(required(unitOfWork.reservations[0]))).toMatchObject({
       status: 'confirmed',
       orderVersion: 2,
     })
-    expect(unitOfWork.events.map((event) => event.eventType)).toEqual(['inventory.stock.moved'])
+    expect(unitOfWork.events).toHaveLength(0)
   })
 
   it('does not confirm the wrong or stale reservation', async () => {

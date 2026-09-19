@@ -116,7 +116,7 @@ export class InventoryStockMovedEvent extends InventoryEvent {
       movementId: string
       itemId: string
       warehouseId: string
-      kind: 'receipt' | 'shipment' | 'adjustment-in' | 'adjustment-out'
+      kind: 'receipt' | 'shipment' | 'adjustment-in' | 'adjustment-out' | 'return-in'
       balanceVersion: number
       quantity: Quantity
       balanceAfter: Quantity

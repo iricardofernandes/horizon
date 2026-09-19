@@ -7,8 +7,8 @@ its own lifecycle. It is reached through Kong at `/financial`, never directly, a
 shares no source with any other module (ADR 0001). Its boundary against `treasury/` and
 `ledger/` is ADR 0041.
 
-**Status: phase 25 — receivables and payables with approvals, forecasts that invoicing
-turns into effective titles, and the cash flow outlook they feed.**
+**Status: phase 30 — receivables and payables with approvals, forecasts that the movement
+of goods turns into effective titles, and the cash flow outlook they feed.**
 
 ---
 
@@ -46,8 +46,10 @@ Every registry entry is deactivated, never deleted: documents keep what they use
 | Direction | Event | Effect |
 |---|---|---|
 | Consumes | `parties.party.registered`, `.updated`, `.erased` | Maintains the party projection; erasure destroys the projected name |
-| Consumes | `sales.order.confirmed` | Raises one draft receivable per order |
-| Consumes | `sales.order.cancelled` | Cancels that draft if it was never posted |
+| Consumes | `sales.order.confirmed` | Raises a **forecast** receivable for the whole order: money expected, owed by nobody yet |
+| Consumes | `sales.shipment.dispatched` | Raises an **effective** receivable for the delivery's share, and reduces the order's forecast to what is still to be delivered |
+| Consumes | `sales.shipment.returned` | Withdraws what that delivery made owed, and expects it again |
+| Consumes | `sales.order.cancelled` | Cancels the order's forecast if it was never posted |
 | Publishes | `financial.receivable.posted`, `.reversed` | A claim on a customer began or was undone |
 | Publishes | `financial.payable.posted`, `.reversed` | An obligation to a supplier began or was undone |
 | Publishes | `financial.settlement.recorded`, `.reversed` | Money was received or paid, or that was undone; with a treasury account, Treasury records the cash |

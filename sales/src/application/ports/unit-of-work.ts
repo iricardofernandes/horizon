@@ -6,13 +6,14 @@ import type {
   QuotesRepository,
   SalesEventsRepository,
   SalesOrdersRepository,
+  ShipmentsRepository,
 } from '@/domain/repositories/sales-repositories'
 
 /** One line in the tenant's hash-chained audit log (ADR 0025). */
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'quote' | 'order'
+  readonly subjectType: 'quote' | 'order' | 'shipment'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -36,6 +37,7 @@ export interface SalesScope {
   readonly events: SalesEventsRepository
   readonly customers: CustomersRepository
   readonly quotes: QuotesRepository
+  readonly shipments: ShipmentsRepository
   readonly audit: AuditTrail
 }
 

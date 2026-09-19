@@ -1,10 +1,17 @@
 import { type Either, left, right } from '@/core/either'
 import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
-import { Title, type TitleTerms } from '@/domain/entities/title'
+import { Title } from '@/domain/entities/title'
 import { BusinessDate, Currency, Money } from '@/domain/value-objects/financial-values'
 import { DocumentNumber, Reason } from '@/domain/value-objects/title-values'
 import type { Clock } from '../ports/clock'
 import type { FinancialScope } from '../ports/unit-of-work'
+import {
+  append,
+  raise as raiseTitle,
+  reduceForecast,
+  type WireInstallment,
+  type WireMoney,
+} from './title-flows'
 
 const SALES_ACTOR = 'system:sales'
 
@@ -147,63 +154,111 @@ function scheduleOf(
   return right(schedule)
 }
 
-/** Invoicing describes the same order as its confirmation, and says the same things about it. */
-export type RequestedInvoicing = ConfirmedOrder
+export interface DispatchedShipment {
+  readonly orderId: string
+  readonly shipmentId: string
+  readonly customerId: string
+  readonly dispatchedOn: string
+  readonly value: WireMoney
+  readonly installments: readonly WireInstallment[]
+  readonly remaining: WireMoney
+  readonly remainingInstallments: readonly WireInstallment[]
+}
 
 /**
- * Invoicing turns the order's forecast into an effective receivable.
+ * Goods left for the customer, so part of what was expected is now owed.
  *
- * The same title changes stage, so the expected money and the claim on the customer are
- * never both counted at once — which is what makes duplication impossible rather than
- * merely unlikely. When the invoice differs from the order, its total replaces the
- * forecast's on the single installment Sales knows about; a person reschedules from there.
+ * Two things happen together and have to happen together: the delivery raises an
+ * **effective** receivable for the share of the order it carried, and the order's forecast
+ * drops to what has still to be delivered. Doing one without the other would count the
+ * same money twice — as expected and as owed at once — which is exactly what the forecast
+ * stage exists to prevent.
  */
-export class RealiseForecastFromInvoicingUseCase {
+export class RecordReceivableFromShipmentUseCase {
   constructor(private readonly clock: Clock) {}
 
   async executeInScope(
     scope: FinancialScope,
-    invoicing: RequestedInvoicing,
-  ): Promise<Either<InvalidInputError, 'realised' | 'raised' | 'ignored'>> {
-    const title = await scope.titles.findByOriginForUpdate('receivable', invoicing.orderId)
-    // Invoicing is what makes a receivable real, so when it wins the race with the
-    // confirmation it raises the title effective and the confirmation then finds it.
-    if (!title) return raise(scope, invoicing, 'effective', this.clock.now())
-    if (title.stage !== 'forecast' || title.status !== 'draft') return right('ignored')
+    shipment: DispatchedShipment,
+  ): Promise<Either<InvalidInputError, 'raised' | 'ignored'>> {
     const now = this.clock.now()
-    const revised = revisedTerms(title, invoicing)
-    if (revised.isLeft()) return left(revised.value)
-    const realised = title.realise(revised.value, now)
-    if (realised.isLeft()) return right('ignored')
-    await scope.titles.save(title)
-    await scope.audit.append({
+    const reduced = await reduceForecast(scope, forecastOf(shipment.orderId, shipment, now))
+    if (reduced.isLeft()) return left(reduced.value)
+    if (await scope.titles.findByOriginForUpdate('receivable', shipment.shipmentId))
+      return right('ignored')
+    if (shipment.installments.length === 0) return right('ignored')
+    return raiseTitle(scope, {
+      direction: 'receivable',
       actor: SALES_ACTOR,
-      action: 'receivable.realised',
-      subjectType: 'title',
-      subjectId: title.id.toString(),
-      occurredAt: now,
-      requestId: null,
-      details: { orderId: invoicing.orderId, total: title.total().amount },
+      origin: { type: 'sales-shipment', documentId: shipment.shipmentId },
+      reference: `SH-${shipment.shipmentId.slice(-8).toUpperCase()}`,
+      partyId: shipment.customerId,
+      issuedOn: shipment.dispatchedOn,
+      currency: shipment.value.currency,
+      installments: shipment.installments,
+      stage: 'effective',
+      action: 'receivable.raised-from-shipment',
+      details: { orderId: shipment.orderId, shipmentId: shipment.shipmentId },
+      now,
     })
-    return right('realised')
   }
 }
 
-/** The forecast's own terms, with the invoiced total when it differs from the ordered one. */
-function revisedTerms(
-  title: Title,
-  invoicing: RequestedInvoicing,
-): Either<InvalidInputError, TitleTerms | null> {
-  const terms = title.termsOf()
-  if (invoicing.total.amount === title.total().amount.toString()) return right(null)
-  const total = Money.create(invoicing.total.amount, terms.currency)
-  if (total.isLeft()) return left(total.value)
-  // An invoice worth something other than the order is a change nobody agreed a schedule
-  // for, so it only replaces a forecast that expects one payment. A schedule — whether a
-  // person built it or the quote's terms did — is not redistributed behind their back.
-  const [first, ...rest] = terms.installments
-  if (!first || rest.length > 0) return right(null)
-  return right({ ...terms, installments: [{ dueOn: first.dueOn, amount: total.value }] })
+export interface ReturnedShipment {
+  readonly orderId: string
+  readonly shipmentId: string
+  readonly remaining: WireMoney
+  readonly remainingInstallments: readonly WireInstallment[]
+}
+
+/**
+ * The delivery came back, so what it made owed goes with it and what the order still has
+ * to deliver goes back up.
+ *
+ * A receivable already posted is a claim the customer accepted; only a person may reverse
+ * one, so it is left alone and the return is theirs to settle.
+ */
+export class WithdrawReceivableOfShipmentUseCase {
+  constructor(private readonly clock: Clock) {}
+
+  async executeInScope(
+    scope: FinancialScope,
+    returned: ReturnedShipment,
+  ): Promise<Either<InvalidInputError, 'withdrawn' | 'ignored'>> {
+    const now = this.clock.now()
+    const restored = await reduceForecast(scope, forecastOf(returned.orderId, returned, now))
+    if (restored.isLeft()) return left(restored.value)
+    const title = await scope.titles.findByOriginForUpdate('receivable', returned.shipmentId)
+    if (title?.status !== 'draft') return right('ignored')
+    const reason = Reason.create('The delivery was returned by the customer')
+    if (reason.isLeft()) return left(reason.value)
+    const cancelled = title.cancel(reason.value, now)
+    if (cancelled.isLeft()) return right('ignored')
+    await scope.titles.save(title)
+    await append(scope, SALES_ACTOR, 'receivable.withdrawn-with-return', title.id.toString(), now, {
+      orderId: returned.orderId,
+      shipmentId: returned.shipmentId,
+    })
+    return right('withdrawn')
+  }
+}
+
+/** What the order has still to deliver, after a delivery or after one came back. */
+function forecastOf(
+  orderId: string,
+  movement: { remaining: WireMoney; remainingInstallments: readonly WireInstallment[] },
+  now: Date,
+) {
+  return {
+    direction: 'receivable' as const,
+    documentId: orderId,
+    remaining: movement.remaining,
+    installments: movement.remainingInstallments,
+    actor: SALES_ACTOR,
+    subject: 'receivable',
+    settled: 'Everything this order sold has been delivered',
+    now,
+  }
 }
 
 /**

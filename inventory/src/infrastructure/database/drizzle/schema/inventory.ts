@@ -100,6 +100,7 @@ export const stockReservationLines = pgTable(
     itemId: uuid('item_id').notNull(),
     warehouseId: uuid('warehouse_id').notNull(),
     quantity: bigint('quantity', { mode: 'bigint' }).notNull(),
+    shipped: bigint('shipped', { mode: 'bigint' }).notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.tenantId, table.reservationId, table.lineId] }),

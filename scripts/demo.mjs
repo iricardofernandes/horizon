@@ -390,6 +390,7 @@ try {
   const stockBefore = BigInt(before.on_hand)
   let orderId = ''
   let quote = { quoteId: '', version: 0, supersededId: '', total: '0', paymentTermDays: [] }
+  let shipment = { shipmentId: '', value: '0', remaining: '0', complete: false, dispatchedOn: '' }
   let receivable = { titleId: '', status: '', outstanding: '' }
   let bank = { accountId: '', entryAmount: '', statementLineStatus: '', reconciliationId: '' }
   let books = { reference: '', raised: [], settled: [], totalDebits: '0', totalCredits: '0', pending: 0 }
@@ -441,6 +442,20 @@ try {
           where tenant_id = ${identity.tenantId} and order_id = ${orderId}
             and status = 'confirmed'`),
       )
+
+      // The goods leave. This is what takes the stock out of its hold and turns what the
+      // customer was expected to owe into what they owe.
+      shipment = await deliverOrder(modules, {
+        database: salesDb,
+        admin: salesAdmin,
+        inventoryAdmin,
+        relay: salesRelay,
+        tenantId: identity.tenantId,
+        orderId,
+        itemId: catalog.itemId,
+        warehouseId,
+        clock,
+      })
       await flushAll(inventoryRelay)
 
       await seedLedgerChart(modules, ledgerDb, identity.tenantId, clock)
@@ -451,6 +466,7 @@ try {
         relay: financialRelay,
         tenantId: identity.tenantId,
         orderId,
+        shipmentId: shipment.shipmentId,
         treasuryAccountId,
         clock,
       })
@@ -547,16 +563,22 @@ try {
     }
   })
 
-  const [order] = await salesAdmin`select status, total, currency, issued_on,
-      (issued_on + 30)::text as due_on from sales_orders
+  const [order] = await salesAdmin`select status, total, currency, fulfillment,
+      (${shipment.dispatchedOn}::date + 30)::text as due_on from sales_orders
     where tenant_id = ${identity.tenantId} and id = ${orderId}`
   assert.equal(order.status, 'confirmed')
+  assert.equal(order.fulfillment, 'fulfilled')
   // Four at 12.50 is 50.00 of goods, plus 5.00 of freight, less the 3.00 haggled off in
   // the second version of the offer. The order is confirmed at what was negotiated.
   assert.equal(order.total, '5200')
   assert.equal(quote.version, 2)
   assert.equal(quote.total, order.total)
-  // The receivable falls due on the terms the quote agreed, not on the day it was confirmed.
+  // Everything the order sold reached the customer, in one delivery worth the whole order.
+  assert.equal(shipment.complete, true)
+  assert.equal(shipment.value, order.total)
+  assert.equal(shipment.remaining, '0')
+  // The receivable falls due on the terms the quote agreed, counted from the day the goods
+  // left — not from the day the order was confirmed.
   assert.deepEqual(
     receivable.installments.map(({ number, dueOn }) => [number, dueOn]),
     [[1, order.due_on]],
@@ -641,6 +663,7 @@ try {
           supplierId,
         },
         quote,
+        shipment,
         order: {
           orderId,
           quoteId: quote.quoteId,
@@ -750,6 +773,7 @@ function loadModules() {
     ...from(salesRequire, 'sales/dist/application/use-cases/place-order.js'),
     ...from(salesRequire, 'sales/dist/application/use-cases/manage-quotes.js'),
     ...from(salesRequire, 'sales/dist/application/use-cases/convert-quote.js'),
+    ...from(salesRequire, 'sales/dist/application/use-cases/ship-orders.js'),
   }
   const salesTransport = from(
     salesRequire,
@@ -853,6 +877,9 @@ function loadModules() {
     ReviseQuoteUseCase: sales.ReviseQuoteUseCase,
     DecideQuoteUseCase: sales.DecideQuoteUseCase,
     ConvertQuoteUseCase: sales.ConvertQuoteUseCase,
+    PickShipmentUseCase: sales.PickShipmentUseCase,
+    PackShipmentUseCase: sales.PackShipmentUseCase,
+    DispatchShipmentUseCase: sales.DispatchShipmentUseCase,
     SalesConsumer: salesTransport.RabbitMqEventConsumer,
     SalesPublisher: salesTransport.RabbitMqEventPublisher,
     SalesOutboxRelay: salesTransport.OutboxRelay,
@@ -1368,15 +1395,66 @@ async function negotiateQuote(modules, { database, admin, tenantId, customerId, 
   }
 }
 
+/**
+ * Pick the whole order, close the box and send it.
+ *
+ * Nothing before this moved a single unit out of the warehouse: the stock was held for
+ * this customer from the moment the order was confirmed, and it is this delivery that
+ * takes it out and makes the money owed.
+ */
+async function deliverOrder(
+  modules,
+  { database, admin, inventoryAdmin, relay, tenantId, orderId, itemId, warehouseId, clock },
+) {
+  const [line] = await admin`select line_id, quantity from sales_order_lines
+    where tenant_id = ${tenantId} and order_id = ${orderId}`
+  const quantity = (BigInt(line.quantity) / 1_000_000n).toString()
+  const picked = await new modules.PickShipmentUseCase(database, clock).execute({
+    context: salesCommand(tenantId, `pick-${orderId}`),
+    orderId,
+    lines: [{ lineId: line.line_id, quantity }],
+  })
+  if (picked.isLeft()) throw picked.value
+  const packed = await new modules.PackShipmentUseCase(database, clock).execute({
+    context: salesCommand(tenantId, `pack-${orderId}`),
+    shipmentId: picked.value.shipmentId,
+    consignment: { carrier: 'Correios', trackingCode: `BR-${orderId.slice(-8).toUpperCase()}` },
+  })
+  if (packed.isLeft()) throw packed.value
+  const dispatched = await new modules.DispatchShipmentUseCase(database, clock).execute({
+    context: salesCommand(tenantId, `dispatch-${orderId}`),
+    shipmentId: picked.value.shipmentId,
+  })
+  if (dispatched.isLeft()) throw dispatched.value
+
+  // The delivery is what Inventory and Financial both act on, so wait for the stock to
+  // actually leave before reading anything that depends on it.
+  await flushUntil(relay, async () =>
+    rowOrNull(inventoryAdmin`select id from stock_movements
+      where tenant_id = ${tenantId} and item_id = ${itemId} and warehouse_id = ${warehouseId}
+        and kind = 'shipment'`),
+  )
+  const [row] = await admin`select dispatched_on::text as dispatched_on, value, status
+    from shipments where tenant_id = ${tenantId} and id = ${picked.value.shipmentId}`
+  return {
+    shipmentId: picked.value.shipmentId,
+    value: dispatched.value.value,
+    remaining: dispatched.value.remaining,
+    complete: dispatched.value.complete,
+    dispatchedOn: row.dispatched_on,
+  }
+}
+
 async function collectReceivable(
   modules,
-  { database, admin, relay, tenantId, orderId, treasuryAccountId, clock },
+  { database, admin, relay, tenantId, orderId, shipmentId, treasuryAccountId, clock },
 ) {
   const draft = await waitFor(
     () =>
       rowOrNull(admin`select id from titles
-        where tenant_id = ${tenantId} and origin_document_id = ${orderId}`),
-    'the draft receivable raised from the confirmed order',
+        where tenant_id = ${tenantId} and origin_document_id = ${shipmentId}
+          and stage = 'effective'`),
+    'the receivable raised by the delivery',
   )
   const categories = await database.listCategories(tenantId)
   let categoryId = categories.find((category) => category.code === DEMO.revenueCategory)?.id
@@ -1395,7 +1473,7 @@ async function collectReceivable(
     tenantId,
     actor: 'system:demo',
     requestId: null,
-    idempotencyKey: `demo-${step}-${orderId}`,
+    idempotencyKey: `demo-${step}-${shipmentId}`,
   })
   const title = await database.titleDetail(tenantId, 'receivable', draft.id, today)
   if (title.status === 'draft') {

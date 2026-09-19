@@ -27,6 +27,7 @@ import {
   type QuoteStatus,
 } from '@/domain/entities/quote'
 import { SalesOrder } from '@/domain/entities/sales-order'
+import { SHIPMENT_STATUSES, Shipment, type ShipmentStatus } from '@/domain/entities/shipment'
 import type { SecretBox } from '@/domain/services/secret-box'
 import {
   BusinessDate,
@@ -41,6 +42,7 @@ import {
   Quantity,
   Reason,
   TaxId,
+  TrackingCode,
 } from '@/domain/value-objects/sales-values'
 import * as schema from './schema'
 
@@ -244,6 +246,44 @@ export class SalesDatabase extends SalesUnitOfWork {
     })
   }
 
+  async listShipmentSnapshots(tenantId: string, orderId: string) {
+    return this.inTenant(tenantId, async () => {
+      const tx = this.currentTransaction()
+      const rows = await tx
+        .select()
+        .from(schema.shipments)
+        .where(eq(schema.shipments.orderId, orderId))
+        .orderBy(sql`${schema.shipments.createdAt} asc`)
+        .limit(100)
+      return Promise.all(
+        rows.map(async (row) => {
+          const lines = await tx
+            .select()
+            .from(schema.shipmentLines)
+            .where(eq(schema.shipmentLines.shipmentId, row.id))
+          return mapShipment(row, lines).toSnapshot()
+        }),
+      )
+    })
+  }
+
+  async findShipmentSnapshot(tenantId: string, shipmentId: string) {
+    return this.inTenant(tenantId, async () => {
+      const tx = this.currentTransaction()
+      const [row] = await tx
+        .select()
+        .from(schema.shipments)
+        .where(eq(schema.shipments.id, shipmentId))
+        .limit(1)
+      if (!row) return null
+      const lines = await tx
+        .select()
+        .from(schema.shipmentLines)
+        .where(eq(schema.shipmentLines.shipmentId, row.id))
+      return mapShipment(row, lines).toSnapshot()
+    })
+  }
+
   async findOrderSnapshot(tenantId: string, orderId: string) {
     return this.inTenant(tenantId, async () => {
       const current = this.#transactions.getStore()
@@ -338,6 +378,10 @@ function mapOrder(
     itemId: line.itemId,
     quantity: Quantity.fromMicros(line.quantity),
   }))
+  const quantitiesOf = (column: 'shipped' | 'allocated') =>
+    lines
+      .filter((line) => line[column] > 0n)
+      .map((line) => ({ lineId: line.lineId, quantity: Quantity.fromMicros(line[column]) }))
   const pricedLines = lines.flatMap((line) => {
     if (
       line.description === null ||
@@ -384,6 +428,10 @@ function mapOrder(
       agreedLines,
       confirmedLines,
       reservationId: row.reservationId,
+      allocated: quantitiesOf('allocated'),
+      shipped: quantitiesOf('shipped'),
+      shipments: row.shipments,
+      confirmedAt: row.confirmedAt,
       currency,
       terms: {
         sellerId: row.sellerId,
@@ -540,6 +588,67 @@ function writeQuoteLines(tx: Transaction, tenantId: string, row: ReturnType<Quot
       unitPrice: BigInt(line.unitPrice),
       lineTotal: BigInt(line.lineTotal),
     })),
+  )
+}
+
+function shipmentRow(row: ReturnType<Shipment['toSnapshot']>) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    orderId: row.orderId,
+    warehouseId: row.warehouseId,
+    status: row.status,
+    value: BigInt(row.value.amount),
+    currency: row.value.currency,
+    carrier: row.carrier,
+    trackingCode: row.trackingCode,
+    pickedBy: row.pickedBy,
+    packedBy: row.packedBy,
+    dispatchedBy: row.dispatchedBy,
+    dispatchedOn: row.dispatchedOn,
+    returnedBy: row.returnedBy,
+    returnedOn: row.returnedOn,
+    closureReason: row.closureReason,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function mapShipment(
+  row: typeof schema.shipments.$inferSelect,
+  lines: readonly (typeof schema.shipmentLines.$inferSelect)[],
+): Shipment {
+  if (!SHIPMENT_STATUSES.includes(row.status as ShipmentStatus))
+    throw new Error('Invalid persisted shipment status')
+  const currency = restored(Currency.create(row.currency))
+  return Shipment.rehydrate(
+    {
+      tenantId: row.tenantId,
+      orderId: row.orderId,
+      warehouseId: row.warehouseId,
+      status: row.status as ShipmentStatus,
+      value: Money.fromAmount(row.value, currency),
+      carrier: row.carrier ? restored(CarrierName.create(row.carrier)) : null,
+      trackingCode: row.trackingCode ? restored(TrackingCode.create(row.trackingCode)) : null,
+      pickedBy: row.pickedBy,
+      packedBy: row.packedBy,
+      dispatchedBy: row.dispatchedBy,
+      dispatchedOn: row.dispatchedOn ? restored(BusinessDate.create(row.dispatchedOn)) : null,
+      returnedBy: row.returnedBy,
+      returnedOn: row.returnedOn ? restored(BusinessDate.create(row.returnedOn)) : null,
+      closure: row.closureReason ? restored(Reason.create(row.closureReason)) : null,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      lines: lines.map((line) => ({
+        lineId: line.lineId,
+        itemId: line.itemId,
+        quantity: Quantity.fromMicros(line.quantity),
+        description: restored(LineDescription.create(line.description)),
+        unitPrice: Money.fromAmount(line.unitPrice, restored(Currency.create(line.currency))),
+        lineTotal: Money.fromAmount(line.lineTotal, restored(Currency.create(line.currency))),
+      })),
+    },
+    new UniqueEntityID(row.id),
   )
 }
 
@@ -775,6 +884,9 @@ function makeScope(
           issuedOn: row.issuedOn,
           notes: row.notes,
           status: row.status,
+          fulfillment: row.fulfillment,
+          shipments: row.shipments,
+          confirmedAt: row.confirmedAt,
           version: row.version,
           reservationId: row.reservationId,
           total: row.total ? BigInt(row.total.amount) : null,
@@ -789,6 +901,8 @@ function makeScope(
             lineId: line.lineId,
             itemId: line.itemId,
             quantity: restored(Quantity.create(line.quantity)).micros,
+            shipped: restored(Quantity.create(line.shipped)).micros,
+            allocated: restored(Quantity.create(line.allocated)).micros,
             // Present only on an order converted from a quote: what the customer agreed to.
             description: line.description ?? null,
             unitPrice: line.unitPrice ? BigInt(line.unitPrice.amount) : null,
@@ -804,6 +918,9 @@ function makeScope(
           .update(schema.salesOrders)
           .set({
             status: row.status,
+            fulfillment: row.fulfillment,
+            shipments: row.shipments,
+            confirmedAt: row.confirmedAt,
             version: row.version,
             reservationId: row.reservationId,
             sellerId: row.sellerId,
@@ -830,6 +947,60 @@ function makeScope(
             .where(
               sql`${schema.salesOrderLines.orderId} = ${row.id} AND ${schema.salesOrderLines.lineId} = ${line.lineId}`,
             )
+        for (const line of row.requestedLines)
+          await tx
+            .update(schema.salesOrderLines)
+            .set({
+              shipped: restored(Quantity.create(line.shipped)).micros,
+              allocated: restored(Quantity.create(line.allocated)).micros,
+            })
+            .where(
+              sql`${schema.salesOrderLines.orderId} = ${row.id} AND ${schema.salesOrderLines.lineId} = ${line.lineId}`,
+            )
+      },
+    },
+    shipments: {
+      findById: async (id) => {
+        const [row] = await tx
+          .select()
+          .from(schema.shipments)
+          .where(eq(schema.shipments.id, id))
+          .limit(1)
+          .for('update')
+        if (!row) return null
+        const lines = await tx
+          .select()
+          .from(schema.shipmentLines)
+          .where(eq(schema.shipmentLines.shipmentId, row.id))
+        return mapShipment(row, lines)
+      },
+      create: async (shipment) => {
+        const row = shipment.toSnapshot()
+        assertTenant(row.tenantId)
+        await tx.insert(schema.shipments).values(shipmentRow(row))
+        await tx.insert(schema.shipmentLines).values(
+          row.lines.map((line) => ({
+            tenantId,
+            shipmentId: row.id,
+            lineId: line.lineId,
+            itemId: line.itemId,
+            quantity: restored(Quantity.create(line.quantity)).micros,
+            description: line.description,
+            unitPrice: BigInt(line.unitPrice.amount),
+            lineTotal: BigInt(line.lineTotal.amount),
+            currency: line.unitPrice.currency,
+          })),
+        )
+      },
+      save: async (shipment) => {
+        const row = shipment.toSnapshot()
+        assertTenant(row.tenantId)
+        // The lines are never rewritten: what is in the box is settled when it is picked,
+        // and a trigger refuses to change them once it has left.
+        await tx
+          .update(schema.shipments)
+          .set(shipmentRow(row))
+          .where(eq(schema.shipments.id, row.id))
       },
     },
     catalogItems: {

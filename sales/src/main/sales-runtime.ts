@@ -7,6 +7,13 @@ import {
   WriteQuoteUseCase,
 } from '@/application/use-cases/manage-quotes'
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
+import {
+  AbandonShipmentUseCase,
+  DispatchShipmentUseCase,
+  PackShipmentUseCase,
+  PickShipmentUseCase,
+  ReturnShipmentUseCase,
+} from '@/application/use-cases/ship-orders'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
@@ -20,6 +27,11 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
   readonly decideQuote: DecideQuoteUseCase
   readonly convertQuote: ConvertQuoteUseCase
   readonly placeOrder: PlaceOrderUseCase
+  readonly pickShipment: PickShipmentUseCase
+  readonly packShipment: PackShipmentUseCase
+  readonly dispatchShipment: DispatchShipmentUseCase
+  readonly returnShipment: ReturnShipmentUseCase
+  readonly abandonShipment: AbandonShipmentUseCase
   readonly accessTokens: AccessTokenVerifier
 
   constructor(config: SalesEnvironment) {
@@ -51,6 +63,11 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
     this.decideQuote = new DecideQuoteUseCase(this.database, clock)
     this.convertQuote = new ConvertQuoteUseCase(this.database, clock)
     this.placeOrder = new PlaceOrderUseCase(this.database, clock)
+    this.pickShipment = new PickShipmentUseCase(this.database, clock)
+    this.packShipment = new PackShipmentUseCase(this.database, clock)
+    this.dispatchShipment = new DispatchShipmentUseCase(this.database, clock)
+    this.returnShipment = new ReturnShipmentUseCase(this.database, clock)
+    this.abandonShipment = new AbandonShipmentUseCase(this.database, clock)
   }
 
   onModuleInit(): Promise<void> {
