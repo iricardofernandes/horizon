@@ -2531,26 +2531,58 @@ tbody tr.reconciliation-selected td {
   font-size: 12px;
   color: var(--color-text-muted);
 }
-.purchasing-dialog {
+/* One document, opened from a board: purchasing's orders, selling's offers and boxes. */
+.document-dialog {
   width: min(920px, calc(100vw - 32px));
 }
-.purchasing-facts {
+.document-approval {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.document-consignment {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+/* Where a document has got to: on its way, arrived, or gone wrong. */
+.badge-picking,
+.badge-packed,
+.badge-partial {
+  background: var(--amber-3);
+  color: var(--amber-11);
+}
+.badge-dispatched,
+.badge-fulfilled {
+  background: var(--jade-3);
+  color: var(--jade-11);
+}
+.badge-abandoned {
+  background: var(--red-3);
+  color: var(--red-11);
+}
+.document-facts {
   display: flex;
   flex-wrap: wrap;
   gap: 24px;
   margin: 16px 0 0;
 }
-.purchasing-facts dt {
+.document-facts dt {
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
-.purchasing-facts dd {
+.document-facts dd {
   margin: 2px 0 0;
   font-size: 13px;
 }
-.purchasing-section-title {
+.document-section-title {
   margin: 22px 0 10px;
   font-size: 12px;
   font-weight: 600;
@@ -2558,7 +2590,7 @@ tbody tr.reconciliation-selected td {
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
-.purchasing-note {
+.document-note {
   margin: 8px 0 0;
   font-size: 12px;
   color: var(--color-text-muted);
@@ -2568,23 +2600,23 @@ tbody tr.reconciliation-selected td {
   font-weight: 600;
   color: var(--green-11);
 }
-.purchasing-quantity {
+.document-quantity {
   width: 88px;
   text-align: right;
 }
-.purchasing-reason {
+.document-reason {
   display: flex;
   flex-direction: column;
   gap: 4px;
   flex: 1 1 220px;
 }
-.purchasing-receive {
+.document-commit {
   display: flex;
   align-items: flex-end;
   gap: 12px;
   margin-top: 12px;
 }
-.purchasing-timeline {
+.document-timeline {
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -2592,7 +2624,7 @@ tbody tr.reconciliation-selected td {
   padding: 0;
   list-style: none;
 }
-.purchasing-timeline-head {
+.document-timeline-head {
   display: flex;
   align-items: center;
   gap: 10px;

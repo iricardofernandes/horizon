@@ -452,6 +452,12 @@ it('delivers an order in parts, and takes one delivery back', async () => {
     { status: 'dispatched', value: '7800', tracking_code: 'BR-6' },
   ])
 
+  // The warehouse's board is not one order's history: unscoped, the newest work is first.
+  const board = await database.listShipmentSnapshots(tenantId)
+  expect(board.map((shipment) => shipment.value.amount)).toEqual(['7800', '5200'])
+  const ofOrder = await database.listShipmentSnapshots(tenantId, orderId)
+  expect(ofOrder.map((shipment) => shipment.value.amount)).toEqual(['5200', '7800'])
+
   // The lines of a delivery that has left are a record of a physical event.
   await expect(
     administrator`update shipment_lines set quantity = 1

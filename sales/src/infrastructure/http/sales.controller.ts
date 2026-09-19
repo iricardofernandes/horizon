@@ -240,6 +240,13 @@ export class SalesController {
   }
 
   /** Everything being picked, packed or gone for one order. */
+  /** The warehouse's work, which is not one order's: everything on its way out. */
+  @Get('shipments')
+  @RequireSalesAction('read')
+  shipments(@Req() request: SalesRequest) {
+    return this.runtime.database.listShipmentSnapshots(tenantOf(request))
+  }
+
   @Get('orders/:id/shipments')
   @RequireSalesAction('read')
   async shipmentsOfOrder(@Param('id') id: string, @Req() request: SalesRequest) {

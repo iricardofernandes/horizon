@@ -150,12 +150,36 @@ try {
   await page.getByRole('dialog', { name: /^Roles of / }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
+  // An offer is negotiated in versions: made, sent, answered with a new version, and
+  // accepted — one document all the way through, with every version still in the record.
   await page.getByRole('link', { name: 'Quotes' }).click()
   await page.waitForURL(`${appUrl}/app/sales/quotes`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Quotes', exact: true }).waitFor()
   await page.getByRole('button', { name: 'New quote' }).click()
-  await page.getByRole('dialog', { name: 'Create quote' }).waitFor()
-  await page.getByRole('button', { name: 'Close dialog' }).click()
+  const quoteForm = page.getByRole('dialog', { name: 'Create quote' })
+  await quoteForm.getByRole('button', { name: 'Create quote' }).click()
+  await page.getByText('Quote created.').waitFor()
+  await page.getByRole('region', { name: 'Draft' }).getByRole('button').first().click()
+  const quoteDialog = page.getByRole('dialog')
+  await quoteDialog.getByText('This is the first version of the offer.').waitFor()
+  await quoteDialog.getByRole('button', { name: 'Send to customer' }).click()
+  await quoteDialog.getByRole('button', { name: 'Revise' }).click()
+  await quoteDialog.getByLabel('Quantity').fill('2')
+  await quoteDialog.getByRole('button', { name: 'Save version' }).click()
+  // The answer is a new version of the same offer — a draft again, because it has not
+  // been said to anybody yet — and the version it replaced stays in the record (ADR 0042).
+  await quoteDialog.getByRole('heading', { name: /version 2$/ }).waitFor()
+  await quoteDialog.getByText('Version 1').waitFor()
+  await quoteDialog.getByRole('button', { name: 'Send to customer' }).click()
+  await quoteDialog.getByRole('button', { name: 'Customer accepted' }).click()
+  await quoteDialog.getByText('accepted', { exact: true }).first().waitFor()
+  await quoteDialog.getByRole('button', { name: 'Close dialog' }).click()
+
+  // Nobody is waiting on this reader: a discount you asked for is decided by somebody else.
+  await page.getByRole('link', { name: 'Quote approvals' }).click()
+  await page.waitForURL(`${appUrl}/app/sales/approvals`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Quote approvals', exact: true }).waitFor()
+  await page.getByText('Nothing is waiting for you').waitFor()
 
   await page.getByRole('link', { name: 'Balances', exact: true }).click()
   await page.waitForURL(`${appUrl}/app/inventory/balances`, { waitUntil: 'domcontentloaded' })
@@ -179,12 +203,58 @@ try {
   await page.getByRole('dialog', { name: /^Order / }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
   assert(orderTraceId, 'the order request did not carry traceparent')
-
-  // The confirmed order reaches Financial as a forecast, and invoicing turns that same
-  // title into an effective receivable; a person then classifies it, posts it and records
-  // the payment (ADR 0041, ADR 0042).
   assert(placedOrderId, 'the placed order id was not captured')
-  const receivableNumber = `SO-${placedOrderId.slice(-8).toUpperCase()}`
+
+  // Confirming the order only held the stock. The warehouse takes the goods off the shelf,
+  // closes the box and sends it, and it is that delivery — not the order — that makes the
+  // money owed; each line starts at what the order still owes.
+  const orderNumber = `SO-${placedOrderId.slice(-8).toUpperCase()}`
+  await page.getByRole('link', { name: 'Deliveries' }).click()
+  await page.waitForURL(`${appUrl}/app/sales/deliveries`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Deliveries', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'New delivery' }).click()
+  const pickDialog = page.getByRole('dialog', { name: 'Take goods off the shelf' })
+  await chooseOption(page, pickDialog.getByRole('combobox', { name: 'Order' }), orderNumber)
+  await pickDialog.getByRole('button', { name: 'Start picking' }).click()
+  await page.getByText('The delivery is being picked.').waitFor()
+  const shipmentId = await waitUntilValue(
+    () =>
+      page.evaluate(async (orderId) => {
+        const response = await fetch('/api/horizon/sales/shipments')
+        if (!response.ok) return null
+        const rows = await response.json()
+        return rows.find((row) => row.orderId === orderId && row.status === 'picking')?.id ?? null
+      }, placedOrderId),
+    'the delivery picked for the placed order',
+  )
+  const shipmentNumber = `SH-${shipmentId.slice(-8).toUpperCase()}`
+  await page
+    .getByRole('region', { name: 'Picking' })
+    .getByRole('button', { name: `Open delivery ${shipmentNumber}` })
+    .click()
+  const shipmentDialog = page.getByRole('dialog', { name: `Delivery ${shipmentNumber}` })
+  await shipmentDialog.getByLabel('Carrier').fill('Correios')
+  await shipmentDialog.getByLabel('Tracking code').fill('BR-GOLDEN-PATH')
+  await shipmentDialog.getByRole('button', { name: 'Close the box' }).click()
+  await shipmentDialog.getByRole('button', { name: 'Send it' }).click()
+  await shipmentDialog.getByText('sent', { exact: true }).waitFor()
+  await shipmentDialog.getByRole('button', { name: 'Close dialog' }).click()
+
+  // A delivery that took everything leaves the order with nothing left to send.
+  await page.getByRole('link', { name: 'Orders', exact: true }).click()
+  await page.waitForURL(`${appUrl}/app/sales/orders`, { waitUntil: 'domcontentloaded' })
+  // Newest first, and two orders written in the same minute share the first eight
+  // characters of a time-ordered id, so the row wanted is the first of them.
+  await page
+    .getByRole('row')
+    .filter({ hasText: placedOrderId.slice(0, 8) })
+    .first()
+    .getByText('fulfilled', { exact: true })
+    .waitFor()
+
+  // The delivery's receivable is what a person now classifies, posts and settles
+  // (ADR 0041, ADR 0042).
+  const receivableNumber = shipmentNumber
   // Purchasing: the demo's requisition became an order and part of it arrived. The board
   // shows where the work got to, and the order shows what is still expected — which is the
   // same figure the payable and the stock were derived from.
@@ -206,7 +276,7 @@ try {
   await orderDialog.getByRole('button', { name: 'Close dialog' }).click()
 
   // Nobody is waiting on this reader: the demo's approvals were decided by somebody else.
-  await page.getByRole('link', { name: 'Approvals' }).click()
+  await page.getByRole('link', { name: 'Approvals', exact: true }).click()
   await page.waitForURL(`${appUrl}/app/purchasing/approvals`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Approvals', exact: true }).waitFor()
   await page.getByText('Nothing is waiting for you').waitFor()
@@ -217,13 +287,13 @@ try {
   await page.getByRole('heading', { name: 'Accounts receivable', exact: true }).waitFor()
   await waitUntil(
     () =>
-      page.evaluate(async (orderId) => {
+      page.evaluate(async (documentId) => {
         const response = await fetch('/api/horizon/financial/receivables?view=draft&limit=100')
         if (!response.ok) return false
         const { data } = await response.json()
-        return data.some((row) => row.origin.documentId === orderId)
-      }, placedOrderId),
-    'the forecast raised from the placed order, realised by invoicing',
+        return data.some((row) => row.origin.documentId === documentId)
+      }, shipmentId),
+    'the receivable the delivery made owed',
   )
   await page.reload({ waitUntil: 'domcontentloaded' })
   // The forecast became the receivable rather than sitting beside it, so nothing is
@@ -466,8 +536,10 @@ try {
     ['Customers', 'Customers'],
     ['Parties', 'Parties'],
     ['Quotes', 'Quotes'],
+    ['Quote approvals', 'Quote approvals'],
     ['Balances', 'Inventory'],
     ['Orders', 'Orders'],
+    ['Deliveries', 'Deliveries'],
     ['Webhooks', 'Webhooks'],
     ['Delivery logs', 'Delivery logs'],
     ['People and access', 'People & access'],
@@ -535,6 +607,17 @@ async function chooseOption(page, combobox, label) {
     await page.waitForTimeout(200)
   }
   assert((await combobox.textContent())?.includes(label), `could not choose ${label}`)
+}
+
+/** Polls until the check answers with something, and hands that answer back. */
+async function waitUntilValue(read, description, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const value = await read()
+    if (value) return value
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}`)
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
 }
 
 async function waitUntil(check, description, timeoutMs = 30_000) {

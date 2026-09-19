@@ -108,6 +108,7 @@ registered and erased in `parties/`, so they are read here and written nowhere (
 | `POST` | `/quotes/:id/decline` | Record that they declined it, with the reason. |
 | `POST` | `/quotes/:id/expire` | Record that nobody answered in time. |
 | `POST` | `/quotes/:id/order` | Convert the accepted offer into the order that delivers it. |
+| `GET` | `/shipments` | Every delivery on its way out, newest first: the warehouse's board. |
 | `GET` | `/orders/:id/shipments` | Everything being picked, packed or gone for one order. |
 | `GET` | `/shipments/:id` | Read one delivery and what is in it. |
 | `POST` | `/shipments` | Pick goods for a customer; the quantities are held against the order. |

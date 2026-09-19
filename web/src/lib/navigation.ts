@@ -19,6 +19,7 @@ import {
   ShoppingCart,
   Truck,
   UsersThree,
+  Van,
   Warehouse,
   WebhooksLogo,
 } from '@phosphor-icons/react'
@@ -89,9 +90,23 @@ export const navigation: readonly NavigationGroup[] = [
         demo: false,
       },
       {
+        href: '/app/sales/approvals',
+        labelKey: 'quoteApprovals',
+        icon: SealCheck,
+        module: 'sales',
+        demo: false,
+      },
+      {
         href: '/app/sales/orders',
         labelKey: 'orders',
         icon: ShoppingCart,
+        module: 'sales',
+        demo: false,
+      },
+      {
+        href: '/app/sales/deliveries',
+        labelKey: 'shipments',
+        icon: Van,
         module: 'sales',
         demo: false,
       },

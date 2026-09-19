@@ -17,24 +17,10 @@ import { short } from '@/lib/format'
 import { idempotentJsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
-import { useDate, useDateTime, useMoney } from '@/lib/use-format'
+import { useDate, useDateTime, useMoney, useQuantity } from '@/lib/use-format'
+import { type Order, outstandingOf } from './types'
 
-export type Order = {
-  id: string
-  status: string
-  customerId: string
-  fulfillmentWarehouseId: string
-  total: { amount: string; currency: string } | null
-  createdAt: string
-  requestedLines: Array<{ lineId: string; itemId: string; quantity: string }>
-  confirmedLines: Array<{
-    lineId: string
-    itemId: string
-    description: string
-    quantity: string
-    lineTotal: { amount: string; currency: string }
-  }>
-}
+export type { Order }
 
 export function OrdersView({
   items,
@@ -190,6 +176,7 @@ export function OrderTable({
           <tr>
             <th>{t('order')}</th>
             <th>{t('status')}</th>
+            <th>{t('fulfillment')}</th>
             <th>{t('total')}</th>
             <th>{t('placedAt')}</th>
             <th aria-label={common('actions')} />
@@ -203,6 +190,13 @@ export function OrderTable({
               </td>
               <td>
                 <Badge status={row.status} label={statusLabel(row.status)} />
+              </td>
+              <td>
+                {row.status === 'confirmed' ? (
+                  <Badge status={row.fulfillment} label={statusLabel(row.fulfillment)} />
+                ) : (
+                  '—'
+                )}
               </td>
               <td>{row.total ? money(row.total.amount, row.total.currency) : common('pending')}</td>
               <td>{date(row.createdAt)}</td>
@@ -237,6 +231,7 @@ function OrderDetailsDialog({
   const common = useTranslations('common')
   const statusLabel = useStatusLabel()
   const money = useMoney()
+  const quantity = useQuantity()
   const dateTime = useDateTime()
   const lines = order.confirmedLines.length ? order.confirmedLines : order.requestedLines
   return (
@@ -275,11 +270,20 @@ function OrderDetailsDialog({
                 {order.total ? money(order.total.amount, order.total.currency) : common('pending')}
               </strong>
             </div>
+            <div>
+              <span className="summary-label">{t('fulfillment')}</span>
+              <Badge status={order.fulfillment} label={statusLabel(order.fulfillment)} />
+            </div>
+            <div>
+              <span className="summary-label">{t('deliveries')}</span>
+              <strong>{order.shipments}</strong>
+            </div>
           </div>
           <div className="order-detail-lines">
             <h3>{t('lines')}</h3>
             {lines.map((line) => {
               const confirmed = isConfirmedOrderLine(line)
+              const owed = order.requestedLines.find((row) => row.lineId === line.lineId)
               return (
                 <div key={line.lineId}>
                   <span>
@@ -288,6 +292,12 @@ function OrderDetailsDialog({
                     </strong>
                     <small className="detail-line-meta">
                       {t('quantityLabel', { quantity: line.quantity })}
+                      {owed && order.status === 'confirmed'
+                        ? ` · ${t('shippedOf', {
+                            shipped: quantity(owed.shipped),
+                            outstanding: quantity(outstandingOf(owed)),
+                          })}`
+                        : ''}
                     </small>
                   </span>
                   <strong>

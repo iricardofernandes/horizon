@@ -34,8 +34,9 @@ the operational golden path through a server-side BFF. A free-tier deployment is
 | Session | `POST /auth/login`, `POST /auth/workspaces`, `POST /auth/workspace`, `POST /auth/refresh`, `POST /auth/logout`, `GET /identity/me` |
 | Overview/catalog | `GET /catalog/items`, `GET /catalog/price-lists`, `GET /inventory/warehouses` |
 | Customers | `GET/POST/DELETE /sales/customers` |
-| Quotes | `GET/POST /sales/quotes`, `GET /sales/quotes/:id`, `POST /sales/quotes/:id/accept` |
+| Quotes and approvals | `GET/POST /sales/quotes`, `GET /sales/quotes/:id`, `POST /sales/quotes/:id/{revise,send,approve,refuse,accept,decline,expire,order}` |
 | Orders | `GET/POST /sales/orders`, `GET /sales/orders/:id`, `GET /sales/customers` |
+| Deliveries | `GET/POST /sales/shipments`, `GET /sales/shipments/:id`, `POST /sales/shipments/:id/{pack,dispatch,return,abandon}` |
 | Inventory | `GET/POST/PATCH /inventory/warehouses`, `POST /inventory/stock-receipts` |
 | Access | `GET/POST/PATCH /identity/users`, `POST /identity/users/:id/roles` |
 | Webhooks | `GET/POST/DELETE /webhooks/webhook-subscriptions`, `GET /webhooks/webhook-deliveries` |

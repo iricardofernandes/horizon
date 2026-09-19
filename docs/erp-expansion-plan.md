@@ -544,6 +544,18 @@ and the boards, the approval inbox, the comparison and the receipt conference as
 
 ### Phase H — complete sales, fulfilment and returns
 
+**Complete**, apart from commissions and profitability, which this plan defers until cost
+and settlement data are stable (Phase I).
+
+The commercial document — quote versions, rejection and expiry, the discount allowance,
+conversion into an order and the terms the order carries — is delivered as
+[plan phase 29](plan.md#phase-29--the-commercial-document-an-offer-negotiated-and-the-order-it-becomes);
+picking, packing, partial delivery and the customer return with its stock and financial
+reversal as
+[plan phase 30](plan.md#phase-30--getting-the-goods-there-picking-partial-delivery-and-what-comes-back);
+and the boards, the negotiation history, the approval queue and the deliveries board as
+[plan phase 31](plan.md#phase-31--the-sales-screens-the-offer-the-decision-and-the-van).
+
 **Deliverables**
 
 - Add quote revision/versioning, rejection/expiry, conversion into order and approval.

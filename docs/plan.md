@@ -1520,6 +1520,64 @@ delivering it stop being the same event.
 
 ---
 
+## Phase 31 — The sales screens: the offer, the decision and the van
+
+**Complete.** The last slice of Phase H of the [expansion plan](erp-expansion-plan.md), and
+the phase's close. Selling has been able to do everything since phase 30; this is where
+somebody can see it — and where the browser golden path stops being a shortcut, because the
+money is now owed by a delivery somebody has to send.
+
+**Deliverables**
+
+- **One card per offer, not one per version.** A negotiation that went four rounds is one
+  offer a customer is thinking about; a board that showed all four would report four times
+  the work there is. The card is the newest version, and the rest is how it got there.
+- **The negotiation, in the dialog.** Every version of the offer with its total, its
+  discount and how it was left, because a price is only readable against the price it
+  replaced. Somebody deciding whether to allow a discount is deciding about a movement, not
+  about a number.
+- **Answering an offer is the same form that made it**, filled with what is on the table. A
+  revision is not a different kind of document: it is this offer said again, differently.
+- **The approval queue** — offers held back by a discount over the allowance, and never the
+  reader's own. As in purchasing, it is deliberately not a second kind of record: the same
+  offers, filtered, so allowing one there and finding it on its board afterwards is the same
+  document rather than a copy of it.
+- **The deliveries board** — picking, packed, sent, came back — with the warehouse's own
+  steps on it: take goods off the shelf, close the box, send it, record a return, or abandon
+  a box that never left. Each picking field starts at what the order still owes, less what
+  another box is already holding, so two boxes being prepared at once cannot promise the
+  same unit.
+- **The order says where it got to**: its fulfilment state on the list, and per line what has
+  gone and what is still to go — the figures Sales derives, never arithmetic done again in
+  the browser.
+- The board and the document dialog are now shared with purchasing rather than copied from
+  it: one `Board`, one set of `document-*` styles, two modules.
+- Bilingual copy in `en` and `pt-BR` for every new string, with the key-parity test covering
+  them, and `GET /shipments` in Sales, because a warehouse's work is not one order's.
+
+**Exit criteria**
+
+- The browser golden path negotiates an offer — created, sent, answered with a second
+  version, accepted — and asserts both versions stay in the record.
+- It then picks, packs and sends the order it placed, and only the delivery makes the money
+  owed: the receivable it classifies, posts and settles is the delivery's `SH-…`, and no
+  forecast is left behind.
+- The approval queue offers nobody their own discount, asserted in the browser.
+- Every screen holds at 390px with no horizontal overflow, the new ones included.
+
+**Non-goals**
+
+- A screen for the commissions and the profitability of a sale: the seller is on the
+  document, but what they earn from it waits for costs to be stable (Phase I).
+- Partial returns and closing an order short, which the aggregate does not offer yet and
+  which phase 30 left as decisions worth taking with the screens rather than before them.
+- Drag and drop between columns, for the same reason as in purchasing: a column is a state
+  a document reaches by being decided, not by being dragged.
+- Re-pricing an offer when the catalogue moves. An offer is a price held open until it
+  expires — that is what makes it an offer.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

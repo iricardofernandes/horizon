@@ -246,14 +246,26 @@ export class SalesDatabase extends SalesUnitOfWork {
     })
   }
 
-  async listShipmentSnapshots(tenantId: string, orderId: string) {
+  /**
+   * Every delivery, or only one order's.
+   *
+   * A warehouse reads its work by what is being picked, not by which order asked for it,
+   * so the same projection answers both questions: the board takes the lot, and an order
+   * takes its own.
+   */
+  async listShipmentSnapshots(tenantId: string, orderId?: string) {
     return this.inTenant(tenantId, async () => {
       const tx = this.currentTransaction()
       const rows = await tx
         .select()
         .from(schema.shipments)
-        .where(eq(schema.shipments.orderId, orderId))
-        .orderBy(sql`${schema.shipments.createdAt} asc`)
+        .where(orderId ? eq(schema.shipments.orderId, orderId) : undefined)
+        // One order reads as its own history, oldest first; the board reads as work, newest first.
+        .orderBy(
+          orderId
+            ? sql`${schema.shipments.createdAt} asc`
+            : sql`${schema.shipments.createdAt} desc`,
+        )
         .limit(100)
       return Promise.all(
         rows.map(async (row) => {

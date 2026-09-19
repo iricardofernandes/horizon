@@ -3,11 +3,11 @@
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { Board, BoardCard } from '@/components/ui/board'
 import { Button } from '@/components/ui/button'
 import { useStatusLabel } from '@/lib/status'
 import { useDate, useMoney } from '@/lib/use-format'
 import { OrderDialog } from './order-dialog'
-import { BoardCard, PurchasingBoard } from './purchasing-board'
 import { RequisitionDialog } from './requisition-dialog'
 import {
   awaitingDecision,
@@ -96,10 +96,12 @@ function RequisitionsBoard({
   const t = useTranslations('purchasing')
   const date = useDate()
   return (
-    <PurchasingBoard
+    <Board
       columnOf={(row) => row.status}
       columns={REQUISITION_COLUMNS}
+      emptyLabel={t('columnEmpty')}
       keyOf={(row) => row.id}
+      labelOf={(column) => t(`column.${column}`)}
       renderCard={(row) => (
         <BoardCard
           label={t('openRequisition', { id: row.id.slice(-8).toUpperCase() })}
@@ -129,10 +131,12 @@ function OrdersBoard({
   const money = useMoney()
   const date = useDate()
   return (
-    <PurchasingBoard
+    <Board
       columnOf={(row) => row.status}
       columns={ORDER_COLUMNS}
+      emptyLabel={t('columnEmpty')}
       keyOf={(row) => row.id}
+      labelOf={(column) => t(`column.${column}`)}
       renderCard={(row) => (
         <BoardCard
           label={t('openOrder', { id: row.id.slice(-8).toUpperCase() })}

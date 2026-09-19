@@ -110,7 +110,7 @@ export function RequisitionDialog({
     <Dialog.Root onOpenChange={(open) => (open ? undefined : onClose())} open>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
-        <Dialog.Popup className="ui-dialog-popup purchasing-dialog">
+        <Dialog.Popup className="ui-dialog-popup document-dialog">
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
@@ -169,7 +169,7 @@ function Body({
         </Dialog.Title>
         <Badge label={label(detail.status)} status={detail.status} />
       </div>
-      <dl className="purchasing-facts">
+      <dl className="document-facts">
         <div>
           <dt>{t('requestedBy')}</dt>
           <dd>{detail.requestedBy}</dd>
@@ -183,14 +183,14 @@ function Body({
           <dd>{detail.decidedBy ?? '—'}</dd>
         </div>
       </dl>
-      {detail.justification ? <p className="purchasing-note">{detail.justification}</p> : null}
+      {detail.justification ? <p className="document-note">{detail.justification}</p> : null}
       {detail.decisionReason ? (
-        <p className="purchasing-note">{t('reasonGiven', { reason: detail.decisionReason })}</p>
+        <p className="document-note">{t('reasonGiven', { reason: detail.decisionReason })}</p>
       ) : null}
 
-      <h3 className="purchasing-section-title">{t('comparison')}</h3>
+      <h3 className="document-section-title">{t('comparison')}</h3>
       {comparison.quotations.length === 0 ? (
-        <p className="purchasing-note">{t('noQuotations')}</p>
+        <p className="document-note">{t('noQuotations')}</p>
       ) : (
         <div className="table-scroll">
           <table>
@@ -289,7 +289,7 @@ function Body({
         ) : null}
         {decidable ? (
           <>
-            <label className="purchasing-reason">
+            <label className="document-reason">
               <span className="ledger-field-label">{t('reason')}</span>
               <input
                 className="ui-input"

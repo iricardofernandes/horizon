@@ -96,7 +96,7 @@ export function OrderDialog({
     <Dialog.Root onOpenChange={(open) => (open ? undefined : onClose())} open>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
-        <Dialog.Popup className="ui-dialog-popup purchasing-dialog">
+        <Dialog.Popup className="ui-dialog-popup document-dialog">
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
@@ -159,7 +159,7 @@ function Body({
         <Dialog.Title>{t('orderTitle', { id: detail.id.slice(-8).toUpperCase() })}</Dialog.Title>
         <Badge label={label(detail.status)} status={detail.status} />
       </div>
-      <dl className="purchasing-facts">
+      <dl className="document-facts">
         <div>
           <dt>{t('supplier')}</dt>
           <dd>{detail.supplierName}</dd>
@@ -178,7 +178,7 @@ function Body({
         </div>
       </dl>
 
-      <h3 className="purchasing-section-title">{t('conference')}</h3>
+      <h3 className="document-section-title">{t('conference')}</h3>
       <Conference
         arriving={arriving}
         counting={counting}
@@ -187,8 +187,8 @@ function Body({
       />
 
       {counting ? (
-        <div className="purchasing-receive">
-          <label className="purchasing-reason">
+        <div className="document-commit">
+          <label className="document-reason">
             <span className="ledger-field-label">{t('overrideReason')}</span>
             <input
               className="ui-input"
@@ -219,7 +219,7 @@ function Body({
         </div>
       ) : null}
 
-      <h3 className="purchasing-section-title">{t('deliveries')}</h3>
+      <h3 className="document-section-title">{t('deliveries')}</h3>
       <Deliveries
         busy={busy}
         canReturn={abilities.canWrite}
@@ -231,7 +231,7 @@ function Body({
       {error ? <Notice copy={error} /> : null}
 
       <div className="dialog-actions">
-        <label className="purchasing-reason">
+        <label className="document-reason">
           <span className="ledger-field-label">{t('reason')}</span>
           <input
             className="ui-input"
@@ -325,7 +325,7 @@ function Conference({
                 <td className="numeric">
                   <input
                     aria-label={t('arrivingFor', { line: line.description })}
-                    className="ui-input purchasing-quantity"
+                    className="ui-input document-quantity"
                     inputMode="decimal"
                     onChange={(event) =>
                       onArriving((current) => ({ ...current, [line.lineId]: event.target.value }))
@@ -361,26 +361,24 @@ function Deliveries({
   const label = useStatusLabel()
   const date = useDate()
   const money = useMoney()
-  if (receipts.length === 0) return <p className="purchasing-note">{t('noDeliveries')}</p>
+  if (receipts.length === 0) return <p className="document-note">{t('noDeliveries')}</p>
   return (
-    <ul className="purchasing-timeline">
+    <ul className="document-timeline">
       {receipts.map((receipt) => (
         <li key={receipt.id}>
-          <div className="purchasing-timeline-head">
+          <div className="document-timeline-head">
             <strong>{date(receipt.receivedOn)}</strong>
             <Badge label={label(receipt.status)} status={receipt.status} />
             <span>{money(receipt.value, receipt.currency)}</span>
           </div>
-          <p className="purchasing-note">
+          <p className="document-note">
             {receipt.lines.map((line) => `${line.description} × ${line.quantity}`).join(', ')}
           </p>
           {receipt.overrideReason ? (
-            <p className="purchasing-note">
-              {t('overReceipt', { reason: receipt.overrideReason })}
-            </p>
+            <p className="document-note">{t('overReceipt', { reason: receipt.overrideReason })}</p>
           ) : null}
           {receipt.returnReason ? (
-            <p className="purchasing-note">{t('returnedFor', { reason: receipt.returnReason })}</p>
+            <p className="document-note">{t('returnedFor', { reason: receipt.returnReason })}</p>
           ) : null}
           {receipt.status === 'recorded' && canReturn ? (
             <Button
