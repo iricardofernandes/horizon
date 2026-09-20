@@ -575,9 +575,13 @@ and the boards, the negotiation history, the approval queue and the deliveries b
 **In progress.** Warehouse transfers, manual adjustments with a reason and an approval
 allowance, and stock counts with their discrepancy posting are delivered as
 [plan phase 32](plan.md#phase-32--stock-moved-on-purpose-a-transfer-a-write-off-and-a-count).
-The remaining deliverables are sliced after it: the Kardex, valuation and the stock
-reports; lots, serial numbers and expiry; product families, variants, kits, BOM and
-production orders; and the screens that close the phase.
+The Kardex, valuation, stock position, min/max alerts, the ABC curve and the cost-of-goods
+report are delivered as
+[plan phase 33](plan.md#phase-33--the-warehouses-own-books-the-kardex-what-it-is-worth-and-what-to-do-about-it),
+which also makes the balance reproducible from the movements in value as well as in
+quantity. The remaining deliverables are sliced after it: lots, serial numbers and expiry;
+product families, variants, kits, BOM and production orders; and the screens that close the
+phase.
 
 **Deliverables**
 

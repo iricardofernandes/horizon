@@ -15,10 +15,19 @@ import {
   countDetail,
   listAdjustments,
   listCounts,
+  listLevels,
   listPolicies,
   listTransfers,
   listWarehouses,
 } from './inventory-reads'
+import {
+  abcCurve,
+  costOfGoodsSold,
+  kardex,
+  stockAlerts,
+  stockPosition,
+  valuation,
+} from './inventory-reports'
 import { makeScope, type Transaction } from './inventory-store'
 import * as schema from './schema'
 
@@ -152,6 +161,34 @@ export class InventoryDatabase extends InventoryUnitOfWork {
 
   listPolicies(tenantId: string) {
     return this.read(tenantId, (tx) => listPolicies(tx))
+  }
+
+  listLevels(tenantId: string, filter: Parameters<typeof listLevels>[1]) {
+    return this.read(tenantId, (tx) => listLevels(tx, filter))
+  }
+
+  kardex(tenantId: string, request: Parameters<typeof kardex>[1]) {
+    return this.read(tenantId, (tx) => kardex(tx, request))
+  }
+
+  valuation(tenantId: string, request: Parameters<typeof valuation>[1]) {
+    return this.read(tenantId, (tx) => valuation(tx, request))
+  }
+
+  stockPosition(tenantId: string, filter: Parameters<typeof stockPosition>[1]) {
+    return this.read(tenantId, (tx) => stockPosition(tx, filter))
+  }
+
+  stockAlerts(tenantId: string, filter: Parameters<typeof stockAlerts>[1]) {
+    return this.read(tenantId, (tx) => stockAlerts(tx, filter))
+  }
+
+  costOfGoodsSold(tenantId: string, request: Parameters<typeof costOfGoodsSold>[1]) {
+    return this.read(tenantId, (tx) => costOfGoodsSold(tx, request))
+  }
+
+  abcCurve(tenantId: string, request: Parameters<typeof abcCurve>[1]) {
+    return this.read(tenantId, (tx) => abcCurve(tx, request))
   }
 
   async ping(): Promise<void> {

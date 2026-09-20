@@ -1665,6 +1665,105 @@ and where what it says is answerable to somebody.
 
 ---
 
+## Phase 33 — The warehouse's own books: the Kardex, what it is worth, and what to do about it
+
+**Complete.** The second slice of Phase I of the [expansion plan](erp-expansion-plan.md).
+
+Inventory has always been able to say what it holds. It has never been able to say what it
+held — not what was on the shelf last Tuesday, not what the shelf was worth then, not what
+the goods that went out last month had cost to buy. The movement table had most of the
+answer all along: every movement records the balance it left behind. What it never recorded
+was what a unit was then worth, because a unit's worth is the balance's moving average and
+no movement ever wrote it down. This is the phase where the ledger stops needing the balance
+table to explain itself, and where the figures it can now produce are turned into the six
+reports an operator actually asks for.
+
+**Deliverables**
+
+- **The column the movement table should always have carried.** Every movement now records
+  the balance's unit cost *after* it was applied — not the price the goods moved at, which
+  is a different figure, because goods arriving at 12.00 onto a shelf holding some at 10.00
+  leave every unit worth something between the two, and goods leaving change no unit's
+  worth at all. With it, the standing of any shelf on any past day is one row, not a replay
+  of every receipt since the beginning. The history that predates the column is backfilled
+  by replaying the same arithmetic the aggregate does, anchored where it must be: a shelf
+  whose ledger opens with a shipment is anchored by that shipment, because goods leaving
+  are priced at the very average they do not change.
+- **A Kardex for one item on one shelf.** An opening standing, every movement in order with
+  what it moved and where it left the balance, and a closing standing. Deliberately not
+  offered for an item across every warehouse: the same thing in two buildings has two
+  running balances and two costs, and interleaving them by the clock produces a column of
+  figures that is true of nothing anybody can walk up to and count. A page in the middle of
+  a long history is still exactly right, because the opening is read from the shelf's own
+  record rather than summed from what came before it.
+- **A valuation of any instant that has already passed**, read from the movements alone.
+  Asked about now it returns exactly what the balance table holds, which is the whole claim
+  the movement ledger makes and the one the tests check against the table the report never
+  consults. A shelf that has been emptied is left out: nothing is not a holding.
+- **A stock position that is paged and filtered**, beside the warehouse listing that
+  embeds a few balances for convenience and stops being usable at the size where this is
+  needed.
+- **Minimum and maximum levels, and the alerts they raise.** A level is a target, never a
+  control — nothing refuses a movement for crossing one — which is why setting one is not
+  an approval decision and why there is no way to delete one: a minimum of zero says "do not
+  tell me about this item" on the record, where the next person can see that somebody
+  decided it. **Short is measured against what is free and over against what is physically
+  there**: goods promised to an order cannot cover the next one, but they do take up the
+  shelf they are sitting on. The report is driven from the levels rather than from the
+  balances, so an item a warehouse is supposed to keep and currently has **none** of
+  appears — the alert that matters most, and the one a query over balances would silently
+  miss.
+- **What the goods that were sold had cost**, valued at the average each shipment was
+  priced at when it went and net of what came back at the cost it went out at. A transfer
+  is not in it, because goods in the other building are still the company's; a write-off is
+  not in it either, because losing stock costs money but is not the cost of selling
+  anything, and an ERP that buries breakage inside its margin has hidden the one figure the
+  warehouse most needs to see.
+- **An ABC curve over the same consumption**, so the two can never disagree about what a
+  period sold. An item belongs to the class its cumulative share *reaches*: the item that
+  carries the running total past eighty per cent is the reason the total got there, and
+  calling it a B because it finished at eighty-one would be exactly backwards. Drawn
+  separately per currency, because a ranking that adds pesos to euros ranks nothing.
+- No contracts change. Nothing here is announced to another module: the new figure is how
+  this warehouse values what stayed, which is its own business, and every report is a read.
+
+**Exit criteria**
+
+- A valuation as of now equals the balance table, item for item and figure for figure,
+  asserted against a table the report never reads.
+- A valuation of a past day returns what that day left, not today's figures applied
+  backwards.
+- A Kardex window opens exactly where the previous window closed, so two pages read end to
+  end tell the same story as one.
+- The cost of goods sold counts what was sold and nothing else, with a transfer and a
+  write-off in the same period to prove it.
+- An item a warehouse keeps none of is raised as an alert, and a shelf whose stock is all
+  promised away is short even while it is also over.
+- One workspace's reports never contain another's rows.
+
+**Non-goals**
+
+- The screens. The Kardex, the position, the alerts and the curves are driven through the
+  API here and get somewhere to be seen in the slice that closes Phase I.
+- Posting the cost of goods sold into the ledger. The figure exists now; deciding when a
+  period's cost is booked, and against which accounts, is an accounting decision that
+  belongs with whoever owns the chart — not a side effect of a report being run.
+- FIFO, LIFO or standard costing. The moving average is the method the module keeps, and
+  offering a second one means keeping two sets of books that have to be reconciled.
+- Lots, serial numbers and expiry, which are the next slice. A Kardex line is an item on a
+  shelf here, and will gain a lot when there are lots to gain.
+- Naming items. The reports return ids: the catalogue is another module's, and a report
+  that joined across the boundary to be friendlier would be a module importing another
+  module's data.
+- Reordering from an alert. What to buy, and from whom, is purchasing's decision; the
+  alert says a shelf needs attention, not who should be sent a purchase order.
+- Restating history when the backfill cannot know it. A shelf whose ledger opens with a
+  receipt onto stock that was already there is valued at nothing for that opening, and the
+  balance table remains the authority on it until the next thing leaves. Guessing would
+  have been worse than saying so.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

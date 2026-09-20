@@ -22,6 +22,8 @@ import {
   StockAdjustmentsRepository,
   StockBalancesRepository,
   StockCountsRepository,
+  type StockLevel,
+  StockLevelsRepository,
   StockReservationsRepository,
   StockTransfersRepository,
   WarehousesRepository,
@@ -136,6 +138,27 @@ class InMemoryCounts extends StockCountsRepository {
   }
   save(count: StockCount): Promise<void> {
     if (!count.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    return Promise.resolve()
+  }
+}
+
+class InMemoryLevels extends StockLevelsRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: StockLevel[],
+  ) {
+    super()
+  }
+  save(level: StockLevel): Promise<void> {
+    if (level.tenantId !== this.tenantId) throw new Error('tenant mismatch')
+    const index = this.records.findIndex(
+      (existing) =>
+        existing.tenantId === level.tenantId &&
+        existing.warehouseId === level.warehouseId &&
+        existing.itemId === level.itemId,
+    )
+    if (index === -1) this.records.push(level)
+    else this.records[index] = level
     return Promise.resolve()
   }
 }
@@ -259,6 +282,7 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
   readonly adjustments: StockAdjustment[] = []
   readonly counts: StockCount[] = []
   readonly policies: AdjustmentPolicy[] = []
+  readonly levels: StockLevel[] = []
   readonly auditRecords: AuditRecord[] = []
   readonly receipts = new Map<string, { receipt: CommandReceipt; response: unknown }>()
   readonly events: DomainEvent[] = []
@@ -280,6 +304,7 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
       adjustments: new InMemoryAdjustments(tenantId, this.adjustments),
       counts: new InMemoryCounts(tenantId, this.counts),
       policies: new InMemoryPolicies(tenantId, this.policies),
+      levels: new InMemoryLevels(tenantId, this.levels),
       events: new InMemoryEvents(tenantId, this.events),
       audit: new InMemoryAudit(this.auditRecords),
     })

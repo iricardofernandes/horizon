@@ -21,7 +21,7 @@ import { StockReservation } from '@/domain/entities/stock-reservation'
 import { StockTransfer } from '@/domain/entities/stock-transfer'
 import { Warehouse } from '@/domain/entities/warehouse'
 import { InventoryStockMovedEvent } from '@/domain/events/inventory-events'
-import type { AdjustmentPolicy } from '@/domain/repositories/inventory-repositories'
+import type { AdjustmentPolicy, StockLevel } from '@/domain/repositories/inventory-repositories'
 import {
   Currency,
   Money,
@@ -223,6 +223,7 @@ async function publish(tx: Transaction, tenantId: string, event: DomainEvent): P
       balanceAfter: movement.balanceAfter.micros,
       unitCost: movement.unitCost?.amount ?? null,
       currency: movement.unitCost?.currency.value ?? null,
+      averageAfter: movement.averageAfter?.amount ?? null,
       balanceVersion: movement.balanceVersion,
       reason: movement.origin?.reason ?? null,
       documentType: movement.origin?.document.type ?? null,
@@ -650,6 +651,27 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
               threshold: policy.threshold,
               updatedBy: policy.updatedBy,
               updatedAt: policy.updatedAt,
+            },
+          })
+      },
+    },
+    levels: {
+      save: async (level: StockLevel) => {
+        assertTenant(level.tenantId)
+        await tx
+          .insert(schema.stockLevels)
+          .values({ ...level, tenantId })
+          .onConflictDoUpdate({
+            target: [
+              schema.stockLevels.tenantId,
+              schema.stockLevels.warehouseId,
+              schema.stockLevels.itemId,
+            ],
+            set: {
+              minimum: level.minimum,
+              maximum: level.maximum,
+              updatedBy: level.updatedBy,
+              updatedAt: level.updatedAt,
             },
           })
       },

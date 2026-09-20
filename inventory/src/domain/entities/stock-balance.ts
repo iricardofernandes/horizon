@@ -277,6 +277,9 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
         quantity,
         balanceAfter: this.props.onHand,
         unitCost,
+        // Read after the movement has been applied, so it is what a unit is worth from
+        // here on. Only goods arriving change it, and they change it for every unit.
+        averageAfter: this.props.averageUnitCost,
         origin: origin ?? null,
       }),
     )

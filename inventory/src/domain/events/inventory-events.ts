@@ -129,6 +129,17 @@ export class InventoryStockMovedEvent extends InventoryEvent {
       quantity: Quantity
       balanceAfter: Quantity
       unitCost: Money | null
+      /**
+       * What one unit of this balance is worth once the movement has been applied.
+       *
+       * Not the movement's own cost: goods arriving at 12 into a shelf holding some at 10
+       * leave every unit worth something between the two, and goods leaving change no
+       * unit's worth at all. It never reaches the wire — a reader elsewhere is told what
+       * moved, not how this warehouse values what stayed — but it is what lets the
+       * movement table say what the stock was worth on any past day without replaying
+       * every receipt since the beginning.
+       */
+      averageAfter: Money | null
       /** Why it moved and under which document; absent for a sale or a purchase. */
       origin: MovementOrigin | null
     },

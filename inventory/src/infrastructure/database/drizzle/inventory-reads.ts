@@ -171,6 +171,24 @@ export async function listPolicies(tx: Transaction) {
   }))
 }
 
+export async function listLevels(tx: Transaction, filter: { warehouseId: string | null } & Page) {
+  const rows = await tx
+    .select()
+    .from(schema.stockLevels)
+    .where(filter.warehouseId ? eq(schema.stockLevels.warehouseId, filter.warehouseId) : undefined)
+    .orderBy(asc(schema.stockLevels.warehouseId), asc(schema.stockLevels.itemId))
+    .limit(filter.limit)
+    .offset(filter.offset)
+  return rows.map((row) => ({
+    warehouseId: row.warehouseId,
+    itemId: row.itemId,
+    minimum: quantity(row.minimum),
+    maximum: row.maximum === null ? null : quantity(row.maximum),
+    updatedBy: row.updatedBy,
+    updatedAt: row.updatedAt.toISOString(),
+  }))
+}
+
 function header(row: typeof schema.stockCounts.$inferSelect) {
   return {
     id: row.id,

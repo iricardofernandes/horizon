@@ -132,6 +132,14 @@ export const stockMovements = pgTable(
     balanceAfter: bigint('balance_after', { mode: 'bigint' }).notNull(),
     unitCost: bigint('unit_cost', { mode: 'bigint' }),
     currency: text('currency'),
+    /**
+     * What one unit was worth here once this movement had been applied.
+     *
+     * The balance's own figure, not the movement's: it is what makes the table able to
+     * say what the shelf was worth on any past day. Its currency is the balance's, which
+     * never changes once set.
+     */
+    averageAfter: bigint('average_after', { mode: 'bigint' }),
     balanceVersion: integer('balance_version').notNull(),
     reason: text('reason'),
     documentType: text('document_type'),
@@ -145,6 +153,12 @@ export const stockMovements = pgTable(
       table.balanceVersion,
     ),
     index('stock_movements_tenant_item_idx').on(table.tenantId, table.itemId, table.occurredAt),
+    index('stock_movements_tenant_balance_idx').on(
+      table.tenantId,
+      table.balanceId,
+      table.occurredAt,
+    ),
+    index('stock_movements_tenant_occurred_idx').on(table.tenantId, table.occurredAt),
     foreignKey({
       name: 'stock_movements_balance_fk',
       columns: [table.tenantId, table.balanceId],
@@ -349,6 +363,37 @@ export const adjustmentPolicies = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (table) => [primaryKey({ columns: [table.tenantId, table.currency] })],
+)
+
+/**
+ * How little of an item a warehouse should get down to, and how much is too much.
+ *
+ * A level is a target, never a control: nothing refuses a movement for crossing one. It
+ * exists so a report can say which shelves need attention, which is why there is no row
+ * meaning "no level" — a minimum of zero is how a workspace says it does not want to hear
+ * about this item, and it says so on the record rather than by deleting one.
+ */
+export const stockLevels = pgTable(
+  'stock_levels',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    warehouseId: uuid('warehouse_id').notNull(),
+    itemId: uuid('item_id').notNull(),
+    minimum: bigint('minimum', { mode: 'bigint' }).notNull(),
+    maximum: bigint('maximum', { mode: 'bigint' }),
+    updatedBy: text('updated_by').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.warehouseId, table.itemId] }),
+    foreignKey({
+      name: 'stock_levels_warehouse_fk',
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id],
+    }),
+  ],
 )
 
 export const commandReceipts = pgTable(

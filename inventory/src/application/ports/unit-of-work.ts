@@ -6,6 +6,7 @@ import type {
   StockAdjustmentsRepository,
   StockBalancesRepository,
   StockCountsRepository,
+  StockLevelsRepository,
   StockReservationsRepository,
   StockTransfersRepository,
   WarehousesRepository,
@@ -15,7 +16,7 @@ import type {
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'warehouse' | 'transfer' | 'adjustment' | 'count' | 'policy'
+  readonly subjectType: 'warehouse' | 'transfer' | 'adjustment' | 'count' | 'policy' | 'level'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -41,6 +42,7 @@ export interface InventoryScope {
   readonly adjustments: StockAdjustmentsRepository
   readonly counts: StockCountsRepository
   readonly policies: AdjustmentPoliciesRepository
+  readonly levels: StockLevelsRepository
   readonly events: InventoryEventsRepository
   readonly audit: AuditTrail
 }

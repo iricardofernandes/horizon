@@ -69,6 +69,27 @@ export abstract class AdjustmentPoliciesRepository {
   abstract save(policy: AdjustmentPolicy): Promise<void>
 }
 
+/**
+ * How little of an item a warehouse should get down to, and how much is too much.
+ *
+ * Unlike the adjustment allowance, this refuses nothing. It is read by a report and by
+ * nobody else, which is why a workspace turns it off by setting a minimum of zero rather
+ * than by deleting the row: what it wants ignored is worth knowing too.
+ */
+export interface StockLevel {
+  readonly tenantId: string
+  readonly warehouseId: string
+  readonly itemId: string
+  readonly minimum: bigint
+  readonly maximum: bigint | null
+  readonly updatedBy: string
+  readonly updatedAt: Date
+}
+
+export abstract class StockLevelsRepository {
+  abstract save(level: StockLevel): Promise<void>
+}
+
 export abstract class StockReservationsRepository {
   abstract findByOrderId(orderId: string): Promise<StockReservation | null>
   abstract create(reservation: StockReservation): Promise<void>

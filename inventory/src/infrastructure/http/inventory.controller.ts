@@ -22,7 +22,7 @@ import {
   RequireInventoryAction,
   tenantOf,
 } from './authorization'
-import { context, idempotent, pageOf } from './command-context'
+import { asOfInstantOf, context, idempotent, pageOf, rangeOf } from './command-context'
 import { id, parse, unwrap } from './request-parsing'
 
 const quantity = z.string().regex(/^\d+(?:\.\d{1,6})?$/)
@@ -74,6 +74,21 @@ const countFiguresInput = z.strictObject({
     .array(z.strictObject({ itemId: z.uuid(), counted: quantity }))
     .min(1)
     .max(2000),
+})
+
+const levelInput = z.strictObject({
+  warehouseId: z.uuid(),
+  itemId: z.uuid(),
+  minimum: quantity,
+  maximum: quantity.nullish(),
+})
+
+const kardexFilter = z.object({ itemId: z.uuid(), warehouseId: z.uuid() })
+const scopeFilter = z.object({ warehouseId: z.uuid().nullish(), itemId: z.uuid().nullish() })
+// Where the A band stops and the B band stops, as whole percentages of the period's value.
+const abcFilter = z.object({
+  a: z.coerce.number().int().min(1).max(99).default(80),
+  b: z.coerce.number().int().min(2).max(100).default(95),
 })
 
 const reasonInput = z.strictObject({ reason: note })
@@ -325,6 +340,108 @@ export class InventoryController {
         decision: { kind: 'cancel', reason: parse(reasonInput, body).reason },
       }),
     )
+  }
+
+  // ---------------------------------------------------------------- reports
+
+  @Get('stock-ledger')
+  @RequireInventoryAction('read')
+  kardex(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(kardexFilter, query)
+    return this.runtime.database.kardex(tenantOf(request), {
+      ...filter,
+      ...rangeOf(query),
+      ...pageOf(query),
+    })
+  }
+
+  @Get('stock-position')
+  @RequireInventoryAction('read')
+  position(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(scopeFilter, query)
+    return this.runtime.database.stockPosition(tenantOf(request), {
+      warehouseId: filter.warehouseId ?? null,
+      itemId: filter.itemId ?? null,
+      ...pageOf(query),
+    })
+  }
+
+  @Get('stock-valuation')
+  @RequireInventoryAction('read')
+  valuation(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(scopeFilter, query)
+    return this.runtime.database.valuation(tenantOf(request), {
+      asOf: asOfInstantOf(query),
+      warehouseId: filter.warehouseId ?? null,
+    })
+  }
+
+  @Get('stock-alerts')
+  @RequireInventoryAction('read')
+  alerts(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(scopeFilter, query)
+    return this.runtime.database.stockAlerts(tenantOf(request), {
+      warehouseId: filter.warehouseId ?? null,
+      ...pageOf(query),
+    })
+  }
+
+  @Get('cost-of-goods-sold')
+  @RequireInventoryAction('read')
+  costOfGoodsSold(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(scopeFilter, query)
+    return this.runtime.database.costOfGoodsSold(tenantOf(request), {
+      ...rangeOf(query),
+      warehouseId: filter.warehouseId ?? null,
+    })
+  }
+
+  @Get('stock-abc')
+  @RequireInventoryAction('read')
+  abcCurve(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(scopeFilter, query)
+    const thresholds = parse(abcFilter, query)
+    if (thresholds.b <= thresholds.a) throw new BadRequestException('b: must be above a')
+    return this.runtime.database.abcCurve(tenantOf(request), {
+      ...rangeOf(query),
+      warehouseId: filter.warehouseId ?? null,
+      thresholds,
+    })
+  }
+
+  // ---------------------------------------------------------------- levels
+
+  @Get('stock-levels')
+  @RequireInventoryAction('read')
+  levels(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(scopeFilter, query)
+    return this.runtime.database.listLevels(tenantOf(request), {
+      warehouseId: filter.warehouseId ?? null,
+      ...pageOf(query),
+    })
+  }
+
+  @Put('stock-levels')
+  @RequireInventoryAction('manage')
+  async defineLevel(@Body() body: unknown, @Req() request: InventoryRequest) {
+    const input = parse(levelInput, body)
+    const level = unwrap(
+      await this.runtime.defineStockLevel.execute({
+        context: context(request),
+        warehouseId: input.warehouseId,
+        itemId: input.itemId,
+        minimum: input.minimum,
+        maximum: input.maximum ?? null,
+      }),
+    )
+    return {
+      warehouseId: level.warehouseId,
+      itemId: level.itemId,
+      minimum: level.minimum.toString(),
+      maximum: level.maximum?.toString() ?? null,
+      updatedBy: level.updatedBy,
+      updatedAt: level.updatedAt.toISOString(),
+    }
   }
 
   // ---------------------------------------------------------------- policies

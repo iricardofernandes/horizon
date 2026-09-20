@@ -106,6 +106,22 @@ surface below and require a workspace-scoped Inventory role.
 | `PATCH` | `/stock-counts/:id/cancel` | Abandon a sheet; it posts nothing. |
 | `GET` | `/adjustment-policies` | The allowance per currency. |
 | `PUT` | `/adjustment-policies` | Set it. |
+| `GET` | `/stock-levels` | The minimum and maximum each warehouse should keep. |
+| `PUT` | `/stock-levels` | Set them for one item in one warehouse. |
+| `GET` | `/stock-ledger` | The Kardex of one item on one shelf: opening, movements, closing. |
+| `GET` | `/stock-position` | What every shelf holds now, with its level and any alert. |
+| `GET` | `/stock-valuation` | What the company held, and what it was worth, at an instant. |
+| `GET` | `/stock-alerts` | The shelves somebody should look at, worst first. |
+| `GET` | `/cost-of-goods-sold` | What the goods that left for customers had cost. |
+| `GET` | `/stock-abc` | Items ranked by what leaving them cost, cut into A, B and C. |
+
+The reports are read from `stock_movements` alone, never from the balance table they are
+checked against: every movement records the quantity the shelf reached **and** what a unit
+was then worth, which is what lets a valuation of a past day be a lookup rather than a
+replay. `from` and `to` are UTC days, bounded to a year; `asOf` defaults to now rather
+than to the end of today, so a valuation never disagrees with a shelf somebody just looked
+at. A stock level refuses nothing — it is read by the alert report and by nobody else, and
+a minimum of zero is how a workspace turns one off without deleting the decision.
 
 Every command that moves stock takes an `Idempotency-Key` header and runs at most once
 (ADR 0028); every decision is a line in the tenant's hash-chained audit log (ADR 0025).

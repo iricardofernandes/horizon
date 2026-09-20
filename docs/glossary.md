@@ -475,3 +475,54 @@ writing the counted figure over the balance would undo whatever happened meanwhi
 ### variance
 What a counted line disagreed with the sheet by, as the movement it becomes. A line nobody
 counted has none, because not counting something is not the same as counting zero of it.
+
+### Kardex
+The full history of one item on one shelf: an opening standing, every movement in order
+with the balance and the unit cost it left behind, and a closing standing. It is
+deliberately about one warehouse rather than an item everywhere, because the same thing in
+two buildings has two running balances and two costs, and interleaving them by the clock
+produces a column of figures that is true of nothing anybody can walk up to and count.
+
+### moving average cost
+What one unit of a balance is worth: the average of everything that has arrived, reweighted
+each time goods come in and left alone when goods go out. It is the only valuation method
+Horizon keeps. Goods leaving are priced at the average of the moment they left, which is
+what lets a sale made in March still be costed at March's figure after a cheaper delivery
+in April.
+
+### valuation
+What the company held, and what it was worth, at an instant. Read from the movements alone
+— each one records the balance and the unit cost it left behind — so a valuation of today
+returns exactly what the balance table holds, and a valuation of a past day returns what
+that day left rather than today's figures applied backwards.
+
+### stock level
+The minimum an item should not get below in a warehouse, and optionally the maximum it
+should not go above. A level is a target, never a control: nothing refuses a movement for
+crossing one, and the only thing that reads it is the alert report. A minimum of zero is
+how a workspace says it does not want to hear about an item — said on the record, rather
+than by deleting the level.
+
+### stock alert
+A shelf somebody should look at: short of its minimum, or over its maximum. Short is
+measured against what is **free**, because goods promised to an order cannot cover the next
+one; over is measured against what is **physically there**, because those goods still take
+up the shelf and the money that bought them. An item a warehouse is supposed to keep and
+currently has none of is the sharpest alert of all, which is why the report is driven from
+the levels rather than from the balances.
+
+### cost of goods sold
+What the goods that left for customers in a period had cost the company, valued at the
+average each shipment was priced at when it went, less what came back at the cost it went
+out at. A transfer is not in it — goods in the other building are still the company's — and
+neither is a write-off: losing stock costs money, but it is not the cost of selling
+anything, and burying breakage inside the margin hides the one figure the warehouse most
+needs to see.
+
+### ABC curve
+Items ranked by what leaving them cost in a period, cut into three classes by cumulative
+share — conventionally the first 80% of the value, the next 15%, and the rest. An item
+belongs to the class its cumulative share *reaches*, so the item that carries the running
+total past eighty per cent is part of the reason it got there rather than being demoted for
+finishing at eighty-one. The curve is drawn separately per currency, because a ranking that
+adds pesos to euros ranks nothing.

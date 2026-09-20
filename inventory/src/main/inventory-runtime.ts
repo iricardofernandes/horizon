@@ -8,7 +8,10 @@ import {
   OpenStockCountUseCase,
   RecordStockCountUseCase,
 } from '@/application/use-cases/count-stock'
-import { DefineAdjustmentPolicyUseCase } from '@/application/use-cases/define-policies'
+import {
+  DefineAdjustmentPolicyUseCase,
+  DefineStockLevelUseCase,
+} from '@/application/use-cases/define-policies'
 import {
   CreateWarehouseUseCase,
   DeactivateWarehouseUseCase,
@@ -38,6 +41,7 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
   readonly closeCount: CloseStockCountUseCase
   readonly decideCount: DecideStockCountUseCase
   readonly defineAdjustmentPolicy: DefineAdjustmentPolicyUseCase
+  readonly defineStockLevel: DefineStockLevelUseCase
 
   constructor(config: InventoryEnvironment) {
     this.database = new InventoryDatabase({
@@ -57,6 +61,7 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
     this.closeCount = new CloseStockCountUseCase(this.database, clock)
     this.decideCount = new DecideStockCountUseCase(this.database, clock)
     this.defineAdjustmentPolicy = new DefineAdjustmentPolicyUseCase(this.database, clock)
+    this.defineStockLevel = new DefineStockLevelUseCase(this.database, clock)
     this.accessTokens = new AccessTokenVerifier(
       config.JWKS_URL,
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
