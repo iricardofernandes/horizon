@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.18.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.19.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -281,11 +281,13 @@ An append-only movement changed on-hand stock and records the resulting balance 
 | `movementId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
 | `itemId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
 | `warehouseId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
-| `kind` | `receipt` \| `shipment` \| `adjustment-in` \| `adjustment-out` \| `return-in` | yes | — |
+| `kind` | `receipt` \| `shipment` \| `adjustment-in` \| `adjustment-out` \| `return-in` \| `transfer-in` \| `transfer-out` | yes | — |
 | `balanceVersion` | integer | yes | — |
 | `quantity` | string | yes | pattern `^\d+(\.\d{1,6})?$` |
 | `balanceAfter` | string | yes | pattern `^\d+(\.\d{1,6})?$` |
 | `unitCost` | any | yes | — |
+| `reason` | `transfer` \| `count` \| `breakage` \| `loss` \| `theft` \| `expiry` \| `found` \| `correction` | no | — |
+| `document` | object | no | — |
 ### `inventory.stock.released` — v1
 
 A reservation stopped holding stock because its order was cancelled or it expired.

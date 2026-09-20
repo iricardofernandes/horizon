@@ -58,10 +58,14 @@ export class Currency extends ValueObject<{ value: string }> {
 }
 
 export class Money extends ValueObject<{ amount: bigint; currency: Currency }> {
-  static create(amount: string, currency: Currency): Either<InvalidInputError, Money> {
+  static create(
+    amount: string,
+    currency: Currency,
+    field = '/amount',
+  ): Either<InvalidInputError, Money> {
     if (!/^\d+$/.test(amount))
       return left(
-        new InvalidInputError('/amount', 'must be a non-negative integer count of minor units'),
+        new InvalidInputError(field, 'must be a non-negative integer count of minor units'),
       )
     return right(new Money({ amount: BigInt(amount), currency }))
   }
@@ -86,6 +90,28 @@ export class WarehouseName extends ValueObject<{ value: string }> {
     if (normalized.length < 1 || normalized.length > 120)
       return left(new InvalidInputError('/name', 'must contain between 1 and 120 characters'))
     return right(new WarehouseName({ value: normalized }))
+  }
+  get value(): string {
+    return this.props.value
+  }
+  protected componentsOf(): readonly unknown[] {
+    return [this.value]
+  }
+}
+
+/**
+ * A person's own words about why stock moved.
+ *
+ * The reason code says which of a handful of things happened; this says what actually
+ * happened, and it is the only part of an adjustment a reader outside the warehouse can
+ * learn anything from.
+ */
+export class Note extends ValueObject<{ value: string }> {
+  static create(value: string, field = '/note'): Either<InvalidInputError, Note> {
+    const normalized = value.trim().replace(/\s+/g, ' ')
+    if (normalized.length < 1 || normalized.length > 500)
+      return left(new InvalidInputError(field, 'must contain between 1 and 500 characters'))
+    return right(new Note({ value: normalized }))
   }
   get value(): string {
     return this.props.value

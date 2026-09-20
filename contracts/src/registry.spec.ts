@@ -21,6 +21,8 @@ const NOT_INDEPENDENTLY_VERSIONED = new Set([
   'violationSchema', // only ever appears inside validationProblemSchema
   'cursorPayloadSchema', // the decoded form of an opaque cursor; not a contract
   'moduleNameSchema', // enumerated inside roleAssignmentSchema
+  'movementReasonSchema', // only ever appears inside inventory.stock.moved
+  'movementDocumentSchema', // likewise; exported so a module can reuse the vocabulary
   'permissionIdSchema', // registered under its own id below
   'roleAssignmentSchema',
   'paginationQuerySchema',

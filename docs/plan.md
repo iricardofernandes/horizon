@@ -1578,6 +1578,93 @@ money is now owed by a delivery somebody has to send.
 
 ---
 
+## Phase 32 — Stock moved on purpose: a transfer, a write-off and a count
+
+**Complete.** The first slice of Phase I of the [expansion plan](erp-expansion-plan.md).
+
+Every movement Inventory has ever recorded was somebody else's decision. Stock arrived
+because purchasing bought it and left because sales sold it, and the warehouse itself had
+no way of saying anything at all — not that a pallet had been dropped, not that a box had
+been moved to the other building, not that the shelf holds ninety-eight of something the
+system is certain there are a hundred of. This is the phase where the warehouse can speak,
+and where what it says is answerable to somebody.
+
+**Deliverables**
+
+- **A transfer moves goods, not value.** Both halves are written in one transaction, so
+  there is no moment at which the stock is in neither place, and what leaves the source
+  carries **its own cost** to the destination rather than being valued again there. Only
+  *available* stock goes: what is reserved is spoken for by an order that expects to find
+  it where it is. Goods may leave a warehouse that has been closed — that is how one is
+  emptied — but nothing is put into one that has.
+- **An adjustment answers to an allowance.** This is the one command in the module that can
+  make the figures say whatever the person typing wants, so past a value the workspace sets
+  the goods do not move until a second person allows it, and **that person is never the one
+  who asked** (four eyes, in the aggregate and in a table constraint). A workspace that has
+  set no allowance has every adjustment approved: silence about a control is not permission
+  to skip it, which is also why the row cannot be deleted.
+- **A reason that works in the direction asked for.** Stock is not *found* by taking it off
+  the shelf and breakage puts none back; `correction` is the only reason that works both
+  ways, because it is the one that admits the figure was simply wrong rather than claiming
+  to know what happened.
+- **An adjustment changes how many there are, never what one is worth.** Goods enter at the
+  average the balance already carries, and a stated cost is accepted only when there is no
+  average to use — an adjustment that re-prices stock is a receipt pretending not to be one.
+- **A count posts the difference, not the figure.** The sheet freezes what the system
+  expected when it opened, because that is what the counter is disagreeing with. If the
+  shelf said a hundred, the counter found ninety-eight, and ten were shipped while they were
+  counting, the balance ends at eighty-eight — writing ninety-eight over it would quietly
+  undo a delivery that really happened. A line nobody counted is left alone, because not
+  counting something is not the same as counting zero of it.
+- **A count that writes off enough is a write-off.** Its differences are weighed against the
+  same allowance, by the sum of their absolute values rather than their net, so a sheet that
+  finds a hundred of one thing and loses a hundred of another cannot net itself through.
+- **The audit log and the command receipts Inventory never had.** Every transfer, write-off,
+  count and allowance is a line in the tenant's hash-chained log naming who took it; every
+  command that moves stock takes an `Idempotency-Key` and is run at most once (ADR 0025,
+  ADR 0028).
+- `@horizon/contracts@0.19.0`: `transfer-in` and `transfer-out` movement kinds, and
+  **optional** `reason` and `document` on `inventory.stock.moved` — so a producer written
+  before stock could be transferred, adjusted or counted still emits a movement the schema
+  accepts. The two halves of a transfer carry the same document, which is what pairs them
+  for a reader.
+
+**Exit criteria**
+
+- A transfer leaves the company owning exactly what it owned before it: the value that left
+  the source arrives at the destination, asserted in the domain and in the database.
+- The same goods are never both reserved for an order and transferred or written off away
+  from it, asserted in the aggregate.
+- The person who asks for a write-off cannot allow it, refused by the aggregate and, if it
+  ever got past that, by a table constraint.
+- A count that runs while stock moves posts its difference against the balance as it then
+  is, and the delivery that happened meanwhile survives it.
+- A settled count takes no more figures: refused by the aggregate and by a trigger on its
+  lines.
+- Every decision appears in the audit chain, in order, under the actor who took it, and the
+  chain cannot be rewritten.
+
+**Non-goals**
+
+- The screens. Transfers, the write-off queue and the count sheet are driven through the
+  API here and get somewhere to be seen in the slice that closes Phase I.
+- The Kardex, valuation reports, stock position, min/max alerts and the ABC curve. The
+  movements now carry why they happened and under which document, which is what those
+  reports will be built from — but building them is the next slice.
+- Stock in transit. A transfer here is instantaneous, because a warehouse that is a
+  lorry is a warehouse, and the module has no way to say where one is yet.
+- Negative stock under a workspace policy. Nothing may drive a balance below zero, full
+  stop; the override the expansion plan asks for waits until there is a reader who can see
+  what it would have produced.
+- Reversing a posted transfer or adjustment. Both are already in the append-only ledger the
+  balances are derived from, so correcting one is another movement in the other direction —
+  never an edit (ADR 0042).
+- Partial counts of a warehouse being frozen while they run. The sheet deliberately does not
+  stop the warehouse working, which is the whole reason it posts a difference rather than a
+  figure.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

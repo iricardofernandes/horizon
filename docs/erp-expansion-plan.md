@@ -572,6 +572,13 @@ and the boards, the negotiation history, the approval queue and the deliveries b
 
 ### Phase I — inventory maturity and production
 
+**In progress.** Warehouse transfers, manual adjustments with a reason and an approval
+allowance, and stock counts with their discrepancy posting are delivered as
+[plan phase 32](plan.md#phase-32--stock-moved-on-purpose-a-transfer-a-write-off-and-a-count).
+The remaining deliverables are sliced after it: the Kardex, valuation and the stock
+reports; lots, serial numbers and expiry; product families, variants, kits, BOM and
+production orders; and the screens that close the phase.
+
 **Deliverables**
 
 - Add warehouse transfers, manual adjustments with reason/approval, stock counts and
@@ -756,7 +763,8 @@ The first executable backlog, in order, is:
 12. Extend the golden path to order → receivable → settlement → bank reconciliation and
     require one joined trace plus reconciled numeric assertions in CI.
 
-**Status:** items 1 to 12 are delivered as plan phases 14 to 21, and Phase F as plan phases
-22 to 25. The next work is Phase G, `procurement/`, which also brings the payable forecasts
-Phase F left waiting for it.
+**Status:** items 1 to 12 are delivered as plan phases 14 to 21, Phase F as plan phases 22
+to 25, Phase G as 26 to 28 and Phase H as 29 to 31. Phase I has begun with plan phase 32,
+which gives the warehouse its own commands — transfers, adjustments and counts — and the
+movement history the valuation and stock reports will be built from.
 

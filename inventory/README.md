@@ -6,11 +6,11 @@ An independently deployable NestJS service with its own database, its own contai
 and its own lifecycle. It is reached through Kong, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 30 — complete.** A reservation is consumed when the goods leave, not when
-the order is confirmed, so a partial delivery takes out exactly what went and leaves the
-rest held.
+**Status: phase 32 — complete.** Stock moves because somebody decided it should, and not
+only because an order did: it is transferred between warehouses, written off with a reason
+and an allowance behind it, and counted against what the shelf actually holds.
 
-The versioned choreography with Sales is defined in `@horizon/contracts@0.18.0`. Forced-RLS PostgreSQL persistence locks every requested
+The versioned choreography with Sales is defined in `@horizon/contracts@0.19.0`. Forced-RLS PostgreSQL persistence locks every requested
 balance and either holds all lines or publishes one complete rejection; confirmation
 atomically converts holds into append-only shipment movements. Its inbox, outbox relay,
 RabbitMQ consumer, bounded retry, circuit breaker, metrics and trace propagation are
@@ -25,6 +25,10 @@ exercised both independently and by `make test-phase7`.
 - **Stock movements** — the append-only ledger from which balances are derived; a balance is never edited directly.
 - **Reservations** — a hold placed against available stock, with expiry.
 - **Cost method** — moving average cost, maintained per item per warehouse.
+- **Transfers** — goods moving between the company's own warehouses, at the cost they left at.
+- **Adjustments** — a deliberate change to how much stock there is, with a reason, and past an allowance a second person's decision.
+- **Counts** — a sheet of what the system expected, what somebody found, and the difference posted between them.
+- **The adjustment allowance** — the value at or above which an adjustment or a count's differences wait for somebody else.
 
 ## What it explicitly does not own
 
@@ -86,6 +90,28 @@ surface below and require a workspace-scoped Inventory role.
 | `POST` | `/warehouses` | Create an active warehouse. |
 | `PATCH` | `/warehouses/:id/deactivate` | Remove a warehouse from new operational work. |
 | `POST` | `/stock-receipts` | Receive stock and recalculate weighted average cost. |
+| `GET` | `/stock-transfers` | List what moved between warehouses. |
+| `POST` | `/stock-transfers` | Move goods between two warehouses, at the cost they left at. |
+| `GET` | `/stock-adjustments` | List adjustments, filtered by status or warehouse. |
+| `POST` | `/stock-adjustments` | Write stock off or on, with a reason. |
+| `PATCH` | `/stock-adjustments/:id/approve` | Allow somebody else's adjustment. |
+| `PATCH` | `/stock-adjustments/:id/reject` | Refuse it, with a reason. |
+| `GET` | `/stock-counts` | List count sheets. |
+| `GET` | `/stock-counts/:id` | One sheet: expected, counted and the difference between them. |
+| `POST` | `/stock-counts` | Open a sheet over a warehouse, freezing what the system expects. |
+| `PATCH` | `/stock-counts/:id/figures` | Record what the counter found. |
+| `PATCH` | `/stock-counts/:id/close` | Settle the sheet and post its differences. |
+| `PATCH` | `/stock-counts/:id/approve` | Allow the differences of somebody else's count. |
+| `PATCH` | `/stock-counts/:id/reject` | Refuse them, with a reason. |
+| `PATCH` | `/stock-counts/:id/cancel` | Abandon a sheet; it posts nothing. |
+| `GET` | `/adjustment-policies` | The allowance per currency. |
+| `PUT` | `/adjustment-policies` | Set it. |
+
+Every command that moves stock takes an `Idempotency-Key` header and runs at most once
+(ADR 0028); every decision is a line in the tenant's hash-chained audit log (ADR 0025).
+Approving or refusing somebody's write-off takes the Inventory **admin** role, and the
+person who asked for one can never be the person who allows it — in the aggregate and in
+a table constraint.
 
 ---
 
@@ -163,6 +189,7 @@ immediately rather than surfacing as a failure on first use.
 | `TENANT_ID_HASH_SALT` | Tenant ids are hashed before appearing in logs and metrics (ADR 0033). |
 | `RESERVATION_TTL_SECONDS` | A reservation not confirmed within this window is released automatically. |
 | `COST_METHOD` | The only implemented method. FIFO and standard cost are not in scope. |
+| `IDEMPOTENCY_TTL_SECONDS` | 24 hours (ADR 0028). |
 
 ---
 

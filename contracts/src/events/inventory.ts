@@ -53,6 +53,36 @@ export const inventoryStockReleased = defineEvent({
   }),
 })
 
+/**
+ * Why a movement happened, when the kind alone does not say.
+ *
+ * A shipment needs no reason — it left because it was sold. Goods that leave without
+ * being sold always do, and a warehouse that cannot tell breakage from theft cannot act
+ * on either.
+ */
+export const movementReasonSchema = z.enum([
+  'transfer',
+  'count',
+  'breakage',
+  'loss',
+  'theft',
+  'expiry',
+  'found',
+  'correction',
+])
+
+/**
+ * The document a movement belongs to.
+ *
+ * The two halves of a transfer carry the same one, which is what pairs them: a reader
+ * seeing goods leave one warehouse can find where they arrived without the event having
+ * to name the other side.
+ */
+export const movementDocumentSchema = z.object({
+  type: z.enum(['transfer', 'adjustment', 'count']),
+  id: uuidSchema,
+})
+
 export const inventoryStockMoved = defineEvent({
   type: 'inventory.stock.moved',
   version: 1,
@@ -62,10 +92,22 @@ export const inventoryStockMoved = defineEvent({
     movementId: uuidSchema,
     itemId: uuidSchema,
     warehouseId: uuidSchema,
-    kind: z.enum(['receipt', 'shipment', 'adjustment-in', 'adjustment-out', 'return-in']),
+    kind: z.enum([
+      'receipt',
+      'shipment',
+      'adjustment-in',
+      'adjustment-out',
+      'return-in',
+      'transfer-in',
+      'transfer-out',
+    ]),
     balanceVersion: z.number().int().positive(),
     quantity: quantitySchema,
     balanceAfter: quantitySchema,
     unitCost: moneySchema.nullable(),
+    // Optional, so a producer written before stock could be transferred, adjusted or
+    // counted keeps emitting a movement this schema accepts.
+    reason: movementReasonSchema.optional(),
+    document: movementDocumentSchema.optional(),
   }),
 })

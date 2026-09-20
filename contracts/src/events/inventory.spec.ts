@@ -89,4 +89,50 @@ describe('inventory event contracts', () => {
       }).success,
     ).toBe(false)
   })
+
+  it('takes a reason and the document a movement belongs to, and neither is required', () => {
+    const movement = {
+      movementId: randomUUID(),
+      itemId: line.itemId,
+      warehouseId: line.warehouseId,
+      balanceVersion: 2,
+      quantity: '4',
+      balanceAfter: '6',
+      unitCost: { amount: '1000', currency: 'BRL' },
+    }
+    const transferId = randomUUID()
+    // The two halves of a transfer are paired by the document they share.
+    expect(
+      inventoryStockMoved.payload.safeParse({
+        ...movement,
+        kind: 'transfer-out',
+        reason: 'transfer',
+        document: { type: 'transfer', id: transferId },
+      }).success,
+    ).toBe(true)
+    expect(
+      inventoryStockMoved.payload.safeParse({
+        ...movement,
+        kind: 'transfer-in',
+        reason: 'transfer',
+        document: { type: 'transfer', id: transferId },
+      }).success,
+    ).toBe(true)
+    // A producer written before either field existed still emits a valid movement.
+    expect(inventoryStockMoved.payload.safeParse({ ...movement, kind: 'receipt' }).success).toBe(
+      true,
+    )
+    expect(
+      inventoryStockMoved.payload.safeParse({ ...movement, kind: 'adjustment-out', reason: 'sold' })
+        .success,
+    ).toBe(false)
+    expect(
+      inventoryStockMoved.payload.safeParse({
+        ...movement,
+        kind: 'adjustment-in',
+        reason: 'found',
+        document: { type: 'count', id: 'not-a-uuid' },
+      }).success,
+    ).toBe(false)
+  })
 })

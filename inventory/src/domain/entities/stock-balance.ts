@@ -4,6 +4,7 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InventoryStockMovedEvent } from '../events/inventory-events'
 import { Money, Quantity } from '../value-objects/inventory-values'
+import type { MovementOrigin } from '../value-objects/movement-origin'
 
 interface StockBalanceProps {
   tenantId: string
@@ -56,6 +57,115 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     return this.props.onHand.minus(this.props.reserved)
   }
   receive(quantity: Quantity, unitCost: Money, now: Date): Either<ConflictError, void> {
+    return this.absorb('receipt', quantity, unitCost, now)
+  }
+
+  /** What a unit here is currently worth; null until something has arrived with a cost. */
+  unitCost(): Money | null {
+    return this.props.averageUnitCost
+  }
+
+  onHand(): Quantity {
+    return this.props.onHand
+  }
+
+  itemId(): string {
+    return this.props.itemId
+  }
+
+  warehouseId(): string {
+    return this.props.warehouseId
+  }
+
+  /**
+   * Goods leave for another warehouse of the same company.
+   *
+   * They leave at what they are worth here, and that figure is returned rather than
+   * recomputed on the other side: a transfer moves stock, not value, and two averages
+   * derived independently would not add up to what left.
+   *
+   * Only what is available goes. What is reserved is spoken for by an order that expects
+   * to find it where it is, and moving it would break that promise silently.
+   */
+  transferOut(
+    quantity: Quantity,
+    origin: MovementOrigin,
+    now: Date,
+  ): Either<ConflictError, Money | null> {
+    if (quantity.isZero()) return left(new ConflictError('movement quantity must be positive'))
+    if (this.available().isLessThan(quantity))
+      return left(new ConflictError('these goods are not available to transfer'))
+    const cost = this.props.averageUnitCost
+    this.props.onHand = this.props.onHand.minus(quantity)
+    this.recordMovement('transfer-out', quantity, cost, now, origin)
+    return right(cost)
+  }
+
+  /** The other half of a transfer: goods arrive at exactly the cost they left at. */
+  transferIn(
+    quantity: Quantity,
+    unitCost: Money | null,
+    origin: MovementOrigin,
+    now: Date,
+  ): Either<ConflictError, void> {
+    if (!unitCost) {
+      if (quantity.isZero()) return left(new ConflictError('movement quantity must be positive'))
+      this.props.onHand = this.props.onHand.plus(quantity)
+      this.recordMovement('transfer-in', quantity, null, now, origin)
+      return right(undefined)
+    }
+    return this.absorb('transfer-in', quantity, unitCost, now, origin)
+  }
+
+  /**
+   * Stock nobody sold appears: found on a shelf, or a figure that was simply wrong.
+   *
+   * An adjustment changes how many there are, never what one is worth, so goods enter at
+   * the average this balance already carries. A stated cost is accepted only when there
+   * is no average to use — the first thing this balance has ever held — because an
+   * adjustment that re-prices stock is a receipt pretending not to be one.
+   *
+   * With neither, the goods come in worth nothing. That is not a loophole but the honest
+   * reading of a counter who found something on a shelf and cannot say what it cost; the
+   * first receipt to price the item prices these too.
+   */
+  adjustIn(
+    quantity: Quantity,
+    stated: Money | null,
+    origin: MovementOrigin,
+    now: Date,
+  ): Either<ConflictError, void> {
+    const held = this.props.averageUnitCost
+    if (held && stated)
+      return left(
+        new ConflictError('an adjustment does not re-price stock that already has a cost'),
+      )
+    const unitCost = held ?? stated
+    if (unitCost) return this.absorb('adjustment-in', quantity, unitCost, now, origin)
+    if (quantity.isZero()) return left(new ConflictError('movement quantity must be positive'))
+    this.props.onHand = this.props.onHand.plus(quantity)
+    this.recordMovement('adjustment-in', quantity, null, now, origin)
+    return right(undefined)
+  }
+
+  /** Stock that is gone: broken, lost, stolen, expired, or never there to begin with. */
+  adjustOut(quantity: Quantity, origin: MovementOrigin, now: Date): Either<ConflictError, void> {
+    if (quantity.isZero()) return left(new ConflictError('movement quantity must be positive'))
+    if (this.available().isLessThan(quantity))
+      return left(new ConflictError('these goods are not available to write off'))
+    this.props.onHand = this.props.onHand.minus(quantity)
+    this.recordMovement('adjustment-out', quantity, this.props.averageUnitCost, now, origin)
+    return right(undefined)
+  }
+
+  /** Goods arrive and are averaged into what is already here. */
+  private absorb(
+    kind: 'receipt' | 'transfer-in' | 'adjustment-in',
+    quantity: Quantity,
+    unitCost: Money,
+    now: Date,
+    origin?: MovementOrigin,
+  ): Either<ConflictError, void> {
     if (quantity.isZero()) return left(new ConflictError('movement quantity must be positive'))
     const previousCost = this.props.averageUnitCost
     if (previousCost && !previousCost.currency.equals(unitCost.currency))
@@ -67,7 +177,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
       (previousValue + receivedValue + nextOnHand.micros / 2n) / nextOnHand.micros
     this.props.onHand = nextOnHand
     this.props.averageUnitCost = Money.fromAmount(roundedAverage, unitCost.currency)
-    this.recordMovement('receipt', quantity, unitCost, now)
+    this.recordMovement(kind, quantity, unitCost, now, origin)
     return right(undefined)
   }
   hold(quantity: Quantity, now: Date): Either<ConflictError, void> {
@@ -142,10 +252,18 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     })
   }
   private recordMovement(
-    kind: 'receipt' | 'shipment' | 'adjustment-out' | 'return-in',
+    kind:
+      | 'receipt'
+      | 'shipment'
+      | 'adjustment-in'
+      | 'adjustment-out'
+      | 'return-in'
+      | 'transfer-in'
+      | 'transfer-out',
     quantity: Quantity,
     unitCost: Money | null,
     now: Date,
+    origin?: MovementOrigin,
   ): void {
     this.props.version += 1
     this.props.updatedAt = now
@@ -159,6 +277,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
         quantity,
         balanceAfter: this.props.onHand,
         unitCost,
+        origin: origin ?? null,
       }),
     )
   }

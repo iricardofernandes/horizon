@@ -1,6 +1,7 @@
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
 import type { Money, Quantity } from '../value-objects/inventory-values'
+import type { MovementOrigin } from '../value-objects/movement-origin'
 
 abstract class InventoryEvent implements DomainEvent {
   abstract readonly eventType: string
@@ -116,11 +117,20 @@ export class InventoryStockMovedEvent extends InventoryEvent {
       movementId: string
       itemId: string
       warehouseId: string
-      kind: 'receipt' | 'shipment' | 'adjustment-in' | 'adjustment-out' | 'return-in'
+      kind:
+        | 'receipt'
+        | 'shipment'
+        | 'adjustment-in'
+        | 'adjustment-out'
+        | 'return-in'
+        | 'transfer-in'
+        | 'transfer-out'
       balanceVersion: number
       quantity: Quantity
       balanceAfter: Quantity
       unitCost: Money | null
+      /** Why it moved and under which document; absent for a sale or a purchase. */
+      origin: MovementOrigin | null
     },
   ) {
     super(balanceId, tenantId, occurredAt)
@@ -143,6 +153,11 @@ export class InventoryStockMovedEvent extends InventoryEvent {
             currency: this.movement.unitCost.currency.value,
           }
         : null,
+      // Omitted rather than null when there is none: the field is optional on the wire,
+      // so a consumer written before it existed sees exactly the payload it expects.
+      ...(this.movement.origin
+        ? { reason: this.movement.origin.reason, document: this.movement.origin.document }
+        : {}),
     }
   }
 }

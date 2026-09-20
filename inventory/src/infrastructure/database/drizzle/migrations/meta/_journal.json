@@ -15,6 +15,13 @@
       "when": 1791100000000,
       "tag": "0001_customer_returns",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792400000000,
+      "tag": "0002_stock_operations",
+      "breakpoints": true
     }
   ]
 }

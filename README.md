@@ -151,7 +151,7 @@ vendored side by side, and a cross-module import cannot resolve.
 |---|---|---|---|
 | [`identity/`](identity/) | Tenants, users, authentication, sessions, API keys, JWKS, RBAC assignment | 3001 | 4 |
 | [`catalog/`](catalog/) | Products, services, units of measure, price lists, NCM classification | 3002 | 6 |
-| [`inventory/`](inventory/) | Stock balances, movements, warehouses, reservations, cost method | 3003 | 7 |
+| [`inventory/`](inventory/) | Stock balances, movements, warehouses, reservations, cost method, transfers, adjustments and counts | 3003 | 7, 32 |
 | [`sales/`](sales/) | Customer projection, quotes, sales orders, shipments and returns | 3004 | 7, 15 |
 | [`parties/`](parties/) | Organizations and people, their roles, tax identifiers and erasure | 3006 | 15 |
 | [`financial/`](financial/) | Receivables and payables with approvals, settlements and reversals; categories, departments and projects, payment methods and terms | 3007 | 16–18 |

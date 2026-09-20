@@ -1,13 +1,29 @@
-import type { EventOutcome, InventoryScope, ReceivedEvent } from '@/application/ports/unit-of-work'
-import { InventoryUnitOfWork } from '@/application/ports/unit-of-work'
+import type {
+  AuditRecord,
+  CommandReceipt,
+  EventOutcome,
+  InventoryScope,
+  ReceivedEvent,
+} from '@/application/ports/unit-of-work'
+import { AuditTrail, InventoryUnitOfWork } from '@/application/ports/unit-of-work'
+import { type Either, left, right } from '@/core/either'
+import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DomainEvent } from '@/core/events/domain-event'
+import type { StockAdjustment } from '@/domain/entities/stock-adjustment'
 import type { StockBalance } from '@/domain/entities/stock-balance'
+import type { StockCount } from '@/domain/entities/stock-count'
 import type { StockReservation } from '@/domain/entities/stock-reservation'
+import type { StockTransfer } from '@/domain/entities/stock-transfer'
 import type { Warehouse } from '@/domain/entities/warehouse'
 import {
+  AdjustmentPoliciesRepository,
+  type AdjustmentPolicy,
   InventoryEventsRepository,
+  StockAdjustmentsRepository,
   StockBalancesRepository,
+  StockCountsRepository,
   StockReservationsRepository,
+  StockTransfersRepository,
   WarehousesRepository,
 } from '@/domain/repositories/inventory-repositories'
 
@@ -35,8 +51,129 @@ class InMemoryBalances extends StockBalancesRepository {
       }) ?? null,
     )
   }
+  inWarehouse(
+    warehouseId: string,
+    itemIds: readonly string[] | null,
+  ): Promise<readonly StockBalance[]> {
+    return Promise.resolve(
+      this.records.filter(
+        (balance) =>
+          balance.belongsTo(this.tenantId) &&
+          balance.warehouseId() === warehouseId &&
+          (itemIds === null || itemIds.includes(balance.itemId())),
+      ),
+    )
+  }
   save(balance: StockBalance): Promise<void> {
     if (!balance.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    return Promise.resolve()
+  }
+}
+
+class InMemoryTransfers extends StockTransfersRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: StockTransfer[],
+  ) {
+    super()
+  }
+  findById(id: string): Promise<StockTransfer | null> {
+    return Promise.resolve(
+      this.records.find(
+        (transfer) => transfer.belongsTo(this.tenantId) && transfer.id.toString() === id,
+      ) ?? null,
+    )
+  }
+  create(transfer: StockTransfer): Promise<void> {
+    if (!transfer.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    this.records.push(transfer)
+    return Promise.resolve()
+  }
+}
+
+class InMemoryAdjustments extends StockAdjustmentsRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: StockAdjustment[],
+  ) {
+    super()
+  }
+  findById(id: string): Promise<StockAdjustment | null> {
+    return Promise.resolve(
+      this.records.find(
+        (adjustment) => adjustment.belongsTo(this.tenantId) && adjustment.id.toString() === id,
+      ) ?? null,
+    )
+  }
+  create(adjustment: StockAdjustment): Promise<void> {
+    if (!adjustment.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    this.records.push(adjustment)
+    return Promise.resolve()
+  }
+  save(adjustment: StockAdjustment): Promise<void> {
+    if (!adjustment.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    return Promise.resolve()
+  }
+}
+
+class InMemoryCounts extends StockCountsRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: StockCount[],
+  ) {
+    super()
+  }
+  findById(id: string): Promise<StockCount | null> {
+    return Promise.resolve(
+      this.records.find((count) => count.belongsTo(this.tenantId) && count.id.toString() === id) ??
+        null,
+    )
+  }
+  create(count: StockCount): Promise<void> {
+    if (!count.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    this.records.push(count)
+    return Promise.resolve()
+  }
+  save(count: StockCount): Promise<void> {
+    if (!count.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    return Promise.resolve()
+  }
+}
+
+class InMemoryPolicies extends AdjustmentPoliciesRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: AdjustmentPolicy[],
+  ) {
+    super()
+  }
+  find(currency: string): Promise<AdjustmentPolicy | null> {
+    return Promise.resolve(
+      this.records.find(
+        (policy) => policy.tenantId === this.tenantId && policy.currency === currency,
+      ) ?? null,
+    )
+  }
+  list(): Promise<readonly AdjustmentPolicy[]> {
+    return Promise.resolve(this.records.filter((policy) => policy.tenantId === this.tenantId))
+  }
+  save(policy: AdjustmentPolicy): Promise<void> {
+    if (policy.tenantId !== this.tenantId) throw new Error('tenant mismatch')
+    const index = this.records.findIndex(
+      (existing) => existing.tenantId === policy.tenantId && existing.currency === policy.currency,
+    )
+    if (index === -1) this.records.push(policy)
+    else this.records[index] = policy
+    return Promise.resolve()
+  }
+}
+
+class InMemoryAudit extends AuditTrail {
+  constructor(private readonly records: AuditRecord[]) {
+    super()
+  }
+  append(record: AuditRecord): Promise<void> {
+    this.records.push(record)
     return Promise.resolve()
   }
 }
@@ -118,6 +255,12 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
   readonly balances: StockBalance[] = []
   readonly warehouses: Warehouse[] = []
   readonly reservations: StockReservation[] = []
+  readonly transfers: StockTransfer[] = []
+  readonly adjustments: StockAdjustment[] = []
+  readonly counts: StockCount[] = []
+  readonly policies: AdjustmentPolicy[] = []
+  readonly auditRecords: AuditRecord[] = []
+  readonly receipts = new Map<string, { receipt: CommandReceipt; response: unknown }>()
   readonly events: DomainEvent[] = []
   readonly provisionedTenants = new Set<string>()
   readonly consumedEvents = new Set<string>()
@@ -133,8 +276,36 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
       warehouses: new InMemoryWarehouses(tenantId, this.warehouses),
       balances: new InMemoryBalances(tenantId, this.balances),
       reservations: new InMemoryReservations(tenantId, this.reservations),
+      transfers: new InMemoryTransfers(tenantId, this.transfers),
+      adjustments: new InMemoryAdjustments(tenantId, this.adjustments),
+      counts: new InMemoryCounts(tenantId, this.counts),
+      policies: new InMemoryPolicies(tenantId, this.policies),
       events: new InMemoryEvents(tenantId, this.events),
+      audit: new InMemoryAudit(this.auditRecords),
     })
+  }
+
+  async once<E, T>(
+    tenantId: string,
+    receipt: CommandReceipt,
+    work: (scope: InventoryScope) => Promise<Either<E, T>>,
+  ): Promise<Either<E | ConflictError, T>> {
+    const key = `${tenantId}:${receipt.idempotencyKey}`
+    const previous = this.receipts.get(key)
+    if (previous) {
+      if (
+        previous.receipt.command !== receipt.command ||
+        previous.receipt.fingerprint !== receipt.fingerprint
+      )
+        return left(
+          new ConflictError('this Idempotency-Key was already used for a different request'),
+        )
+      return right(previous.response as T)
+    }
+    const outcome = await this.inTenant(tenantId, work)
+    // A refused command leaves no receipt, exactly as its transaction leaves no rows.
+    if (outcome.isRight()) this.receipts.set(key, { receipt, response: outcome.value })
+    return outcome
   }
 
   async processEvent<T>(

@@ -438,3 +438,40 @@ which is kept: a delivery nobody agreed to is a cost nobody agreed to.
 ### outstanding quantity
 How much of an order line has not arrived. Zero once it all has; what a closed order leaves
 outstanding is what it will now never receive.
+
+## Stock
+
+### stock movement
+One line in the append-only ledger a balance is derived from: what moved, how much, in
+which direction, what it was worth and when. A balance is never edited directly; it is what
+the movements add up to. A movement made by a person also says **why** and under which
+document, because a movement with an order behind it explains itself and one without does
+not.
+
+### transfer
+Goods moving between two of the company's own warehouses. It changes where stock is, not
+how much of it the company owns, which is why it needs no approval and why the goods arrive
+at exactly the cost they left at rather than being valued again. Only available stock moves:
+what is reserved is spoken for by an order that expects to find it where it is.
+
+### adjustment
+A deliberate change to how much stock there is, with nobody having bought or sold anything —
+breakage, loss, theft, expiry, goods found, or a figure that was simply wrong. It changes
+how many there are, never what one is worth. Past the workspace's allowance it waits for a
+second person, and never for the person who asked.
+
+### adjustment allowance
+The value, per currency, at or above which an adjustment — or the differences a count
+produces — needs a second person. A workspace that has set none has every adjustment
+approved: silence about a control is not permission to skip it, which is also why the
+allowance cannot be removed once set, only changed.
+
+### count
+A sheet of what the system expected at the moment it was opened and what somebody actually
+found. Closing it posts the **difference** between the two against the balance as it then
+is, not the figure counted: the warehouse keeps working while the aisles are walked, and
+writing the counted figure over the balance would undo whatever happened meanwhile.
+
+### variance
+What a counted line disagreed with the sheet by, as the movement it becomes. A line nobody
+counted has none, because not counting something is not the same as counting zero of it.
