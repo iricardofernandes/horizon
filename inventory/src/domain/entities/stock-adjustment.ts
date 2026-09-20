@@ -4,6 +4,7 @@ import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { Money, Note, Quantity } from '../value-objects/inventory-values'
 import { type AdjustmentReason, reasonAdmits } from '../value-objects/movement-origin'
+import type { LotCode } from '../value-objects/tracking'
 
 export const ADJUSTMENT_STATUSES = ['pending', 'posted', 'rejected'] as const
 export type AdjustmentStatus = (typeof ADJUSTMENT_STATUSES)[number]
@@ -18,6 +19,14 @@ interface StockAdjustmentProps {
   warehouseId: string
   itemId: string
   direction: AdjustmentDirection
+  /**
+   * Which boxes, for an item the workspace identifies.
+   *
+   * Carried on the adjustment rather than supplied when it is allowed, because the
+   * decision a second person is being asked to take is about a particular lot: "write off
+   * four" and "write off four of AB-1204" are not the same request.
+   */
+  lot: LotCode | null
   quantity: Quantity
   reason: AdjustmentReason
   note: Note | null
@@ -60,6 +69,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
       warehouseId: string
       itemId: string
       direction: AdjustmentDirection
+      lot: LotCode | null
       quantity: Quantity
       reason: AdjustmentReason
       note: Note | null
@@ -86,6 +96,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
           warehouseId: props.warehouseId,
           itemId: props.itemId,
           direction: props.direction,
+          lot: props.lot,
           quantity: props.quantity,
           reason: props.reason,
           note: props.note,
@@ -160,6 +171,10 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
     return this.props.direction
   }
 
+  lot(): LotCode | null {
+    return this.props.lot
+  }
+
   quantity(): Quantity {
     return this.props.quantity
   }
@@ -190,6 +205,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
     warehouseId: string
     itemId: string
     direction: AdjustmentDirection
+    lot: string | null
     quantity: string
     reason: AdjustmentReason
     note: string | null
@@ -213,6 +229,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
       warehouseId: this.props.warehouseId,
       itemId: this.props.itemId,
       direction: this.props.direction,
+      lot: this.props.lot?.value ?? null,
       quantity: this.props.quantity.toString(),
       reason: this.props.reason,
       note: this.props.note?.value ?? null,

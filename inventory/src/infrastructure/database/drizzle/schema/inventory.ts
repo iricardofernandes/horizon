@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   bigint,
+  date,
   foreignKey,
   index,
   integer,
@@ -10,6 +11,7 @@ import {
   smallint,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
@@ -267,6 +269,8 @@ export const stockAdjustments = pgTable(
     warehouseId: uuid('warehouse_id').notNull(),
     itemId: uuid('item_id').notNull(),
     direction: text('direction').notNull(),
+    /** Which boxes, for an item the workspace identifies; named when it was asked for. */
+    lotCode: text('lot_code'),
     quantity: bigint('quantity', { mode: 'bigint' }).notNull(),
     reason: text('reason').notNull(),
     note: text('note'),
@@ -333,16 +337,26 @@ export const stockCounts = pgTable(
 export const stockCountLines = pgTable(
   'stock_count_lines',
   {
+    id: uuid('id').primaryKey(),
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id),
     countId: uuid('count_id').notNull(),
     itemId: uuid('item_id').notNull(),
+    /**
+     * Which boxes this line is about, for an item the workspace identifies.
+     *
+     * Null for everything else. A lot-tracked item is counted lot by lot, because the
+     * useful answer is not that the shelf is two short but that lot AB-1204 is.
+     */
+    lotCode: text('lot_code'),
     expected: bigint('expected', { mode: 'bigint' }).notNull(),
     counted: bigint('counted', { mode: 'bigint' }),
   },
   (table) => [
-    primaryKey({ columns: [table.tenantId, table.countId, table.itemId] }),
+    unique('stock_count_lines_sheet_key')
+      .on(table.tenantId, table.countId, table.itemId, table.lotCode)
+      .nullsNotDistinct(),
     foreignKey({
       name: 'stock_count_lines_count_fk',
       columns: [table.tenantId, table.countId],
@@ -392,6 +406,90 @@ export const stockLevels = pgTable(
       name: 'stock_levels_warehouse_fk',
       columns: [table.tenantId, table.warehouseId],
       foreignColumns: [warehouses.tenantId, warehouses.id],
+    }),
+  ],
+)
+
+/**
+ * Whether the warehouse has to know which of a thing it is holding, item by item.
+ *
+ * Inventory's own decision rather than the catalogue's: it governs how goods must be
+ * received and picked, which is a fact about the shelf and the people standing at it. No
+ * row means the item is counted, not identified.
+ */
+export const itemTracking = pgTable(
+  'item_tracking',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    itemId: uuid('item_id').notNull(),
+    tracking: text('tracking').notNull(),
+    expiry: text('expiry').notNull(),
+    updatedBy: text('updated_by').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.itemId] })],
+)
+
+/**
+ * Which boxes a shelf is holding.
+ *
+ * One row per code per balance, and what they add up to is what the balance has on hand —
+ * asserted by the aggregate and by a trigger, because a warehouse whose lots disagree
+ * with its balance can answer neither question honestly. A lot that runs out stops being
+ * a row; where it went stays in the movements.
+ */
+export const stockLots = pgTable(
+  'stock_lots',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    balanceId: uuid('balance_id').notNull(),
+    lotCode: text('lot_code').notNull(),
+    onHand: bigint('on_hand', { mode: 'bigint' }).notNull(),
+    expiresOn: date('expires_on'),
+    firstReceivedAt: timestamp('first_received_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.balanceId, table.lotCode] }),
+    index('stock_lots_tenant_expiry_idx').on(table.tenantId, table.expiresOn),
+    foreignKey({
+      name: 'stock_lots_balance_fk',
+      columns: [table.tenantId, table.balanceId],
+      foreignColumns: [stockBalances.tenantId, stockBalances.id],
+    }),
+  ],
+)
+
+/**
+ * Which boxes a movement touched: the thread a recall is pulled by.
+ *
+ * Append-only, like the movement it belongs to. Reading it forwards says where a lot went;
+ * reading it backwards says where what went out came from.
+ */
+export const stockMovementLots = pgTable(
+  'stock_movement_lots',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    movementId: uuid('movement_id').notNull(),
+    lotCode: text('lot_code').notNull(),
+    quantity: bigint('quantity', { mode: 'bigint' }).notNull(),
+    expiresOn: date('expires_on'),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.movementId, table.lotCode] }),
+    index('stock_movement_lots_trace_idx').on(table.tenantId, table.lotCode),
+    foreignKey({
+      name: 'stock_movement_lots_movement_fk',
+      columns: [table.movementId],
+      foreignColumns: [stockMovements.id],
     }),
   ],
 )

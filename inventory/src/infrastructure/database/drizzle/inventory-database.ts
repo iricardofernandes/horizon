@@ -24,8 +24,10 @@ import {
   abcCurve,
   costOfGoodsSold,
   kardex,
+  listLots,
   stockAlerts,
   stockPosition,
+  traceLot,
   valuation,
 } from './inventory-reports'
 import { makeScope, type Transaction } from './inventory-store'
@@ -189,6 +191,18 @@ export class InventoryDatabase extends InventoryUnitOfWork {
 
   abcCurve(tenantId: string, request: Parameters<typeof abcCurve>[1]) {
     return this.read(tenantId, (tx) => abcCurve(tx, request))
+  }
+
+  listLots(tenantId: string, filter: Parameters<typeof listLots>[1]) {
+    return this.read(tenantId, (tx) => listLots(tx, filter))
+  }
+
+  traceLot(tenantId: string, request: Parameters<typeof traceLot>[1]) {
+    return this.read(tenantId, (tx) => traceLot(tx, request))
+  }
+
+  listTracking(tenantId: string) {
+    return this.inTenant(tenantId, (scope) => scope.tracking.list())
   }
 
   async ping(): Promise<void> {

@@ -95,8 +95,8 @@ export class ReserveStockUseCase {
     const locked = await Promise.all(
       lines.map((line) => scope.balances.lock(line.itemId, line.warehouseId)),
     )
-    const shortfalls = this.shortfallsFor(lines, locked)
     const now = this.clock.now()
+    const shortfalls = this.shortfallsFor(lines, locked, now)
     if (shortfalls.length > 0) return this.reject(scope, request, shortfalls, now)
 
     await this.hold(scope, lines, locked, now)
@@ -114,12 +114,19 @@ export class ReserveStockUseCase {
     return right({ reserved: true, reservationId: reservation.id.toString(), expiresAt })
   }
 
+  /**
+   * What cannot be promised, on the day the promise is being asked for.
+   *
+   * Stock whose date has gone by is on the shelf but not available, so an order for it is
+   * refused with a shortfall rather than accepted against goods nobody may be sent.
+   */
   private shortfallsFor(
     lines: readonly ReservationEventLine[],
     balances: readonly (StockBalance | null)[],
+    now: Date,
   ): readonly ReservationShortfall[] {
     return lines.flatMap((line, index) => {
-      const available = balances[index]?.available() ?? Quantity.fromMicros(0n)
+      const available = balances[index]?.available(now) ?? Quantity.fromMicros(0n)
       return available.isLessThan(line.quantity) ? [{ ...line, availableQuantity: available }] : []
     })
   }

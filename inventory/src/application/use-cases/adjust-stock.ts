@@ -2,13 +2,14 @@ import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import { type AdjustmentDirection, StockAdjustment } from '@/domain/entities/stock-adjustment'
-import { StockBalance } from '@/domain/entities/stock-balance'
+import type { StockBalance } from '@/domain/entities/stock-balance'
 import { type Money, Note, type Quantity } from '@/domain/value-objects/inventory-values'
 import {
   type AdjustmentReason,
   isAdjustmentReason,
   type MovementOrigin,
 } from '@/domain/value-objects/movement-origin'
+import { LotCode } from '@/domain/value-objects/tracking'
 import type { Clock } from '../ports/clock'
 import type { InventoryScope, InventoryUnitOfWork } from '../ports/unit-of-work'
 import {
@@ -20,12 +21,15 @@ import {
   once,
 } from './commands'
 import { moneyOf, noteOf, quantityOf, worthOf } from './inputs'
+import { openBalance } from './manage-inventory'
 
 export interface AdjustStockRequest {
   readonly context: IdempotentContext
   readonly warehouseId: string
   readonly itemId: string
   readonly direction: AdjustmentDirection
+  /** Which boxes, for an item the workspace identifies. */
+  readonly lot?: string | null | undefined
   readonly quantity: string
   readonly reason: string
   readonly note?: string | null | undefined
@@ -71,6 +75,12 @@ export class AdjustStockUseCase {
       if (parsed.isLeft()) return Promise.resolve(left(parsed.value))
       stated = parsed.value
     }
+    let lot: LotCode | null = null
+    if (request.lot) {
+      const code = LotCode.create(request.lot)
+      if (code.isLeft()) return Promise.resolve(left(code.value))
+      lot = code.value
+    }
 
     return once(this.unitOfWork, context, 'adjust-stock', request, async (scope) => {
       const warehouse = await scope.warehouses.findById(request.warehouseId)
@@ -87,6 +97,7 @@ export class AdjustStockUseCase {
         warehouseId: request.warehouseId,
         itemId: request.itemId,
         direction: request.direction,
+        lot,
         quantity: quantity.value,
         reason,
         note: note.value,
@@ -114,6 +125,7 @@ export class AdjustStockUseCase {
           warehouseId: made.warehouseId(),
           itemId: made.itemId(),
           direction: made.direction(),
+          lot: made.lot()?.value ?? null,
           quantity: made.quantity().toString(),
           reason: made.reason(),
           value: described(made.value()),
@@ -238,10 +250,7 @@ async function hold(
 ): Promise<Held> {
   const balance = await scope.balances.lock(itemId, warehouseId)
   if (balance) return { balance, existing: true }
-  return {
-    balance: StockBalance.open({ tenantId: scope.tenantId, itemId, warehouseId, now }),
-    existing: false,
-  }
+  return { balance: await openBalance(scope, { itemId, warehouseId }, now), existing: false }
 }
 
 /** Moves the goods and writes both the balance and the movement that explains it. */
@@ -255,10 +264,24 @@ async function write(
     reason: adjustment.reason(),
     document: { type: 'adjustment', id: adjustment.id.toString() },
   }
+  // The lot was named when the adjustment was asked for, not when it was allowed: the
+  // decision a second person took was about these boxes.
+  const lot = adjustment.lot()
   const applied =
     adjustment.direction() === 'in'
-      ? held.balance.adjustIn(adjustment.quantity(), adjustment.statedUnitCost(), origin, now)
-      : held.balance.adjustOut(adjustment.quantity(), origin, now)
+      ? held.balance.adjustIn(
+          adjustment.quantity(),
+          adjustment.statedUnitCost(),
+          origin,
+          now,
+          lot ? [{ code: lot, expiresOn: null, quantity: adjustment.quantity() }] : null,
+        )
+      : held.balance.adjustOut(
+          adjustment.quantity(),
+          origin,
+          now,
+          lot ? [{ code: lot, quantity: adjustment.quantity() }] : null,
+        )
   if (applied.isLeft()) return left(applied.value)
   if (held.existing) await scope.balances.save(held.balance)
   else await scope.balances.create(held.balance)

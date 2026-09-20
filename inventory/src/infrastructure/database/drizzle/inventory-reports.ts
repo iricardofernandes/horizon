@@ -33,6 +33,22 @@ const money = (amount: string | null, currency: string | null) =>
 const inWarehouse = (warehouseId: string | null, column = 'm.warehouse_id') =>
   warehouseId ? sql`and ${sql.raw(column)} = ${warehouseId}` : sql``
 
+/**
+ * What each shelf is holding in lots, and how much of it is still fit to send anybody.
+ *
+ * `good` is null for a balance with no lots at all, which is how an untracked item looks,
+ * and the readers below fall back to on hand for those. A tracked balance whose every lot
+ * has gone off yields zero rather than null, which is the difference that matters: it has
+ * stock, and none of it can be promised.
+ */
+const LOT_TOTALS = sql.raw(`left join (
+      select balance_id,
+        sum(on_hand) as tracked,
+        coalesce(sum(on_hand) filter (where expires_on is null or expires_on >= current_date), 0)
+          as good
+      from stock_lots group by balance_id
+    ) lot on lot.balance_id = b.id`)
+
 // ------------------------------------------------------------------------- the Kardex
 
 export interface KardexLine {
@@ -50,6 +66,8 @@ export interface KardexLine {
   readonly balanceValue: string | null
   readonly reason: string | null
   readonly document: { type: string; id: string } | null
+  /** Which boxes this line moved, for an item the workspace identifies. */
+  readonly lots: readonly { code: string; quantity: string; expiresOn: string | null }[]
 }
 
 export interface KardexStanding {
@@ -147,6 +165,11 @@ export async function kardex(
     limit ${request.limit} offset ${request.offset}
   `)
 
+  const touched = await lotsTouchedBy(
+    tx,
+    [...rows].map((row) => row.id),
+  )
+
   return {
     itemId: request.itemId,
     warehouseId: request.warehouseId,
@@ -169,9 +192,43 @@ export async function kardex(
         row.document_type && row.document_id
           ? { type: row.document_type, id: row.document_id }
           : null,
+      lots: touched.get(row.id) ?? [],
     })),
     closing: await standingAt(request.to),
   }
+}
+
+/** The boxes each of a set of movements touched, for hanging off the lines above. */
+async function lotsTouchedBy(
+  tx: Transaction,
+  movementIds: readonly string[],
+): Promise<ReadonlyMap<string, { code: string; quantity: string; expiresOn: string | null }[]>> {
+  const touched = new Map<string, { code: string; quantity: string; expiresOn: string | null }[]>()
+  if (movementIds.length === 0) return touched
+  const rows = await tx.execute<{
+    movement_id: string
+    lot_code: string
+    quantity: string
+    expires_on: string | null
+  }>(sql`
+    select ml.movement_id, ml.lot_code, ml.quantity::text, ml.expires_on::text
+    from stock_movement_lots ml
+    where ml.movement_id in (${sql.join(
+      movementIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})
+    order by ml.lot_code
+  `)
+  for (const row of rows) {
+    const lots = touched.get(row.movement_id) ?? []
+    lots.push({
+      code: row.lot_code,
+      quantity: quantity(row.quantity),
+      expiresOn: row.expires_on,
+    })
+    touched.set(row.movement_id, lots)
+  }
+  return touched
 }
 
 // ---------------------------------------------------------------------- the valuation
@@ -258,6 +315,8 @@ export interface PositionRow {
   readonly warehouseName: string
   readonly onHand: string
   readonly reserved: string
+  /** On hand less whatever has gone off: still owned, no longer sellable. */
+  readonly expired: string
   readonly available: string
   readonly unitCost: { amount: string; currency: string } | null
   readonly value: string | null
@@ -287,9 +346,12 @@ export async function stockPosition(
     select b.item_id, b.warehouse_id, w.name as warehouse_name,
       b.on_hand::text, b.reserved::text, b.average_unit_cost::text, b.currency,
       round(b.on_hand::numeric * b.average_unit_cost / ${MICROS})::text as value,
+      coalesce(lot.good, b.on_hand)::text as sellable,
+      coalesce(lot.tracked - lot.good, 0)::text as expired,
       l.minimum::text, l.maximum::text
     from stock_balances b
     join warehouses w on w.id = b.warehouse_id
+    ${LOT_TOTALS}
     left join stock_levels l on l.warehouse_id = b.warehouse_id and l.item_id = b.item_id
     where true
       ${inWarehouse(filter.warehouseId, 'b.warehouse_id')}
@@ -305,6 +367,8 @@ type PositionSourceRow = {
   warehouse_id: string
   warehouse_name: string
   on_hand: string
+  sellable: string
+  expired: string
   reserved: string
   average_unit_cost: string | null
   currency: string | null
@@ -315,7 +379,11 @@ type PositionSourceRow = {
 
 function presentPosition(row: PositionSourceRow): PositionRow {
   const onHand = BigInt(row.on_hand)
-  const available = onHand - BigInt(row.reserved)
+  const sellable = BigInt(row.sellable)
+  const reserved = BigInt(row.reserved)
+  // Goods that have gone off are still on the shelf and still the company's, so they are
+  // still on hand. They just cannot be promised to anybody.
+  const available = sellable > reserved ? sellable - reserved : 0n
   const minimum = row.minimum === null ? null : BigInt(row.minimum)
   const maximum = row.maximum === null ? null : BigInt(row.maximum)
   return {
@@ -323,7 +391,8 @@ function presentPosition(row: PositionSourceRow): PositionRow {
     warehouseId: row.warehouse_id,
     warehouseName: row.warehouse_name,
     onHand: quantity(onHand),
-    reserved: quantity(row.reserved),
+    reserved: quantity(reserved),
+    expired: quantity(row.expired),
     available: quantity(available),
     unitCost: money(row.average_unit_cost, row.currency),
     value: row.average_unit_cost === null ? null : row.value,
@@ -376,6 +445,11 @@ export async function stockAlerts(
     with standing as (
       select l.item_id, l.warehouse_id, w.name as warehouse_name,
         coalesce(b.on_hand, 0) as on_hand, coalesce(b.reserved, 0) as reserved,
+        -- Stock that has gone off cannot cover a shortage, so it is not counted towards
+        -- the minimum; it is very much still on the shelf, so it counts towards the
+        -- maximum. An item whose whole holding has expired is short of all of it.
+        coalesce(lot.good, b.on_hand, 0) as sellable,
+        coalesce(lot.tracked - lot.good, 0) as expired,
         b.average_unit_cost, b.currency,
         round(b.on_hand::numeric * b.average_unit_cost / ${MICROS}) as value,
         l.minimum, l.maximum
@@ -383,15 +457,17 @@ export async function stockAlerts(
       join warehouses w on w.id = l.warehouse_id
       left join stock_balances b
         on b.warehouse_id = l.warehouse_id and b.item_id = l.item_id
+      ${LOT_TOTALS}
       where true ${inWarehouse(filter.warehouseId, 'l.warehouse_id')}
     )
     select s.item_id, s.warehouse_id, s.warehouse_name,
-      s.on_hand::text, s.reserved::text, s.average_unit_cost::text, s.currency, s.value::text,
+      s.on_hand::text, s.sellable::text, s.expired::text, s.reserved::text,
+      s.average_unit_cost::text, s.currency, s.value::text,
       s.minimum::text, s.maximum::text,
-      greatest(s.minimum - (s.on_hand - s.reserved), s.on_hand - coalesce(s.maximum, s.on_hand))::text
-        as shortfall
+      greatest(s.minimum - greatest(s.sellable - s.reserved, 0),
+               s.on_hand - coalesce(s.maximum, s.on_hand))::text as shortfall
     from standing s
-    where (s.on_hand - s.reserved) < s.minimum
+    where greatest(s.sellable - s.reserved, 0) < s.minimum
        or (s.maximum is not null and s.on_hand > s.maximum)
     order by shortfall desc, s.warehouse_name, s.item_id
     limit ${filter.limit} offset ${filter.offset}
@@ -400,7 +476,9 @@ export async function stockAlerts(
     const position = presentPosition(row)
     if (position.alert === null) return []
     const onHand = BigInt(row.on_hand)
-    const available = onHand - BigInt(row.reserved)
+    const sellable = BigInt(row.sellable)
+    const reserved = BigInt(row.reserved)
+    const available = sellable > reserved ? sellable - reserved : 0n
     const target = row.maximum === null ? BigInt(row.minimum ?? 0) : BigInt(row.maximum)
     return [
       {
@@ -588,5 +666,160 @@ export async function abcCurve(
     thresholds: request.thresholds,
     rows: present,
     totals: totalled(present),
+  }
+}
+
+// ---------------------------------------------------------------- lots and their thread
+
+export interface LotRow {
+  readonly itemId: string
+  readonly warehouseId: string
+  readonly warehouseName: string
+  readonly code: string
+  readonly onHand: string
+  readonly expiresOn: string | null
+  readonly firstReceivedAt: string
+  /** Whether the day it names has already gone by. */
+  readonly expired: boolean
+}
+
+/**
+ * Which boxes the company is holding, soonest to go off first.
+ *
+ * Ordered the way the shelf picks: earliest date first, nothing-dated last. `expiringBy`
+ * is what a warehouse asks on a Monday morning — show me what I have to move this week —
+ * and it deliberately includes what has already gone, because those are the ones that
+ * need a decision most.
+ */
+export async function listLots(
+  tx: Transaction,
+  filter: {
+    warehouseId: string | null
+    itemId: string | null
+    expiringBy: string | null
+    limit: number
+    offset: number
+  },
+): Promise<readonly LotRow[]> {
+  const rows = await tx.execute<{
+    item_id: string
+    warehouse_id: string
+    warehouse_name: string
+    lot_code: string
+    on_hand: string
+    expires_on: string | null
+    first_received_at: string
+    expired: boolean
+  }>(sql`
+    select b.item_id, b.warehouse_id, w.name as warehouse_name,
+      l.lot_code, l.on_hand::text, l.expires_on::text,
+      to_char(l.first_received_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+        as first_received_at,
+      (l.expires_on is not null and l.expires_on < current_date) as expired
+    from stock_lots l
+    join stock_balances b on b.id = l.balance_id
+    join warehouses w on w.id = b.warehouse_id
+    where true
+      ${filter.warehouseId ? sql`and b.warehouse_id = ${filter.warehouseId}` : sql``}
+      ${filter.itemId ? sql`and b.item_id = ${filter.itemId}` : sql``}
+      ${filter.expiringBy ? sql`and l.expires_on is not null and l.expires_on <= ${filter.expiringBy}::date` : sql``}
+    order by l.expires_on asc nulls last, l.first_received_at, l.lot_code
+    limit ${filter.limit} offset ${filter.offset}
+  `)
+  return [...rows].map((row) => ({
+    itemId: row.item_id,
+    warehouseId: row.warehouse_id,
+    warehouseName: row.warehouse_name,
+    code: row.lot_code,
+    onHand: quantity(row.on_hand),
+    expiresOn: row.expires_on,
+    firstReceivedAt: row.first_received_at,
+    expired: row.expired,
+  }))
+}
+
+export interface TraceStep {
+  readonly movementId: string
+  readonly occurredAt: string
+  readonly warehouseId: string
+  readonly warehouseName: string
+  readonly kind: string
+  readonly direction: 'in' | 'out'
+  readonly quantity: string
+  readonly reason: string | null
+  readonly document: { type: string; id: string } | null
+}
+
+export interface LotTrace {
+  readonly itemId: string
+  readonly code: string
+  /** What is still on a shelf under this code, across every warehouse. */
+  readonly onHand: string
+  readonly expiresOn: string | null
+  readonly steps: readonly TraceStep[]
+}
+
+/**
+ * Where a lot came from, and where it went.
+ *
+ * The question a recall is made of, and the reason the tracking exists at all. Every
+ * movement that touched the code is here in the order it happened, each naming the
+ * document behind it — the receipt that brought the goods in, the order that sent them
+ * out — so following the thread is reading a list rather than joining four tables by
+ * hand.
+ *
+ * Across warehouses on purpose: a batch that was split between two buildings is one
+ * batch, and a recall that only looked at one of them would be worse than none.
+ */
+export async function traceLot(
+  tx: Transaction,
+  request: { itemId: string; code: string; limit: number; offset: number },
+): Promise<LotTrace> {
+  const [held] = await tx.execute<{ on_hand: string; expires_on: string | null }>(sql`
+    select coalesce(sum(l.on_hand), 0)::text as on_hand, min(l.expires_on)::text as expires_on
+    from stock_lots l
+    join stock_balances b on b.id = l.balance_id
+    where l.lot_code = ${request.code} and b.item_id = ${request.itemId}
+  `)
+  const rows = await tx.execute<{
+    id: string
+    occurred_at: string
+    warehouse_id: string
+    warehouse_name: string
+    kind: string
+    quantity: string
+    reason: string | null
+    document_type: string | null
+    document_id: string | null
+  }>(sql`
+    select m.id, m.warehouse_id, w.name as warehouse_name, m.kind,
+      to_char(m.occurred_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as occurred_at,
+      ml.quantity::text, m.reason, m.document_type, m.document_id
+    from stock_movement_lots ml
+    join stock_movements m on m.id = ml.movement_id
+    join warehouses w on w.id = m.warehouse_id
+    where ml.lot_code = ${request.code} and m.item_id = ${request.itemId}
+    order by m.occurred_at, m.balance_version
+    limit ${request.limit} offset ${request.offset}
+  `)
+  return {
+    itemId: request.itemId,
+    code: request.code,
+    onHand: quantity(held?.on_hand ?? 0n),
+    expiresOn: held?.expires_on ?? null,
+    steps: [...rows].map((row) => ({
+      movementId: row.id,
+      occurredAt: row.occurred_at,
+      warehouseId: row.warehouse_id,
+      warehouseName: row.warehouse_name,
+      kind: row.kind,
+      direction: INBOUND.has(row.kind) ? ('in' as const) : ('out' as const),
+      quantity: quantity(row.quantity),
+      reason: row.reason,
+      document:
+        row.document_type && row.document_id
+          ? { type: row.document_type, id: row.document_id }
+          : null,
+    })),
   }
 }

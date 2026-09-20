@@ -1,8 +1,13 @@
 import { left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
-import type { AdjustmentPolicy, StockLevel } from '@/domain/repositories/inventory-repositories'
+import type {
+  AdjustmentPolicy,
+  StockLevel,
+  TrackedItem,
+} from '@/domain/repositories/inventory-repositories'
 import { Money } from '@/domain/value-objects/inventory-values'
+import { trackingOf } from '@/domain/value-objects/tracking'
 import type { Clock } from '../ports/clock'
 import type { InventoryUnitOfWork } from '../ports/unit-of-work'
 import { audit, type CommandContext, type Outcome } from './commands'
@@ -116,6 +121,69 @@ export class DefineStockLevelUseCase {
         },
       })
       return right(level)
+    })
+  }
+}
+
+/**
+ * Whether the warehouse has to know which of a thing it is holding.
+ *
+ * The decision may only be taken while the item is on no shelf anywhere in the workspace.
+ * Starting to track goods that are already out there would mean inventing codes for boxes
+ * nobody can go and read, and stopping would throw away an answer somebody is relying on
+ * — so rather than letting either happen quietly, the rule is that the question is
+ * settled before there is anything to be wrong about.
+ *
+ * Which is also why there is no way to delete the decision: an item that was identified
+ * and is now not would leave a shelf full of lots nothing accounts for.
+ */
+export class DefineItemTrackingUseCase {
+  constructor(
+    private readonly unitOfWork: InventoryUnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  execute(request: {
+    context: CommandContext
+    itemId: string
+    tracking: string
+    expiry?: string | null | undefined
+  }): Outcome<TrackedItem> {
+    const { context } = request
+    const tracking = trackingOf(request.tracking, request.expiry ?? 'none')
+    if (tracking.isLeft()) return Promise.resolve(left(tracking.value))
+
+    return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
+      const current = await scope.tracking.find(request.itemId)
+      const unchanged =
+        current?.tracking.kind === tracking.value.kind &&
+        current.tracking.expiry === tracking.value.expiry
+      // Restating the same decision is not a change, so it never has to wait for the
+      // shelves to empty; a workspace may always re-record what is already true.
+      if (!unchanged && (await scope.tracking.holdsStock(request.itemId)))
+        return left(
+          new ConflictError(
+            'how this item is tracked can only be decided while none of it is in stock',
+          ),
+        )
+
+      const now = this.clock.now()
+      const item: TrackedItem = {
+        tenantId: context.tenantId,
+        itemId: request.itemId,
+        tracking: tracking.value,
+        updatedBy: context.actor,
+        updatedAt: now,
+      }
+      await scope.tracking.save(item)
+      await audit(scope, context, {
+        action: 'item.tracking-defined',
+        subjectType: 'item',
+        subjectId: item.itemId,
+        occurredAt: now,
+        details: { tracking: item.tracking.kind, expiry: item.tracking.expiry },
+      })
+      return right(item)
     })
   }
 }

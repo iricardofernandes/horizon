@@ -1,9 +1,11 @@
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
+import type { LotEntry } from '@/domain/entities/lot-book'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import type { ShippedLine, StockReservation } from '@/domain/entities/stock-reservation'
 import { Quantity } from '@/domain/value-objects/inventory-values'
+import type { MovementOrigin } from '@/domain/value-objects/movement-origin'
 import type { Clock } from '../ports/clock'
 import type { InventoryScope } from '../ports/unit-of-work'
 
@@ -17,6 +19,12 @@ export interface DeliveryRequest {
   readonly orderId: string
   readonly lines: readonly DeliveryLine[]
 }
+
+/** Goods left, or came back, because of an order; the order is what a recall follows. */
+const originOf = (orderId: string): MovementOrigin => ({
+  reason: 'sale',
+  document: { type: 'order', id: orderId },
+})
 
 type DeliveryFailure = ResourceNotFoundError | ConflictError
 
@@ -40,9 +48,11 @@ export class ShipReservationUseCase {
     const now = this.clock.now()
     const dispatched = reservation.dispatch(lines, now)
     if (dispatched.isLeft()) return left(dispatched.value)
-    const moved = await move(scope, reservation, lines, (balance, quantity) =>
-      balance.ship(quantity, now),
-    )
+    const origin = originOf(request.orderId)
+    const moved = await move(scope, reservation, lines, (balance, quantity) => {
+      const gone = balance.ship(quantity, now, origin)
+      return gone.isLeft() ? left(gone.value) : right(undefined)
+    })
     if (moved.isLeft()) return left(moved.value)
     await scope.reservations.save(reservation)
     return right(undefined)
@@ -69,13 +79,47 @@ export class ReturnToStockUseCase {
     const now = this.clock.now()
     const returned = reservation.takeBack(lines, now)
     if (returned.isLeft()) return left(returned.value)
-    const moved = await move(scope, reservation, lines, (balance, quantity) =>
-      balance.takeBack(quantity, now),
-    )
+    const origin = originOf(request.orderId)
+    // Goods coming home are the same goods. Which lots they went out in is written on the
+    // shipments this order already made, so the return reads them back rather than
+    // inventing a code for boxes that already have one.
+    const shipped = await scope.movements.lotsShippedFor(request.orderId)
+    const moved = await move(scope, reservation, lines, (balance, quantity) => {
+      const lots = allocate(shipped.get(balance.itemId()) ?? [], quantity)
+      if (lots.isLeft()) return left(lots.value)
+      return balance.takeBack(quantity, now, lots.value, origin)
+    })
     if (moved.isLeft()) return left(moved.value)
     await scope.reservations.save(reservation)
     return right(undefined)
   }
+}
+
+/**
+ * The lots a returned quantity goes back into, taken from what the order shipped.
+ *
+ * Greedy over what went out, most of it first, because a customer sending four back from
+ * a delivery of ten rarely says which four and the warehouse has to put them somewhere
+ * defensible. An untracked item allocates nothing, which is the whole of its answer.
+ */
+function allocate(
+  shipped: readonly LotEntry[],
+  quantity: Quantity,
+): Either<ConflictError, readonly LotEntry[] | null> {
+  if (shipped.length === 0) return right(null)
+  const lots: LotEntry[] = []
+  let outstanding = quantity
+  for (const lot of [...shipped].sort((a, b) =>
+    a.quantity.isLessThan(b.quantity) ? 1 : a.quantity.micros === b.quantity.micros ? 0 : -1,
+  )) {
+    if (outstanding.isZero()) break
+    const taken = outstanding.isLessThan(lot.quantity) ? outstanding : lot.quantity
+    lots.push({ code: lot.code, expiresOn: lot.expiresOn, quantity: taken })
+    outstanding = outstanding.minus(taken)
+  }
+  if (!outstanding.isZero())
+    return left(new ConflictError('more is coming back than this order ever shipped'))
+  return right(lots)
 }
 
 /** Apply one movement per delivered line, against the balance the line was held on. */

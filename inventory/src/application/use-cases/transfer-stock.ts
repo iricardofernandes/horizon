@@ -1,19 +1,26 @@
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
-import { StockBalance } from '@/domain/entities/stock-balance'
+import type { LotPick } from '@/domain/entities/lot-book'
+import type { StockBalance } from '@/domain/entities/stock-balance'
 import { StockTransfer, type TransferLine } from '@/domain/entities/stock-transfer'
 import type { MovementOrigin } from '@/domain/value-objects/movement-origin'
 import type { Clock } from '../ports/clock'
 import type { InventoryScope, InventoryUnitOfWork } from '../ports/unit-of-work'
 import { audit, type Failure, type IdempotentContext, type Outcome, once } from './commands'
-import { noteOf, quantityOf } from './inputs'
+import { lotPicksOf, noteOf, quantityOf } from './inputs'
+import { openBalance } from './manage-inventory'
 
 export interface TransferStockRequest {
   readonly context: IdempotentContext
   readonly sourceWarehouseId: string
   readonly destinationWarehouseId: string
-  readonly lines: readonly { itemId: string; quantity: string }[]
+  readonly lines: readonly {
+    itemId: string
+    quantity: string
+    /** Which boxes to send. Left out, the source sends whatever should go first. */
+    lots?: readonly { code: string; quantity: string }[] | null | undefined
+  }[]
   readonly note?: string | null | undefined
 }
 
@@ -36,9 +43,13 @@ export class TransferStockUseCase {
     const note = noteOf(request.note)
     if (note.isLeft()) return Promise.resolve(left(note.value))
     const lines: TransferLine[] = []
+    const picked = new Map<string, readonly LotPick[] | null>()
     for (const [index, line] of request.lines.entries()) {
       const quantity = quantityOf(line.quantity, `/lines/${index}/quantity`)
       if (quantity.isLeft()) return Promise.resolve(left(quantity.value))
+      const picks = lotPicksOf(line.lots, `/lines/${index}/lots`)
+      if (picks.isLeft()) return Promise.resolve(left(picks.value))
+      picked.set(line.itemId, picks.value)
       lines.push({ itemId: line.itemId, quantity: quantity.value })
     }
 
@@ -68,7 +79,7 @@ export class TransferStockUseCase {
         reason: 'transfer',
         document: { type: 'transfer', id: transfer.value.id.toString() },
       }
-      const moved = await this.move(scope, transfer.value, origin)
+      const moved = await this.move(scope, transfer.value, origin, picked)
       if (moved.isLeft()) return left(moved.value)
 
       const now = this.clock.now()
@@ -92,6 +103,7 @@ export class TransferStockUseCase {
     scope: InventoryScope,
     transfer: StockTransfer,
     origin: MovementOrigin,
+    picked: ReadonlyMap<string, readonly LotPick[] | null>,
   ): Promise<Either<Failure, void>> {
     const now = this.clock.now()
     const held = await lockAll(scope, transfer, now)
@@ -101,10 +113,8 @@ export class TransferStockUseCase {
       const from = held.value.get(key(line.itemId, transfer.source()))
       const to = held.value.get(key(line.itemId, transfer.destination()))
       if (!from || !to) return left(new ConflictError('a transferred balance went missing'))
-      const taken = from.balance.transferOut(line.quantity, origin, now)
-      if (taken.isLeft()) return left(taken.value)
-      const given = to.balance.transferIn(line.quantity, taken.value, origin, now)
-      if (given.isLeft()) return left(given.value)
+      const moved = carry(from.balance, to.balance, line, origin, now, picked.get(line.itemId))
+      if (moved.isLeft()) return left(moved.value)
     }
 
     for (const { balance, existing } of held.value.values()) {
@@ -119,6 +129,33 @@ export class TransferStockUseCase {
 interface Held {
   readonly balance: StockBalance
   readonly existing: boolean
+}
+
+/**
+ * One line's worth of goods off one shelf and onto another.
+ *
+ * The very boxes that left arrive, with the dates they left carrying: a transfer moves
+ * where goods are, never which goods they are, so the destination is handed exactly what
+ * the source drew rather than being asked to choose again.
+ */
+function carry(
+  from: StockBalance,
+  to: StockBalance,
+  line: TransferLine,
+  origin: MovementOrigin,
+  now: Date,
+  picks: readonly LotPick[] | null | undefined,
+): Either<Failure, void> {
+  const taken = from.transferOut(line.quantity, origin, now, picks ?? null)
+  if (taken.isLeft()) return left(taken.value)
+  const drawn = taken.value.drawn
+  return to.transferIn(
+    line.quantity,
+    taken.value.cost,
+    origin,
+    now,
+    drawn.length > 0 ? drawn : null,
+  )
 }
 
 const key = (itemId: string, warehouseId: string) => `${itemId}:${warehouseId}`
@@ -154,7 +191,7 @@ async function lockAll(
     if (!balance && warehouseId === transfer.source())
       return left(new ResourceNotFoundError('the source warehouse holds none of this item'))
     held.set(key(itemId, warehouseId), {
-      balance: balance ?? StockBalance.open({ tenantId: scope.tenantId, itemId, warehouseId, now }),
+      balance: balance ?? (await openBalance(scope, { itemId, warehouseId }, now)),
       existing: balance !== null,
     })
   }

@@ -1764,6 +1764,126 @@ reports an operator actually asks for.
 
 ---
 
+## Phase 34 — Which of them: the lot, the date on it, and the order they leave in
+
+**Complete.** The third slice of Phase I of the [expansion plan](erp-expansion-plan.md).
+
+Inventory has always been able to count. Ask it how many it holds and it answers; ask it
+*which* ones and there was nothing to say. For most things that is right — one screw is
+every other screw, and making a picker name the box would be a cost with nothing on the
+other side of it. For a batch that can be recalled, or a jar that goes off, it is the only
+question worth asking, and a warehouse that cannot answer it cannot be run.
+
+Phase I's remaining tracking work was sliced in two here. This phase is lots, dates and
+the thread through them, which is complete on its own and is what a food, chemical or
+pharmaceutical warehouse needs; serial numbers are a different shape of answer rather than
+a stricter version of the same one, and get [phase 35](#phase-35--the-unit-that-has-a-name-serial-numbers)
+to themselves.
+
+**Deliverables**
+
+- **A tracking decision per item, taken in Inventory.** Not in the catalogue: the policy
+  governs how goods have to be received and picked, which is a fact about the shelf and
+  the people standing at it. `none` or `lot`, with lots optionally or compulsorily dated.
+  **It can only be decided while none of the item is in stock anywhere** — starting to
+  track goods already on shelves would mean inventing codes for boxes nobody can go and
+  read, and stopping would throw away an answer somebody is relying on. Restating the same
+  decision is always allowed, because nothing changes. There is no way to delete one.
+  `serial` is refused rather than accepted and ignored: a workspace must not be able to
+  switch on a control the module does not yet honour.
+- **Lots, and the invariant they rest on.** What a shelf's lots add up to is what its
+  balance holds, always — in the aggregate and in a deferred constraint trigger, because a
+  warehouse whose lots disagree with its balance can answer neither question honestly. A
+  code already on the shelf is the same lot arriving again, and its date is not open to
+  being restated: two cartons stamped differently are two lots. A lot that runs out stops
+  being a holding; where it went stays in the movements.
+- **Codes are upper-cased.** A lot code is read off a carton by a person, and case is not
+  something a person transcribes reliably; two pickers typing `AB-1204` and `ab-1204` mean
+  the same pallet, and a system that made them two lots would have invented a discrepancy
+  out of nothing but handwriting.
+- **Goods leave earliest-date-first.** Undated lots wait until last, ties are settled by
+  what arrived first, and somebody who knows better can name the lots instead. **A lot
+  whose day has gone by is never picked automatically**, and never sent to a customer at
+  all — not even as the only stock left, because the answer to "we have nothing good to
+  send" is to say so.
+- **Expired stock is on hand but not available.** It has not stopped being the company's
+  and it is still sitting on the shelf, so it still counts towards what is held, towards
+  what is valued, and towards a maximum level. It cannot be promised to anybody, so an
+  order for it is refused with a shortfall. That split is the whole of what a date does
+  here.
+- **A promise is for goods, not for a particular box.** Reservations hold quantity and
+  pin no lot: pinning one weeks before a van arrives would hold back the very stock that
+  ought to go first, and would have to be repinned every time something with an earlier
+  date was delivered. Which boxes go is decided when somebody walks to the shelf.
+- **A transfer moves where goods are, never which goods they are.** The lots drawn from
+  the source arrive at the destination under the same codes, carrying the same dates.
+- **A customer return goes back into the lots it went out in**, read off the shipments the
+  order made and netted against what has already come back, so a second partial return
+  cannot put more into a lot than that lot ever sent.
+- **A tracked item is counted lot by lot.** The useful answer is not that the shelf is two
+  short but that lot AB-1204 is — and the difference cannot be posted at all without
+  saying which lot it came out of. The sheet's key gains the lot and its lines gain an
+  identity of their own.
+- **A write-off names its lot when it is asked for, not when it is allowed.** "Write off
+  four" and "write off four of AB-1204" are not the same request, and the second person is
+  being asked about the second one.
+- **The thread.** Every movement records which boxes it touched, and a sale and a purchase
+  now name their document — the order that sent the goods, the receipt that brought them
+  in. Following a lot is reading a list: `GET /stock-lots/:code/trace` gives every movement
+  that touched it, in order, across every warehouse, because a batch split between two
+  buildings is one batch and a recall that looked at only one of them would be worse than
+  none. `GET /stock-lots` lists what is held, soonest to go off first, and answers the
+  Monday-morning question — what do I have to move this week.
+- `@horizon/contracts@0.20.0`: `sale` and `purchase` movement reasons, and `order` and
+  `receipt` document types. Which lot a warehouse drew from stays off the wire: that is how
+  it keeps its own promises, and a reader elsewhere is told what moved rather than which of
+  it. A fiscal document that has to name the lot will ask for it.
+
+**Exit criteria**
+
+- A tracked balance's lots add up to it, asserted in the aggregate and by a trigger that
+  refuses a direct database edit breaking it.
+- Goods received without a lot are refused for a tracked item; a lot named for an untracked
+  item is refused too.
+- A shipment draws the earliest date first and records which lots went, asserted against
+  the database.
+- Expired stock is on hand, valued, and refused to an order — and refused to a shipment
+  even for a promise made while it was still good.
+- The same boxes arrive at the far end of a transfer, dates included.
+- A count of a tracked item is frozen lot by lot and posts its difference against the lot
+  the line was about.
+- A recall reads as a list: the trace of a lot names the receipt it arrived on and the
+  order it left on, and never crosses into another workspace.
+
+**Non-goals**
+
+- Serial numbers, which are [phase 35](#phase-35--the-unit-that-has-a-name-serial-numbers).
+- Per-lot cost. A lot says which goods these are, not what they are worth: valuation stays
+  the moving average of phase 33, and giving each lot its own cost would be FIFO arriving
+  through the back door.
+- Lots on the wire. The movement event says what moved, not which boxes; a consumer that
+  needs the lot asks Inventory.
+- Pinning a lot to an order when the order is placed, for the reason above.
+- Blocking a sale of an item whose lots are all about to expire. A date that has not passed
+  has not passed; a warehouse that wants a margin sets one on the report, not in the rule.
+- Quarantine as a status. Goods that must not go out are moved to a warehouse they cannot
+  be sold from, which the module already offers, rather than gaining a second way to be
+  unavailable.
+- Backfilling lots onto stock received before the decision was taken. There is nothing to
+  backfill from — which is exactly why the decision may only be taken on an empty shelf.
+
+---
+
+## Phase 35 — The unit that has a name: serial numbers
+
+**Planned.** Naming every single unit, which is a different shape of answer from naming
+the box it came in: a serial is unique for an item forever, including after it has been
+sent and come back, and it carries a life of its own — in stock, shipped, returned,
+scrapped — rather than a quantity. Built on the tracking decision of phase 34, which gains
+`serial` as a third value once the module can honour it.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

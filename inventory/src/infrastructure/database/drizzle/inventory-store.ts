@@ -1,12 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, notInArray, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { AuditRecord, AuditTrail, InventoryScope } from '@/application/ports/unit-of-work'
 import { canonicalJson } from '@/core/audit/canonical-json'
 import type { Either } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
+import type { LotHolding } from '@/domain/entities/lot-book'
+import { LotBook, outstandingByItem } from '@/domain/entities/lot-book'
 import {
   ADJUSTMENT_STATUSES,
   type AdjustmentDirection,
@@ -21,7 +23,11 @@ import { StockReservation } from '@/domain/entities/stock-reservation'
 import { StockTransfer } from '@/domain/entities/stock-transfer'
 import { Warehouse } from '@/domain/entities/warehouse'
 import { InventoryStockMovedEvent } from '@/domain/events/inventory-events'
-import type { AdjustmentPolicy, StockLevel } from '@/domain/repositories/inventory-repositories'
+import type {
+  AdjustmentPolicy,
+  StockLevel,
+  TrackedItem,
+} from '@/domain/repositories/inventory-repositories'
 import {
   Currency,
   Money,
@@ -30,6 +36,13 @@ import {
   WarehouseName,
 } from '@/domain/value-objects/inventory-values'
 import { type AdjustmentReason, isAdjustmentReason } from '@/domain/value-objects/movement-origin'
+import {
+  ExpiryDate,
+  type ItemTracking,
+  LotCode,
+  trackingOf,
+  UNTRACKED,
+} from '@/domain/value-objects/tracking'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
@@ -53,7 +66,11 @@ function note(value: string | null): Note | null {
   return value === null ? null : restored(Note.create(value))
 }
 
-function mapBalance(row: typeof schema.stockBalances.$inferSelect): StockBalance {
+function mapBalance(
+  row: typeof schema.stockBalances.$inferSelect,
+  tracking: ItemTracking,
+  lots: readonly (typeof schema.stockLots.$inferSelect)[],
+): StockBalance {
   return StockBalance.rehydrate(
     {
       tenantId: row.tenantId,
@@ -62,11 +79,26 @@ function mapBalance(row: typeof schema.stockBalances.$inferSelect): StockBalance
       onHand: Quantity.fromMicros(row.onHand),
       reserved: Quantity.fromMicros(row.reserved),
       averageUnitCost: money(row.averageUnitCost, row.currency),
+      tracking,
+      lots: new LotBook(lots.map(mapLot)),
       version: row.version,
       updatedAt: row.updatedAt,
     },
     new UniqueEntityID(row.id),
   )
+}
+
+function mapLot(row: typeof schema.stockLots.$inferSelect): LotHolding {
+  return {
+    code: restored(LotCode.create(row.lotCode)),
+    expiresOn: row.expiresOn === null ? null : restored(ExpiryDate.create(row.expiresOn)),
+    onHand: Quantity.fromMicros(row.onHand),
+    firstReceivedAt: row.firstReceivedAt,
+  }
+}
+
+function mapTracking(row: typeof schema.itemTracking.$inferSelect | undefined): ItemTracking {
+  return row ? restored(trackingOf(row.tracking, row.expiry)) : UNTRACKED
 }
 
 function mapWarehouse(row: typeof schema.warehouses.$inferSelect): Warehouse {
@@ -149,6 +181,7 @@ function mapAdjustment(row: typeof schema.stockAdjustments.$inferSelect): StockA
       warehouseId: row.warehouseId,
       itemId: row.itemId,
       direction,
+      lot: row.lotCode === null ? null : restored(LotCode.create(row.lotCode)),
       quantity: Quantity.fromMicros(row.quantity),
       reason,
       note: note(row.note),
@@ -178,6 +211,7 @@ function mapCount(
       warehouseId: row.warehouseId,
       lines: lines.map((line) => ({
         itemId: line.itemId,
+        lot: line.lotCode === null ? null : restored(LotCode.create(line.lotCode)),
         expected: Quantity.fromMicros(line.expected),
         counted: line.counted === null ? null : Quantity.fromMicros(line.counted),
       })),
@@ -230,6 +264,16 @@ async function publish(tx: Transaction, tenantId: string, event: DomainEvent): P
       documentId: movement.origin?.document.id ?? null,
       occurredAt: event.occurredAt,
     })
+    if (movement.lots.length > 0)
+      await tx.insert(schema.stockMovementLots).values(
+        movement.lots.map((lot) => ({
+          tenantId,
+          movementId: movement.movementId,
+          lotCode: lot.code.value,
+          quantity: lot.quantity.micros,
+          expiresOn: lot.expiresOn?.value ?? null,
+        })),
+      )
   }
   const id = new UniqueEntityID().toString()
   const carrier: Record<string, string> = {}
@@ -291,6 +335,75 @@ function auditTrail(tx: Transaction, tenantId: string): AuditTrail {
   }
 }
 
+async function findTracking(tx: Transaction, itemId: string): Promise<ItemTracking> {
+  const [row] = await tx
+    .select()
+    .from(schema.itemTracking)
+    .where(eq(schema.itemTracking.itemId, itemId))
+    .limit(1)
+  return mapTracking(row)
+}
+
+async function trackingFor(
+  tx: Transaction,
+  itemIds: readonly string[],
+): Promise<Map<string, ItemTracking>> {
+  const rows = await tx
+    .select()
+    .from(schema.itemTracking)
+    .where(inArray(schema.itemTracking.itemId, [...itemIds]))
+  return new Map(rows.map((row) => [row.itemId, mapTracking(row)]))
+}
+
+function lotsOf(tx: Transaction, balanceIds: readonly string[]) {
+  return tx
+    .select()
+    .from(schema.stockLots)
+    .where(inArray(schema.stockLots.balanceId, [...balanceIds]))
+}
+
+/**
+ * The lot book, written back as it now stands.
+ *
+ * Replacing the rows wholesale rather than tracking which ones moved: a book has at most
+ * a handful of open lots, the aggregate is already locked, and the alternative is a
+ * second bookkeeping of changes that could drift from the first. Lots that have run out
+ * are gone, which is what the deferred trigger checks the remainder against.
+ */
+async function writeLots(
+  tx: Transaction,
+  tenantId: string,
+  balanceId: string,
+  lots: readonly LotHolding[],
+): Promise<void> {
+  const present = lots.map((lot) => lot.code.value)
+  await tx
+    .delete(schema.stockLots)
+    .where(
+      present.length === 0
+        ? eq(schema.stockLots.balanceId, balanceId)
+        : and(
+            eq(schema.stockLots.balanceId, balanceId),
+            notInArray(schema.stockLots.lotCode, present),
+          ),
+    )
+  for (const lot of lots)
+    await tx
+      .insert(schema.stockLots)
+      .values({
+        tenantId,
+        balanceId,
+        lotCode: lot.code.value,
+        onHand: lot.onHand.micros,
+        expiresOn: lot.expiresOn?.value ?? null,
+        firstReceivedAt: lot.firstReceivedAt,
+      })
+      .onConflictDoUpdate({
+        target: [schema.stockLots.tenantId, schema.stockLots.balanceId, schema.stockLots.lotCode],
+        set: { onHand: lot.onHand.micros },
+      })
+}
+
 export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
   const assertTenant = (actual: string) => {
     if (actual !== tenantId) throw new Error('Aggregate tenant does not match transaction')
@@ -349,7 +462,9 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           )
           .limit(1)
           .for('update')
-        return row ? mapBalance(row) : null
+        if (!row) return null
+        const [tracking, lots] = await Promise.all([findTracking(tx, itemId), lotsOf(tx, [row.id])])
+        return mapBalance(row, tracking, lots)
       },
       inWarehouse: async (warehouseId, itemIds) => {
         const rows = await tx
@@ -364,7 +479,22 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
               : eq(schema.stockBalances.warehouseId, warehouseId),
           )
           .orderBy(asc(schema.stockBalances.itemId))
-        return rows.map(mapBalance)
+        if (rows.length === 0) return []
+        const lots = await lotsOf(
+          tx,
+          rows.map((row) => row.id),
+        )
+        const tracked = await trackingFor(
+          tx,
+          rows.map((row) => row.itemId),
+        )
+        return rows.map((row) =>
+          mapBalance(
+            row,
+            tracked.get(row.itemId) ?? UNTRACKED,
+            lots.filter((lot) => lot.balanceId === row.id),
+          ),
+        )
       },
       create: async (balance) => {
         const row = balance.toSnapshot()
@@ -381,6 +511,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           version: row.version,
           updatedAt: row.updatedAt,
         })
+        await writeLots(tx, tenantId, row.id, balance.lots())
       },
       save: async (balance) => {
         const row = balance.toSnapshot()
@@ -396,6 +527,101 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
             updatedAt: row.updatedAt,
           })
           .where(eq(schema.stockBalances.id, row.id))
+        await writeLots(tx, tenantId, row.id, balance.lots())
+      },
+    },
+    movements: {
+      lotsShippedFor: async (orderId: string) => {
+        const rows = await tx
+          .select({
+            itemId: schema.stockMovements.itemId,
+            lotCode: schema.stockMovementLots.lotCode,
+            expiresOn: schema.stockMovementLots.expiresOn,
+            kind: schema.stockMovements.kind,
+            quantity: schema.stockMovementLots.quantity,
+          })
+          .from(schema.stockMovementLots)
+          .innerJoin(
+            schema.stockMovements,
+            eq(schema.stockMovements.id, schema.stockMovementLots.movementId),
+          )
+          .where(
+            and(
+              eq(schema.stockMovements.documentType, 'order'),
+              eq(schema.stockMovements.documentId, orderId),
+            ),
+          )
+        return outstandingByItem(
+          rows.map((row) => ({
+            itemId: row.itemId,
+            code: restored(LotCode.create(row.lotCode)),
+            expiresOn: row.expiresOn === null ? null : restored(ExpiryDate.create(row.expiresOn)),
+            quantity: Quantity.fromMicros(row.quantity),
+            outbound: row.kind === 'shipment',
+          })),
+        )
+      },
+    },
+    tracking: {
+      find: async (itemId) => {
+        const [row] = await tx
+          .select()
+          .from(schema.itemTracking)
+          .where(eq(schema.itemTracking.itemId, itemId))
+          .limit(1)
+        return row
+          ? {
+              tenantId: row.tenantId,
+              itemId: row.itemId,
+              tracking: mapTracking(row),
+              updatedBy: row.updatedBy,
+              updatedAt: row.updatedAt,
+            }
+          : null
+      },
+      list: async () => {
+        const rows = await tx
+          .select()
+          .from(schema.itemTracking)
+          .orderBy(asc(schema.itemTracking.itemId))
+        return rows.map((row) => ({
+          tenantId: row.tenantId,
+          itemId: row.itemId,
+          tracking: mapTracking(row),
+          updatedBy: row.updatedBy,
+          updatedAt: row.updatedAt,
+        }))
+      },
+      /** Anything at all on any shelf, which is what forbids the decision changing. */
+      holdsStock: async (itemId) => {
+        const [row] = await tx
+          .select({ onHand: schema.stockBalances.onHand })
+          .from(schema.stockBalances)
+          .where(and(eq(schema.stockBalances.itemId, itemId), gt(schema.stockBalances.onHand, 0n)))
+          .limit(1)
+        return row !== undefined
+      },
+      save: async (item: TrackedItem) => {
+        assertTenant(item.tenantId)
+        await tx
+          .insert(schema.itemTracking)
+          .values({
+            tenantId,
+            itemId: item.itemId,
+            tracking: item.tracking.kind,
+            expiry: item.tracking.expiry,
+            updatedBy: item.updatedBy,
+            updatedAt: item.updatedAt,
+          })
+          .onConflictDoUpdate({
+            target: [schema.itemTracking.tenantId, schema.itemTracking.itemId],
+            set: {
+              tracking: item.tracking.kind,
+              expiry: item.tracking.expiry,
+              updatedBy: item.updatedBy,
+              updatedAt: item.updatedAt,
+            },
+          })
       },
     },
     reservations: {
@@ -508,6 +734,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
         const row = adjustment.toSnapshot()
         assertTenant(row.tenantId)
         await tx.insert(schema.stockAdjustments).values({
+          lotCode: row.lot,
           id: row.id,
           tenantId,
           warehouseId: row.warehouseId,
@@ -585,9 +812,11 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
         })
         await tx.insert(schema.stockCountLines).values(
           row.lines.map((line) => ({
+            id: new UniqueEntityID().toString(),
             tenantId,
             countId: row.id,
             itemId: line.itemId,
+            lotCode: line.lot,
             expected: micros(line.expected),
             counted: line.counted === null ? null : micros(line.counted),
           })),
@@ -620,6 +849,9 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
               and(
                 eq(schema.stockCountLines.countId, row.id),
                 eq(schema.stockCountLines.itemId, line.itemId),
+                line.lot === null
+                  ? isNull(schema.stockCountLines.lotCode)
+                  : eq(schema.stockCountLines.lotCode, line.lot),
               ),
             )
       },

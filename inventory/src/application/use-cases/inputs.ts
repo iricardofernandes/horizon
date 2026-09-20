@@ -1,6 +1,8 @@
 import { type Either, left, right } from '@/core/either'
 import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import type { LotEntry, LotPick } from '@/domain/entities/lot-book'
 import { Currency, Money, Note, Quantity } from '@/domain/value-objects/inventory-values'
+import { ExpiryDate, LotCode } from '@/domain/value-objects/tracking'
 
 /** Parsing the edge of the system once, so no use case reimplements it (ADR 0032). */
 
@@ -40,4 +42,53 @@ export function worthOf(quantity: Quantity, unitCost: Money): Money {
     (quantity.micros * unitCost.amount + MICROS / 2n) / MICROS,
     unitCost.currency,
   )
+}
+
+/**
+ * The lots a caller named, checked into value objects.
+ *
+ * Nothing here decides whether lots were *required* — that is the item's tracking policy,
+ * and the balance is the thing that knows it. This only turns what arrived over the wire
+ * into something the aggregate can reason about.
+ */
+export function lotEntriesOf(
+  lots:
+    | readonly { code: string; expiresOn?: string | null | undefined; quantity: string }[]
+    | null
+    | undefined,
+  field = '/lots',
+): Either<InvalidInputError, readonly LotEntry[] | null> {
+  if (!lots) return right(null)
+  const entries: LotEntry[] = []
+  for (const [index, lot] of lots.entries()) {
+    const code = LotCode.create(lot.code, `${field}/${index}/code`)
+    if (code.isLeft()) return left(code.value)
+    const quantity = Quantity.create(lot.quantity, `${field}/${index}/quantity`)
+    if (quantity.isLeft()) return left(quantity.value)
+    let expiresOn: ExpiryDate | null = null
+    if (lot.expiresOn) {
+      const parsed = ExpiryDate.create(lot.expiresOn, `${field}/${index}/expiresOn`)
+      if (parsed.isLeft()) return left(parsed.value)
+      expiresOn = parsed.value
+    }
+    entries.push({ code: code.value, expiresOn, quantity: quantity.value })
+  }
+  return right(entries)
+}
+
+/** Which lots to draw from, when the caller would rather choose than let the shelf. */
+export function lotPicksOf(
+  picks: readonly { code: string; quantity: string }[] | null | undefined,
+  field = '/lots',
+): Either<InvalidInputError, readonly LotPick[] | null> {
+  if (!picks) return right(null)
+  const chosen: LotPick[] = []
+  for (const [index, pick] of picks.entries()) {
+    const code = LotCode.create(pick.code, `${field}/${index}/code`)
+    if (code.isLeft()) return left(code.value)
+    const quantity = Quantity.create(pick.quantity, `${field}/${index}/quantity`)
+    if (quantity.isLeft()) return left(quantity.value)
+    chosen.push({ code: code.value, quantity: quantity.value })
+  }
+  return right(chosen)
 }

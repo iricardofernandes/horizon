@@ -1,10 +1,11 @@
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
-import { StockBalance } from '@/domain/entities/stock-balance'
+import type { StockBalance } from '@/domain/entities/stock-balance'
 import { StockCount, type Variance } from '@/domain/entities/stock-count'
 import { Money, Note, Quantity } from '@/domain/value-objects/inventory-values'
 import type { MovementOrigin } from '@/domain/value-objects/movement-origin'
+import { LotCode } from '@/domain/value-objects/tracking'
 import type { Clock } from '../ports/clock'
 import type { InventoryScope, InventoryUnitOfWork } from '../ports/unit-of-work'
 import { approvalRequired } from './adjust-stock'
@@ -17,6 +18,7 @@ import {
   once,
 } from './commands'
 import { noteOf, quantityOf, worthOf } from './inputs'
+import { openBalance } from './manage-inventory'
 
 export class OpenStockCountUseCase {
   constructor(
@@ -39,13 +41,12 @@ export class OpenStockCountUseCase {
       if (!warehouse) return left(new ResourceNotFoundError('warehouse was not found'))
       const itemIds = request.itemIds && request.itemIds.length > 0 ? request.itemIds : null
       const balances = await scope.balances.inWarehouse(request.warehouseId, itemIds)
-      const held = new Map(balances.map((balance) => [balance.itemId(), balance.onHand()]))
+      const held = new Map(balances.map((balance) => [balance.itemId(), balance]))
       // An item named explicitly but never held is still worth counting: finding
       // something on a shelf the system says is empty is the whole point of a count.
-      const lines = (itemIds ?? [...held.keys()]).map((itemId) => ({
-        itemId,
-        expected: held.get(itemId) ?? Quantity.fromMicros(0n),
-      }))
+      const lines = (itemIds ?? [...held.keys()]).flatMap((itemId) =>
+        sheetFor(itemId, held.get(itemId)),
+      )
 
       const count = StockCount.open({
         tenantId: context.tenantId,
@@ -67,6 +68,7 @@ export class OpenStockCountUseCase {
           warehouseId: request.warehouseId,
           lines: count.value.lines().map((line) => ({
             itemId: line.itemId,
+            lot: line.lot?.value ?? null,
             expected: line.expected.toString(),
           })),
         },
@@ -85,14 +87,20 @@ export class RecordStockCountUseCase {
   execute(request: {
     context: CommandContext
     countId: string
-    counts: readonly { itemId: string; counted: string }[]
+    counts: readonly { itemId: string; lot?: string | null | undefined; counted: string }[]
   }): Outcome<void> {
     const { context } = request
-    const counts: { itemId: string; counted: Quantity }[] = []
+    const counts: { itemId: string; lot: LotCode | null; counted: Quantity }[] = []
     for (const [index, entry] of request.counts.entries()) {
       const counted = quantityOf(entry.counted, `/counts/${index}/counted`)
       if (counted.isLeft()) return Promise.resolve(left(counted.value))
-      counts.push({ itemId: entry.itemId, counted: counted.value })
+      let lot: LotCode | null = null
+      if (entry.lot) {
+        const code = LotCode.create(entry.lot, `/counts/${index}/lot`)
+        if (code.isLeft()) return Promise.resolve(left(code.value))
+        lot = code.value
+      }
+      counts.push({ itemId: entry.itemId, lot, counted: counted.value })
     }
 
     return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
@@ -281,18 +289,19 @@ async function post(
     const existing = await scope.balances.lock(variance.itemId, count.warehouseId())
     const balance =
       existing ??
-      StockBalance.open({
-        tenantId: scope.tenantId,
-        itemId: variance.itemId,
-        warehouseId: count.warehouseId(),
-        now,
-      })
+      (await openBalance(scope, { itemId: variance.itemId, warehouseId: count.warehouseId() }, now))
     // The difference is applied to whatever the balance has become, never the figure
-    // counted: a delivery that went out during the count is not undone by it.
+    // counted: a delivery that went out during the count is not undone by it. Under lot
+    // tracking it goes into or out of the very lot the line was about, which is the whole
+    // reason the sheet is walked lot by lot rather than item by item.
+    const lots = variance.lot
+      ? [{ code: variance.lot, expiresOn: null, quantity: variance.quantity }]
+      : null
+    const picks = variance.lot ? [{ code: variance.lot, quantity: variance.quantity }] : null
     const applied =
       variance.direction === 'in'
-        ? balance.adjustIn(variance.quantity, null, origin, now)
-        : balance.adjustOut(variance.quantity, origin, now)
+        ? balance.adjustIn(variance.quantity, null, origin, now, lots)
+        : balance.adjustOut(variance.quantity, origin, now, picks)
     if (applied.isLeft()) return left(applied.value)
     if (existing) await scope.balances.save(balance)
     else await scope.balances.create(balance)
@@ -305,6 +314,24 @@ const settled = { approve: 'approved', reject: 'rejected', cancel: 'cancelled' }
 
 const described = (variance: Variance) => ({
   itemId: variance.itemId,
+  lot: variance.lot?.value ?? null,
   direction: variance.direction,
   quantity: variance.quantity.toString(),
 })
+
+/**
+ * The lines a sheet freezes for one item.
+ *
+ * An item the workspace identifies gets a line per lot on the shelf, because the useful
+ * answer is not that there are two fewer but that lot AB-1204 is two short — and because
+ * the difference cannot be posted at all without saying which lot it came out of. An item
+ * never held, or one nobody identifies, gets the single line it has always had.
+ */
+function sheetFor(
+  itemId: string,
+  balance: StockBalance | undefined,
+): { itemId: string; lot: LotCode | null; expected: Quantity }[] {
+  if (!balance) return [{ itemId, lot: null, expected: Quantity.fromMicros(0n) }]
+  if (!balance.isTracked()) return [{ itemId, lot: null, expected: balance.onHand() }]
+  return balance.lots().map((lot) => ({ itemId, lot: lot.code, expected: lot.onHand }))
+}

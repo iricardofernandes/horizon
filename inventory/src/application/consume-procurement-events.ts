@@ -41,6 +41,8 @@ export class InventoryProcurementEventHandlers {
       this.receive.executeInScope(scope, {
         tenantId: parsed.tenantId,
         warehouseId: parsed.payload.warehouseId,
+        // The receipt is what a recall is traced back to, so the movement names it.
+        receiptId: parsed.payload.receiptId,
         lines: parsed.payload.lines,
       }),
     )
@@ -53,6 +55,7 @@ export class InventoryProcurementEventHandlers {
       this.giveBack.executeInScope(scope, {
         tenantId: parsed.tenantId,
         warehouseId: parsed.payload.warehouseId,
+        receiptId: parsed.payload.receiptId,
         lines: parsed.payload.lines,
       }),
     )

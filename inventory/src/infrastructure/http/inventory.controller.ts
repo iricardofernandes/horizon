@@ -35,19 +35,32 @@ const note = z.string().min(1).max(500)
 
 const createWarehouseInput = z.strictObject({ name: z.string().min(1).max(120) })
 
+const lotCode = z.string().min(1).max(60)
+/** Goods arriving under a code, with the day they go off if anybody said. */
+const lotEntries = z
+  .array(z.strictObject({ code: lotCode, expiresOn: z.iso.date().nullish(), quantity }))
+  .min(1)
+  .max(200)
+/** Which boxes to draw from, when the caller would rather choose than let the shelf. */
+const lotPicks = z
+  .array(z.strictObject({ code: lotCode, quantity }))
+  .min(1)
+  .max(200)
+
 const receiveStockInput = z.strictObject({
   warehouseId: z.uuid(),
   itemId: z.uuid(),
   quantity,
   unitCost: amount,
   currency,
+  lots: lotEntries.nullish(),
 })
 
 const transferInput = z.strictObject({
   sourceWarehouseId: z.uuid(),
   destinationWarehouseId: z.uuid(),
   lines: z
-    .array(z.strictObject({ itemId: z.uuid(), quantity }))
+    .array(z.strictObject({ itemId: z.uuid(), quantity, lots: lotPicks.nullish() }))
     .min(1)
     .max(200),
   note: note.nullish(),
@@ -57,6 +70,7 @@ const adjustmentInput = z.strictObject({
   warehouseId: z.uuid(),
   itemId: z.uuid(),
   direction: z.enum(['in', 'out']),
+  lot: lotCode.nullish(),
   quantity,
   reason: z.enum(['breakage', 'loss', 'theft', 'expiry', 'found', 'correction']),
   note: note.nullish(),
@@ -71,10 +85,24 @@ const countInput = z.strictObject({
 
 const countFiguresInput = z.strictObject({
   counts: z
-    .array(z.strictObject({ itemId: z.uuid(), counted: quantity }))
+    .array(z.strictObject({ itemId: z.uuid(), lot: lotCode.nullish(), counted: quantity }))
     .min(1)
     .max(2000),
 })
+
+const trackingInput = z.strictObject({
+  itemId: z.uuid(),
+  tracking: z.enum(['none', 'lot']),
+  expiry: z.enum(['none', 'optional', 'required']).nullish(),
+})
+
+const lotFilter = z.object({
+  warehouseId: z.uuid().nullish(),
+  itemId: z.uuid().nullish(),
+  expiringBy: z.iso.date().nullish(),
+})
+
+const traceFilter = z.object({ itemId: z.uuid() })
 
 const levelInput = z.strictObject({
   warehouseId: z.uuid(),
@@ -407,6 +435,67 @@ export class InventoryController {
       warehouseId: filter.warehouseId ?? null,
       thresholds,
     })
+  }
+
+  // ---------------------------------------------------------------- lots
+
+  @Get('stock-lots')
+  @RequireInventoryAction('read')
+  lots(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(lotFilter, query)
+    return this.runtime.database.listLots(tenantOf(request), {
+      warehouseId: filter.warehouseId ?? null,
+      itemId: filter.itemId ?? null,
+      expiringBy: filter.expiringBy ?? null,
+      ...pageOf(query),
+    })
+  }
+
+  @Get('stock-lots/:code/trace')
+  @RequireInventoryAction('read')
+  traceLot(@Param('code') code: string, @Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(traceFilter, query)
+    return this.runtime.database.traceLot(tenantOf(request), {
+      itemId: filter.itemId,
+      code: parse(lotCode, code).trim().replace(/\s+/g, ' ').toUpperCase(),
+      ...pageOf(query),
+    })
+  }
+
+  // ---------------------------------------------------------------- tracking
+
+  @Get('item-tracking')
+  @RequireInventoryAction('read')
+  async tracking(@Req() request: InventoryRequest) {
+    const items = await this.runtime.database.listTracking(tenantOf(request))
+    return items.map((item) => ({
+      itemId: item.itemId,
+      tracking: item.tracking.kind,
+      expiry: item.tracking.expiry,
+      updatedBy: item.updatedBy,
+      updatedAt: item.updatedAt.toISOString(),
+    }))
+  }
+
+  @Put('item-tracking')
+  @RequireInventoryAction('manage')
+  async defineTracking(@Body() body: unknown, @Req() request: InventoryRequest) {
+    const input = parse(trackingInput, body)
+    const item = unwrap(
+      await this.runtime.defineItemTracking.execute({
+        context: context(request),
+        itemId: input.itemId,
+        tracking: input.tracking,
+        expiry: input.expiry ?? 'none',
+      }),
+    )
+    return {
+      itemId: item.itemId,
+      tracking: item.tracking.kind,
+      expiry: item.tracking.expiry,
+      updatedBy: item.updatedBy,
+      updatedAt: item.updatedAt.toISOString(),
+    }
   }
 
   // ---------------------------------------------------------------- levels

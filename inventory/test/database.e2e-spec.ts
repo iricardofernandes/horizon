@@ -222,5 +222,13 @@ it('uses unprivileged roles and keeps movement history append-only', async () =>
     movement_delete: false,
     outbox_update: false,
   })
-  await expect(administrator`truncate stock_movements`).rejects.toThrow('append-only')
+  // Two guards now, and the outer one answers first: what a movement touched points back
+  // at it, so the history cannot be dropped without dropping the thread through it either.
+  await expect(administrator`truncate stock_movements`).rejects.toThrow('foreign key')
+  await expect(administrator`update stock_movements set quantity = 0`).rejects.toThrow(
+    'append-only',
+  )
+  await expect(administrator`truncate stock_movement_lots`).rejects.toThrow(
+    'a movement touched cannot be changed',
+  )
 })

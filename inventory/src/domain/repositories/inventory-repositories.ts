@@ -1,10 +1,12 @@
 import type { DomainEvent } from '@/core/events/domain-event'
+import type { LotEntry } from '../entities/lot-book'
 import type { StockAdjustment } from '../entities/stock-adjustment'
 import type { StockBalance } from '../entities/stock-balance'
 import type { StockCount } from '../entities/stock-count'
 import type { StockReservation } from '../entities/stock-reservation'
 import type { StockTransfer } from '../entities/stock-transfer'
 import type { Warehouse } from '../entities/warehouse'
+import type { ItemTracking } from '../value-objects/tracking'
 
 export abstract class WarehousesRepository {
   abstract findById(id: string): Promise<Warehouse | null>
@@ -70,6 +72,36 @@ export abstract class AdjustmentPoliciesRepository {
 }
 
 /**
+ * Whether the warehouse has to know which of a thing it is holding.
+ *
+ * Inventory's own decision rather than the catalogue's: it governs how goods must be
+ * received and picked, which is a fact about the shelf and the people standing at it.
+ * An item with no row is counted, not identified.
+ */
+export interface TrackedItem {
+  readonly tenantId: string
+  readonly itemId: string
+  readonly tracking: ItemTracking
+  readonly updatedBy: string
+  readonly updatedAt: Date
+}
+
+export abstract class ItemTrackingRepository {
+  abstract find(itemId: string): Promise<TrackedItem | null>
+  abstract list(): Promise<readonly TrackedItem[]>
+  /**
+   * Whether this item is on any shelf anywhere in the workspace.
+   *
+   * The decision to identify goods cannot be taken about goods already on a shelf —
+   * nobody knows which ones those are — and it cannot be untaken either, because that
+   * throws away an answer somebody is relying on. So it may only be changed while there
+   * is nothing to be wrong about.
+   */
+  abstract holdsStock(itemId: string): Promise<boolean>
+  abstract save(item: TrackedItem): Promise<void>
+}
+
+/**
  * How little of an item a warehouse should get down to, and how much is too much.
  *
  * Unlike the adjustment allowance, this refuses nothing. It is read by a report and by
@@ -94,6 +126,18 @@ export abstract class StockReservationsRepository {
   abstract findByOrderId(orderId: string): Promise<StockReservation | null>
   abstract create(reservation: StockReservation): Promise<void>
   abstract save(reservation: StockReservation): Promise<void>
+}
+
+/**
+ * What the movement ledger can be asked while a command is still running.
+ *
+ * Only one question so far, and it is the one a customer return has to ask: goods coming
+ * home are the same goods, so which lots they went out in has to be read back off the
+ * shipments rather than guessed at.
+ */
+export abstract class StockMovementsRepository {
+  /** Lots this order has sent and not yet had back, by item. */
+  abstract lotsShippedFor(orderId: string): Promise<ReadonlyMap<string, readonly LotEntry[]>>
 }
 
 /** Persists domain events to the outbox owned by the surrounding transaction. */

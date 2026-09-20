@@ -1,11 +1,11 @@
 /**
  * Why stock moved, and which document says so.
  *
- * A receipt and a shipment need neither: the goods arrived because they were bought and
- * left because they were sold, and the order is already the explanation. Everything in
- * this file is about the movements that have no order behind them — the ones a warehouse
- * decides on by itself — because those are exactly the ones nobody can account for later
- * unless somebody wrote down why.
+ * `sale` and `purchase` were once left out, on the grounds that the kind already said it:
+ * goods arrived because they were bought and left because they were sold. That holds
+ * right up until somebody has to answer where a particular box went, and "it was sold" is
+ * not an answer without the order that sold it — so a warehouse that identifies its goods
+ * needs the document named on every movement, not only on the ones it decided by itself.
  */
 
 export const ADJUSTMENT_REASONS = [
@@ -18,10 +18,16 @@ export const ADJUSTMENT_REASONS = [
 ] as const
 export type AdjustmentReason = (typeof ADJUSTMENT_REASONS)[number]
 
-export const MOVEMENT_REASONS = ['transfer', 'count', ...ADJUSTMENT_REASONS] as const
+export const MOVEMENT_REASONS = [
+  'sale',
+  'purchase',
+  'transfer',
+  'count',
+  ...ADJUSTMENT_REASONS,
+] as const
 export type MovementReason = (typeof MOVEMENT_REASONS)[number]
 
-export const DOCUMENT_TYPES = ['transfer', 'adjustment', 'count'] as const
+export const DOCUMENT_TYPES = ['order', 'receipt', 'transfer', 'adjustment', 'count'] as const
 export type DocumentType = (typeof DOCUMENT_TYPES)[number]
 
 /** The document a movement belongs to; the two halves of a transfer share one. */

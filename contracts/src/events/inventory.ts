@@ -54,13 +54,16 @@ export const inventoryStockReleased = defineEvent({
 })
 
 /**
- * Why a movement happened, when the kind alone does not say.
+ * Why a movement happened, and under which document.
  *
- * A shipment needs no reason — it left because it was sold. Goods that leave without
- * being sold always do, and a warehouse that cannot tell breakage from theft cannot act
- * on either.
+ * `sale` and `purchase` were once left out: a shipment left because it was sold, and the
+ * kind said so. They are named now because a warehouse that tracks which boxes it holds
+ * has to be able to answer where a particular box went, and "it was sold" is not an
+ * answer without the order that sold it.
  */
 export const movementReasonSchema = z.enum([
+  'sale',
+  'purchase',
   'transfer',
   'count',
   'breakage',
@@ -79,7 +82,7 @@ export const movementReasonSchema = z.enum([
  * to name the other side.
  */
 export const movementDocumentSchema = z.object({
-  type: z.enum(['transfer', 'adjustment', 'count']),
+  type: z.enum(['order', 'receipt', 'transfer', 'adjustment', 'count']),
   id: uuidSchema,
 })
 

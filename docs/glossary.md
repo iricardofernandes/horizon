@@ -526,3 +526,36 @@ belongs to the class its cumulative share *reaches*, so the item that carries th
 total past eighty per cent is part of the reason it got there rather than being demoted for
 finishing at eighty-one. The curve is drawn separately per currency, because a ranking that
 adds pesos to euros ranks nothing.
+
+### tracking policy
+Whether the warehouse has to know *which* of a thing it is holding, decided item by item
+and kept by Inventory rather than the catalogue: it governs how goods must be received and
+picked, which is a fact about the shelf and the people standing at it. It can only be
+decided while none of the item is in stock anywhere — starting to track goods already on
+shelves would mean inventing codes for boxes nobody can go and read, and stopping would
+throw away an answer somebody is relying on.
+
+### lot
+A batch of an item, identified by the code printed on its carton. Upper-cased, because a
+code is read off a box by a person and case is not something a person transcribes
+reliably. A code already on a shelf is the same lot arriving again, so its expiry date is
+not open to being restated. What a shelf's lots add up to is always what its balance holds.
+
+### expiry date
+The day a lot stops being fit to send anybody — a calendar day rather than an instant,
+because that is what is printed on the box, and the lot is good for the whole of the day it
+names. Expired stock is **on hand but not available**: it has not stopped being the
+company's and it is still taking up the shelf, but nobody can be promised it.
+
+### FEFO
+First expiry, first out: the order goods leave a shelf in. Earliest date first, undated
+lots last, ties settled by what arrived first. A lot whose day has gone by is never picked
+this way and is never sent to a customer at all — it has to be named by somebody who has
+decided what they are doing with it, and then only to be moved or written off.
+
+### traceability
+The thread through the movement ledger that answers where a lot came from and where it
+went. Every movement records which boxes it touched, and every movement now names the
+document behind it — the receipt that brought the goods in, the order that sent them out —
+so following a batch is reading a list rather than joining tables by hand. Followed across
+warehouses, because a batch split between two buildings is one batch.

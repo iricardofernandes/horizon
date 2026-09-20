@@ -46,9 +46,9 @@ describe('a stock balance moved by hand', () => {
     const destination = opened('10', '2000')
     const document = origin('transfer')
 
-    const cost = unwrap(source.transferOut(quantity('40'), document, now))
-    expect(cost?.amount).toBe(1000n)
-    unwrap(destination.transferIn(quantity('40'), cost, document, now))
+    const taken = unwrap(source.transferOut(quantity('40'), document, now))
+    expect(taken.cost?.amount).toBe(1000n)
+    unwrap(destination.transferIn(quantity('40'), taken.cost, document, now))
 
     expect(source.onHand().toString()).toBe('60')
     expect(destination.onHand().toString()).toBe('50')

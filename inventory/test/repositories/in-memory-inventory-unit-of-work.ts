@@ -9,23 +9,28 @@ import { AuditTrail, InventoryUnitOfWork } from '@/application/ports/unit-of-wor
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DomainEvent } from '@/core/events/domain-event'
+import { type LotEntry, outstandingByItem } from '@/domain/entities/lot-book'
 import type { StockAdjustment } from '@/domain/entities/stock-adjustment'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import type { StockCount } from '@/domain/entities/stock-count'
 import type { StockReservation } from '@/domain/entities/stock-reservation'
 import type { StockTransfer } from '@/domain/entities/stock-transfer'
 import type { Warehouse } from '@/domain/entities/warehouse'
+import { InventoryStockMovedEvent } from '@/domain/events/inventory-events'
 import {
   AdjustmentPoliciesRepository,
   type AdjustmentPolicy,
   InventoryEventsRepository,
+  ItemTrackingRepository,
   StockAdjustmentsRepository,
   StockBalancesRepository,
   StockCountsRepository,
   type StockLevel,
   StockLevelsRepository,
+  StockMovementsRepository,
   StockReservationsRepository,
   StockTransfersRepository,
+  type TrackedItem,
   WarehousesRepository,
 } from '@/domain/repositories/inventory-repositories'
 
@@ -139,6 +144,75 @@ class InMemoryCounts extends StockCountsRepository {
   save(count: StockCount): Promise<void> {
     if (!count.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
     return Promise.resolve()
+  }
+}
+
+class InMemoryTracking extends ItemTrackingRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: TrackedItem[],
+    private readonly balances: StockBalance[],
+  ) {
+    super()
+  }
+  find(itemId: string): Promise<TrackedItem | null> {
+    return Promise.resolve(
+      this.records.find((item) => item.tenantId === this.tenantId && item.itemId === itemId) ??
+        null,
+    )
+  }
+  list(): Promise<readonly TrackedItem[]> {
+    return Promise.resolve(this.records.filter((item) => item.tenantId === this.tenantId))
+  }
+  holdsStock(itemId: string): Promise<boolean> {
+    return Promise.resolve(
+      this.balances.some(
+        (balance) =>
+          balance.belongsTo(this.tenantId) &&
+          balance.itemId() === itemId &&
+          !balance.onHand().isZero(),
+      ),
+    )
+  }
+  save(item: TrackedItem): Promise<void> {
+    if (item.tenantId !== this.tenantId) throw new Error('tenant mismatch')
+    const index = this.records.findIndex(
+      (existing) => existing.tenantId === item.tenantId && existing.itemId === item.itemId,
+    )
+    if (index === -1) this.records.push(item)
+    else this.records[index] = item
+    return Promise.resolve()
+  }
+}
+
+/**
+ * What a return reads back off the shipments an order made.
+ *
+ * Collected from the movement events the fakes have seen, which is the same place the
+ * real one reads it from — the difference being that this one has never been written to
+ * disk.
+ */
+class InMemoryMovements extends StockMovementsRepository {
+  constructor(private readonly events: DomainEvent[]) {
+    super()
+  }
+  lotsShippedFor(orderId: string): Promise<ReadonlyMap<string, readonly LotEntry[]>> {
+    const moves = this.events
+      .filter(
+        (event): event is InventoryStockMovedEvent => event instanceof InventoryStockMovedEvent,
+      )
+      .map((event) => event.movementOf())
+      .filter((movement) => movement.origin?.document.id === orderId)
+      .flatMap((movement) =>
+        movement.lots.map((lot) => ({
+          itemId: movement.itemId,
+          code: lot.code,
+          expiresOn: lot.expiresOn,
+          quantity: lot.quantity,
+          outbound: movement.kind === 'shipment',
+        })),
+      )
+    return Promise.resolve(outstandingByItem(moves))
   }
 }
 
@@ -283,6 +357,7 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
   readonly counts: StockCount[] = []
   readonly policies: AdjustmentPolicy[] = []
   readonly levels: StockLevel[] = []
+  readonly trackedItems: TrackedItem[] = []
   readonly auditRecords: AuditRecord[] = []
   readonly receipts = new Map<string, { receipt: CommandReceipt; response: unknown }>()
   readonly events: DomainEvent[] = []
@@ -299,6 +374,8 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
       tenantId,
       warehouses: new InMemoryWarehouses(tenantId, this.warehouses),
       balances: new InMemoryBalances(tenantId, this.balances),
+      tracking: new InMemoryTracking(tenantId, this.trackedItems, this.balances),
+      movements: new InMemoryMovements(this.events),
       reservations: new InMemoryReservations(tenantId, this.reservations),
       transfers: new InMemoryTransfers(tenantId, this.transfers),
       adjustments: new InMemoryAdjustments(tenantId, this.adjustments),

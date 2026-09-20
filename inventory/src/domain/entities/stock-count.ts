@@ -3,6 +3,7 @@ import { AggregateRoot } from '@/core/entities/aggregate-root'
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { Note, Quantity } from '../value-objects/inventory-values'
+import type { LotCode } from '../value-objects/tracking'
 import type { ApprovalState } from './stock-adjustment'
 
 export const COUNT_STATUSES = ['open', 'pending', 'closed', 'cancelled'] as const
@@ -10,6 +11,14 @@ export type CountStatus = (typeof COUNT_STATUSES)[number]
 
 export interface CountLine {
   readonly itemId: string
+  /**
+   * Which boxes this line is about, for an item the workspace identifies.
+   *
+   * Null for everything else. A lot-tracked item is walked lot by lot, because the useful
+   * answer is not that the shelf is two short but that lot AB-1204 is — and because the
+   * difference cannot be posted at all without saying which lot it came out of.
+   */
+  readonly lot: LotCode | null
   /** What the system said when the sheet was opened — never recomputed afterwards. */
   readonly expected: Quantity
   readonly counted: Quantity | null
@@ -18,9 +27,14 @@ export interface CountLine {
 /** A line whose count disagreed with the sheet, as the movement it becomes. */
 export interface Variance {
   readonly itemId: string
+  readonly lot: LotCode | null
   readonly direction: 'in' | 'out'
   readonly quantity: Quantity
 }
+
+/** An item plus its lot, which is what a line on the sheet is actually about. */
+const keyOf = (line: { itemId: string; lot: LotCode | null }) =>
+  `${line.itemId}\u0000${line.lot?.value ?? ''}`
 
 interface StockCountProps {
   tenantId: string
@@ -61,7 +75,7 @@ export class StockCount extends AggregateRoot<StockCountProps> {
     props: {
       tenantId: string
       warehouseId: string
-      lines: readonly { itemId: string; expected: Quantity }[]
+      lines: readonly { itemId: string; lot: LotCode | null; expected: Quantity }[]
       note: Note | null
       openedBy: string
       now: Date
@@ -70,9 +84,9 @@ export class StockCount extends AggregateRoot<StockCountProps> {
   ): Either<ConflictError, StockCount> {
     if (props.lines.length === 0)
       return left(new ConflictError('a count sheet needs at least one item on it'))
-    const items = new Set(props.lines.map((line) => line.itemId))
-    if (items.size !== props.lines.length)
-      return left(new ConflictError('an item appears at most once on a count sheet'))
+    const keys = new Set(props.lines.map(keyOf))
+    if (keys.size !== props.lines.length)
+      return left(new ConflictError('an item and lot appear at most once on a count sheet'))
     return right(
       new StockCount(
         {
@@ -98,19 +112,19 @@ export class StockCount extends AggregateRoot<StockCountProps> {
 
   /** What the counter found, for some or all of the sheet; counting again overwrites. */
   record(
-    counts: readonly { itemId: string; counted: Quantity }[],
+    counts: readonly { itemId: string; lot: LotCode | null; counted: Quantity }[],
     now: Date,
   ): Either<ConflictError, void> {
     if (this.props.status !== 'open')
       return left(new ConflictError('only an open count takes figures'))
     if (counts.length === 0) return left(new ConflictError('record at least one counted item'))
-    const known = new Map(this.props.lines.map((line) => [line.itemId, line]))
+    const known = new Set(this.props.lines.map(keyOf))
     for (const count of counts)
-      if (!known.has(count.itemId))
-        return left(new ConflictError('this item is not on the count sheet'))
-    const counted = new Map(counts.map((count) => [count.itemId, count.counted]))
+      if (!known.has(keyOf(count)))
+        return left(new ConflictError('this item and lot are not on the count sheet'))
+    const counted = new Map(counts.map((count) => [keyOf(count), count.counted]))
     this.props.lines = this.props.lines.map((line) =>
-      counted.has(line.itemId) ? { ...line, counted: counted.get(line.itemId) ?? null } : line,
+      counted.has(keyOf(line)) ? { ...line, counted: counted.get(keyOf(line)) ?? null } : line,
     )
     this.props.updatedAt = now
     return right(undefined)
@@ -191,6 +205,7 @@ export class StockCount extends AggregateRoot<StockCountProps> {
       const grew = line.expected.isLessThan(line.counted)
       variances.push({
         itemId: line.itemId,
+        lot: line.lot,
         direction: grew ? 'in' : 'out',
         quantity: grew ? line.counted.minus(line.expected) : line.expected.minus(line.counted),
       })
@@ -231,7 +246,12 @@ export class StockCount extends AggregateRoot<StockCountProps> {
     id: string
     tenantId: string
     warehouseId: string
-    lines: readonly { itemId: string; expected: string; counted: string | null }[]
+    lines: readonly {
+      itemId: string
+      lot: string | null
+      expected: string
+      counted: string | null
+    }[]
     note: string | null
     status: CountStatus
     approvalState: ApprovalState
@@ -250,6 +270,7 @@ export class StockCount extends AggregateRoot<StockCountProps> {
       warehouseId: this.props.warehouseId,
       lines: this.props.lines.map((line) => ({
         itemId: line.itemId,
+        lot: line.lot?.value ?? null,
         expected: line.expected.toString(),
         counted: line.counted?.toString() ?? null,
       })),
