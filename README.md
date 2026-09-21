@@ -158,6 +158,7 @@ vendored side by side, and a cross-module import cannot resolve.
 | [`treasury/`](treasury/) | Bank and cash accounts, their append-only journal, balances, transfers, statement import and reconciliation | 3008 | 19, 20 |
 | [`ledger/`](ledger/) | Chart of accounts, balanced double-entry journal, accounting periods, automatic postings from financial and treasury facts, trial balance, result of the period, cash flow and drill-down | 3009 | 22–25 |
 | [`procurement/`](procurement/) | Purchase requisitions, supplier quotations and their comparison, approval thresholds, purchase orders, receiving and returns | 3010 | 26–28 |
+| [`fiscal/`](fiscal/) | Phase 39 fiscal origin ingress, encrypted owner projections and resumable backfill; issuance remains disabled | 3011 reserved | 39 |
 | [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, retry, DLQ, replay | 3005 | 9 |
 | [`web/`](web/) | Next.js frontend, routed and bilingual | 3000 | 10, 14 |
 | [`contracts/`](contracts/) | Published package: versioned Zod event and API schemas | — | 3 |
@@ -184,12 +185,23 @@ git clone <this repository> && cd horizon
 
 make install     # npm ci in every project
 make check       # boundaries + lint + typecheck + unit tests, everywhere
+make ci-local    # repo checks, builds and Testcontainers e2e before pushing
+make ci-local-full # plus clean npm installs and all Docker image builds
 make up          # start the platform dependencies
 make demo        # idempotent seed plus signed callback golden path
 make up-apps     # then start all five services and web at http://localhost:3000
 make test-phase10 # repeat the human flow in Chromium and verify its joined trace
 make test-phase12 # prove the MCP debugger's parse and database privilege boundaries
 ```
+
+`make ci-local` checks the current working tree, including uncommitted changes. It
+runs all projects because a change to shared CI inputs selects the full matrix. It
+needs Node 24, Docker and installed project dependencies (`make install`). Use
+`make ci-local-full` to repeat CI's clean `npm ci` and Docker image builds too; its
+clean installs need the current contracts package in local Verdaccio. Both commands
+check that regenerating `docs/events.md` and `published-schemas.json` makes no
+changes. GitHub still runs the browser golden path, gateway validation and Terraform
+in separate jobs; run those workflows or their local commands when those areas change.
 
 Sign in as `demo@horizon.local` with `Horizon-demo-2026!` after running `make demo`, then
 select the local `horizon-demo` workspace.
@@ -278,6 +290,7 @@ Jaeger / Prometheus / Loki / Grafana · Docker · Terraform (never applied) · G
 |---|---|
 | [`docs/plan.md`](docs/plan.md) | Phases, deliverables, exit criteria, non-goals |
 | [`docs/erp-expansion-plan.md`](docs/erp-expansion-plan.md) | Dependency-ordered plan for finance, purchasing, fiscal, CRM, localization and broader ERP coverage |
+| [`docs/fiscal-implementation-plan.md`](docs/fiscal-implementation-plan.md) | Detailed Phase J sequence, fiscal source register, integration gates and exit evidence |
 | [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece is deferred |
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
 | [`docs/adr/`](docs/adr/) | 47 decision records |

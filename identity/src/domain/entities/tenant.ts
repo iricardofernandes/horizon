@@ -2,6 +2,7 @@ import { type Either, left, right } from '@/core/either'
 import { AggregateRoot } from '@/core/entities/aggregate-root'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import { CompanyFiscalProfileChangedEvent } from '@/domain/events/company-fiscal-profile-changed-event'
 import { TenantCreatedEvent } from '@/domain/events/tenant-created-event'
 import type { CompanyProfile, CompanyProfileProps } from '@/domain/value-objects/company-profile'
 import type { TenantName } from '@/domain/value-objects/tenant-name'
@@ -17,6 +18,8 @@ interface TenantProps {
   timezone: Timezone
   status: TenantStatus
   company: CompanyProfile | null
+  fiscalProfileRevision: number
+  fiscalProfileEffectiveFrom: string | null
   readonly createdAt: Date
   updatedAt: Date
 }
@@ -29,6 +32,8 @@ export interface TenantSnapshot {
   readonly timezone: string
   readonly status: TenantStatus
   readonly company: Readonly<CompanyProfileProps> | null
+  readonly fiscalProfileRevision: number
+  readonly fiscalProfileEffectiveFrom: string | null
   readonly createdAt: Date
   readonly updatedAt: Date
 }
@@ -49,6 +54,8 @@ export class Tenant extends AggregateRoot<TenantProps> {
       timezone: Timezone
       status?: TenantStatus
       company?: CompanyProfile | null
+      fiscalProfileRevision?: number
+      fiscalProfileEffectiveFrom?: string | null
       createdAt?: Date
       updatedAt?: Date
     },
@@ -62,6 +69,8 @@ export class Tenant extends AggregateRoot<TenantProps> {
         timezone: props.timezone,
         status: props.status ?? 'active',
         company: props.company ?? null,
+        fiscalProfileRevision: props.fiscalProfileRevision ?? 0,
+        fiscalProfileEffectiveFrom: props.fiscalProfileEffectiveFrom ?? null,
         createdAt: now,
         updatedAt: props.updatedAt ?? now,
       },
@@ -105,14 +114,29 @@ export class Tenant extends AggregateRoot<TenantProps> {
    * Record who this workspace legally is. Separate from the reader's language: this is
    * what Finance and Fiscal will calculate from (ADR 0043, ADR 0044).
    */
-  describeCompany(company: CompanyProfile, now: Date): void {
+  describeCompany(company: CompanyProfile, effectiveFrom: string, now: Date): void {
     this.props.company = company
+    this.props.fiscalProfileRevision += 1
+    this.props.fiscalProfileEffectiveFrom = effectiveFrom
     this.props.updatedAt = now
+    this.addDomainEvent(
+      new CompanyFiscalProfileChangedEvent(
+        this.id,
+        this.id.toString(),
+        this.props.fiscalProfileRevision,
+        effectiveFrom,
+        now,
+      ),
+    )
   }
 
   /** The currency this workspace reports in, before a company profile exists. */
   baseCurrency(): string {
     return this.props.company?.baseCurrency ?? 'BRL'
+  }
+
+  fiscalProfileEffectiveFrom(): string | null {
+    return this.props.fiscalProfileEffectiveFrom
   }
 
   suspend(now: Date): Either<ConflictError, void> {
@@ -138,6 +162,8 @@ export class Tenant extends AggregateRoot<TenantProps> {
       timezone: this.props.timezone.value,
       status: this.props.status,
       company: this.props.company?.details ?? null,
+      fiscalProfileRevision: this.props.fiscalProfileRevision,
+      fiscalProfileEffectiveFrom: this.props.fiscalProfileEffectiveFrom,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,
     })

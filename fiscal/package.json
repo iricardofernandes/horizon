@@ -1,0 +1,37 @@
+{
+  "name": "@horizon/fiscal",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Fiscal ingress and restricted projections for Phase 39.",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsup src/worker.ts src/backfill-cli.ts --format cjs --platform node --out-dir dist --clean",
+    "start": "node dist/worker.js",
+    "backfill": "node dist/backfill-cli.js",
+    "db:migrate": "node scripts/migrate.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.config.e2e.mts"
+  },
+  "dependencies": {
+    "@horizon/contracts": "0.23.0",
+    "amqplib": "2.0.1",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
+    "@testcontainers/postgresql": "^12.1.0",
+    "@testcontainers/rabbitmq": "12.1.0",
+    "@types/amqplib": "0.10.8",
+    "@types/node": "^26.5.1",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

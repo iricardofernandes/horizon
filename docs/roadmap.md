@@ -65,7 +65,7 @@ and where a historical document must be recalculable exactly as it was calculate
 its original date.** That is a genuinely hard versioning and determinism problem,
 and it is legible to a reviewer who has never heard of the Brazilian tax code.
 
-**Scope when built.** The calculation engine only:
+**Core of the scope.** The calculation engine provides:
 
 - Rules expressed **as data** — versioned rule sets with validity intervals,
   jurisdiction scope, and taxpayer-classification predicates — never as branching
@@ -73,9 +73,8 @@ and it is legible to a reviewer who has never heard of the Brazilian tax code.
 - Deterministic recalculation: the same document and the same effective date always
   produce the same result, including years later, because the engine resolves the
   rule set version rather than "the current rules".
-- A SEFAZ port with a **deterministic mock adapter as the default**, so the module is
-  fully testable and fully demonstrable with no external dependency and no
-  certificate.
+- An authority port with a **deterministic mock adapter as the default**, so rules and
+  document state can be tested without an external dependency or certificate.
 - A calculation-explanation output: which rule versions fired, in what order, with
   what intermediate values. A tax result that cannot be explained is not usable.
 
@@ -89,10 +88,11 @@ early, it would be the largest and least legible thing in the repository.
 classification in place (Phase 6); the contract versioning gate live, since fiscal
 rule schemas will version faster than anything else (Phase 3).
 
-**Known omissions to declare when built.** SPED export and digital-certificate
-handling (A1/A3) will be explicitly out of scope and documented as such. Half of a
-certificate integration is worse than none — it invites a reviewer to assume the
-whole document-transmission path works when it does not.
+**Phase J expansion.** The [detailed fiscal plan](fiscal-implementation-plan.md) adds
+NF-e, NFC-e and NFS-e document lifecycles, XML import, certificate-backed authority
+adapters and a support matrix. Each real integration is gated by homologation evidence
+for its issuer and jurisdiction. SPED export remains out of scope; simulated documents
+are labeled as such and cannot be mistaken for authorized fiscal documents.
 
 ---
 

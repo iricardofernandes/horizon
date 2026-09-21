@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes } from 'node:crypto'
+import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -292,6 +292,51 @@ it('issues API keys once, respects issuer scope, and revokes them immediately', 
   await request(app.getHttpServer())
     .post('/auth/api-key')
     .send({ tenantId: owner.tenantId, presented: key.body.token })
+    .expect(401)
+})
+
+it('exchanges a tenant-scoped service key for a restricted fiscal reader token', async () => {
+  const owner = await tenant()
+  for (const role of [
+    { module: 'identity', role: 'fiscal-reader' },
+    { module: 'parties', role: 'fiscal-reader' },
+    { module: 'catalog', role: 'viewer' },
+  ]) {
+    await request(app.getHttpServer())
+      .post(`/users/${owner.ownerId}/roles`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ assignment: role, operation: 'grant' })
+      .expect(200)
+  }
+  const key = await request(app.getHttpServer())
+    .post('/api-keys')
+    .set('Authorization', `Bearer ${owner.accessToken}`)
+    .send({ name: 'Fiscal reader', scopes: ['identity:read', 'parties:read', 'catalog:read'] })
+    .expect(201)
+  const exchanged = await request(app.getHttpServer())
+    .post('/auth/fiscal-token')
+    .send({ tenantId: owner.tenantId, presented: key.body.token })
+    .expect(200)
+  expect(exchanged.headers['cache-control']).toContain('no-store')
+  const verified = await runtime.signer.verify(exchanged.body.accessToken)
+  expect(verified.isRight()).toBe(true)
+  if (verified.isLeft()) throw verified.value
+  expect(verified.value).toMatchObject({
+    tenantId: owner.tenantId,
+    subject: `api-key:${key.body.apiKeyId}`,
+    roles: [
+      { module: 'parties', role: 'fiscal-reader' },
+      { module: 'identity', role: 'fiscal-reader' },
+      { module: 'catalog', role: 'viewer' },
+    ],
+  })
+  await request(app.getHttpServer())
+    .get('/workspace/company/fiscal-profiles')
+    .set('Authorization', `Bearer ${exchanged.body.accessToken}`)
+    .expect(200)
+  await request(app.getHttpServer())
+    .post('/auth/fiscal-token')
+    .send({ tenantId: randomUUID(), presented: key.body.token })
     .expect(401)
 })
 

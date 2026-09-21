@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { ConfirmReservationUseCase } from '@/application/use-cases/confirm-reservation'
+import { CreateWarehouseUseCase } from '@/application/use-cases/manage-inventory'
 import { ReserveStockUseCase } from '@/application/use-cases/reserve-stock'
 import {
   ReturnToStockUseCase,
@@ -23,6 +24,20 @@ beforeAll(() => {
 
 afterAll(async () => {
   await Promise.allSettled([database?.close(), application?.end(), administrator?.end()])
+})
+
+it('provisions a new tenant when its first warehouse is created', async () => {
+  const tenantId = randomUUID()
+  const created = await new CreateWarehouseUseCase(database, clock).execute({
+    tenantId,
+    name: 'First warehouse',
+  })
+  if (created.isLeft()) throw created.value
+  const [tenant] = await administrator`select id from tenants where id = ${tenantId}`
+  const [warehouse] = await administrator`select id from warehouses
+    where tenant_id = ${tenantId} and id = ${created.value.warehouseId}`
+  expect(tenant?.id).toBe(tenantId)
+  expect(warehouse?.id).toBe(created.value.warehouseId)
 })
 
 async function seedBalance(onHand = 10_000_000n) {

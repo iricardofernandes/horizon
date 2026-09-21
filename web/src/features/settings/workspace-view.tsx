@@ -21,6 +21,7 @@ export type CompanyProfile = {
   address: {
     line: string | null
     city: string | null
+    municipalityCode: string | null
     state: string | null
     postalCode: string | null
     country: string
@@ -37,6 +38,8 @@ export type Workspace = {
   status: string
   baseCurrency: string
   company: CompanyProfile | null
+  fiscalProfileRevision: number
+  fiscalProfileEffectiveFrom: string | null
 }
 
 export function WorkspaceView({
@@ -134,11 +137,13 @@ function CompanyPanel({
           municipalRegistration: text(data, 'municipalRegistration'),
           addressLine: text(data, 'addressLine'),
           addressCity: text(data, 'addressCity'),
+          addressMunicipalityCode: text(data, 'addressMunicipalityCode'),
           addressState: text(data, 'addressState'),
           addressPostalCode: text(data, 'addressPostalCode'),
           addressCountry: text(data, 'addressCountry') ?? 'BR',
           baseCurrency: text(data, 'baseCurrency') ?? 'BRL',
           fiscalRegime: data.get('fiscalRegime'),
+          fiscalEffectiveFrom: text(data, 'fiscalEffectiveFrom'),
           timezone: text(data, 'timezone') ?? workspace.timezone,
         }),
       },
@@ -215,6 +220,14 @@ function CompanyPanel({
           name="addressCity"
         />
         <TextField
+          defaultValue={company?.address.municipalityCode ?? ''}
+          label={t('addressMunicipalityCode')}
+          maxLength={7}
+          name="addressMunicipalityCode"
+        />
+      </div>
+      <div className="form-grid two-columns">
+        <TextField
           defaultValue={company?.address.state ?? ''}
           label={t('addressState')}
           maxLength={120}
@@ -257,6 +270,13 @@ function CompanyPanel({
         />
       </div>
       <TextField
+        defaultValue={workspace.fiscalProfileEffectiveFrom ?? new Date().toISOString().slice(0, 10)}
+        label={t('fiscalEffectiveFrom')}
+        name="fiscalEffectiveFrom"
+        required
+        type="date"
+      />
+      <TextField
         defaultValue={workspace.timezone}
         description={t('timezoneHelp')}
         label={t('timezone')}
@@ -295,6 +315,10 @@ function CompanyReadout({
         <div>
           <dt>{t('taxId')}</dt>
           <dd>{company?.taxId ?? t('none')}</dd>
+        </div>
+        <div>
+          <dt>{t('addressMunicipalityCode')}</dt>
+          <dd>{company?.address.municipalityCode ?? t('none')}</dd>
         </div>
         <div>
           <dt>{t('fiscalRegime')}</dt>

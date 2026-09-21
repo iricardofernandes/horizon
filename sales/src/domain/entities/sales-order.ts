@@ -7,6 +7,7 @@ import {
   type AgreedInstallment,
   type ConfirmedOrderLine,
   type RequestedOrderLine,
+  SalesFiscalOriginRecordedEvent,
   SalesInvoicingRequestedEvent,
   SalesOrderCancelledEvent,
   SalesOrderConfirmedEvent,
@@ -411,6 +412,15 @@ export class SalesOrder extends AggregateRoot<SalesOrderProps> {
         installments: plan.installments,
       }),
     )
+    this.addDomainEvent(
+      new SalesFiscalOriginRecordedEvent(this.id, this.props.tenantId, now, {
+        shipmentId: shipment.shipmentId,
+        purpose: 'original',
+        customerId: this.props.customerId,
+        lines: plan.lines,
+        total: plan.value,
+      }),
+    )
   }
 
   returnEvent(
@@ -442,6 +452,15 @@ export class SalesOrder extends AggregateRoot<SalesOrderProps> {
         value: undone.value,
         remaining: undone.remaining,
         remainingInstallments: undone.remainingInstallments,
+      }),
+    )
+    this.addDomainEvent(
+      new SalesFiscalOriginRecordedEvent(this.id, this.props.tenantId, now, {
+        shipmentId: shipment.shipmentId,
+        purpose: 'return',
+        customerId: this.props.customerId,
+        lines: shipment.lines,
+        total: undone.value,
       }),
     )
   }

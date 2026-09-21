@@ -112,3 +112,15 @@ export const dataSubjectErased = defineEvent({
     erasedAt: instantSchema,
   }),
 })
+
+export const companyFiscalProfileChanged = defineEvent({
+  type: 'identity.company.fiscal-profile-changed',
+  version: 1,
+  description:
+    'An issuer profile has a new effective revision for restricted asynchronous projection.',
+  payload: z.strictObject({
+    tenantId: uuidSchema,
+    revision: z.number().int().positive(),
+    effectiveFrom: z.iso.date(),
+  }),
+})

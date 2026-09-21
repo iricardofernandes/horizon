@@ -169,10 +169,18 @@ export class CustomerName extends ValueObject<{ value: string }> {
 
 export class TaxId extends ValueObject<{ value: string }> {
   static create(value: string): Either<InvalidInputError, TaxId> {
-    const digits = value.replace(/\D/g, '')
-    if (digits.length !== 11 && digits.length !== 14)
-      return left(new InvalidInputError('/taxId', 'must be a CPF or CNPJ with 11 or 14 digits'))
-    return right(new TaxId({ value: digits }))
+    const canonical = value
+      .trim()
+      .toUpperCase()
+      .replace(/[.\-/\s]/g, '')
+    if (!/^(?:\d{11}|[A-Z0-9]{12}\d{2})$/.test(canonical))
+      return left(
+        new InvalidInputError(
+          '/taxId',
+          'must be an 11-digit CPF or a 14-character CNPJ with two check digits',
+        ),
+      )
+    return right(new TaxId({ value: canonical }))
   }
   get value(): string {
     return this.props.value

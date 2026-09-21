@@ -80,6 +80,8 @@ one means writing a new ADR that supersedes it.
 | [0041](0041-financial-treasury-ledger-boundaries.md) | Financial, treasury and ledger are three boundaries |
 | [0046](0046-reconciliation-suggests-a-human-confirms.md) | Reconciliation suggests, a human confirms |
 | [0047](0047-reporting-projections-never-write-back.md) | Reporting projections never write back |
+| [0048](0048-fiscal-origin-and-operational-ownership.md) | Fiscal origin and operational ownership |
+| [0049](0049-restricted-fiscal-profile-projections.md) | Restricted fiscal profile projections |
 
 ## Frontend
 

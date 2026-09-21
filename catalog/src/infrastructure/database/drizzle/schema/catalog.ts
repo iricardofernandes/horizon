@@ -53,6 +53,8 @@ export const catalogItems = pgTable(
     name: text('name').notNull(),
     unitId: uuid('unit_id').notNull(),
     ncm: text('ncm'),
+    classificationRevision: integer('classification_revision').notNull().default(0),
+    classificationEffectiveFrom: date('classification_effective_from'),
     active: integer('active').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
@@ -65,6 +67,32 @@ export const catalogItems = pgTable(
       name: 'catalog_items_tenant_unit_fk',
       columns: [table.tenantId, table.unitId],
       foreignColumns: [units.tenantId, units.id],
+    }),
+  ],
+)
+
+export const itemClassifications = pgTable(
+  'item_classifications',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    itemId: uuid('item_id').notNull(),
+    revision: integer('revision').notNull(),
+    effectiveFrom: date('effective_from').notNull(),
+    ncm: text('ncm'),
+    recordedAt: timestamp('recorded_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('item_classifications_revision_key').on(
+      table.tenantId,
+      table.itemId,
+      table.revision,
+    ),
+    foreignKey({
+      name: 'item_classifications_item_fk',
+      columns: [table.tenantId, table.itemId],
+      foreignColumns: [catalogItems.tenantId, catalogItems.id],
     }),
   ],
 )

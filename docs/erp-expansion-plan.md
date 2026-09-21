@@ -572,7 +572,7 @@ and the boards, the negotiation history, the approval queue and the deliveries b
 
 ### Phase I — inventory maturity and production
 
-**In progress.** Warehouse transfers, manual adjustments with a reason and an approval
+**Delivered.** Warehouse transfers, manual adjustments with a reason and an approval
 allowance, and stock counts with their discrepancy posting are delivered as
 [plan phase 32](plan.md#phase-32--stock-moved-on-purpose-a-transfer-a-write-off-and-a-count).
 The Kardex, valuation, stock position, min/max alerts, the ABC curve and the cost-of-goods
@@ -586,8 +586,7 @@ Serial numbers are delivered as
 families, variants, kits and BOM as
 [plan phase 36](plan.md#phase-36--what-a-thing-is-and-what-it-is-made-of). Production orders,
 material issue, finished-goods receipt, scrap and third-party production are delivered as
-[plan phase 37](plan.md#phase-37--the-order-that-consumes-and-produces). Only the screens
-that close the phase remain
+[plan phase 37](plan.md#phase-37--the-order-that-consumes-and-produces). The inventory screens close this phase
 ([phase 38](plan.md#phase-38--the-inventory-screens)).
 
 **Deliverables**
@@ -608,6 +607,9 @@ that close the phase remain
 - A production order conserves quantities/cost across material issue and finished receipt.
 
 ### Phase J — fiscal documents
+
+The implementation is split into [phases 39–48](fiscal-implementation-plan.md), with
+per-phase deliverables, dependencies, evidence gates and an official-source register.
 
 **Deliverables**
 
@@ -775,7 +777,5 @@ The first executable backlog, in order, is:
     require one joined trace plus reconciled numeric assertions in CI.
 
 **Status:** items 1 to 12 are delivered as plan phases 14 to 21, Phase F as plan phases 22
-to 25, Phase G as 26 to 28 and Phase H as 29 to 31. Phase I has begun with plan phase 32,
-which gives the warehouse its own commands — transfers, adjustments and counts — and the
-movement history the valuation and stock reports will be built from.
-
+to 25, Phase G as 26 to 28, Phase H as 29 to 31 and Phase I as 32 to 38. Phase J is
+planned as phases 39 to 48 in the [fiscal implementation plan](fiscal-implementation-plan.md).

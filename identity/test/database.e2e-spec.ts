@@ -8,6 +8,7 @@ import postgres from 'postgres'
 import { AuthenticateApiKeyUseCase } from '@/application/use-cases/authenticate-api-key'
 import { AuthenticateUserUseCase } from '@/application/use-cases/authenticate-user'
 import { CreateTenantUseCase } from '@/application/use-cases/create-tenant'
+import { DescribeCompanyUseCase } from '@/application/use-cases/describe-company'
 import { DisableUserUseCase } from '@/application/use-cases/disable-user'
 import { RevokeApiKeyUseCase } from '@/application/use-cases/revoke-api-key'
 import { VerifyAuditChainUseCase } from '@/application/use-cases/verify-audit-chain'
@@ -77,6 +78,45 @@ it('persists sign-up, encrypts personal data and atomically records events', asy
     'identity.tenant.created',
     'identity.user.registered',
   ])
+})
+
+it('round-trips an alphanumeric issuer CNPJ and municipality code through the expanded tenant row', async () => {
+  const created = await tenant()
+  const result = await new DescribeCompanyUseCase(db, { now: () => new Date() }).execute({
+    tenantId: created.tenantId,
+    actor: { type: 'user', id: created.ownerId },
+    company: {
+      legalName: 'Issuer LTDA',
+      taxId: '00.000.000/e08g-12',
+      addressMunicipalityCode: '3550308',
+      baseCurrency: 'BRL',
+      fiscalRegime: 'simples-nacional',
+    },
+    timezone: 'America/Sao_Paulo',
+    fiscalEffectiveFrom: '2026-09-01',
+  })
+  if (result.isLeft()) throw result.value
+  const restored = await db.inTenant(created.tenantId, (scope) =>
+    scope.tenants.findById(created.tenantId),
+  )
+  expect(restored?.toSnapshot().company).toMatchObject({
+    taxId: '00000000E08G12',
+    address: { municipalityCode: '3550308' },
+  })
+  const exportRecord = await db.findCompanyFiscalExport(created.tenantId, 1)
+  expect(exportRecord).toMatchObject({
+    effectiveFrom: '2026-09-01',
+    company: { taxId: '00000000E08G12', address: { municipalityCode: '3550308' } },
+  })
+  const [history] =
+    await owner`select ciphertext from company_profile_versions where tenant_id = ${created.tenantId}`
+  expect(JSON.stringify(history)).not.toContain('E08G')
+  const notices =
+    await owner`select event_type,payload from outbox where tenant_id = ${created.tenantId}`
+  expect(
+    notices.find((event) => event.event_type === 'identity.company.fiscal-profile-changed')
+      ?.payload,
+  ).toMatchObject({ tenantId: created.tenantId, revision: 1, effectiveFrom: '2026-09-01' })
 })
 
 it('enforces RLS on tenants, users, API keys, subject keys, audit and outbox', async () => {

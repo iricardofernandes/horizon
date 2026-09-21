@@ -4,6 +4,7 @@ import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import { Party } from '@/domain/entities/party'
+import { FiscalProfile, type FiscalProfileInput } from '@/domain/value-objects/fiscal-profile'
 import {
   PartyAddress,
   PartyEmail,
@@ -137,6 +138,25 @@ export class DescribePartyUseCase {
     if (details.isLeft()) return left(details.value)
     return withParty(this.unitOfWork, request.tenantId, request.partyId, (party) =>
       party.describe(details.value, this.clock.now()),
+    )
+  }
+}
+
+export class DescribePartyFiscalProfileUseCase {
+  constructor(
+    private readonly unitOfWork: PartiesUnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  async execute(request: {
+    readonly tenantId: string
+    readonly partyId: string
+    readonly profile: FiscalProfileInput
+  }): Promise<Either<InvalidInputError | ResourceNotFoundError | ConflictError, number>> {
+    const profile = FiscalProfile.create(request.profile)
+    if (profile.isLeft()) return left(profile.value)
+    return withParty(this.unitOfWork, request.tenantId, request.partyId, (party) =>
+      party.describeFiscalProfile(profile.value, this.clock.now()),
     )
   }
 }

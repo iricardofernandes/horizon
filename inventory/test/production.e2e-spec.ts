@@ -198,6 +198,15 @@ it('puts the finished goods on the shelf worth exactly what went into them', asy
   const chair = await balanceOf(world.tenantId, world.chair)
   expect(String(chair?.on_hand)).toBe('10000000')
   expect(String(chair?.average_unit_cost)).toBe('7000')
+  const kardex = await database.kardex(world.tenantId, {
+    itemId: world.chair,
+    warehouseId: world.warehouseId,
+    from: '2026-01-01T00:00:00.000Z',
+    to: new Date(Date.now() + 60_000).toISOString(),
+    limit: 200,
+    offset: 0,
+  })
+  expect(kardex.lines.map((line) => [line.kind, line.direction])).toEqual([['production-in', 'in']])
 })
 
 it('conserves value across the whole order, asserted against the database', async () => {

@@ -332,6 +332,12 @@ function ReceiveStockDialog({
       setBusy(false)
       return
     }
+    const lotCode = String(data.get('lotCode') ?? '').trim()
+    const expiresOn = String(data.get('expiresOn') ?? '').trim()
+    const serials = String(data.get('serials') ?? '')
+      .split(',')
+      .map((serial) => serial.trim())
+      .filter(Boolean)
     const response = await tracedFetch(
       'inventory.stock.receive',
       '/api/horizon/inventory/stock-receipts',
@@ -344,6 +350,18 @@ function ReceiveStockDialog({
           quantity: data.get('quantity'),
           unitCost,
           currency: String(data.get('currency') ?? 'BRL').toUpperCase(),
+          ...(lotCode
+            ? {
+                lots: [
+                  {
+                    code: lotCode,
+                    quantity: data.get('quantity'),
+                    ...(expiresOn ? { expiresOn } : {}),
+                  },
+                ],
+              }
+            : {}),
+          ...(serials.length ? { serials } : {}),
         }),
       },
     )
@@ -417,6 +435,18 @@ function ReceiveStockDialog({
               name="currency"
               pattern="[A-Za-z]{3}"
               required
+            />
+            <TextField
+              label={t('lotCode')}
+              name="lotCode"
+              maxLength={60}
+              description={t('lotCodeHint')}
+            />
+            <TextField label={t('expiresOn')} name="expiresOn" type="date" />
+            <TextField
+              label={t('serialNumbers')}
+              name="serials"
+              description={t('serialNumbersHint')}
             />
             <FormActions busy={busy} error={error} label={t('postReceipt')} />
           </form>

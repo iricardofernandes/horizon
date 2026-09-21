@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto'
+import { salesFiscalOriginRecorded } from '@horizon/contracts'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { ApplyStockReservedUseCase } from '@/application/use-cases/apply-reservation-outcome'
@@ -16,6 +17,15 @@ import {
   PickShipmentUseCase,
   ReturnShipmentUseCase,
 } from '@/application/use-cases/ship-orders'
+import type { Either } from '@/core/either'
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import { Customer } from '@/domain/entities/customer'
+import {
+  CustomerEmail,
+  CustomerName,
+  CustomerPhone,
+  TaxId,
+} from '@/domain/value-objects/sales-values'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
 
@@ -211,6 +221,38 @@ it('uses an RLS-bound application role and protects relay-owned outbox state', a
     has_table_privilege(current_user, 'sales_orders', 'DELETE') as order_delete,
     has_table_privilege(current_user, 'outbox', 'UPDATE') as outbox_update`
   expect(privileges).toEqual({ order_delete: false, outbox_update: false })
+})
+
+it('round-trips numeric and alphanumeric CNPJ in existing Sales customer rows', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const value = <E, T>(result: Either<E, T>): T => {
+    if (result.isLeft()) throw result.value
+    return result.value
+  }
+  for (const input of ['12.345.678/0001-95', '00.000.000/e08g-12']) {
+    const id = randomUUID()
+    const now = new Date()
+    const customer = Customer.rehydrate(
+      {
+        tenantId,
+        name: value(CustomerName.create(`Legacy ${id}`)),
+        email: value(CustomerEmail.create(`${id}@example.com`)),
+        phone: value(CustomerPhone.create('+55 11 99999-9999')),
+        address: 'Rua Um, 42',
+        taxId: value(TaxId.create(input)),
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      new UniqueEntityID(id),
+    )
+    await database.inTenant(tenantId, (scope) => scope.customers.create(customer))
+    const restored = await database.inTenant(tenantId, (scope) => scope.customers.findById(id))
+    expect(restored?.toSnapshot().taxId).toBe(input.replace(/[^\dA-Za-z]/g, '').toUpperCase())
+    const [stored] = await administrator`select tax_id_ciphertext from customers where id = ${id}`
+    expect(stored?.tax_id_ciphertext).not.toContain('E08G')
+  }
 })
 
 it('persists priced quotes and crypto-shreds customer personal data', async () => {
@@ -502,8 +544,28 @@ it('delivers an order in parts, and takes one delivery back', async () => {
     'sales.order.confirmed',
     'sales.shipment.dispatched',
     'sales.invoicing.requested',
+    'sales.fiscal-origin.recorded',
     'sales.shipment.dispatched',
     'sales.invoicing.requested',
+    'sales.fiscal-origin.recorded',
     'sales.shipment.returned',
+    'sales.fiscal-origin.recorded',
   ])
+  const origins =
+    await administrator`select document_id, purpose from fiscal_origins where tenant_id = ${tenantId}`
+  expect(origins).toHaveLength(3)
+  expect(origins.filter((origin) => origin.purpose === 'original')).toHaveLength(2)
+  expect(origins.filter((origin) => origin.purpose === 'return')).toHaveLength(1)
+  const fiscalEvents = await administrator`select payload from outbox
+    where tenant_id = ${tenantId} and event_type = 'sales.fiscal-origin.recorded'`
+  const payloads = fiscalEvents.map((event) =>
+    salesFiscalOriginRecorded.payload.parse(event.payload),
+  )
+  expect(payloads).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ originId: first.shipmentId, purpose: 'original', orderId }),
+      expect.objectContaining({ originId: second.shipmentId, purpose: 'original', orderId }),
+      expect.objectContaining({ originId: first.shipmentId, purpose: 'return', orderId }),
+    ]),
+  )
 })

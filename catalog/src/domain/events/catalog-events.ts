@@ -40,6 +40,25 @@ export class CatalogItemDeactivatedEvent extends CatalogEvent {
   }
 }
 
+export class CatalogItemClassificationChangedEvent extends CatalogEvent {
+  readonly eventType = 'catalog.item.classification-changed'
+  constructor(
+    id: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly classification: {
+      revision: number
+      effectiveFrom: string
+      ncm: string | null
+    },
+  ) {
+    super(id, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return { itemId: this.aggregateId.toString(), ...this.classification }
+  }
+}
+
 export class CatalogPriceChangedEvent extends CatalogEvent {
   readonly eventType = 'catalog.price.changed'
   constructor(

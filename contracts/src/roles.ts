@@ -42,12 +42,12 @@ export type ModuleName = z.infer<typeof moduleNameSchema>
  * per-module maps, in a few minutes. A role change is a deployment, not a support action.
  */
 export const ROLES = {
-  identity: ['owner', 'admin', 'member'],
+  identity: ['owner', 'admin', 'member', 'fiscal-reader'],
   catalog: ['admin', 'editor', 'viewer'],
   inventory: ['admin', 'operator', 'viewer'],
   sales: ['admin', 'representative', 'viewer'],
   webhooks: ['admin', 'viewer'],
-  parties: ['admin', 'editor', 'viewer'],
+  parties: ['admin', 'editor', 'viewer', 'fiscal-reader'],
   financial: ['admin', 'operator', 'viewer'],
   treasury: ['admin', 'operator', 'viewer'],
   ledger: ['admin', 'accountant', 'viewer'],

@@ -36,6 +36,13 @@
       "when": 1791100000000,
       "tag": "0004_fulfilment",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791100001000,
+      "tag": "0005_fiscal_origins",
+      "breakpoints": true
     }
   ]
 }

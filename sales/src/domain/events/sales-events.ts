@@ -155,6 +155,37 @@ export class SalesInvoicingRequestedEvent extends SalesEvent {
   }
 }
 
+/** One immutable billable origin; the database key suppresses duplicate deliveries. */
+export class SalesFiscalOriginRecordedEvent extends SalesEvent {
+  readonly eventType = 'sales.fiscal-origin.recorded'
+  constructor(
+    orderId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly origin: {
+      shipmentId: string
+      purpose: 'original' | 'return'
+      customerId: string
+      lines: readonly ConfirmedOrderLine[]
+      total: Money
+    },
+  ) {
+    super(orderId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      orderId: this.aggregateId.toString(),
+      originModule: 'sales',
+      originDocumentType: 'shipment',
+      originId: this.origin.shipmentId,
+      purpose: this.origin.purpose,
+      customerId: this.origin.customerId,
+      lines: this.origin.lines.map(confirmedLinePayload),
+      total: moneyPayload(this.origin.total),
+    }
+  }
+}
+
 const installmentsPayload = (installments: readonly AgreedInstallment[]) =>
   installments.map(installmentPayload)
 

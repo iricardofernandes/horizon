@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.22.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.23.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -82,6 +82,18 @@ A product family and the ordered attributes its variants differ along were defin
 | `familyId` | string | yes | Product family identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
 | `name` | string | yes | min length 1. max length 160 |
 | `attributes` | array | yes | — |
+### `catalog.item.classification-changed` — v1
+
+An item tax classification changed from an effective date; posted snapshots retain the old classification.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `itemId` | string | yes | Catalog item identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `revision` | integer | yes | — |
+| `effectiveFrom` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `ncm` | any | yes | — |
 ### `catalog.item.created` — v1
 
 A product or service was added to a tenant catalog and may be referenced by downstream modules.
@@ -246,6 +258,17 @@ An API key is no longer valid. Carries the public prefix rather than the key, so
 | `apiKeyId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
 | `prefix` | string | yes | min length 24. max length 24 |
 | `revokedAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
+### `identity.company.fiscal-profile-changed` — v1
+
+An issuer profile has a new effective revision for restricted asynchronous projection.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `tenantId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `revision` | integer | yes | — |
+| `effectiveFrom` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
 ### `identity.data-subject.erased` — v1
 
 A data-subject key was destroyed (ADR 0026). Every module holding personal data for this subject must shred its own copies; the ciphertext identity holds is now unrecoverable by anyone, including the operator.
@@ -443,6 +466,17 @@ The party’s personal data was crypto-shredded. Every projection must destroy i
 | Field | Type | Required | Notes |
 |---|---|:--:|---|
 | `partyId` | string | yes | Party identifier, shared by every context that projects it. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+### `parties.party.fiscal-profile-changed` — v1
+
+A restricted Fiscal projector may fetch this exact recipient revision; no personal data is carried on the bus.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `partyId` | string | yes | Party identifier, shared by every context that projects it. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `revision` | integer | yes | — |
+| `effectiveFrom` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
 ### `parties.party.registered` — v1
 
 An organization or person entered the shared registry with the roles it plays. Consumers build their own projection keyed by the party id; the tax identifier is deliberately absent.
@@ -661,6 +695,22 @@ Somebody asked for something to be bought and sent the request for a decision. A
 
 ## `sales`
 
+### `sales.fiscal-origin.recorded` — v1
+
+One billable shipment or return was recorded under a tenant-unique fiscal origin. This does not authorize a fiscal document or create another stock or money effect.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `orderId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `originModule` | string | yes | — |
+| `originDocumentType` | string | yes | — |
+| `originId` | string | yes | Shipment identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `purpose` | `original` \| `return` | yes | — |
+| `customerId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `lines` | array | yes | — |
+| `total` | object | yes | — |
 ### `sales.invoicing.requested` — v1
 
 A confirmed order is ready for the future Fiscal module to issue its invoice document.

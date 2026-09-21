@@ -18,7 +18,7 @@ export type Party = {
 
 /** CNPJs identify organizations and CPFs people; the registry enforces the pairing. */
 export function kindOfTaxId(taxId: string): Party['kind'] {
-  return taxId.replace(/\D/g, '').length === 14 ? 'organization' : 'person'
+  return taxId.trim().replace(/[.\-/\s]/g, '').length === 14 ? 'organization' : 'person'
 }
 
 export function maskedTaxId(party: Party): string {

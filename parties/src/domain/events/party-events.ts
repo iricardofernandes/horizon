@@ -122,3 +122,24 @@ export class PartyErasedEvent extends PartyEvent {
     return { partyId: this.aggregateId.toString() }
   }
 }
+
+/** A restricted consumer can fetch this exact revision; no profile data enters the bus. */
+export class PartyFiscalProfileChangedEvent extends PartyEvent {
+  readonly eventType = 'parties.party.fiscal-profile-changed'
+  constructor(
+    partyId: UniqueEntityID,
+    tenantId: string,
+    private readonly revision: number,
+    private readonly effectiveFrom: string,
+    occurredAt: Date,
+  ) {
+    super(partyId, tenantId, occurredAt)
+  }
+  payloadOf() {
+    return {
+      partyId: this.aggregateId.toString(),
+      revision: this.revision,
+      effectiveFrom: this.effectiveFrom,
+    }
+  }
+}

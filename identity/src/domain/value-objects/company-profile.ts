@@ -18,6 +18,7 @@ export type FiscalRegime = (typeof FISCAL_REGIMES)[number]
 export interface CompanyAddress {
   readonly line: string | null
   readonly city: string | null
+  readonly municipalityCode: string | null
   readonly state: string | null
   readonly postalCode: string | null
   readonly country: string
@@ -42,6 +43,7 @@ export interface CompanyProfileInput {
   readonly municipalRegistration?: string | null | undefined
   readonly addressLine?: string | null | undefined
   readonly addressCity?: string | null | undefined
+  readonly addressMunicipalityCode?: string | null | undefined
   readonly addressState?: string | null | undefined
   readonly addressPostalCode?: string | null | undefined
   readonly addressCountry?: string | null | undefined
@@ -76,16 +78,27 @@ export class CompanyProfile extends ValueObject<CompanyProfileProps> {
     if (!/^[A-Z]{2}$/.test(country))
       return left(new InvalidInputError('/addressCountry', 'must be an ISO 3166-1 alpha-2 code'))
 
+    const taxId = canonicalTaxId(input.taxId)
+    if (taxId !== null && country === 'BR' && !/^(?:\d{11}|[A-Z0-9]{12}\d{2})$/.test(taxId))
+      return left(new InvalidInputError('/taxId', 'must be an 11-digit CPF or 14-character CNPJ'))
+
+    const municipalityCode = optional(input.addressMunicipalityCode)
+    if (municipalityCode !== null && !/^\d{7}$/.test(municipalityCode))
+      return left(
+        new InvalidInputError('/addressMunicipalityCode', 'must be a seven-digit IBGE code'),
+      )
+
     return right(
       new CompanyProfile({
         legalName,
         tradeName: optional(input.tradeName),
-        taxId: digitsOnly(input.taxId),
+        taxId,
         stateRegistration: optional(input.stateRegistration),
         municipalRegistration: optional(input.municipalRegistration),
         address: {
           line: optional(input.addressLine),
           city: optional(input.addressCity),
+          municipalityCode,
           state: optional(input.addressState),
           postalCode: optional(input.addressPostalCode),
           country,
@@ -126,6 +139,7 @@ export class CompanyProfile extends ValueObject<CompanyProfileProps> {
       this.props.municipalRegistration,
       this.props.address.line,
       this.props.address.city,
+      this.props.address.municipalityCode,
       this.props.address.state,
       this.props.address.postalCode,
       this.props.address.country,
@@ -140,8 +154,12 @@ function optional(value: string | null | undefined): string | null {
   return trimmed.length === 0 ? null : trimmed
 }
 
-/** Registrations are compared and reported without their punctuation. */
-function digitsOnly(value: string | null | undefined): string | null {
-  const digits = value?.replace(/\D/g, '') ?? ''
-  return digits.length === 0 ? null : digits
+/** Preserve letters in new CNPJs while keeping numeric registrations canonical. */
+function canonicalTaxId(value: string | null | undefined): string | null {
+  const canonical =
+    value
+      ?.trim()
+      .toUpperCase()
+      .replace(/[.\-/\s]/g, '') ?? ''
+  return canonical.length === 0 ? null : canonical
 }

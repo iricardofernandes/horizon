@@ -9,6 +9,7 @@ import {
   PaymentTerms,
   Quantity,
   Reason,
+  TaxId,
 } from './value-objects/sales-values'
 
 function unwrap<T>(result: { isLeft(): boolean; value: T }): T {
@@ -31,6 +32,11 @@ const plainTerms = {
   notes: null,
 }
 const issuedOn = unwrap(BusinessDate.create('2026-09-14'))
+
+it('preserves alphanumeric CNPJ in a legacy Sales customer', () => {
+  expect(unwrap(TaxId.create('00.000.000/e08g-12')).value).toBe('00000000E08G12')
+  expect(TaxId.create('00.000.000/E08G-AA').isLeft()).toBe(true)
+})
 
 function draft() {
   const line = { lineId: randomUUID(), itemId: randomUUID(), quantity: quantity('2.5') }

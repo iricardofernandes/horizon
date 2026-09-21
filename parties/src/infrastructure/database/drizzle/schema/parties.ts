@@ -50,6 +50,8 @@ export const parties = pgTable(
     emailCiphertext: text('email_ciphertext').notNull(),
     phoneCiphertext: text('phone_ciphertext').notNull(),
     addressCiphertext: text('address_ciphertext').notNull(),
+    fiscalProfileCiphertext: text('fiscal_profile_ciphertext'),
+    fiscalProfileRevision: smallint('fiscal_profile_revision').notNull().default(0),
     roles: text('roles').array().notNull(),
     status: text('status').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
@@ -63,6 +65,32 @@ export const parties = pgTable(
       name: 'parties_tenant_data_key_fk',
       columns: [table.tenantId, table.id],
       foreignColumns: [partyDataKeys.tenantId, partyDataKeys.id],
+    }),
+  ],
+)
+
+export const partyFiscalProfiles = pgTable(
+  'party_fiscal_profiles',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    partyId: uuid('party_id').notNull(),
+    revision: smallint('revision').notNull(),
+    effectiveFrom: text('effective_from').notNull(),
+    ciphertext: text('ciphertext').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('party_fiscal_profiles_revision_key').on(
+      table.tenantId,
+      table.partyId,
+      table.revision,
+    ),
+    foreignKey({
+      name: 'party_fiscal_profiles_party_fk',
+      columns: [table.tenantId, table.partyId],
+      foreignColumns: [parties.tenantId, parties.id],
     }),
   ],
 )

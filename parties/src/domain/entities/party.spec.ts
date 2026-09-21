@@ -85,6 +85,12 @@ describe('party values', () => {
     expect(TaxId.create('12.345.678/0001-95', 'person').isLeft()).toBe(true)
   })
 
+  it('preserves alphanumeric CNPJ in the canonical and encrypted-index input', () => {
+    expect(valid(TaxId.create('00.000.000/e08g-12', 'organization')).value).toBe('00000000E08G12')
+    expect(TaxId.create('00.000.000/E08G-AA', 'organization').isLeft()).toBe(true)
+    expect(TaxId.create('00.000.000/E08@-12', 'organization').isLeft()).toBe(true)
+  })
+
   it('rejects a role outside the published set', () => {
     expect(PartyRoles.of(['customer', 'landlord']).isLeft()).toBe(true)
   })

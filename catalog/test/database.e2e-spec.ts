@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
+import { ClassifyCatalogItemUseCase } from '@/application/use-cases/classify-catalog-item'
 import { CreateCatalogItemUseCase } from '@/application/use-cases/create-catalog-item'
 import { CreateUnitUseCase } from '@/application/use-cases/create-unit'
 import { CreatePriceListUseCase, SetPriceUseCase } from '@/application/use-cases/manage-prices'
@@ -84,6 +85,41 @@ it('persists every aggregate and its outbox event atomically', async () => {
     'catalog.item.created',
     'catalog.price.changed',
   ])
+})
+
+it('retains effective-dated classification revisions and publishes a versioned notice', async () => {
+  const fixture = await seed()
+  const result = await new ClassifyCatalogItemUseCase(database, clock).execute({
+    actor,
+    tenantId: fixture.tenantId,
+    itemId: fixture.itemId,
+    effectiveFrom: '2026-09-01',
+    ncm: '09012100',
+  })
+  if (result.isLeft()) throw result.value
+  expect(result.value.revision).toBe(1)
+  expect(await database.classificationRevision(fixture.tenantId, fixture.itemId, 1)).toMatchObject({
+    ncm: '09012100',
+    effectiveFrom: '2026-09-01',
+  })
+  expect(await database.classificationRevision(randomUUID(), fixture.itemId, 1)).toBeNull()
+  expect(await database.listClassificationRevisions(fixture.tenantId, 1)).toEqual({
+    tenantId: fixture.tenantId,
+    data: [{ itemId: fixture.itemId, revision: 1 }],
+    nextCursor: null,
+  })
+  const otherTenant = randomUUID()
+  expect(await database.listClassificationRevisions(otherTenant, 1)).toEqual({
+    tenantId: otherTenant,
+    data: [],
+    nextCursor: null,
+  })
+  const [event] =
+    await owner`select payload from outbox where tenant_id = ${fixture.tenantId} and event_type = 'catalog.item.classification-changed'`
+  expect(event?.payload).toMatchObject({ itemId: fixture.itemId, revision: 1 })
+  await expect(
+    owner`update item_classifications set ncm = null where item_id = ${fixture.itemId}`,
+  ).rejects.toThrow('append-only')
 })
 
 it('enforces cross-tenant isolation for units, items and price lists', async () => {

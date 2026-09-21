@@ -2631,3 +2631,49 @@ tbody tr.reconciliation-selected td {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+
+.inventory-phase-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+.inventory-phase-form {
+  padding: 1.25rem;
+  margin: 1.25rem 0;
+}
+.inventory-phase-form h2 {
+  margin: 0 0 1rem;
+}
+.inventory-phase-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  align-items: end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.inventory-phase-line {
+  display: contents;
+}
+.inventory-phase-table {
+  margin: 1rem 0 2rem;
+}
+.inventory-phase-detail {
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+}
+.inventory-phase-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.inventory-phase-reason {
+  max-width: 28rem;
+  margin: 1rem 0;
+}
+.inventory-phase-summary {
+  font-weight: 600;
+  margin: 1rem 0;
+}

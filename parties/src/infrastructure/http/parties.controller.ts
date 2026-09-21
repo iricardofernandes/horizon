@@ -5,6 +5,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Inject,
   NotFoundException,
@@ -19,6 +20,7 @@ import { z } from 'zod'
 import type { Either } from '@/core/either'
 import type { UseCaseError } from '@/core/errors/use-case-error'
 import type { PartySnapshot } from '@/domain/entities/party'
+import { TAXPAYER_INDICATORS } from '@/domain/value-objects/fiscal-profile'
 import { PARTY_KINDS, PARTY_ROLES } from '@/domain/value-objects/party-values'
 import { PartiesRuntime } from '@/main/parties-runtime'
 import { type PartiesRequest, PublicRoute, RequirePartiesAction, tenantOf } from './authorization'
@@ -40,9 +42,31 @@ const registerInput = z.strictObject({
 const describeInput = z.strictObject(details)
 const roleInput = z.strictObject({ operation: z.enum(['grant', 'revoke']) })
 const statusInput = z.strictObject({ active: z.boolean() })
+const fiscalProfileInput = z.strictObject({
+  effectiveFrom: z.iso.date(),
+  stateRegistration: z.string().trim().min(1).max(40).nullable(),
+  municipalRegistration: z.string().trim().min(1).max(40).nullable(),
+  taxpayerIndicator: z.enum(TAXPAYER_INDICATORS),
+  finalConsumer: z.boolean(),
+  address: z.strictObject({
+    street: z.string().trim().min(1).max(160),
+    number: z.string().trim().min(1).max(160),
+    complement: z.string().trim().max(160).nullable(),
+    district: z.string().trim().min(1).max(160),
+    city: z.string().trim().min(1).max(160),
+    municipalityCode: z.string().trim().nullable(),
+    state: z.string().trim().nullable(),
+    postalCode: z.string().trim(),
+    country: z.string().trim().length(2),
+  }),
+})
 const listQuery = z.strictObject({
   role: z.enum(PARTY_ROLES).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100),
+})
+const fiscalListQuery = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  cursor: z.uuid().optional(),
 })
 
 /** The tax identifier leaves as its last digits only; the full value is not a list field. */
@@ -105,6 +129,19 @@ export class PartiesController {
     return { data: rows.map(present) }
   }
 
+  @Get('parties/fiscal-profiles')
+  @RequirePartiesAction('fiscal-read')
+  @Header('Cache-Control', 'no-store')
+  async listFiscalProfiles(@Query() query: unknown, @Req() request: PartiesRequest) {
+    const parsed = fiscalListQuery.safeParse(query)
+    if (!parsed.success) throw new BadRequestException('Invalid fiscal profile cursor')
+    return this.runtime.database.listFiscalProfileRevisions(
+      tenantOf(request),
+      parsed.data.limit,
+      parsed.data.cursor,
+    )
+  }
+
   @Get('parties/:id')
   @RequirePartiesAction('read')
   async get(@Param('id') id: string, @Req() request: PartiesRequest) {
@@ -158,6 +195,45 @@ export class PartiesController {
         operation: parsed.data.operation,
       }),
     )
+  }
+
+  @Put('parties/:id/fiscal-profile')
+  @RequirePartiesAction('manage')
+  async describeFiscalProfile(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: PartiesRequest,
+  ) {
+    const parsed = fiscalProfileInput.safeParse(body)
+    if (!parsed.success)
+      throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid fiscal profile')
+    const revision = unwrap(
+      await this.runtime.describeFiscalProfile.execute({
+        tenantId: tenantOf(request),
+        partyId: uuid(id),
+        profile: parsed.data,
+      }),
+    )
+    return { revision }
+  }
+
+  @Get('parties/:id/fiscal-profile/:revision')
+  @RequirePartiesAction('fiscal-read')
+  @Header('Cache-Control', 'no-store')
+  async fiscalProfile(
+    @Param('id') id: string,
+    @Param('revision') revision: string,
+    @Req() request: PartiesRequest,
+  ) {
+    const parsed = z.coerce.number().int().positive().safeParse(revision)
+    if (!parsed.success) throw new BadRequestException('Invalid fiscal profile revision')
+    const profile = await this.runtime.database.findFiscalExport(
+      tenantOf(request),
+      uuid(id),
+      parsed.data,
+    )
+    if (!profile) throw new NotFoundException('Fiscal profile was not found')
+    return profile
   }
 
   @Patch('parties/:id/status')

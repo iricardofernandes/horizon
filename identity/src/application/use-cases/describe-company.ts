@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 
 import { type Either, left, right } from '@/core/either'
-import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import type { Actor } from '@/domain/audit/audit-entry'
 import type { Tenant } from '@/domain/entities/tenant'
@@ -14,6 +14,7 @@ export interface DescribeCompanyRequest {
   readonly tenantId: string
   readonly company: CompanyProfileInput
   readonly timezone: string
+  readonly fiscalEffectiveFrom?: string | undefined
   readonly actor: Actor
   readonly requestId?: string | null
 }
@@ -44,11 +45,27 @@ export class DescribeCompanyUseCase {
     if (timezone.isLeft()) return left(timezone.value)
 
     const now = this.clock.now()
+    const effectiveFrom = request.fiscalEffectiveFrom ?? now.toISOString().slice(0, 10)
+    const parsedDate = new Date(`${effectiveFrom}T00:00:00Z`)
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) ||
+      Number.isNaN(parsedDate.getTime()) ||
+      parsedDate.toISOString().slice(0, 10) !== effectiveFrom
+    )
+      return left(new InvalidInputError('/fiscalEffectiveFrom', 'must be a calendar date'))
     return this.unitOfWork.inTenant(request.tenantId, async (scope) => {
       const tenant = await scope.tenants.findById(request.tenantId)
       if (tenant === null) return left(new ResourceNotFoundError('workspace'))
+      const previous = tenant.fiscalProfileEffectiveFrom()
+      if (previous !== null && effectiveFrom < previous)
+        return left(
+          new InvalidInputError(
+            '/fiscalEffectiveFrom',
+            'cannot predate the current fiscal profile',
+          ),
+        )
 
-      tenant.describeCompany(company.value, now)
+      tenant.describeCompany(company.value, effectiveFrom, now)
       tenant.moveTo(timezone.value, now)
       await scope.tenants.save(tenant)
       await scope.audit.append({

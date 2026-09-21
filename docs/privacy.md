@@ -8,8 +8,9 @@ Horizon is designed against **LGPD** (Lei Geral de Proteção de Dados, Brazil) 
 they differ, the stricter requirement is applied.
 
 > **Status.** Identity implements live subject-key destruction, encrypted personal
-> fields and a verifiable audit chain, covered by integration tests. Cross-module erasure
-> consumers, production key management and scheduled retention jobs remain future work.
+> fields and a verifiable audit chain. Parties and the Phase 39 Fiscal projection have
+> tested live erasure for recipient data. Production key management, backup erasure,
+> cross-module export and scheduled retention jobs remain future work.
 
 ---
 
@@ -33,11 +34,13 @@ it does not adjudicate the request.
 | Name, email address, password hash | `identity/` | User | Authentication and access control — without it, no one can log in |
 | Session and API key metadata, IP address, user agent | `identity/` | User | Security: reuse detection, revocation, audit |
 | Customer name, `cnpj`/`cpf`, email, phone, address | `sales/` | Customer contact, or a sole trader | Performing the sales contract: a counterparty must be identifiable and reachable |
+| Legal name, CPF/CNPJ, registration and structured fiscal address | `parties/` | Person, company contact or sole trader | Identifying the counterparty and preparing a lawful fiscal document |
+| Restricted encrypted copy of issuer and recipient fiscal profiles | `fiscal/` | Issuer or recipient | Preparing a document against an exact effective-dated owner revision |
 | Actor identity on every audit entry | all modules | User | Legal obligation and legitimate interest in an accountable record |
 
-Everything else Horizon stores — products, quantities, prices, movements — is **not**
-personal data. Over-classification makes the system unusable; the classification is made
-per column, at design time, and recorded in the module's schema.
+Product codes, quantities, prices and movements are generally non-personal, but may
+become identifying when attached to a sole trader or individual. Classification is
+made per field and use, rather than inferred from the table name alone.
 
 ---
 
@@ -69,6 +72,7 @@ scheduled job — not left to whoever remembers.
 | Customer records tied to commercial transactions | As long as the transactions require | Crypto-shredded when the retention floor passes |
 | Audit entries | Retained for the life of the tenant's account | Personal fields crypto-shredded; the chain stays |
 | Fiscal and commercial documents | Per Brazilian statutory minima (typically five years) | Reviewed, then shredded |
+| Mutable Fiscal profile projections | While required to prepare or reconcile a draft | Subject key destroyed on erasure; scheduled expiry and legal hold policy still require implementation |
 
 Erasure and retention pull in opposite directions when a subject asks to be forgotten
 while a legal obligation requires the record to survive. Horizon resolves this the way
@@ -108,6 +112,15 @@ customers, `identity/` has users. `identity/` publishes
 `identity.data-subject.erased`, and every module holding data for that subject shreds its
 own keys on receipt. The event carries no personal data, only the subject identifier
 being destroyed.
+
+For recipient profiles, `parties.party.erased` now reaches Fiscal's durable inbox. Fiscal
+creates an erasure tombstone even when the profile has not yet arrived, destroys any
+existing per-party key and rejects a late backfill. Owner change notices contain only
+IDs, revision numbers and effective dates; full names, identifiers and addresses travel
+only through role-restricted, tenant-scoped HTTP exports. Fiscal encrypts each revision
+with AES-GCM under its own per-subject key. Its broker and worker logs omit export bodies.
+Issuer profiles use a separate per-tenant key; retention and erasure of a sole-trader
+issuer need a legal-hold decision before production enablement.
 
 ### What redaction cannot hide
 

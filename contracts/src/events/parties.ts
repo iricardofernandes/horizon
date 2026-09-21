@@ -79,3 +79,15 @@ export const partyErased = defineEvent({
     'The party’s personal data was crypto-shredded. Every projection must destroy its own copy; the payload carries no personal data by construction.',
   payload: z.object({ partyId }),
 })
+
+export const partyFiscalProfileChanged = defineEvent({
+  type: 'parties.party.fiscal-profile-changed',
+  version: 1,
+  description:
+    'A restricted Fiscal projector may fetch this exact recipient revision; no personal data is carried on the bus.',
+  payload: z.strictObject({
+    partyId,
+    revision: z.number().int().positive(),
+    effectiveFrom: z.iso.date(),
+  }),
+})

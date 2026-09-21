@@ -12,8 +12,8 @@ import type { PartiesRuntime } from '@/main/parties-runtime'
 const PUBLIC = 'parties:public'
 const ACTION = 'parties:action'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
-export const RequirePartiesAction = (action: 'read' | 'manage' | 'erase') =>
-  SetMetadata(ACTION, action)
+type PartiesAction = 'read' | 'manage' | 'erase' | 'fiscal-read'
+export const RequirePartiesAction = (action: PartiesAction) => SetMetadata(ACTION, action)
 
 export interface PartiesRequest {
   readonly headers: Readonly<Record<string, string | string[] | undefined>>
@@ -29,10 +29,11 @@ export function tenantOf(request: PartiesRequest): string {
  * The static role map for this module (ADR 0023). Erasure is admin-only: it is
  * irreversible and reaches every context that projects the party.
  */
-const PERMITS: Readonly<Record<string, readonly ('read' | 'manage' | 'erase')[]>> = {
+const PERMITS: Readonly<Record<string, readonly PartiesAction[]>> = {
   admin: ['read', 'manage', 'erase'],
   editor: ['read', 'manage'],
   viewer: ['read'],
+  'fiscal-reader': ['fiscal-read'],
 }
 
 /**
@@ -64,12 +65,12 @@ export class PartiesAuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException()
     }
-    const action = this.reflector.getAllAndOverride<'read' | 'manage' | 'erase'>(ACTION, targets)
+    const action = this.reflector.getAllAndOverride<PartiesAction>(ACTION, targets)
     if (!action) return true
     const allowed = request.principal.roles.some((assignment) => {
       if (assignment.module === 'parties')
         return PERMITS[assignment.role]?.includes(action) ?? false
-      if (assignment.module === 'sales' && action !== 'erase')
+      if (assignment.module === 'sales' && (action === 'read' || action === 'manage'))
         return SALES_BRIDGE[assignment.role]?.includes(action) ?? false
       return false
     })

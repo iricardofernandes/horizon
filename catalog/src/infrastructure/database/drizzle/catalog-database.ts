@@ -109,6 +109,55 @@ export class CatalogDatabase extends UnitOfWork {
     return this.read(tenantId, (tx) => listVariants(tx, request))
   }
 
+  classificationRevision(tenantId: string, itemId: string, revision: number) {
+    return this.read(tenantId, async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(schema.itemClassifications)
+        .where(
+          and(
+            eq(schema.itemClassifications.itemId, itemId),
+            eq(schema.itemClassifications.revision, revision),
+          ),
+        )
+        .limit(1)
+      return row
+        ? {
+            tenantId,
+            itemId,
+            revision: row.revision,
+            effectiveFrom: row.effectiveFrom,
+            ncm: row.ncm,
+          }
+        : null
+    })
+  }
+
+  listClassificationRevisions(tenantId: string, limit: number, afterId?: string) {
+    return this.read(tenantId, async (tx) => {
+      const rows = await tx
+        .select({
+          itemId: schema.catalogItems.id,
+          revision: schema.catalogItems.classificationRevision,
+        })
+        .from(schema.catalogItems)
+        .where(
+          and(
+            gt(schema.catalogItems.classificationRevision, 0),
+            afterId === undefined ? undefined : gt(schema.catalogItems.id, afterId),
+          ),
+        )
+        .orderBy(asc(schema.catalogItems.id))
+        .limit(limit + 1)
+      const data = rows.slice(0, limit)
+      return {
+        tenantId,
+        data,
+        nextCursor: rows.length > limit ? (data.at(-1)?.itemId ?? null) : null,
+      }
+    })
+  }
+
   private read<T>(tenantId: string, query: (tx: Transaction) => Promise<T>): Promise<T> {
     return this.inTenant(tenantId, () => {
       const current = this.#transactions.getStore()
@@ -159,6 +208,8 @@ function mapItem(
       name: restored(CatalogName.create(row.name)),
       unitId: row.unitId,
       ncm: row.ncm === null ? null : restored(NcmCode.create(row.ncm)),
+      classificationRevision: row.classificationRevision,
+      classificationEffectiveFrom: row.classificationEffectiveFrom,
       variant: variant
         ? {
             familyId: variant.familyId,
@@ -478,12 +529,34 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
     save: async (item) => {
       const { variant, ...row } = item.toSnapshot()
       assertTenant(row.tenantId)
+      const [before] = await tx
+        .select({ revision: schema.catalogItems.classificationRevision })
+        .from(schema.catalogItems)
+        .where(eq(schema.catalogItems.id, row.id))
+        .limit(1)
+      if (!before) throw new Error('Item disappeared during classification update')
+      if (row.classificationRevision > before.revision + 1)
+        throw new Error('Item classification revision skipped')
+      if (row.classificationRevision === before.revision + 1) {
+        if (!row.classificationEffectiveFrom)
+          throw new Error('Classification revision has no effective date')
+        await tx.insert(schema.itemClassifications).values({
+          tenantId,
+          itemId: row.id,
+          revision: row.classificationRevision,
+          effectiveFrom: row.classificationEffectiveFrom,
+          ncm: row.ncm,
+          recordedAt: row.updatedAt,
+        })
+      }
       await tx
         .update(schema.catalogItems)
         .set({
           name: row.name,
           unitId: row.unitId,
           ncm: row.ncm,
+          classificationRevision: row.classificationRevision,
+          classificationEffectiveFrom: row.classificationEffectiveFrom,
           active: row.active ? 1 : 0,
           updatedAt: row.updatedAt,
         })

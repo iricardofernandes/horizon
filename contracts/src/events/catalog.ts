@@ -30,6 +30,22 @@ export const catalogItemDeactivated = defineEvent({
   payload: z.object({ itemId }),
 })
 
+export const catalogItemClassificationChanged = defineEvent({
+  type: 'catalog.item.classification-changed',
+  version: 1,
+  description:
+    'An item tax classification changed from an effective date; posted snapshots retain the old classification.',
+  payload: z.object({
+    itemId,
+    revision: z.number().int().positive(),
+    effectiveFrom: z.iso.date(),
+    ncm: z
+      .string()
+      .regex(/^\d{8}$/)
+      .nullable(),
+  }),
+})
+
 export const catalogPriceChanged = defineEvent({
   type: 'catalog.price.changed',
   version: 1,

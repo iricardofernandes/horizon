@@ -15,14 +15,16 @@ Brazil should be able to read any part of this repository after this page.
 
 ### `cnpj`
 *Cadastro Nacional da Pessoa Jurídica.* The national registry number identifying a
-**legal entity** (a company). Fourteen digits with two check digits. Structurally
+**legal entity** (a company). Fourteen characters with two check digits. Existing
+identifiers are numeric; [new registrations may be alphanumeric](https://www.gov.br/receitafederal/pt-br/acesso-a-informacao/acoes-e-programas/programas-e-atividades/cnpj-alfanumerico/cnpj-alfa).
+Structurally
 comparable to an EIN in the United States, a UK company number, or an EU VAT
 identification number — but unlike a VAT number it is mandatory for every registered
 company and is the primary key of corporate identity across the entire tax system.
 
-Modelled as a `Cnpj` value object that validates its check digits in the constructor
-(ADR 0031). Personal data when it identifies a sole trader, and therefore encrypted
-(ADR 0026).
+The current registry and workspace profile still normalize to digits; Phase 39 expands
+their validation and encrypted indexes. The identifier can be personal data when it
+identifies a sole trader, so ADR 0026's protection applies.
 
 ### `cpf`
 *Cadastro de Pessoas Físicas.* The equivalent for a **natural person**: eleven digits
@@ -31,15 +33,14 @@ Insurance number in role, though used far more widely in commerce. Always person
 
 ### `nfe`
 *Nota Fiscal Eletrônica.* An **electronic fiscal document** — a legally binding XML
-invoice that must be transmitted to and authorised by the tax authority *before* goods
-may be shipped. This is the part with no equivalent in most jurisdictions: it is not a
-commercial invoice sent to a customer, but a government-authorised document without
-which a shipment is contraband. There is a variant for services (`nfse`, municipal) and
-one for transport (`cte`).
+invoice whose use depends on authorization by the tax authority under the applicable
+[NF-e technical rules](https://www.nfe.fazenda.gov.br/PORTAl/listaConteudo.aspx?AspxAutoDetectCookieSupport=1&tipoConteudo=ndIjl+iEFdE%3D).
+It is distinct from a commercial invoice. Services have NFS-e, with a different
+national/municipal technical system; transport has CT-e.
 
-Out of scope. Generating and transmitting one belongs to `fiscal/`
-([roadmap](roadmap.md)), which will scope itself to the calculation engine and document
-that certificate handling and transmission are omitted rather than half-implemented.
+The [fiscal implementation plan](fiscal-implementation-plan.md) introduces issuance and
+transmission in tested slices. An untested adapter or a simulated response never grants
+the product a claim of legal issuance.
 
 ### `sped`
 *Sistema Público de Escrituração Digital.* The **digital bookkeeping regime**: a family

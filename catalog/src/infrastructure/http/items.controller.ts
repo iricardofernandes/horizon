@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Inject,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -32,6 +33,17 @@ const createItem = z.strictObject({
     .refine((value) => /^\d{8}$/.test(value.replace(/[.\s]/g, '')), 'must contain exactly 8 digits')
     .nullish(),
 })
+const classifyItem = z.strictObject({
+  effectiveFrom: z.iso.date(),
+  ncm: z
+    .string()
+    .regex(/^\d{8}$/)
+    .nullable(),
+})
+const classificationList = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  cursor: z.uuid().optional(),
+})
 
 @Controller('items')
 @ApiTags('items')
@@ -44,6 +56,18 @@ export class ItemsController {
   async list(@Query() query: unknown, @Req() request: CatalogHttpRequest) {
     const page = unwrap(await this.runtime.listItems.execute(listRequest(query, tenantOf(request))))
     return presentPage(page, presentItem)
+  }
+
+  @Get('classifications')
+  @RequirePermission('read', 'Items')
+  @ReadDuringDenylistOutage()
+  async listClassifications(@Query() query: unknown, @Req() request: CatalogHttpRequest) {
+    const parsed = classificationList.parse(query)
+    return this.runtime.database.listClassificationRevisions(
+      tenantOf(request),
+      parsed.limit,
+      parsed.cursor,
+    )
   }
 
   @Post()
@@ -76,5 +100,42 @@ export class ItemsController {
         itemId: z.uuid().parse(itemId),
       }),
     )
+  }
+
+  @Patch(':itemId/classification')
+  @RequestSchema(classifyItem)
+  @RequirePermission('manage', 'Items')
+  async classify(
+    @Param('itemId') itemId: string,
+    @Body() body: unknown,
+    @Req() request: CatalogHttpRequest,
+  ) {
+    const input = classifyItem.parse(body)
+    return unwrap(
+      await this.runtime.classifyItem.execute({
+        tenantId: tenantOf(request),
+        ...auditOf(request),
+        itemId: z.uuid().parse(itemId),
+        ...input,
+      }),
+    )
+  }
+
+  @Get(':itemId/classification/:revision')
+  @RequirePermission('read', 'Items')
+  @ReadDuringDenylistOutage()
+  async classification(
+    @Param('itemId') itemId: string,
+    @Param('revision') revision: string,
+    @Req() request: CatalogHttpRequest,
+  ) {
+    const parsed = z.coerce.number().int().positive().parse(revision)
+    const result = await this.runtime.database.classificationRevision(
+      tenantOf(request),
+      z.uuid().parse(itemId),
+      parsed,
+    )
+    if (!result) throw new NotFoundException('Classification revision was not found')
+    return result
   }
 }

@@ -701,6 +701,26 @@ function quoteRow(row: ReturnType<Quote['toSnapshot']>) {
 
 async function publish(tx: Transaction, tenantId: string, event: DomainEvent): Promise<void> {
   if (event.tenantId !== tenantId) throw new Error('Event tenant does not match transaction')
+  const payload = event.payloadOf()
+  if (event.eventType === 'sales.fiscal-origin.recorded') {
+    const originId = payload.originId
+    const purpose = payload.purpose
+    if (typeof originId !== 'string' || (purpose !== 'original' && purpose !== 'return'))
+      throw new Error('Invalid Sales fiscal origin event')
+    const [claimed] = await tx
+      .insert(schema.fiscalOrigins)
+      .values({
+        tenantId,
+        originModule: 'sales',
+        documentType: 'shipment',
+        documentId: originId,
+        purpose,
+        recordedAt: event.occurredAt,
+      })
+      .onConflictDoNothing()
+      .returning({ documentId: schema.fiscalOrigins.documentId })
+    if (!claimed) return
+  }
   const id = new UniqueEntityID().toString()
   const carrier: Record<string, string> = {}
   propagation.inject(context.active(), carrier)
@@ -714,7 +734,7 @@ async function publish(tx: Transaction, tenantId: string, event: DomainEvent): P
     traceId:
       trace.getSpan(context.active())?.spanContext().traceId ?? randomBytes(16).toString('hex'),
     traceParent: carrier.traceparent ?? null,
-    payload: { ...event.payloadOf() },
+    payload: { ...payload },
   })
 }
 

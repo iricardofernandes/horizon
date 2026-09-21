@@ -66,6 +66,7 @@ export class CreateWarehouseUseCase {
   }): Promise<Either<InvalidInputError | ConflictError, { warehouseId: string }>> {
     const name = WarehouseName.create(request.name)
     if (name.isLeft()) return left(name.value)
+    await this.unitOfWork.provisionTenant(request.tenantId)
     return this.unitOfWork.inTenant(request.tenantId, async (scope) => {
       if (await scope.warehouses.findByName(name.value.value))
         return left(new ConflictError('warehouse name already exists'))

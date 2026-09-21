@@ -100,6 +100,23 @@ export const salesInvoicingRequested = defineEvent({
   }),
 })
 
+export const salesFiscalOriginRecorded = defineEvent({
+  type: 'sales.fiscal-origin.recorded',
+  version: 1,
+  description:
+    'One billable shipment or return was recorded under a tenant-unique fiscal origin. This does not authorize a fiscal document or create another stock or money effect.',
+  payload: z.strictObject({
+    orderId: uuidSchema,
+    originModule: z.literal('sales'),
+    originDocumentType: z.literal('shipment'),
+    originId: shipmentId,
+    purpose: z.enum(['original', 'return']),
+    customerId: uuidSchema,
+    lines: z.array(shippedLineSchema).min(1),
+    total: moneySchema,
+  }),
+})
+
 export const salesQuoteSent = defineEvent({
   type: 'sales.quote.sent',
   version: 1,

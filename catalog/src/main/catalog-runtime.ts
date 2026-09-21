@@ -1,5 +1,6 @@
 import { Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
 import Redis from 'ioredis'
+import { ClassifyCatalogItemUseCase } from '@/application/use-cases/classify-catalog-item'
 import { CreateCatalogItemUseCase } from '@/application/use-cases/create-catalog-item'
 import { CreateUnitUseCase } from '@/application/use-cases/create-unit'
 import { DeactivateCatalogItemUseCase } from '@/application/use-cases/deactivate-catalog-item'
@@ -31,6 +32,7 @@ export class CatalogRuntime implements OnModuleInit, OnModuleDestroy {
   readonly createUnit: CreateUnitUseCase
   readonly listUnits: ListUnitsUseCase
   readonly createItem: CreateCatalogItemUseCase
+  readonly classifyItem: ClassifyCatalogItemUseCase
   readonly listItems: ListCatalogItemsUseCase
   readonly deactivateItem: DeactivateCatalogItemUseCase
   readonly listFamilies: ListProductFamiliesUseCase
@@ -70,6 +72,7 @@ export class CatalogRuntime implements OnModuleInit, OnModuleDestroy {
     this.createUnit = new CreateUnitUseCase(db, clock)
     this.listUnits = new ListUnitsUseCase(db)
     this.createItem = new CreateCatalogItemUseCase(db, clock)
+    this.classifyItem = new ClassifyCatalogItemUseCase(db, clock)
     this.listItems = new ListCatalogItemsUseCase(db)
     this.deactivateItem = new DeactivateCatalogItemUseCase(db, clock)
     this.listFamilies = new ListProductFamiliesUseCase(db)

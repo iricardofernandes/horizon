@@ -57,6 +57,8 @@ export function presentWorkspace(tenant: Tenant) {
     status: snapshot.status,
     baseCurrency: tenant.baseCurrency(),
     company: snapshot.company,
+    fiscalProfileRevision: snapshot.fiscalProfileRevision,
+    fiscalProfileEffectiveFrom: snapshot.fiscalProfileEffectiveFrom,
     createdAt: snapshot.createdAt,
     updatedAt: snapshot.updatedAt,
   }

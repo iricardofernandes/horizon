@@ -36,6 +36,20 @@
       "when": 1789830000000,
       "tag": "0004_workspace_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790020800000,
+      "tag": "0005_issuer_municipality",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790020801000,
+      "tag": "0006_company_fiscal_versions",
+      "breakpoints": true
     }
   ]
 }

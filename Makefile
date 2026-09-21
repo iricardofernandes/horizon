@@ -56,7 +56,15 @@ boundaries: ## Verify module isolation
 	@node scripts/check-boundaries.mjs
 
 .PHONY: check
-check: boundaries lint typecheck test ## Everything CI runs, locally
+check: boundaries lint typecheck test ## Fast code checks in every project
+
+.PHONY: ci-local
+ci-local: ## Run repository, build and integration gates before pushing
+	@node scripts/ci-local.mjs
+
+.PHONY: ci-local-full
+ci-local-full: ## Also verify clean installs and build all Docker images
+	@node scripts/ci-local.mjs --full
 
 .PHONY: keys
 keys: ## Generate Ed25519 development keys into a gitignored path

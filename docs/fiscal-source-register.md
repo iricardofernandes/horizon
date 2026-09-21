@@ -1,0 +1,28 @@
+# Fiscal source register
+
+Status: baseline artifacts downloaded and hashed on 2026-09-21. These are the files
+offered by the official portals at retrieval time; they are not approved adapter
+versions. Before enabling an adapter, record its exact schema selection, effective
+dates, validation fixtures, jurisdiction and reviewer. A missing value blocks its
+homologated or production capability.
+
+| Family | Authoritative portal | Artifact version / checksum | Capability dependent on it |
+|---|---|---|---|
+| NF-e/NFC-e MOC | [Portal NF-e manuals](https://www.nfe.fazenda.gov.br/PORTAl/listaConteudo.aspx?AspxAutoDetectCookieSupport=1&tipoConteudo=ndIjl+iEFdE%3D) | [MOC 7.0 PDF](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=LrBx7WT9PuA%3D), 4,304,647 bytes, SHA-256 `f664dcf94b77cabb32311620d85a7eb02cdf86adb2d4632ce178af2572dd2ad1` | Model 55 and 65 states, XML and auxiliary output |
+| NF-e/NFC-e technical notes | [Portal NF-e technical notes](https://www.nfe.fazenda.gov.br/portaL/listaConteudo.aspx?AspxAutoDetectCookieSupport=1&tipoConteudo=04BIflQt1aY%3D) | [NT 2026.004 v1.01 PDF](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=BTZQzgsO9Ws%3D), published 08/06/2026, SHA-256 `5f24a25351e790692754b07bbefac42ac67e70167a62a7806395d880f56675be`; [NT 2025.002 v1.51 PDF](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=AKD%2FmuSmiIY%3D), published 04/08/2026, SHA-256 `a4aaaa181522b43cd90b502f8ccb9e4bdabea30fed838e2d0790be5ba77254a4` | Authority adapters and validation |
+| NF-e/NFC-e XSD | [Portal NF-e schemas](https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=BMPFMBoln3w%3D) | [PL 010f, internal v1.04 ZIP](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=8ITFuBLltXs%3D), published 31/08/2026, SHA-256 `b8589490a58a09a993a80e6ac4d7ed10f20892061ecfc56719337098d4b95998`; [PL 010d v1.03 alphanumeric CNPJ ZIP](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=%20pBOYTXBtbk%3D), published 10/07/2026, SHA-256 `45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b`; [RTC event XSD ZIP](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=kp0SXLu%20ZdI%3D), published 27/07/2026, SHA-256 `a4c57ce95b225cd8852f90bd6c39ca28ae551636ff3f67eb2602b9fa847129b2` | XML validation; 010f and 010d overlap, so an adapter must select a compatible combination |
+| National NFS-e | [Production documents](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual) and [restricted production documents](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/producao-restrita) | Production [XSD v1.01-20260209](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/nfse-esquemas_xsd-v1-01-20260209.zip), SHA-256 `e7935cbd9470527c6cc32984c1b2263e614183bf0139ce2733eaaed2de9a8072`; [DPS/NFS-e layout v1.01-20260209](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/anexo_i-sefin_adn-dps_nfse-snnfse-v1-01-20260209.xlsx), SHA-256 `de5bc492959eadc8bfa7540e16939995924f2188f743648eaf84d3b31e9eeb7c` | DPS, NFS-e and events |
+| NFS-e endpoints | [Official API environments](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/apis-prod-restrita-e-producao) | Pending per environment | Endpoint configuration |
+| IBS/CBS | [Receita Federal 2026 guidance](https://www.gov.br/receitafederal/pt-br/acesso-a-informacao/acoes-e-programas/programas-e-atividades/reforma-tributaria-do-consumo/orientacoes-2026) | Pending rule package and tax review | Effective-dated calculation |
+| CNPJ alfanumérico | [Receita Federal technical documents](https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/documentos-tecnicos/cnpj); [first issued example, 2026-07-31](https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2026/julho/receita-federal-gera-o-primeiro-cnpj-em-formato-alfanumerico) | [Official check-digit manual](https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/documentos-tecnicos/cnpj/manual-dv-cnpj.pdf/@@download/file), SHA-256 `7bb839f6c9beb968bd5bb67d31dd5db090d2333be55815759cfb293e639b4754`; format round-trip fixture `00.000.000/E08G-12` | Party and issuer identifiers; fiscal issuance must validate check digits against the manual |
+
+All hashes above were computed from direct official downloads on 2026-09-21. The
+NF-e portal requires a session cookie to download its files. The 010f listing says
+"PL 010f" while its ZIP filename and internal directory say `PL_010f_v1.04`; both
+identifiers are retained to avoid silently conflating releases. NT 2025.002 v1.51
+superseded the v1.50 noted in the first draft of this register. The exact effective
+date of each rule must be read from its technical note for the target environment and
+UF, rather than inferred from publication date. These hashes identify artifacts, not
+an approved adapter, issuer or municipality. The first enabled capability must add
+legal/tax reviewer, validation fixtures and homologation evidence. Keep previous
+source digests with posted document snapshots when the register is updated.

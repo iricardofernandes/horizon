@@ -2140,10 +2140,108 @@ promise worth making about it is that nothing is created or lost in between.
 
 ## Phase 38 — The inventory screens
 
-**Planned.** Somewhere to see and decide everything phases 32 to 37 built: transfers, the
+**Delivered.** The inventory workspace exposes operations, reports, tracking, product
+structure and production screens for everything phases 32 to 37 built: transfers, the
 write-off queue, count sheets, the Kardex and valuation, levels and alerts, lots and their
 traces, units by name, families and variants, recipes and explosions, and production
 orders. Closes Phase I.
+
+---
+
+## Phase 39 — Fiscal sources, identifiers and operational ownership — **delivered**
+
+Freeze a reviewed source/capability matrix, decide the authorization and
+dispatch choreography, support alphanumeric CNPJ and structured fiscal profiles, and
+publish secure projections of issuer and recipient data. A duplicated invoicing intent
+must produce one fiscal origin. [Detailed work and exit evidence](fiscal-implementation-plan.md#39--source-matrix-identities-and-choreography).
+
+The [source register](fiscal-source-register.md),
+[unsupported-by-default capability matrix](fiscal-capabilities.md) and
+[origin/ownership ADR](adr/0048-fiscal-origin-and-operational-ownership.md) and
+[restricted-projection ADR](adr/0049-restricted-fiscal-profile-projections.md) are recorded.
+The [Phase 39 verification record](fiscal-phase39-evidence.md) maps each work item and
+exit criterion to its current implementation and test evidence.
+Numeric and alphanumeric CNPJ format is preserved in Parties, legacy Sales, Identity and
+the web classifier. Identity stores an IBGE municipality code; Parties stores a structured,
+effective-dated fiscal profile. Parties and Identity keep encrypted profile versions and
+restricted owner exports, and Catalog publishes classification revisions. Sales records
+an origin per shipment or return under a unique database key. The contracts are released
+as version 0.23.0 and pinned by consumers. `fiscal/` now consumes these notices,
+backfills exact owner revisions through authenticated APIs, encrypts profile copies,
+destroys recipient keys on erasure and creates one blocked intent per origin. Its
+PostgreSQL and RabbitMQ tests cover duplicate messages and cross-tenant isolation.
+The source register includes checksums for downloaded national NFS-e production files
+and the current NF-e/NFC-e MOC, technical notes and XSD packages. The
+[migration and cutover runbook](fiscal-phase39-migration.md) covers
+revision-zero legacy records and historical Sales shipments. Identity exchanges
+tenant-scoped service keys for short-lived, restricted fiscal reader tokens; the worker
+renews them per tenant. The [local Docker rollout](fiscal-phase39-evidence.md#local-docker-rollout-2026-09-21)
+verified owner-API backfill and reconciliation, a live profile notice, and the Sales
+dispatch-to-Fiscal golden path on an isolated tenant. Every capability remains
+`unsupported`. Each later operation needs its own source and tax review, credentials,
+reconciliation and homologation evidence before activation. The model 55 authorization
+gate is verified when that operation becomes supported.
+
+## Phase 40 — The independent fiscal service
+
+**Planned.** Extend the Phase 39 `fiscal/` ingress on port 3011 with contracts, roles,
+audit, outbox, immutable artifacts and concurrent-safe numbering. Prove the complete
+document lifecycle and crash recovery before connecting an authority.
+[Detailed work and exit evidence](fiscal-implementation-plan.md#40--independent-fiscal-service-and-durable-records).
+
+## Phase 41 — Temporal tax rules and explanations
+
+**Planned.** Import versioned classifications and implement deterministic, dated tax
+calculations for legacy taxes and IBS/CBS, with saved inputs, rounding and source
+references. Recalculating a historical document must reproduce its original result.
+[Detailed work and exit evidence](fiscal-implementation-plan.md#41--temporal-tax-rules-with-explanations).
+
+## Phase 42 — NF-e model 55, simulated end to end
+
+**Planned.** Draft, validate, number, sign, submit, query and cancel an NF-e through a
+deterministic simulator. Retain XML, response and protocol; make an uncertain response
+consultable before retry. Simulated documents remain visibly simulated.
+[Detailed work and exit evidence](fiscal-implementation-plan.md#42--nf-e-model-55-lifecycle-with-a-simulator).
+
+## Phase 43 — NF-e homologation for one issuer and UF
+
+**Planned.** Implement and test one real SEFAZ adapter in homologation, including
+certificate use, rejection, outage, consultation and cancellation. Production capability
+is limited to the exact issuer/UF/operation tuple whose evidence is recorded.
+[Detailed work and exit evidence](fiscal-implementation-plan.md#43--one-nf-e-sefaz-homologation-path).
+
+## Phase 44 — Inbound XML and purchase reconciliation
+
+**Planned.** Import and verify supplier XML, match it to Parties, Catalog, Procurement
+receipts and Financial payables, and expose conflicts for review. Reimporting must never
+create a second stock movement or payable.
+[Detailed work and exit evidence](fiscal-implementation-plan.md#44--inbound-xml-and-three-way-reconciliation).
+
+## Phase 45 — Returns, remittance and complements
+
+**Planned.** Create linked fiscal documents and authority events for supported returns,
+remittances, complements and corrections, with conservation and idempotency tests.
+Original documents and operational effects remain traceable.
+[Detailed work and exit evidence](fiscal-implementation-plan.md#45--returns-remittance-and-complementary-documents).
+
+## Phase 46 — NFC-e model 65
+
+**Planned.** Add model-specific XML, auxiliary rendering, QR code, lifecycle and an
+independently tested homologation tuple. Do not infer model 65 support from NF-e tests.
+[Detailed work and exit evidence](fiscal-implementation-plan.md#46--nfc-e-model-65-as-a-separate-capability).
+
+## Phase 47 — National NFS-e
+
+**Planned.** Implement DPS/NFS-e issuance, consultation and supported events for one
+verified national-system issuer/municipality tuple. Service contracts remain Phase K.
+[Detailed work and exit evidence](fiscal-implementation-plan.md#47--national-nfs-e-and-municipal-capability).
+
+## Phase 48 — Fiscal screens and release evidence
+
+**Planned.** Complete the operator screens, observability, recovery tools, browser flows,
+artifact restore and per-tuple support matrix. Close Phase J only for capabilities
+backed by executable tests and homologation evidence.
+[Detailed work and exit evidence](fiscal-implementation-plan.md#48--operator-screens-rollout-and-support-evidence).
 
 ---
 

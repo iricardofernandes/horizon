@@ -1,6 +1,7 @@
 import {
   catalogCompositionDefined,
   catalogFamilyDefined,
+  catalogItemClassificationChanged,
   catalogItemCreated,
   catalogItemDeactivated,
   catalogPriceChanged,
@@ -17,6 +18,7 @@ import {
 } from './financial'
 import {
   apiKeyRevoked,
+  companyFiscalProfileChanged,
   dataSubjectErased,
   sessionReuseDetected,
   tenantCreated,
@@ -38,6 +40,7 @@ import {
 } from './ledger'
 import {
   partyErased,
+  partyFiscalProfileChanged,
   partyRegistered,
   partyRoleGranted,
   partyRoleRevoked,
@@ -56,6 +59,7 @@ import {
   procurementRequisitionSubmitted,
 } from './procurement'
 import {
+  salesFiscalOriginRecorded,
   salesInvoicingRequested,
   salesOrderCancelled,
   salesOrderConfirmed,
@@ -101,7 +105,9 @@ export const EVENTS: readonly EventDefinition[] = [
   apiKeyRevoked,
   sessionReuseDetected,
   dataSubjectErased,
+  companyFiscalProfileChanged,
   catalogItemCreated,
+  catalogItemClassificationChanged,
   catalogItemDeactivated,
   catalogPriceChanged,
   catalogFamilyDefined,
@@ -115,11 +121,13 @@ export const EVENTS: readonly EventDefinition[] = [
   inventoryStockReleased,
   inventoryStockMoved,
   salesInvoicingRequested,
+  salesFiscalOriginRecorded,
   partyRegistered,
   partyUpdated,
   partyRoleGranted,
   partyRoleRevoked,
   partyErased,
+  partyFiscalProfileChanged,
   financialReceivablePosted,
   financialReceivableReversed,
   financialSettlementRecorded,

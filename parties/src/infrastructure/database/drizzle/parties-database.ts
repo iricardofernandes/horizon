@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHmac, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, sql } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { type PartiesScope, PartiesUnitOfWork } from '@/application/ports/unit-of-work'
@@ -10,6 +10,7 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
 import { Party, type PartySnapshot, type PartyStatus } from '@/domain/entities/party'
 import type { SecretBox } from '@/domain/services/secret-box'
+import { FiscalProfile, type FiscalProfileData } from '@/domain/value-objects/fiscal-profile'
 import {
   PARTY_KINDS,
   PartyAddress,
@@ -35,6 +36,17 @@ export interface PartiesDatabaseOptions {
   readonly poolMax?: number
   readonly statementTimeoutMs?: number
   readonly privacy: PartyPrivacy
+}
+
+export interface PartyFiscalExport {
+  readonly tenantId: string
+  readonly partyId: string
+  readonly kind: PartyKind
+  readonly legalName: string
+  readonly tradeName: string | null
+  readonly taxId: string
+  readonly revision: number
+  readonly profile: Readonly<FiscalProfileData>
 }
 
 /** Owns the connection; only tenant-bound repositories leave this module (ADR 0017). */
@@ -67,6 +79,88 @@ export class PartiesDatabase extends PartiesUnitOfWork {
       return this.#transactions.run({ tx, tenantId }, () =>
         work(makeScope(tx, tenantId, this.#privacy)),
       )
+    })
+  }
+
+  /** Exact encrypted revision for the restricted, asynchronous Fiscal projector. */
+  async findFiscalExport(
+    tenantId: string,
+    partyId: string,
+    revision: number,
+  ): Promise<PartyFiscalExport | null> {
+    return this.inTenant(tenantId, async (scope) => {
+      const party = await scope.parties.findById(partyId)
+      if (!party || party.isErased()) return null
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('Fiscal export requires a tenant transaction')
+      const [row] = await current.tx
+        .select()
+        .from(schema.partyFiscalProfiles)
+        .where(
+          and(
+            eq(schema.partyFiscalProfiles.partyId, partyId),
+            eq(schema.partyFiscalProfiles.revision, revision),
+          ),
+        )
+        .limit(1)
+      if (!row) return null
+      const [key] = await current.tx
+        .select()
+        .from(schema.partyDataKeys)
+        .where(eq(schema.partyDataKeys.id, partyId))
+        .limit(1)
+      if (!key?.material) return null
+      const plaintext = this.#privacy.secretBox.open(
+        `${tenantId}:${partyId}:fiscalProfile:${key.material}`,
+        row.ciphertext,
+      )
+      if (plaintext === null) throw new Error('Fiscal profile authentication failed')
+      const exported = JSON.parse(plaintext) as Omit<PartyFiscalExport, 'tenantId'>
+      const profile = restored(FiscalProfile.create(exported.profile)).details
+      return {
+        tenantId,
+        partyId,
+        kind: exported.kind,
+        legalName: exported.legalName,
+        tradeName: exported.tradeName,
+        taxId: exported.taxId,
+        revision,
+        profile,
+      }
+    })
+  }
+
+  /** Stable, tenant-scoped cursor for fiscal projection backfill; contains no personal data. */
+  async listFiscalProfileRevisions(
+    tenantId: string,
+    limit: number,
+    afterId?: string,
+  ): Promise<{
+    tenantId: string
+    data: readonly { partyId: string; revision: number }[]
+    nextCursor: string | null
+  }> {
+    return this.inTenant(tenantId, async () => {
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('Fiscal profile listing requires a tenant transaction')
+      const rows = await current.tx
+        .select({ partyId: schema.parties.id, revision: schema.parties.fiscalProfileRevision })
+        .from(schema.parties)
+        .where(
+          and(
+            gt(schema.parties.fiscalProfileRevision, 0),
+            eq(schema.parties.status, 'active'),
+            afterId === undefined ? undefined : gt(schema.parties.id, afterId),
+          ),
+        )
+        .orderBy(asc(schema.parties.id))
+        .limit(limit + 1)
+      const data = rows.slice(0, limit)
+      return {
+        tenantId,
+        data,
+        nextCursor: rows.length > limit ? (data.at(-1)?.partyId ?? null) : null,
+      }
     })
   }
 
@@ -173,6 +267,13 @@ async function mapParty(
       address: restored(
         PartyAddress.create(erased ? ERASED.address : open('address', row.addressCiphertext)),
       ),
+      fiscalProfile:
+        erased || row.fiscalProfileCiphertext === null
+          ? null
+          : restored(
+              FiscalProfile.create(JSON.parse(open('fiscalProfile', row.fiscalProfileCiphertext))),
+            ),
+      fiscalProfileRevision: row.fiscalProfileRevision,
       roles: restored(PartyRoles.of(row.roles)),
       status: row.status as PartyStatus,
       createdAt: row.createdAt,
@@ -226,6 +327,11 @@ function makeScope(tx: Transaction, tenantId: string, privacy: PartyPrivacy): Pa
       emailCiphertext: seal('email', row.email),
       phoneCiphertext: seal('phone', row.phone),
       addressCiphertext: seal('address', row.address),
+      fiscalProfileCiphertext:
+        row.fiscalProfile === null
+          ? null
+          : seal('fiscalProfile', JSON.stringify(row.fiscalProfile)),
+      fiscalProfileRevision: row.fiscalProfileRevision,
       roles: [...row.roles],
       status: row.status,
       updatedAt: row.updatedAt,
@@ -286,6 +392,36 @@ function makeScope(tx: Transaction, tenantId: string, privacy: PartyPrivacy): Pa
             .set({ material: null, erasedAt: row.updatedAt })
             .where(eq(schema.partyDataKeys.id, row.id))
         } else {
+          const [before] = await tx
+            .select({ revision: schema.parties.fiscalProfileRevision })
+            .from(schema.parties)
+            .where(eq(schema.parties.id, row.id))
+            .limit(1)
+          if (!before) throw new Error('Party disappeared during fiscal profile update')
+          if (row.fiscalProfileRevision > before.revision + 1)
+            throw new Error('Fiscal profile revision skipped')
+          if (row.fiscalProfileRevision === before.revision + 1 && row.fiscalProfile) {
+            const material = await materialFor(row.id)
+            await tx.insert(schema.partyFiscalProfiles).values({
+              tenantId,
+              partyId: row.id,
+              revision: row.fiscalProfileRevision,
+              effectiveFrom: row.fiscalProfile.effectiveFrom,
+              ciphertext: privacy.secretBox.seal(
+                `${tenantId}:${row.id}:fiscalProfile:${material}`,
+                JSON.stringify({
+                  partyId: row.id,
+                  kind: row.kind,
+                  legalName: row.legalName,
+                  tradeName: row.tradeName,
+                  taxId: row.taxId,
+                  revision: row.fiscalProfileRevision,
+                  profile: row.fiscalProfile,
+                }),
+              ),
+              recordedAt: row.updatedAt,
+            })
+          }
           await tx
             .update(schema.parties)
             .set(sealed(row, await materialFor(row.id)))

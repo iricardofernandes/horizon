@@ -135,6 +135,7 @@ describe('getting the goods to the customer', () => {
     expect(unitOfWork.events.map((event) => event.eventType)).toEqual([
       'sales.shipment.dispatched',
       'sales.invoicing.requested',
+      'sales.fiscal-origin.recorded',
     ])
   })
 
@@ -208,6 +209,10 @@ describe('getting the goods to the customer', () => {
       shipmentId,
       reason: 'Damaged in transit',
       value: { amount: '1200', currency: 'BRL' },
+    })
+    expect(unitOfWork.events[1]?.payloadOf()).toMatchObject({
+      originId: shipmentId,
+      purpose: 'return',
     })
   })
 

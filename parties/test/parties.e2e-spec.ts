@@ -3,6 +3,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import {
   ChangePartyRoleUseCase,
+  DescribePartyFiscalProfileUseCase,
   ErasePartyUseCase,
   RegisterPartyUseCase,
 } from '@/application/use-cases/manage-parties'
@@ -83,6 +84,82 @@ it('refuses a second party with the same tax identifier and points to granting a
   expect(granted.isRight()).toBe(true)
   const [row] = await administrator`select roles from parties where id = ${partyId}`
   expect(row?.roles).toEqual(['customer', 'supplier'])
+})
+
+it('keeps alphanumeric CNPJ letters through encryption and deduplicates case and mask', async () => {
+  const tenantId = randomUUID()
+  const partyId = await register(tenantId, '00.000.000/e08g-12')
+  const snapshot = await database.findSnapshot(tenantId, partyId)
+  expect(snapshot?.taxId).toBe('00000000E08G12')
+
+  const duplicate = await new RegisterPartyUseCase(database, clock).execute({
+    ...details,
+    tenantId,
+    taxId: '00000000E08G12',
+    roles: ['customer'],
+  })
+  expect(duplicate.isLeft()).toBe(true)
+
+  const [row] =
+    await administrator`select tax_id_ciphertext, tax_id_index from parties where id = ${partyId}`
+  expect(JSON.stringify(row)).not.toContain('E08G')
+})
+
+it('stores versioned fiscal details encrypted and excludes them from general party events', async () => {
+  const tenantId = randomUUID()
+  const partyId = await register(tenantId, '00.000.000/E08G-12')
+  const first = await new DescribePartyFiscalProfileUseCase(database, clock).execute({
+    tenantId,
+    partyId,
+    profile: {
+      effectiveFrom: '2026-09-01',
+      stateRegistration: '123456',
+      municipalRegistration: null,
+      taxpayerIndicator: 'contributor',
+      finalConsumer: false,
+      address: {
+        street: 'Rua Um',
+        number: '42',
+        complement: null,
+        district: 'Centro',
+        city: 'São Paulo',
+        municipalityCode: '3550308',
+        state: 'SP',
+        postalCode: '01001000',
+        country: 'BR',
+      },
+    },
+  })
+  if (first.isLeft()) throw first.value
+  expect(first.value).toBe(1)
+  const exported = await database.findFiscalExport(tenantId, partyId, 1)
+  expect(exported).toMatchObject({
+    taxId: '00000000E08G12',
+    profile: { address: { municipalityCode: '3550308' } },
+  })
+  const [row] =
+    await administrator`select fiscal_profile_ciphertext from parties where id = ${partyId}`
+  expect(JSON.stringify(row)).not.toContain('3550308')
+  const [history] =
+    await administrator`select ciphertext from party_fiscal_profiles where party_id = ${partyId}`
+  expect(JSON.stringify(history)).not.toContain('E08G')
+  const events =
+    await administrator`select event_type,payload from outbox where tenant_id = ${tenantId}`
+  const notice = events.find((event) => event.event_type === 'parties.party.fiscal-profile-changed')
+  expect(notice?.payload).toMatchObject({ partyId, revision: 1, effectiveFrom: '2026-09-01' })
+  expect(JSON.stringify(notice)).not.toContain('3550308')
+  expect(JSON.stringify(notice)).not.toContain('E08G')
+  expect(await database.listFiscalProfileRevisions(tenantId, 1)).toEqual({
+    tenantId,
+    data: [{ partyId, revision: 1 }],
+    nextCursor: null,
+  })
+  const otherTenant = randomUUID()
+  expect(await database.listFiscalProfileRevisions(otherTenant, 1)).toEqual({
+    tenantId: otherTenant,
+    data: [],
+    nextCursor: null,
+  })
 })
 
 it('lets the same tax identifier exist once in each tenant', async () => {

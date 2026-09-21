@@ -20,6 +20,30 @@ export const tenants = pgTable('tenants', {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 })
 
+/** One outbox announcement for each billable operational origin and purpose. */
+export const fiscalOrigins = pgTable(
+  'fiscal_origins',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    originModule: text('origin_module').notNull(),
+    documentType: text('document_type').notNull(),
+    documentId: uuid('document_id').notNull(),
+    purpose: text('purpose').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('fiscal_origins_one_request_key').on(
+      table.tenantId,
+      table.originModule,
+      table.documentType,
+      table.documentId,
+      table.purpose,
+    ),
+  ],
+)
+
 export const catalogItems = pgTable(
   'catalog_items',
   {

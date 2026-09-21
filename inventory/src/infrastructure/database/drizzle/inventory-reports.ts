@@ -19,7 +19,7 @@ import type { Transaction } from './inventory-store'
 const MICROS = sql.raw('1000000')
 
 /** In and out, as the kinds divide. A return from a customer puts goods back. */
-const INBOUND = new Set(['receipt', 'transfer-in', 'adjustment-in', 'return-in'])
+const INBOUND = new Set(['receipt', 'transfer-in', 'adjustment-in', 'return-in', 'production-in'])
 
 /** Goods sold, less the ones that came back: what the period actually consumed. */
 const SOLD = sql.raw(`case when m.kind = 'shipment' then 1 else -1 end`)

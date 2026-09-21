@@ -150,6 +150,7 @@ describe('delivering what was sold', () => {
     expect(events.map((event) => event.eventType)).toEqual([
       'sales.shipment.dispatched',
       'sales.invoicing.requested',
+      'sales.fiscal-origin.recorded',
     ])
     expect(events[0]?.payloadOf()).toMatchObject({
       dispatchedOn: '2026-09-16',

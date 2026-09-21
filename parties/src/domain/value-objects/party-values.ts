@@ -26,7 +26,8 @@ export class PartyName extends ValueObject<{ value: string }> {
 }
 
 /**
- * A CPF or a CNPJ, digits only.
+ * A CPF or a CNPJ. The first twelve CNPJ positions may be alphanumeric;
+ * its two check digits and every CPF position remain numeric.
  *
  * Uniqueness per tenant is enforced against a keyed blind index of this value rather than
  * the value itself, which is what allows "is this company already a supplier?" to be
@@ -34,16 +35,24 @@ export class PartyName extends ValueObject<{ value: string }> {
  */
 export class TaxId extends ValueObject<{ value: string }> {
   static create(value: string, kind?: PartyKind): Either<InvalidInputError, TaxId> {
-    const digits = value.replace(/\D/g, '')
-    if (digits.length !== 11 && digits.length !== 14)
-      return left(new InvalidInputError('/taxId', 'must be a CPF or CNPJ with 11 or 14 digits'))
-    if (kind === 'person' && digits.length !== 11)
-      return left(new InvalidInputError('/taxId', 'a person is identified by an 11-digit CPF'))
-    if (kind === 'organization' && digits.length !== 14)
+    const canonical = value
+      .trim()
+      .toUpperCase()
+      .replace(/[.\-/\s]/g, '')
+    if (!/^(?:\d{11}|[A-Z0-9]{12}\d{2})$/.test(canonical))
       return left(
-        new InvalidInputError('/taxId', 'an organization is identified by a 14-digit CNPJ'),
+        new InvalidInputError(
+          '/taxId',
+          'must be an 11-digit CPF or a 14-character CNPJ with two check digits',
+        ),
       )
-    return right(new TaxId({ value: digits }))
+    if (kind === 'person' && canonical.length !== 11)
+      return left(new InvalidInputError('/taxId', 'a person is identified by an 11-digit CPF'))
+    if (kind === 'organization' && canonical.length !== 14)
+      return left(
+        new InvalidInputError('/taxId', 'an organization is identified by a 14-character CNPJ'),
+      )
+    return right(new TaxId({ value: canonical }))
   }
   get value(): string {
     return this.props.value

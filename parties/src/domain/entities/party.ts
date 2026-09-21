@@ -4,10 +4,12 @@ import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import {
   PartyErasedEvent,
+  PartyFiscalProfileChangedEvent,
   PartyRegisteredEvent,
   PartyRoleChangedEvent,
   PartyUpdatedEvent,
 } from '../events/party-events'
+import type { FiscalProfile, FiscalProfileData } from '../value-objects/fiscal-profile'
 import type {
   PartyAddress,
   PartyEmail,
@@ -30,6 +32,8 @@ interface PartyProps {
   email: PartyEmail
   phone: PartyPhone
   address: PartyAddress
+  fiscalProfile: FiscalProfile | null
+  fiscalProfileRevision: number
   roles: PartyRoles
   status: PartyStatus
   createdAt: Date
@@ -46,6 +50,8 @@ export interface PartySnapshot {
   readonly email: string
   readonly phone: string
   readonly address: string
+  readonly fiscalProfile: Readonly<FiscalProfileData> | null
+  readonly fiscalProfileRevision: number
   readonly roles: readonly PartyRole[]
   readonly status: PartyStatus
   readonly createdAt: Date
@@ -61,7 +67,10 @@ export interface PartySnapshot {
  */
 export class Party extends AggregateRoot<PartyProps> {
   static register(
-    props: Omit<PartyProps, 'status' | 'createdAt' | 'updatedAt'> & { now: Date },
+    props: Omit<
+      PartyProps,
+      'status' | 'createdAt' | 'updatedAt' | 'fiscalProfile' | 'fiscalProfileRevision'
+    > & { now: Date },
     id?: UniqueEntityID,
   ): Party {
     const party = new Party(
@@ -74,6 +83,8 @@ export class Party extends AggregateRoot<PartyProps> {
         email: props.email,
         phone: props.phone,
         address: props.address,
+        fiscalProfile: null,
+        fiscalProfileRevision: 0,
         roles: props.roles,
         status: 'active',
         createdAt: props.now,
@@ -140,6 +151,27 @@ export class Party extends AggregateRoot<PartyProps> {
     this.props.updatedAt = now
     this.announceUpdate(now)
     return right(undefined)
+  }
+
+  describeFiscalProfile(profile: FiscalProfile, now: Date): Either<ConflictError, number> {
+    if (this.props.status === 'erased')
+      return left(new ConflictError('an erased party cannot have a fiscal profile'))
+    const previous = this.props.fiscalProfile?.details.effectiveFrom
+    if (previous && profile.details.effectiveFrom < previous)
+      return left(new ConflictError('a new fiscal profile cannot predate the current version'))
+    this.props.fiscalProfile = profile
+    this.props.fiscalProfileRevision += 1
+    this.props.updatedAt = now
+    this.addDomainEvent(
+      new PartyFiscalProfileChangedEvent(
+        this.id,
+        this.props.tenantId,
+        this.props.fiscalProfileRevision,
+        profile.details.effectiveFrom,
+        now,
+      ),
+    )
+    return right(this.props.fiscalProfileRevision)
   }
 
   grant(role: PartyRole, now: Date): Either<ConflictError, void> {
@@ -241,6 +273,8 @@ export class Party extends AggregateRoot<PartyProps> {
       email: this.props.email.value,
       phone: this.props.phone.value,
       address: this.props.address.value,
+      fiscalProfile: this.props.fiscalProfile?.details ?? null,
+      fiscalProfileRevision: this.props.fiscalProfileRevision,
       roles: this.props.roles.values,
       status: this.props.status,
       createdAt: this.props.createdAt,

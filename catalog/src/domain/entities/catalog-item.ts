@@ -3,6 +3,7 @@ import { AggregateRoot } from '@/core/entities/aggregate-root'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import {
+  CatalogItemClassificationChangedEvent,
   CatalogItemCreatedEvent,
   CatalogItemDeactivatedEvent,
   CatalogVariantAssignedEvent,
@@ -18,6 +19,8 @@ interface ItemProps {
   name: CatalogName
   unitId: string
   ncm: NcmCode | null
+  classificationRevision: number
+  classificationEffectiveFrom: string | null
   /**
    * The family this item is one combination of, and its answers.
    *
@@ -38,6 +41,8 @@ export interface CatalogItemSnapshot {
   readonly name: string
   readonly unitId: string
   readonly ncm: string | null
+  readonly classificationRevision: number
+  readonly classificationEffectiveFrom: string | null
   readonly variant: {
     familyId: string
     combination: string
@@ -50,8 +55,18 @@ export interface CatalogItemSnapshot {
 
 export class CatalogItem extends AggregateRoot<ItemProps> {
   static create(
-    props: Omit<ItemProps, 'active' | 'createdAt' | 'updatedAt' | 'variant'> & {
+    props: Omit<
+      ItemProps,
+      | 'active'
+      | 'createdAt'
+      | 'updatedAt'
+      | 'variant'
+      | 'classificationRevision'
+      | 'classificationEffectiveFrom'
+    > & {
       variant?: ItemProps['variant']
+      classificationRevision?: number
+      classificationEffectiveFrom?: string | null
       active?: boolean
       createdAt?: Date
       updatedAt?: Date
@@ -63,6 +78,8 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
       {
         ...props,
         variant: props.variant ?? null,
+        classificationRevision: props.classificationRevision ?? 0,
+        classificationEffectiveFrom: props.classificationEffectiveFrom ?? null,
         active: props.active ?? true,
         createdAt: now,
         updatedAt: props.updatedAt ?? now,
@@ -71,7 +88,15 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
     )
   }
   static register(
-    props: Omit<ItemProps, 'active' | 'createdAt' | 'updatedAt' | 'variant'> & { now: Date },
+    props: Omit<
+      ItemProps,
+      | 'active'
+      | 'createdAt'
+      | 'updatedAt'
+      | 'variant'
+      | 'classificationRevision'
+      | 'classificationEffectiveFrom'
+    > & { now: Date },
   ): CatalogItem {
     const item = CatalogItem.create({ ...props, createdAt: props.now, updatedAt: props.now })
     item.addDomainEvent(
@@ -92,8 +117,32 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
     this.addDomainEvent(new CatalogItemDeactivatedEvent(this.id, this.props.tenantId, now))
     return right(undefined)
   }
+
+  classify(ncm: NcmCode | null, effectiveFrom: string, now: Date): Either<ConflictError, number> {
+    if (!this.props.active)
+      return left(new ConflictError('an inactive item cannot be reclassified'))
+    const previous = this.props.classificationEffectiveFrom
+    if (previous !== null && effectiveFrom < previous)
+      return left(new ConflictError('classification cannot predate the current version'))
+    this.props.ncm = ncm
+    this.props.classificationRevision += 1
+    this.props.classificationEffectiveFrom = effectiveFrom
+    this.props.updatedAt = now
+    this.addDomainEvent(
+      new CatalogItemClassificationChangedEvent(this.id, this.props.tenantId, now, {
+        revision: this.props.classificationRevision,
+        effectiveFrom,
+        ncm: ncm?.value ?? null,
+      }),
+    )
+    return right(this.props.classificationRevision)
+  }
   isActive(): boolean {
     return this.props.active
+  }
+
+  ncmCode(): string | null {
+    return this.props.ncm?.value ?? null
   }
   belongsTo(tenantId: string): boolean {
     return this.props.tenantId === tenantId
@@ -159,6 +208,8 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
       sku: this.props.sku.value,
       name: this.props.name.value,
       ncm: this.props.ncm?.value ?? null,
+      classificationRevision: this.props.classificationRevision,
+      classificationEffectiveFrom: this.props.classificationEffectiveFrom,
       variant: variant
         ? {
             familyId: variant.familyId,

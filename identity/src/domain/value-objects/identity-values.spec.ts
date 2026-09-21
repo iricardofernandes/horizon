@@ -147,6 +147,32 @@ describe('company profile', () => {
     expect(profile.details.taxId).toBe('12345678000195')
   })
 
+  it('preserves and uppercases alphanumeric CNPJ positions', () => {
+    const profile = valid(CompanyProfile.create({ ...base, taxId: '00.000.000/e08g-12' }))
+    expect(profile.details.taxId).toBe('00000000E08G12')
+    expect(CompanyProfile.create({ ...base, taxId: '00.000.000/E08G-AA' }).isLeft()).toBe(true)
+  })
+
+  it('continues to accept an existing numeric CPF profile', () => {
+    expect(valid(CompanyProfile.create({ ...base, taxId: '123.456.789-01' })).details.taxId).toBe(
+      '12345678901',
+    )
+  })
+
+  it('records a structured IBGE municipality code without guessing it from the city', () => {
+    const profile = valid(
+      CompanyProfile.create({
+        ...base,
+        addressCity: 'São Paulo',
+        addressMunicipalityCode: '3550308',
+      }),
+    )
+    expect(profile.details.address.municipalityCode).toBe('3550308')
+    expect(CompanyProfile.create({ ...base, addressMunicipalityCode: 'São Paulo' }).isLeft()).toBe(
+      true,
+    )
+  })
+
   it('treats blank optional fields as absent rather than empty', () => {
     const profile = valid(CompanyProfile.create({ ...base, tradeName: '   ' })).details
     expect(profile.tradeName).toBeNull()

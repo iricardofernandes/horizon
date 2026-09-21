@@ -2,6 +2,7 @@ import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import {
   ChangePartyRoleUseCase,
   ChangePartyStatusUseCase,
+  DescribePartyFiscalProfileUseCase,
   DescribePartyUseCase,
   ErasePartyUseCase,
   RegisterPartyUseCase,
@@ -17,6 +18,7 @@ export class PartiesRuntime implements OnModuleInit, OnModuleDestroy {
   readonly accessTokens: AccessTokenVerifier
   readonly registerParty: RegisterPartyUseCase
   readonly describeParty: DescribePartyUseCase
+  readonly describeFiscalProfile: DescribePartyFiscalProfileUseCase
   readonly changeRole: ChangePartyRoleUseCase
   readonly changeStatus: ChangePartyStatusUseCase
   readonly eraseParty: ErasePartyUseCase
@@ -38,6 +40,7 @@ export class PartiesRuntime implements OnModuleInit, OnModuleDestroy {
     )
     this.registerParty = new RegisterPartyUseCase(this.database, clock)
     this.describeParty = new DescribePartyUseCase(this.database, clock)
+    this.describeFiscalProfile = new DescribePartyFiscalProfileUseCase(this.database, clock)
     this.changeRole = new ChangePartyRoleUseCase(this.database, clock)
     this.changeStatus = new ChangePartyStatusUseCase(this.database, clock)
     this.eraseParty = new ErasePartyUseCase(this.database, clock)

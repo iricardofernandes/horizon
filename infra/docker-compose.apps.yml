@@ -351,6 +351,39 @@ services:
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_procurement
       DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_procurement
 
+  fiscal-migrate:
+    <<: *service
+    profiles: [fiscal]
+    build:
+      context: ../fiscal
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_fiscal
+    command: ["npm", "run", "db:migrate"]
+
+  fiscal:
+    <<: *service
+    profiles: [fiscal]
+    build:
+      context: ../fiscal
+      network: host
+    container_name: horizon-fiscal
+    depends_on:
+      fiscal-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      <<: *env
+      OTEL_SERVICE_NAME: fiscal
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_fiscal
+      PARTIES_URL: http://parties:3006
+      IDENTITY_URL: http://identity:3001
+      CATALOG_URL: http://catalog:3002
+      FISCAL_SERVICE_KEYS_JSON: ${HORIZON_FISCAL_SERVICE_KEYS_JSON:-{}}
+
   webhooks-migrate:
     <<: *service
     build:

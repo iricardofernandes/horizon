@@ -11,6 +11,7 @@
     { "path": "treasury",              "kind": "service", "port": 3008 },
     { "path": "ledger",                "kind": "service", "port": 3009 },
     { "path": "procurement",           "kind": "service", "port": 3010 },
+    { "path": "fiscal",                "kind": "service", "port": 3011 },
     { "path": "web",                   "kind": "frontend", "port": 3000 },
     { "path": "contracts",             "kind": "package" },
     { "path": "tooling/mcp-debugger",  "kind": "package" },

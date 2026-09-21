@@ -26,6 +26,7 @@ import {
 import type { AuditRecord } from '@/domain/repositories/audit-log-repository'
 import type { TenantDirectory } from '@/domain/repositories/tenant-directory'
 import type { SecretBox } from '@/domain/services/secret-box'
+import type { CompanyProfileProps } from '@/domain/value-objects/company-profile'
 import { Email } from '@/domain/value-objects/email'
 import { Locale } from '@/domain/value-objects/locale'
 import { PasswordHash } from '@/domain/value-objects/password-hash'
@@ -49,6 +50,14 @@ export interface ReceivedEvent {
   readonly sourceModule: string
   readonly eventId: string
   readonly eventType: string
+}
+
+export interface CompanyFiscalExport {
+  readonly tenantId: string
+  readonly revision: number
+  readonly effectiveFrom: string
+  readonly timezone: string
+  readonly company: Readonly<CompanyProfileProps>
 }
 
 /** Owns the connection; only tenant-bound repositories leave this module (ADR 0017). */
@@ -112,6 +121,39 @@ export class IdentityDatabase extends UnitOfWork {
       return this.#transactions.run({ tx, tenantId }, () =>
         work(makeScope(tx, tenantId, this.#options)),
       )
+    })
+  }
+
+  async findCompanyFiscalExport(
+    tenantId: string,
+    revision: number,
+  ): Promise<CompanyFiscalExport | null> {
+    return this.inTenant(tenantId, async () => {
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('Company fiscal export requires a tenant transaction')
+      const [version] = await current.tx
+        .select()
+        .from(schema.companyProfileVersions)
+        .where(
+          and(
+            eq(schema.companyProfileVersions.tenantId, tenantId),
+            eq(schema.companyProfileVersions.revision, revision),
+          ),
+        )
+        .limit(1)
+      if (!version) return null
+      const [key] = await current.tx
+        .select()
+        .from(schema.companyProfileKeys)
+        .where(eq(schema.companyProfileKeys.tenantId, tenantId))
+        .limit(1)
+      if (!key) throw new Error('Company profile key is unavailable')
+      const plaintext = this.#options.secretBox.open(
+        `${tenantId}:company-profile:${key.material}`,
+        version.ciphertext,
+      )
+      if (plaintext === null) throw new Error('Company profile authentication failed')
+      return JSON.parse(plaintext) as CompanyFiscalExport
     })
   }
 
@@ -471,7 +513,45 @@ function makeScope(
       },
       save: async (tenant) => {
         const row = tenantRow(tenant)
+        const snapshot = tenant.toSnapshot()
         assertTenant(tenant.id.toString())
+        const [before] = await tx
+          .select({ revision: schema.tenants.fiscalProfileRevision })
+          .from(schema.tenants)
+          .where(eq(schema.tenants.id, row.id))
+          .limit(1)
+        if (!before) throw new Error('Tenant disappeared during company profile update')
+        if (snapshot.fiscalProfileRevision > before.revision + 1)
+          throw new Error('Company fiscal profile revision skipped')
+        if (snapshot.fiscalProfileRevision === before.revision + 1) {
+          if (!snapshot.company || !snapshot.fiscalProfileEffectiveFrom)
+            throw new Error('Company fiscal profile revision has no snapshot or effective date')
+          const [held] = await tx
+            .select()
+            .from(schema.companyProfileKeys)
+            .where(eq(schema.companyProfileKeys.tenantId, row.id))
+            .limit(1)
+          const material = held?.material ?? randomBytes(32).toString('base64url')
+          if (!held)
+            await tx.insert(schema.companyProfileKeys).values({ tenantId: row.id, material })
+          const exportRecord: CompanyFiscalExport = {
+            tenantId: row.id,
+            revision: snapshot.fiscalProfileRevision,
+            effectiveFrom: snapshot.fiscalProfileEffectiveFrom,
+            timezone: snapshot.timezone,
+            company: snapshot.company,
+          }
+          await tx.insert(schema.companyProfileVersions).values({
+            tenantId: row.id,
+            revision: snapshot.fiscalProfileRevision,
+            effectiveFrom: snapshot.fiscalProfileEffectiveFrom,
+            ciphertext: options.secretBox.seal(
+              `${row.id}:company-profile:${material}`,
+              JSON.stringify(exportRecord),
+            ),
+            recordedAt: row.updatedAt,
+          })
+        }
         await tx.update(schema.tenants).set(row).where(eq(schema.tenants.id, tenant.id.toString()))
         await publish(tenant.pullDomainEvents())
       },

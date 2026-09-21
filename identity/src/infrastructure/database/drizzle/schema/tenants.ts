@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 /**
  * The tenant row itself is tenant-scoped: its policy is `id = current_tenant`, the same
@@ -26,14 +26,41 @@ export const tenants = pgTable('tenants', {
   municipalRegistration: text('municipal_registration'),
   addressLine: text('address_line'),
   addressCity: text('address_city'),
+  addressMunicipalityCode: text('address_municipality_code'),
   addressState: text('address_state'),
   addressPostalCode: text('address_postal_code'),
   addressCountry: text('address_country').notNull().default('BR'),
   baseCurrency: text('base_currency').notNull().default('BRL'),
   fiscalRegime: text('fiscal_regime').notNull().default('not-declared'),
+  fiscalProfileRevision: integer('fiscal_profile_revision').notNull().default(0),
+  fiscalProfileEffectiveFrom: text('fiscal_profile_effective_from'),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
 })
+
+/** Per-issuer encryption material for the immutable company profile revision history. */
+export const companyProfileKeys = pgTable('company_profile_keys', {
+  tenantId: uuid('tenant_id')
+    .primaryKey()
+    .references(() => tenants.id),
+  material: text('material').notNull(),
+})
+
+export const companyProfileVersions = pgTable(
+  'company_profile_versions',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => companyProfileKeys.tenantId),
+    revision: integer('revision').notNull(),
+    effectiveFrom: text('effective_from').notNull(),
+    ciphertext: text('ciphertext').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('company_profile_versions_revision_key').on(table.tenantId, table.revision),
+  ],
+)
 
 /**
  * Slug → tenant id, and **deliberately not tenant-scoped** (ADR 0037).
