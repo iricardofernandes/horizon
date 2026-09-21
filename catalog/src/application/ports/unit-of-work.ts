@@ -1,7 +1,9 @@
 import type { AuditLogRepository } from '@/domain/repositories/audit-log-repository'
 import type {
   CatalogItemsRepository,
+  CompositionsRepository,
   PriceListsRepository,
+  ProductFamiliesRepository,
   UnitsRepository,
 } from '@/domain/repositories/catalog-repositories'
 
@@ -10,6 +12,8 @@ export interface TenantScope {
   readonly units: UnitsRepository
   readonly items: CatalogItemsRepository
   readonly priceLists: PriceListsRepository
+  readonly families: ProductFamiliesRepository
+  readonly compositions: CompositionsRepository
   readonly audit: AuditLogRepository
 }
 

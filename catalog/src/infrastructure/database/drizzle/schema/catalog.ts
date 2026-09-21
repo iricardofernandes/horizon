@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   bigint,
+  date,
   foreignKey,
   index,
   integer,
@@ -64,6 +65,139 @@ export const catalogItems = pgTable(
       name: 'catalog_items_tenant_unit_fk',
       columns: [table.tenantId, table.unitId],
       foreignColumns: [units.tenantId, units.id],
+    }),
+  ],
+)
+
+/**
+ * A group of items that differ only along named axes.
+ *
+ * Not a thing anybody stocks or sells: it is how the catalogue says that these forty
+ * shirts are one shirt in forty combinations.
+ */
+export const productFamilies = pgTable(
+  'product_families',
+  {
+    id: uuid('id').primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    name: text('name').notNull(),
+    /** Ordered, and fixed once anything is in the family. */
+    attributes: text('attributes').array().notNull(),
+    active: integer('active').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('product_families_tenant_id_key').on(table.tenantId, table.id),
+    uniqueIndex('product_families_tenant_name_key').on(table.tenantId, table.name),
+    index('product_families_tenant_keyset_idx').on(table.tenantId, table.createdAt, table.id),
+  ],
+)
+
+/**
+ * One item's place in a family, and the answers that put it there.
+ *
+ * `combination` is what makes two variants the same variant — the answers in the family's
+ * own order, case-folded — and it is unique per family, which is the whole point of
+ * varying along axes rather than just naming things differently.
+ */
+export const itemVariants = pgTable(
+  'item_variants',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    itemId: uuid('item_id').notNull(),
+    familyId: uuid('family_id').notNull(),
+    combination: text('combination').notNull(),
+    values: jsonb('values').$type<{ attribute: string; value: string }[]>().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.itemId] }),
+    uniqueIndex('item_variants_family_combination_key').on(
+      table.tenantId,
+      table.familyId,
+      table.combination,
+    ),
+    foreignKey({
+      name: 'item_variants_tenant_item_fk',
+      columns: [table.tenantId, table.itemId],
+      foreignColumns: [catalogItems.tenantId, catalogItems.id],
+    }),
+    foreignKey({
+      name: 'item_variants_tenant_family_fk',
+      columns: [table.tenantId, table.familyId],
+      foreignColumns: [productFamilies.tenantId, productFamilies.id],
+    }),
+  ],
+)
+
+/**
+ * What an item is made of, from a date.
+ *
+ * Versioned rather than edited: a production order that consumed four of something is not
+ * wrong because the recipe now says three. The one in force on a date is the latest
+ * version whose `effective_from` has arrived.
+ */
+export const compositions = pgTable(
+  'compositions',
+  {
+    id: uuid('id').primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    parentItemId: uuid('parent_item_id').notNull(),
+    version: integer('version').notNull(),
+    realisation: text('realisation').notNull(),
+    effectiveFrom: date('effective_from').notNull(),
+    definedBy: text('defined_by').notNull(),
+    definedAt: timestamp('defined_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('compositions_tenant_id_key').on(table.tenantId, table.id),
+    uniqueIndex('compositions_parent_version_key').on(
+      table.tenantId,
+      table.parentItemId,
+      table.version,
+    ),
+    index('compositions_parent_effective_idx').on(
+      table.tenantId,
+      table.parentItemId,
+      table.effectiveFrom,
+    ),
+    foreignKey({
+      name: 'compositions_tenant_parent_fk',
+      columns: [table.tenantId, table.parentItemId],
+      foreignColumns: [catalogItems.tenantId, catalogItems.id],
+    }),
+  ],
+)
+
+export const compositionLines = pgTable(
+  'composition_lines',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    compositionId: uuid('composition_id').notNull(),
+    componentItemId: uuid('component_item_id').notNull(),
+    quantity: bigint('quantity', { mode: 'bigint' }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.compositionId, table.componentItemId] }),
+    index('composition_lines_component_idx').on(table.tenantId, table.componentItemId),
+    foreignKey({
+      name: 'composition_lines_composition_fk',
+      columns: [table.tenantId, table.compositionId],
+      foreignColumns: [compositions.tenantId, compositions.id],
+    }),
+    foreignKey({
+      name: 'composition_lines_tenant_component_fk',
+      columns: [table.tenantId, table.componentItemId],
+      foreignColumns: [catalogItems.tenantId, catalogItems.id],
     }),
   ],
 )

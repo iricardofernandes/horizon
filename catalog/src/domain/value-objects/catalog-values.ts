@@ -79,3 +79,98 @@ export class Money extends ValueObject<{ amount: bigint; currency: Currency }> {
     return [this.amount, this.currency.value]
   }
 }
+
+/**
+ * What a combination is built out of, so nothing a person types can be spelled to look
+ * like the separators that hold one together.
+ */
+const CONTROL_CHARACTERS = /\p{Cc}/u
+
+/**
+ * One axis a family's variants differ along: "size", "colour".
+ *
+ * Case-folded for comparison but kept as written for display, because a catalogue that
+ * turned "Colour" into "colour" on screen would be correcting its owner's spelling.
+ */
+export class AttributeName extends TextValue {
+  static create(value: string, field = '/attribute'): Either<InvalidInputError, AttributeName> {
+    const normalized = value.trim().replace(/\s+/g, ' ')
+    if (normalized.length < 1 || normalized.length > 60)
+      return left(new InvalidInputError(field, 'must contain between 1 and 60 characters'))
+    if (CONTROL_CHARACTERS.test(normalized))
+      return left(new InvalidInputError(field, 'must not contain control characters'))
+    return right(new AttributeName({ value: normalized }))
+  }
+  /** What makes two names the same name, whatever case anybody typed. */
+  get key(): string {
+    return this.value.toLocaleLowerCase()
+  }
+}
+
+/** What one variant answers for one axis: "L", "navy blue". */
+export class AttributeValue extends TextValue {
+  static create(value: string, field = '/value'): Either<InvalidInputError, AttributeValue> {
+    const normalized = value.trim().replace(/\s+/g, ' ')
+    if (normalized.length < 1 || normalized.length > 120)
+      return left(new InvalidInputError(field, 'must contain between 1 and 120 characters'))
+    if (CONTROL_CHARACTERS.test(normalized))
+      return left(new InvalidInputError(field, 'must not contain control characters'))
+    return right(new AttributeValue({ value: normalized }))
+  }
+  get key(): string {
+    return this.value.toLocaleLowerCase()
+  }
+}
+
+const SCALE = 1_000_000n
+
+/**
+ * How much of a component goes into one of the parent.
+ *
+ * Six decimal places, the same as the quantities Inventory moves: a recipe that asked for
+ * more precision than the warehouse can count would be a recipe nobody could follow.
+ */
+export class ComponentQuantity extends ValueObject<{ micros: bigint }> {
+  static create(value: string, field = '/quantity'): Either<InvalidInputError, ComponentQuantity> {
+    if (!/^\d+(\.\d{1,6})?$/.test(value))
+      return left(
+        new InvalidInputError(field, 'must be a non-negative decimal with at most 6 places'),
+      )
+    const [whole = '0', fraction = ''] = value.split('.')
+    const micros = BigInt(whole) * SCALE + BigInt(fraction.padEnd(6, '0'))
+    if (micros === 0n)
+      return left(new InvalidInputError(field, 'must be more than none of the component'))
+    return right(new ComponentQuantity({ micros }))
+  }
+  static fromMicros(micros: bigint): ComponentQuantity {
+    return new ComponentQuantity({ micros })
+  }
+  get micros(): bigint {
+    return this.props.micros
+  }
+  override toString(): string {
+    const whole = this.micros / SCALE
+    const fraction = (this.micros % SCALE).toString().padStart(6, '0').replace(/0+$/, '')
+    return fraction.length === 0 ? whole.toString() : `${whole}.${fraction}`
+  }
+  protected componentsOf(): readonly unknown[] {
+    return [this.micros]
+  }
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+/** The day a version of a recipe starts applying. */
+export class EffectiveDate extends TextValue {
+  static create(value: string, field = '/effectiveFrom'): Either<InvalidInputError, EffectiveDate> {
+    if (
+      !ISO_DATE.test(value) ||
+      new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value
+    )
+      return left(new InvalidInputError(field, 'must be a calendar date as YYYY-MM-DD'))
+    return right(new EffectiveDate({ value }))
+  }
+  isBefore(other: EffectiveDate): boolean {
+    return this.value < other.value
+  }
+}

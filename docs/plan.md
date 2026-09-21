@@ -1960,6 +1960,112 @@ or the other, never both. A serial already says everything a lot would.
 
 ---
 
+## Phase 36 — What a thing is, and what it is made of
+
+**Complete.** The fifth slice of Phase I of the [expansion plan](erp-expansion-plan.md).
+
+A catalogue that can only list things says nothing about how they relate. These forty
+shirts are one shirt in forty combinations; that chair is a seat, a back and four legs.
+Both are facts about the goods rather than about any one document, so they belong in the
+catalogue rather than being rediscovered by every module that needs them.
+
+Phase I's remaining work was sliced in two here. This phase is the structure — what things
+are and what they are made of — and [phase 37](#phase-37--the-order-that-consumes-and-produces)
+is the factory acting on it.
+
+**Deliverables**
+
+- **Families, and the axes they vary along.** Ordered and named, and fixed once anything is
+  in the family: one that gained a third axis would leave every variant already in it
+  unable to answer, and one that lost an axis would make two variants that used to differ
+  identical.
+- **Variants that are products in their own right.** A variant keeps its own SKU, its own
+  stock and its own price; the family only says what makes it different from its siblings.
+  It must answer every axis, exactly once, and nothing else. **An item does not move from
+  one family to another** — the answers were given against *those* axes, and carrying them
+  elsewhere would leave the item describing itself in a vocabulary nobody uses any more.
+- **A combination is what makes two variants the same variant.** Built from the answers in
+  the family's own order and case-folded, so "L / Navy" and "l / navy" collide rather than
+  becoming two products nobody could tell apart on a shelf. Unique per family, refused in
+  the use case and again by an index for the two people who ask at the same moment.
+- **One structure for kits and recipes, with the difference stated rather than guessed.**
+  `assembled` is a recipe: the parent is stocked in its own right and something has to make
+  it. `exploded` is a bundle: the parent is never stocked at all, and wherever it is used
+  it stands for the components underneath it. The two look alike on paper and behave
+  nothing alike in a warehouse, which is why the composition says which it is rather than
+  leaving a reader to infer it from whether any stock ever turned up.
+- **Versioned and effective-dated, never edited.** A recipe changes and the goods made
+  under the old one have to stay explicable: a production order that consumed four of
+  something is not wrong because the recipe now says three. Superseding is adding a version
+  that takes effect later — no earlier than the one it replaces, so two answers are never
+  in force on the same day — and a trigger refuses any rewrite of a published one.
+- **No cycles, at any depth.** A chair made of legs is fine; a chair made of legs made of
+  chairs is a catalogue that cannot say what anything costs or how long anything takes. The
+  aggregate refuses the one-step case, the use case walks the graph before writing so the
+  person is told *which* component closes the loop, and a deferred trigger walks it again
+  for two people who define halves of a cycle at once.
+- **The explosion.** Everything one of the parent needs, all the way down, with the levels
+  multiplied through: four legs of two screws each is eight screws, and a part that appears
+  under two sub-assemblies is summed rather than listed twice. Leaves only by default —
+  the things somebody actually has to have in a warehouse — because a list mixing a
+  sub-assembly with the screws inside it would be double-counting in plain sight.
+- **Only a product is made of anything.** A service is delivered rather than assembled, and
+  a bundle of services is a contract, which is Phase K's problem. A service may be a
+  *component*, which is how a product sold with its fitting is described.
+- `@horizon/contracts@0.21.0`: `catalog.family.defined`, `catalog.variant.assigned` and
+  `catalog.composition.defined`. Nothing consumes them yet — phase 37 is the first — and
+  publishing them now is what lets it be written against a fact rather than a table.
+
+**Exit criteria**
+
+- A family's axes are answered in the family's own order and spelling, whatever order or
+  case the caller used.
+- Two variants cannot answer a family's axes the same way, refused by the use case and by
+  a unique index.
+- A version in force on a past day is the one that was in force on that day, not the newest.
+- A cycle is refused however far down it closes, by the use case and by the trigger.
+- An explosion multiplies through the levels and sums a component reached by two paths.
+- One workspace's families and recipes never appear in another's.
+
+**Non-goals**
+
+- Acting on any of it. Production is [phase 37](#phase-37--the-order-that-consumes-and-produces),
+  and selling an exploded kit — resolving it into its components when an order is placed —
+  is a Sales decision that phase has no business taking on its behalf. This phase publishes
+  the facts; consuming them is somebody else's slice.
+- Prices derived from a composition. What a kit costs to make and what a workspace charges
+  for it are different questions, and the second one is already answered by a price list.
+- Attributes with types, units or allowed values. A family varies along "size"; whether the
+  sizes are S/M/L or 38/40/42 is the workspace's business, and validating it would be
+  inventing a schema language nobody asked for.
+- Generating variants from the cross product of a family's axes. Forty combinations is
+  forty decisions about SKUs, prices and what is actually stocked, and a button that made
+  them all would be making them badly.
+- Operations, routings, work centres and lead times. A composition says what goes in, not
+  how long it takes or who does it; that is production planning, beyond Phase I.
+- Scrap factors on a recipe line. What a process loses is measured by the orders that ran
+  it, and phase 37 records it rather than predicting it here.
+
+---
+
+## Phase 37 — The order that consumes and produces
+
+**Planned.** Production orders in `inventory/`: an order that freezes the recipe it was
+released under, issues its materials, receives the finished goods at the cost of what went
+in, records scrap, and conserves quantity and value across the whole of it. Third-party
+production — materials sent to a subcontractor and the product coming back — closes it.
+
+---
+
+## Phase 38 — The inventory screens
+
+**Planned.** Somewhere to see and decide everything phases 32 to 37 built: transfers, the
+write-off queue, count sheets, the Kardex and valuation, levels and alerts, lots and their
+traces, units by name, families and variants, recipes and explosions, and production
+orders. Closes Phase I.
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

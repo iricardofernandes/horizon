@@ -78,11 +78,24 @@ same Zod schemas that validate the request, and served at `/docs`.
 | `GET` | `/items` | `read:Items` | List products and services, keyset-paginated. |
 | `POST` | `/items` | `manage:Items` | Add a product or service. |
 | `PATCH` | `/items/{itemId}/deactivate` | `manage:Items` | Stop the item being added to new documents. Existing references stay valid. |
+| `GET` | `/families` | `read:Items` | List product families and the axes they vary along. |
+| `POST` | `/families` | `manage:Items` | Define a family and its ordered axes. |
+| `GET` | `/families/{familyId}/variants` | `read:Items` | The items in a family, with the answers that tell them apart. |
+| `PUT` | `/families/variants/{itemId}` | `manage:Items` | Place an item in a family as one combination. |
+| `GET` | `/items/{itemId}/composition` | `read:Items` | What the item is made of on a given day. |
+| `GET` | `/items/{itemId}/composition/explosion` | `read:Items` | Everything one of it needs, all the way down. |
+| `POST` | `/items/{itemId}/composition` | `manage:Items` | Supersede the recipe with a new version from a date. |
 | `GET` | `/price-lists` | `read:PriceLists` | List price lists with their current prices. |
 | `POST` | `/price-lists` | `manage:PriceLists` | Create a price list in one currency. |
 | `PUT` | `/price-lists/{priceListId}/prices/{itemId}` | `manage:Prices` | Set the current price of an item. |
 | `GET` | `/health/live` | public | Is the process running. |
 | `GET` | `/health/ready` | public | Are PostgreSQL and Redis reachable. |
+
+A family's axes are fixed once anything is in it, and an item never moves between
+families: the answers were given against *those* axes. Two variants cannot answer a
+family's axes the same way. A composition is superseded, never edited — the goods made
+under the old recipe have to stay explicable — and nothing may be made of itself at any
+depth, which the use case checks by walking the graph and a deferred trigger checks again.
 
 Writes accept an optional `Idempotency-Key` (ADR 0028): a repeat of the same request
 replays the stored response, and the same key with a different body is a `409`.

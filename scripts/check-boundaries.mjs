@@ -47,11 +47,18 @@ function walk(dir, out = []) {
   return out
 }
 
-/** Import specifiers with their 1-based line numbers. */
+/**
+ * Import specifiers with their 1-based line numbers.
+ *
+ * `from` has to be preceded by whitespace to count. Without that, a string literal ending
+ * in `_from'` — a column named `effective_from`, say — ends the scan that began at the
+ * nearest `export`, and the checker reports whatever happened to fall in between as an
+ * undeclared dependency.
+ */
 function readImports(file) {
   const text = readFileSync(file, 'utf8')
   const pattern =
-    /(?:^|\n)\s*(?:import|export)[\s\S]*?from\s*['"]([^'"]+)['"]|(?:^|[^.\w])require\(\s*['"]([^'"]+)['"]\s*\)|(?:^|[^.\w])import\(\s*['"]([^'"]+)['"]\s*\)/g
+    /(?:^|\n)\s*(?:import|export)[\s\S]*?\sfrom\s*['"]([^'"]+)['"]|(?:^|[^.\w])require\(\s*['"]([^'"]+)['"]\s*\)|(?:^|[^.\w])import\(\s*['"]([^'"]+)['"]\s*\)/g
   const found = []
   let match
   while ((match = pattern.exec(text)) !== null) {

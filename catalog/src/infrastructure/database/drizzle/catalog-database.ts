@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, asc, desc, eq, gt, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
@@ -18,20 +18,27 @@ import type { Page } from '@/core/repositories/pagination-params'
 import type { AuditEntry } from '@/domain/audit/audit-entry'
 import { AuditEntry as AuditLink } from '@/domain/audit/audit-entry'
 import { CatalogItem } from '@/domain/entities/catalog-item'
+import { Composition } from '@/domain/entities/composition'
 import { PriceList } from '@/domain/entities/price-list'
+import { ProductFamily } from '@/domain/entities/product-family'
 import { UnitOfMeasure } from '@/domain/entities/unit-of-measure'
 import type { AuditRecord } from '@/domain/repositories/audit-log-repository'
 import {
+  AttributeName,
+  AttributeValue,
   CatalogName,
+  ComponentQuantity,
   Currency,
+  EffectiveDate,
   NcmCode,
   Sku,
   UnitCode,
 } from '@/domain/value-objects/catalog-values'
+import { compositionInForce, explodeComposition, listVariants } from './composition-reads'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
+export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 type Cursor = { createdAt: string; id: string }
 
 export interface CatalogDatabaseOptions {
@@ -90,6 +97,26 @@ export class CatalogDatabase extends UnitOfWork {
     })
   }
 
+  compositionInForce(tenantId: string, request: Parameters<typeof compositionInForce>[1]) {
+    return this.read(tenantId, (tx) => compositionInForce(tx, request))
+  }
+
+  explodeComposition(tenantId: string, request: Parameters<typeof explodeComposition>[1]) {
+    return this.read(tenantId, (tx) => explodeComposition(tx, request))
+  }
+
+  listVariants(tenantId: string, request: Parameters<typeof listVariants>[1]) {
+    return this.read(tenantId, (tx) => listVariants(tx, request))
+  }
+
+  private read<T>(tenantId: string, query: (tx: Transaction) => Promise<T>): Promise<T> {
+    return this.inTenant(tenantId, () => {
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('This read requires a tenant transaction')
+      return query(current.tx)
+    })
+  }
+
   async ping(): Promise<void> {
     await this.#db.execute(sql`select 1`)
   }
@@ -118,7 +145,10 @@ function mapUnit(row: typeof schema.units.$inferSelect): UnitOfMeasure {
   )
 }
 
-function mapItem(row: typeof schema.catalogItems.$inferSelect): CatalogItem {
+function mapItem(
+  row: typeof schema.catalogItems.$inferSelect,
+  variant?: typeof schema.itemVariants.$inferSelect,
+): CatalogItem {
   if (row.kind !== 'product' && row.kind !== 'service')
     throw new Error('Invalid persisted catalog item kind')
   return CatalogItem.create(
@@ -129,9 +159,56 @@ function mapItem(row: typeof schema.catalogItems.$inferSelect): CatalogItem {
       name: restored(CatalogName.create(row.name)),
       unitId: row.unitId,
       ncm: row.ncm === null ? null : restored(NcmCode.create(row.ncm)),
+      variant: variant
+        ? {
+            familyId: variant.familyId,
+            answers: variant.values.map((held) => ({
+              attribute: restored(AttributeName.create(held.attribute)),
+              value: restored(AttributeValue.create(held.value)),
+            })),
+          }
+        : null,
       active: row.active === 1,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
+function mapFamily(row: typeof schema.productFamilies.$inferSelect): ProductFamily {
+  return ProductFamily.rehydrate(
+    {
+      tenantId: row.tenantId,
+      name: restored(CatalogName.create(row.name)),
+      attributes: row.attributes.map((name) => restored(AttributeName.create(name))),
+      active: row.active === 1,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
+function mapComposition(
+  row: typeof schema.compositions.$inferSelect,
+  lines: readonly (typeof schema.compositionLines.$inferSelect)[],
+): Composition {
+  if (row.realisation !== 'assembled' && row.realisation !== 'exploded')
+    throw new Error('Invalid persisted composition realisation')
+  return Composition.rehydrate(
+    {
+      tenantId: row.tenantId,
+      parentItemId: row.parentItemId,
+      version: row.version,
+      realisation: row.realisation,
+      effectiveFrom: restored(EffectiveDate.create(row.effectiveFrom)),
+      lines: lines.map((line) => ({
+        componentItemId: line.componentItemId,
+        quantity: ComponentQuantity.fromMicros(line.quantity),
+      })),
+      definedBy: row.definedBy,
+      definedAt: row.definedAt,
     },
     new UniqueEntityID(row.id),
   )
@@ -274,6 +351,61 @@ function mapAudit(row: typeof schema.auditLog.$inferSelect): AuditEntry {
   return AuditLink.rehydrate(row, new UniqueEntityID(row.id))
 }
 
+async function variantOf(tx: Transaction, itemId: string) {
+  const [row] = await tx
+    .select()
+    .from(schema.itemVariants)
+    .where(eq(schema.itemVariants.itemId, itemId))
+    .limit(1)
+  return row
+}
+
+async function variantsOf(tx: Transaction, itemIds: readonly string[]) {
+  if (itemIds.length === 0) return new Map<string, typeof schema.itemVariants.$inferSelect>()
+  const rows = await tx
+    .select()
+    .from(schema.itemVariants)
+    .where(inArray(schema.itemVariants.itemId, [...itemIds]))
+  return new Map(rows.map((row) => [row.itemId, row]))
+}
+
+/** An item's place in a family, written beside it or left alone when it has none. */
+async function writeVariant(
+  tx: Transaction,
+  tenantId: string,
+  itemId: string,
+  variant: {
+    familyId: string
+    combination: string
+    values: readonly { attribute: string; value: string }[]
+  } | null,
+  updatedAt: Date,
+): Promise<void> {
+  if (!variant) return
+  await tx
+    .insert(schema.itemVariants)
+    .values({
+      tenantId,
+      itemId,
+      familyId: variant.familyId,
+      combination: variant.combination,
+      values: [...variant.values],
+      updatedAt,
+    })
+    .onConflictDoUpdate({
+      target: [schema.itemVariants.tenantId, schema.itemVariants.itemId],
+      set: { combination: variant.combination, values: [...variant.values], updatedAt },
+    })
+}
+
+function linesOf(tx: Transaction, compositionId: string) {
+  return tx
+    .select()
+    .from(schema.compositionLines)
+    .where(eq(schema.compositionLines.compositionId, compositionId))
+    .orderBy(asc(schema.compositionLines.componentItemId))
+}
+
 function makeScope(tx: Transaction, tenantId: string): TenantScope {
   const assertTenant = (actual: string) => {
     if (actual !== tenantId) throw new Error('Aggregate tenant does not match transaction')
@@ -326,7 +458,7 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
         .from(schema.catalogItems)
         .where(eq(schema.catalogItems.id, id))
         .limit(1)
-      return row ? mapItem(row) : null
+      return row ? mapItem(row, await variantOf(tx, row.id)) : null
     },
     findBySku: async (sku) => {
       const [row] = await tx
@@ -334,16 +466,17 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
         .from(schema.catalogItems)
         .where(eq(schema.catalogItems.sku, sku))
         .limit(1)
-      return row ? mapItem(row) : null
+      return row ? mapItem(row, await variantOf(tx, row.id)) : null
     },
     create: async (item) => {
-      const row = item.toSnapshot()
+      const { variant, ...row } = item.toSnapshot()
       assertTenant(row.tenantId)
       await tx.insert(schema.catalogItems).values({ ...row, active: row.active ? 1 : 0 })
+      await writeVariant(tx, tenantId, row.id, variant, row.updatedAt)
       await publish(tx, tenantId, item.pullDomainEvents())
     },
     save: async (item) => {
-      const row = item.toSnapshot()
+      const { variant, ...row } = item.toSnapshot()
       assertTenant(row.tenantId)
       await tx
         .update(schema.catalogItems)
@@ -355,6 +488,7 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
           updatedAt: row.updatedAt,
         })
         .where(eq(schema.catalogItems.id, row.id))
+      await writeVariant(tx, tenantId, row.id, variant, row.updatedAt)
       await publish(tx, tenantId, item.pullDomainEvents())
     },
     list: async (params) => {
@@ -366,7 +500,141 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
         )
         .orderBy(asc(schema.catalogItems.createdAt), asc(schema.catalogItems.id))
         .limit(params.limit + 1)
-      return page(rows.map(mapItem), params.limit, (item) => encodeCursor(item.toSnapshot()))
+      const variants = await variantsOf(
+        tx,
+        rows.map((row) => row.id),
+      )
+      return page(
+        rows.map((row) => mapItem(row, variants.get(row.id))),
+        params.limit,
+        (item) => encodeCursor(item.toSnapshot()),
+      )
+    },
+  }
+  const families: TenantScope['families'] = {
+    findById: async (id) => {
+      const [row] = await tx
+        .select()
+        .from(schema.productFamilies)
+        .where(eq(schema.productFamilies.id, id))
+        .limit(1)
+      return row ? mapFamily(row) : null
+    },
+    findByName: async (name) => {
+      const [row] = await tx
+        .select()
+        .from(schema.productFamilies)
+        .where(eq(schema.productFamilies.name, name))
+        .limit(1)
+      return row ? mapFamily(row) : null
+    },
+    create: async (family) => {
+      const row = family.toSnapshot()
+      assertTenant(row.tenantId)
+      await tx
+        .insert(schema.productFamilies)
+        .values({ ...row, attributes: [...row.attributes], active: row.active ? 1 : 0 })
+      await publish(tx, tenantId, family.pullDomainEvents())
+    },
+    save: async (family) => {
+      const row = family.toSnapshot()
+      assertTenant(row.tenantId)
+      await tx
+        .update(schema.productFamilies)
+        .set({ name: row.name, active: row.active ? 1 : 0, updatedAt: row.updatedAt })
+        .where(eq(schema.productFamilies.id, row.id))
+      await publish(tx, tenantId, family.pullDomainEvents())
+    },
+    list: async (params) => {
+      const rows = await tx
+        .select()
+        .from(schema.productFamilies)
+        .where(
+          after(
+            schema.productFamilies.createdAt,
+            schema.productFamilies.id,
+            decodeCursor(params.cursor),
+          ),
+        )
+        .orderBy(asc(schema.productFamilies.createdAt), asc(schema.productFamilies.id))
+        .limit(params.limit + 1)
+      return page(rows.map(mapFamily), params.limit, (family) => encodeCursor(family.toSnapshot()))
+    },
+    combinationTaken: async (familyId, combination, exceptItemId) => {
+      const [row] = await tx
+        .select({ itemId: schema.itemVariants.itemId })
+        .from(schema.itemVariants)
+        .where(
+          and(
+            eq(schema.itemVariants.familyId, familyId),
+            eq(schema.itemVariants.combination, combination),
+          ),
+        )
+        .limit(2)
+      return row !== undefined && row.itemId !== exceptItemId
+    },
+  }
+  const compositions: TenantScope['compositions'] = {
+    inForce: async (parentItemId, on) => {
+      const [row] = await tx
+        .select()
+        .from(schema.compositions)
+        .where(
+          and(
+            eq(schema.compositions.parentItemId, parentItemId),
+            lte(schema.compositions.effectiveFrom, on),
+          ),
+        )
+        .orderBy(desc(schema.compositions.effectiveFrom), desc(schema.compositions.version))
+        .limit(1)
+      return row ? mapComposition(row, await linesOf(tx, row.id)) : null
+    },
+    latest: async (parentItemId) => {
+      const [row] = await tx
+        .select()
+        .from(schema.compositions)
+        .where(eq(schema.compositions.parentItemId, parentItemId))
+        .orderBy(desc(schema.compositions.version))
+        .limit(1)
+      return row ? mapComposition(row, await linesOf(tx, row.id)) : null
+    },
+    create: async (composition) => {
+      const row = composition.toSnapshot()
+      assertTenant(row.tenantId)
+      await tx.insert(schema.compositions).values({
+        id: row.id,
+        tenantId,
+        parentItemId: row.parentItemId,
+        version: row.version,
+        realisation: row.realisation,
+        effectiveFrom: row.effectiveFrom,
+        definedBy: row.definedBy,
+        definedAt: row.definedAt,
+      })
+      await tx.insert(schema.compositionLines).values(
+        composition.lines().map((line) => ({
+          tenantId,
+          compositionId: row.id,
+          componentItemId: line.componentItemId,
+          quantity: line.quantity.micros,
+        })),
+      )
+      await publish(tx, tenantId, composition.pullDomainEvents())
+    },
+    reaches: async (from, target) => {
+      const [row] = await tx.execute<{ found: boolean }>(sql`
+        with recursive below(item_id, depth) as (
+          select ${from}::uuid, 1
+          union all
+          select l.component_item_id, b.depth + 1
+          from below b
+          join compositions c on c.parent_item_id = b.item_id
+          join composition_lines l on l.composition_id = c.id
+          where b.depth < 32
+        )
+        select true as found from below where item_id = ${target}::uuid limit 1
+      `)
+      return row !== undefined
     },
   }
   const priceLists: TenantScope['priceLists'] = {
@@ -472,5 +740,5 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
           .limit(1)
       )[0]?.sequence ?? 0,
   }
-  return { tenantId, units, items, priceLists, audit }
+  return { tenantId, units, items, priceLists, families, compositions, audit }
 }

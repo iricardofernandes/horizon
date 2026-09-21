@@ -4,6 +4,8 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core'
 import { LoggerModule } from 'nestjs-pino'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { CatalogAuthGuard } from '@/infrastructure/http/authorization'
+import { CompositionsController } from '@/infrastructure/http/compositions.controller'
+import { FamiliesController } from '@/infrastructure/http/families.controller'
 import { IdempotencyInterceptor } from '@/infrastructure/http/idempotency-interceptor'
 import { IdempotencyStore } from '@/infrastructure/http/idempotency-store'
 import { ItemsController } from '@/infrastructure/http/items.controller'
@@ -104,7 +106,14 @@ export class AppModule {
           },
         }),
       ],
-      controllers: [UnitsController, ItemsController, PriceListsController, SystemController],
+      controllers: [
+        UnitsController,
+        ItemsController,
+        FamiliesController,
+        CompositionsController,
+        PriceListsController,
+        SystemController,
+      ],
       providers,
       exports: [CatalogRuntime],
     }

@@ -573,3 +573,32 @@ Where a named unit is in its life: **in stock** on a shelf, **shipped** to a cus
 **returned** to the supplier it came from, or **scrapped**. The row is never deleted, only
 moved along, which is what makes a unit followable after it has left. A unit is on a shelf
 exactly when it is in stock, and on none when it is not.
+
+### product family
+A group of items that differ only along named, ordered axes — "size", "colour". Not a thing
+anybody stocks or sells: it is how a catalogue says that these forty shirts are one shirt in
+forty combinations. Its axes are fixed once anything is in it, because one that gained an
+axis would leave every variant unable to answer and one that lost an axis would make two
+variants that used to differ identical.
+
+### variant
+An item that is one combination of its family's axes. A product in its own right — its own
+SKU, its own stock, its own price — which the family only distinguishes from its siblings.
+It must answer every axis exactly once, and it never moves to another family: the answers
+were given against *those* axes.
+
+### combination
+What makes two variants of a family the same variant: their answers in the family's own
+order, case-folded. Unique within a family, because a catalogue holding two items nobody
+could tell apart is offering a choice that is not one.
+
+### composition
+What an item is made of. **Assembled** is a recipe — the parent is stocked in its own right
+and something has to make it. **Exploded** is a bundle — the parent is never stocked at all
+and stands for the components underneath it wherever it is used. The two look alike on paper
+and behave nothing alike in a warehouse, so the composition says which it is.
+
+### explosion
+Everything one of an item needs, all the way down, with the quantities multiplied through
+the levels and a component reached by two paths summed rather than listed twice. Leaves only
+by default: the things somebody actually has to have in a warehouse.

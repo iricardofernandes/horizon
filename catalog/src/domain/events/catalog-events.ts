@@ -54,3 +54,57 @@ export class CatalogPriceChangedEvent extends CatalogEvent {
     return { priceListId: this.aggregateId.toString(), ...this.price }
   }
 }
+
+export class CatalogFamilyDefinedEvent extends CatalogEvent {
+  readonly eventType = 'catalog.family.defined'
+  constructor(
+    id: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly family: { name: string; attributes: readonly string[] },
+  ) {
+    super(id, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return { familyId: this.aggregateId.toString(), ...this.family }
+  }
+}
+
+export class CatalogVariantAssignedEvent extends CatalogEvent {
+  readonly eventType = 'catalog.variant.assigned'
+  constructor(
+    id: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly variant: {
+      familyId: string
+      values: readonly { attribute: string; value: string }[]
+    },
+  ) {
+    super(id, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return { itemId: this.aggregateId.toString(), ...this.variant }
+  }
+}
+
+export class CatalogCompositionDefinedEvent extends CatalogEvent {
+  readonly eventType = 'catalog.composition.defined'
+  constructor(
+    id: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly composition: {
+      parentItemId: string
+      version: number
+      realisation: 'assembled' | 'exploded'
+      effectiveFrom: string
+      lines: readonly { componentItemId: string; quantity: string }[]
+    },
+  ) {
+    super(id, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return { compositionId: this.aggregateId.toString(), ...this.composition }
+  }
+}

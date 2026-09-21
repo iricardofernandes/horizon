@@ -3,11 +3,17 @@ import Redis from 'ioredis'
 import { CreateCatalogItemUseCase } from '@/application/use-cases/create-catalog-item'
 import { CreateUnitUseCase } from '@/application/use-cases/create-unit'
 import { DeactivateCatalogItemUseCase } from '@/application/use-cases/deactivate-catalog-item'
+import { DefineCompositionUseCase } from '@/application/use-cases/define-composition'
 import {
   ListCatalogItemsUseCase,
   ListPriceListsUseCase,
+  ListProductFamiliesUseCase,
   ListUnitsUseCase,
 } from '@/application/use-cases/list-catalog'
+import {
+  AssignVariantUseCase,
+  DefineProductFamilyUseCase,
+} from '@/application/use-cases/manage-families'
 import { CreatePriceListUseCase, SetPriceUseCase } from '@/application/use-cases/manage-prices'
 import { ProvisionTenantCatalogUseCase } from '@/application/use-cases/provision-tenant-catalog'
 import { RedisTokenDenylist } from '@/infrastructure/cache/redis-token-denylist'
@@ -27,6 +33,10 @@ export class CatalogRuntime implements OnModuleInit, OnModuleDestroy {
   readonly createItem: CreateCatalogItemUseCase
   readonly listItems: ListCatalogItemsUseCase
   readonly deactivateItem: DeactivateCatalogItemUseCase
+  readonly listFamilies: ListProductFamiliesUseCase
+  readonly defineFamily: DefineProductFamilyUseCase
+  readonly assignVariant: AssignVariantUseCase
+  readonly defineComposition: DefineCompositionUseCase
   readonly createPriceList: CreatePriceListUseCase
   readonly listPriceLists: ListPriceListsUseCase
   readonly setPrice: SetPriceUseCase
@@ -62,6 +72,10 @@ export class CatalogRuntime implements OnModuleInit, OnModuleDestroy {
     this.createItem = new CreateCatalogItemUseCase(db, clock)
     this.listItems = new ListCatalogItemsUseCase(db)
     this.deactivateItem = new DeactivateCatalogItemUseCase(db, clock)
+    this.listFamilies = new ListProductFamiliesUseCase(db)
+    this.defineFamily = new DefineProductFamilyUseCase(db, clock)
+    this.assignVariant = new AssignVariantUseCase(db, clock)
+    this.defineComposition = new DefineCompositionUseCase(db, clock)
     this.createPriceList = new CreatePriceListUseCase(db, clock)
     this.listPriceLists = new ListPriceListsUseCase(db)
     this.setPrice = new SetPriceUseCase(db, clock)

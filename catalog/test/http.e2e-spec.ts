@@ -492,9 +492,14 @@ it('publishes request schemas, permissions and the outage exception in OpenAPI',
   expect(document.paths['/items']?.post).not.toHaveProperty('x-revocation-store-outage')
   expect(document.paths['/health/live']?.get).not.toHaveProperty('x-catalog-permission')
   expect(Object.keys(document.paths).sort()).toEqual([
+    '/families',
+    '/families/variants/{itemId}',
+    '/families/{familyId}/variants',
     '/health/live',
     '/health/ready',
     '/items',
+    '/items/{itemId}/composition',
+    '/items/{itemId}/composition/explosion',
     '/items/{itemId}/deactivate',
     '/price-lists',
     '/price-lists/{priceListId}/prices/{itemId}',

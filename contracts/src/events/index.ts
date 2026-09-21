@@ -1,4 +1,11 @@
-import { catalogItemCreated, catalogItemDeactivated, catalogPriceChanged } from './catalog'
+import {
+  catalogCompositionDefined,
+  catalogFamilyDefined,
+  catalogItemCreated,
+  catalogItemDeactivated,
+  catalogPriceChanged,
+  catalogVariantAssigned,
+} from './catalog'
 import type { EventDefinition } from './define'
 import {
   financialPayablePosted,
@@ -97,6 +104,9 @@ export const EVENTS: readonly EventDefinition[] = [
   catalogItemCreated,
   catalogItemDeactivated,
   catalogPriceChanged,
+  catalogFamilyDefined,
+  catalogVariantAssigned,
+  catalogCompositionDefined,
   salesOrderPlaced,
   inventoryStockReserved,
   inventoryStockReservationRejected,

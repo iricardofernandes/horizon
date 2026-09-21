@@ -3,12 +3,16 @@ import { UnitOfWork } from '@/application/ports/unit-of-work'
 import type { Page, PaginationParams } from '@/core/repositories/pagination-params'
 import { AuditEntry } from '@/domain/audit/audit-entry'
 import type { CatalogItem } from '@/domain/entities/catalog-item'
+import type { Composition } from '@/domain/entities/composition'
 import type { PriceList } from '@/domain/entities/price-list'
+import type { ProductFamily } from '@/domain/entities/product-family'
 import type { UnitOfMeasure } from '@/domain/entities/unit-of-measure'
 import type { AuditLogRepository, AuditRecord } from '@/domain/repositories/audit-log-repository'
 import {
   CatalogItemsRepository,
+  CompositionsRepository,
   PriceListsRepository,
+  ProductFamiliesRepository,
   UnitsRepository,
 } from '@/domain/repositories/catalog-repositories'
 
@@ -75,6 +79,95 @@ class InMemoryUnitsRepository extends TenantRepository<UnitOfMeasure> implements
   }
 }
 
+class InMemoryFamiliesRepository
+  extends TenantRepository<ProductFamily>
+  implements ProductFamiliesRepository
+{
+  constructor(
+    tenantId: string,
+    records: ProductFamily[],
+    private readonly items: CatalogItem[],
+  ) {
+    super(tenantId, records)
+  }
+  findById(id: string): Promise<ProductFamily | null> {
+    return Promise.resolve(this.byId(id))
+  }
+  findByName(name: string): Promise<ProductFamily | null> {
+    return Promise.resolve(
+      this.visible().find((family) => family.toSnapshot().name === name) ?? null,
+    )
+  }
+  create(family: ProductFamily): Promise<void> {
+    this.insert(family)
+    return Promise.resolve()
+  }
+  save(family: ProductFamily): Promise<void> {
+    this.replace(family)
+    return Promise.resolve()
+  }
+  list(params: PaginationParams): Promise<Page<ProductFamily>> {
+    return Promise.resolve(page(this.visible(), params))
+  }
+  combinationTaken(familyId: string, combination: string, exceptItemId: string): Promise<boolean> {
+    return Promise.resolve(
+      this.items.some((item) => {
+        const variant = item.toSnapshot().variant
+        return (
+          item.belongsTo(this.tenantId) &&
+          item.id.toString() !== exceptItemId &&
+          variant?.familyId === familyId &&
+          variant.combination === combination
+        )
+      }),
+    )
+  }
+}
+
+/** The graph of what is made of what, walked the way the recursive query does. */
+class InMemoryCompositionsRepository
+  extends TenantRepository<Composition>
+  implements CompositionsRepository
+{
+  inForce(parentItemId: string, on: string): Promise<Composition | null> {
+    const candidates = this.of(parentItemId).filter(
+      (composition) => composition.toSnapshot().effectiveFrom <= on,
+    )
+    return Promise.resolve(candidates.at(-1) ?? null)
+  }
+  latest(parentItemId: string): Promise<Composition | null> {
+    const held = [...this.of(parentItemId)].sort((a, b) => a.version() - b.version())
+    return Promise.resolve(held.at(-1) ?? null)
+  }
+  create(composition: Composition): Promise<void> {
+    this.insert(composition)
+    return Promise.resolve()
+  }
+  reaches(from: string, target: string): Promise<boolean> {
+    const seen = new Set<string>()
+    const walk = (itemId: string, depth: number): boolean => {
+      if (itemId === target) return true
+      if (depth > 32 || seen.has(itemId)) return false
+      seen.add(itemId)
+      return this.of(itemId).some((composition) =>
+        composition.lines().some((line) => walk(line.componentItemId, depth + 1)),
+      )
+    }
+    return Promise.resolve(walk(from, 0))
+  }
+  private of(parentItemId: string): readonly Composition[] {
+    return this.visible()
+      .filter((composition) => composition.parentItemId() === parentItemId)
+      .sort((a, b) => {
+        const left = a.toSnapshot()
+        const right = b.toSnapshot()
+        return left.effectiveFrom === right.effectiveFrom
+          ? left.version - right.version
+          : left.effectiveFrom.localeCompare(right.effectiveFrom)
+      })
+  }
+}
+
 class InMemoryItemsRepository
   extends TenantRepository<CatalogItem>
   implements CatalogItemsRepository
@@ -122,15 +215,23 @@ class InMemoryPriceListsRepository
 }
 
 /** Chains for real, so a use-case test can assert the chain and not merely the call. */
+/**
+ * The chain, plus the records as they were handed over.
+ *
+ * A test asserting who did what wants the record, not the hashed entry: reaching into the
+ * entry's snapshot from an application spec is exactly what ADR 0031 forbids.
+ */
 class InMemoryAuditLogRepository implements AuditLogRepository {
   constructor(
     private readonly tenantId: string,
     private readonly entries: AuditEntry[],
+    private readonly written: AuditRecord[] = [],
   ) {}
   private visible(): AuditEntry[] {
     return this.entries.filter((entry) => entry.toSnapshot().tenantId === this.tenantId)
   }
   append(record: AuditRecord): Promise<AuditEntry> {
+    this.written.push(record)
     const last = this.visible().at(-1)
     const entry = AuditEntry.append({
       payload: {
@@ -170,7 +271,10 @@ export class InMemoryCatalogUnitOfWork extends UnitOfWork {
   readonly units: UnitOfMeasure[] = []
   readonly items: CatalogItem[] = []
   readonly priceLists: PriceList[] = []
+  readonly families: ProductFamily[] = []
+  readonly compositions: Composition[] = []
   readonly auditEntries: AuditEntry[] = []
+  readonly auditRecordsWritten: AuditRecord[] = []
   readonly provisionedTenants = new Set<string>()
   readonly consumedEvents = new Set<string>()
 
@@ -198,8 +302,10 @@ export class InMemoryCatalogUnitOfWork extends UnitOfWork {
       tenantId,
       units: new InMemoryUnitsRepository(tenantId, this.units),
       items: new InMemoryItemsRepository(tenantId, this.items),
+      families: new InMemoryFamiliesRepository(tenantId, this.families, this.items),
+      compositions: new InMemoryCompositionsRepository(tenantId, this.compositions),
       priceLists: new InMemoryPriceListsRepository(tenantId, this.priceLists),
-      audit: new InMemoryAuditLogRepository(tenantId, this.auditEntries),
+      audit: new InMemoryAuditLogRepository(tenantId, this.auditEntries, this.auditRecordsWritten),
     })
   }
 }
