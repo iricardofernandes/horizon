@@ -1,10 +1,10 @@
 import type { DomainEvent } from '@/core/events/domain-event'
-import type { LotEntry } from '../entities/lot-book'
 import type { StockAdjustment } from '../entities/stock-adjustment'
 import type { StockBalance } from '../entities/stock-balance'
 import type { StockCount } from '../entities/stock-count'
 import type { StockReservation } from '../entities/stock-reservation'
 import type { StockTransfer } from '../entities/stock-transfer'
+import type { Units } from '../entities/tracked-units'
 import type { Warehouse } from '../entities/warehouse'
 import type { ItemTracking } from '../value-objects/tracking'
 
@@ -136,8 +136,20 @@ export abstract class StockReservationsRepository {
  * shipments rather than guessed at.
  */
 export abstract class StockMovementsRepository {
-  /** Lots this order has sent and not yet had back, by item. */
-  abstract lotsShippedFor(orderId: string): Promise<ReadonlyMap<string, readonly LotEntry[]>>
+  /** What this order has sent and not yet had back, by item: lots, or units by name. */
+  abstract unitsShippedFor(orderId: string): Promise<ReadonlyMap<string, Units>>
+}
+
+/**
+ * What every shelf at once knows about a named unit.
+ *
+ * A balance can only see its own shelf, so the one thing it cannot check is the thing
+ * that matters most about a serial: that no other shelf is holding it. Goods arriving
+ * from outside the workspace ask this before they claim a name.
+ */
+export abstract class ItemSerialsRepository {
+  /** Of these names, the ones some shelf is already holding. */
+  abstract inStock(itemId: string, serials: readonly string[]): Promise<readonly string[]>
 }
 
 /** Persists domain events to the outbox owned by the surrounding transaction. */

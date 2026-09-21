@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { StockBalance } from './entities/stock-balance'
+import { ofLots, pickLots } from './entities/tracked-units'
 import { Currency, Money, Quantity } from './value-objects/inventory-values'
 import type { MovementOrigin } from './value-objects/movement-origin'
 import { ExpiryDate, type ItemTracking, LotCode } from './value-objects/tracking'
@@ -43,13 +44,18 @@ const receive = (
   expiresOn: string | null = null,
 ) =>
   unwrap(
-    balance.receive(quantity(amount), money('1000'), now, [
-      {
-        code: code(lot),
-        expiresOn: expiresOn === null ? null : day(expiresOn),
-        quantity: quantity(amount),
-      },
-    ]),
+    balance.receive(
+      quantity(amount),
+      money('1000'),
+      now,
+      ofLots([
+        {
+          code: code(lot),
+          expiresOn: expiresOn === null ? null : day(expiresOn),
+          quantity: quantity(amount),
+        },
+      ]),
+    ),
   )
 
 const held = (balance: StockBalance) =>
@@ -72,9 +78,12 @@ describe('a shelf that has to say which boxes it is holding', () => {
       now,
     })
 
-    const received = balance.receive(quantity('10'), money('1000'), now, [
-      { code: code('AB-1'), expiresOn: null, quantity: quantity('10') },
-    ])
+    const received = balance.receive(
+      quantity('10'),
+      money('1000'),
+      now,
+      ofLots([{ code: code('AB-1'), expiresOn: null, quantity: quantity('10') }]),
+    )
 
     expect(received.isLeft()).toBe(true)
   })
@@ -82,9 +91,12 @@ describe('a shelf that has to say which boxes it is holding', () => {
   it('refuses lots that do not add up to what moved', () => {
     const balance = shelf()
 
-    const received = balance.receive(quantity('10'), money('1000'), now, [
-      { code: code('AB-1'), expiresOn: null, quantity: quantity('7') },
-    ])
+    const received = balance.receive(
+      quantity('10'),
+      money('1000'),
+      now,
+      ofLots([{ code: code('AB-1'), expiresOn: null, quantity: quantity('7') }]),
+    )
 
     expect(received.isLeft()).toBe(true)
   })
@@ -92,9 +104,12 @@ describe('a shelf that has to say which boxes it is holding', () => {
   it('insists on a date when the workspace says every lot has one', () => {
     const balance = shelf(BY_LOT_DATED)
 
-    const undated = balance.receive(quantity('10'), money('1000'), now, [
-      { code: code('AB-1'), expiresOn: null, quantity: quantity('10') },
-    ])
+    const undated = balance.receive(
+      quantity('10'),
+      money('1000'),
+      now,
+      ofLots([{ code: code('AB-1'), expiresOn: null, quantity: quantity('10') }]),
+    )
 
     expect(undated.isLeft()).toBe(true)
   })
@@ -103,9 +118,12 @@ describe('a shelf that has to say which boxes it is holding', () => {
     const balance = shelf()
     receive(balance, 'AB-1', '10', '2026-12-01')
 
-    const again = balance.receive(quantity('5'), money('1000'), now, [
-      { code: code('AB-1'), expiresOn: day('2027-01-01'), quantity: quantity('5') },
-    ])
+    const again = balance.receive(
+      quantity('5'),
+      money('1000'),
+      now,
+      ofLots([{ code: code('AB-1'), expiresOn: day('2027-01-01'), quantity: quantity('5') }]),
+    )
 
     expect(again.isLeft()).toBe(true)
   })
@@ -129,7 +147,7 @@ describe('the order boxes leave in', () => {
 
     const gone = unwrap(balance.ship(quantity('12'), now))
 
-    expect(gone.map((lot) => [lot.code.value, lot.quantity.toString()])).toEqual([
+    expect(gone.lots.map((lot) => [lot.code.value, lot.quantity.toString()])).toEqual([
       ['SOON', '10'],
       ['LATE', '2'],
     ])
@@ -143,7 +161,7 @@ describe('the order boxes leave in', () => {
 
     const gone = unwrap(balance.ship(quantity('4'), now))
 
-    expect(gone.map((lot) => lot.code.value)).toEqual(['DATED'])
+    expect(gone.lots.map((lot) => lot.code.value)).toEqual(['DATED'])
   })
 
   it('draws from the lots somebody named instead, when they named them', () => {
@@ -152,9 +170,12 @@ describe('the order boxes leave in', () => {
     receive(balance, 'LATE', '10', '2027-01-01')
 
     unwrap(
-      balance.transferOut(quantity('3'), document(), now, [
-        { code: code('LATE'), quantity: quantity('3') },
-      ]),
+      balance.transferOut(
+        quantity('3'),
+        document(),
+        now,
+        pickLots([{ code: code('LATE'), quantity: quantity('3') }]),
+      ),
     )
 
     expect(held(balance)).toEqual([
@@ -200,9 +221,12 @@ describe('stock that has gone off', () => {
   it('is written off when somebody names it, which is what the reason is for', () => {
     const balance = expired()
 
-    const gone = balance.adjustOut(quantity('10'), document(), now, [
-      { code: code('GONE'), quantity: quantity('10') },
-    ])
+    const gone = balance.adjustOut(
+      quantity('10'),
+      document(),
+      now,
+      pickLots([{ code: code('GONE'), quantity: quantity('10') }]),
+    )
 
     expect(gone.isRight()).toBe(true)
     expect(held(balance)).toEqual([['GOOD', '4']])
@@ -251,9 +275,12 @@ describe('boxes moving between the company’s own warehouses', () => {
     const balance = shelf()
     receive(balance, 'AB-1', '5')
 
-    const moved = balance.transferOut(quantity('5'), document(), now, [
-      { code: code('AB-1'), quantity: quantity('9') },
-    ])
+    const moved = balance.transferOut(
+      quantity('5'),
+      document(),
+      now,
+      pickLots([{ code: code('AB-1'), quantity: quantity('9') }]),
+    )
 
     expect(moved.isLeft()).toBe(true)
   })
@@ -271,8 +298,8 @@ describe('what a movement says it touched', () => {
 
     const movement = balance.pullDomainEvents()[0]
     const touched = (
-      movement as { movementOf(): { lots: readonly { code: LotCode }[] } }
-    ).movementOf().lots
+      movement as { movementOf(): { units: { lots: readonly { code: LotCode }[] } } }
+    ).movementOf().units.lots
     expect(touched.map((lot) => lot.code.value)).toEqual(['SOON', 'LATE'])
   })
 })

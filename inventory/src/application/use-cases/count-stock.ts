@@ -1,11 +1,13 @@
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
+import { unitsOf } from '@/domain/entities/serial-book'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import { StockCount, type Variance } from '@/domain/entities/stock-count'
+import { naming } from '@/domain/entities/tracked-units'
 import { Money, Note, Quantity } from '@/domain/value-objects/inventory-values'
 import type { MovementOrigin } from '@/domain/value-objects/movement-origin'
-import { LotCode } from '@/domain/value-objects/tracking'
+import { LotCode, SerialNumber } from '@/domain/value-objects/tracking'
 import type { Clock } from '../ports/clock'
 import type { InventoryScope, InventoryUnitOfWork } from '../ports/unit-of-work'
 import { approvalRequired } from './adjust-stock'
@@ -69,6 +71,7 @@ export class OpenStockCountUseCase {
           lines: count.value.lines().map((line) => ({
             itemId: line.itemId,
             lot: line.lot?.value ?? null,
+            serial: line.serial?.value ?? null,
             expected: line.expected.toString(),
           })),
         },
@@ -87,20 +90,19 @@ export class RecordStockCountUseCase {
   execute(request: {
     context: CommandContext
     countId: string
-    counts: readonly { itemId: string; lot?: string | null | undefined; counted: string }[]
+    counts: readonly {
+      itemId: string
+      lot?: string | null | undefined
+      serial?: string | null | undefined
+      counted: string
+    }[]
   }): Outcome<void> {
     const { context } = request
-    const counts: { itemId: string; lot: LotCode | null; counted: Quantity }[] = []
+    const counts: CountedLine[] = []
     for (const [index, entry] of request.counts.entries()) {
-      const counted = quantityOf(entry.counted, `/counts/${index}/counted`)
-      if (counted.isLeft()) return Promise.resolve(left(counted.value))
-      let lot: LotCode | null = null
-      if (entry.lot) {
-        const code = LotCode.create(entry.lot, `/counts/${index}/lot`)
-        if (code.isLeft()) return Promise.resolve(left(code.value))
-        lot = code.value
-      }
-      counts.push({ itemId: entry.itemId, lot, counted: counted.value })
+      const parsed = countedOf(entry, index)
+      if (parsed.isLeft()) return Promise.resolve(left(parsed.value))
+      counts.push(parsed.value)
     }
 
     return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
@@ -294,14 +296,15 @@ async function post(
     // counted: a delivery that went out during the count is not undone by it. Under lot
     // tracking it goes into or out of the very lot the line was about, which is the whole
     // reason the sheet is walked lot by lot rather than item by item.
-    const lots = variance.lot
-      ? [{ code: variance.lot, expiresOn: null, quantity: variance.quantity }]
-      : null
-    const picks = variance.lot ? [{ code: variance.lot, quantity: variance.quantity }] : null
+    const { named, picked } = naming({
+      lot: variance.lot,
+      serials: variance.serial ? [variance.serial] : [],
+      quantity: variance.quantity,
+    })
     const applied =
       variance.direction === 'in'
-        ? balance.adjustIn(variance.quantity, null, origin, now, lots)
-        : balance.adjustOut(variance.quantity, origin, now, picks)
+        ? balance.adjustIn(variance.quantity, null, origin, now, named)
+        : balance.adjustOut(variance.quantity, origin, now, picked)
     if (applied.isLeft()) return left(applied.value)
     if (existing) await scope.balances.save(balance)
     else await scope.balances.create(balance)
@@ -315,9 +318,44 @@ const settled = { approve: 'approved', reject: 'rejected', cancel: 'cancelled' }
 const described = (variance: Variance) => ({
   itemId: variance.itemId,
   lot: variance.lot?.value ?? null,
+  serial: variance.serial?.value ?? null,
   direction: variance.direction,
   quantity: variance.quantity.toString(),
 })
+
+interface CountedLine {
+  readonly itemId: string
+  readonly lot: LotCode | null
+  readonly serial: SerialNumber | null
+  readonly counted: Quantity
+}
+
+/** One figure the counter wrote down, and which line of the sheet it belongs to. */
+function countedOf(
+  entry: {
+    itemId: string
+    lot?: string | null | undefined
+    serial?: string | null | undefined
+    counted: string
+  },
+  index: number,
+): Either<Failure, CountedLine> {
+  const counted = quantityOf(entry.counted, `/counts/${index}/counted`)
+  if (counted.isLeft()) return left(counted.value)
+  let lot: LotCode | null = null
+  if (entry.lot) {
+    const code = LotCode.create(entry.lot, `/counts/${index}/lot`)
+    if (code.isLeft()) return left(code.value)
+    lot = code.value
+  }
+  let serial: SerialNumber | null = null
+  if (entry.serial) {
+    const named = SerialNumber.create(entry.serial, `/counts/${index}/serial`)
+    if (named.isLeft()) return left(named.value)
+    serial = named.value
+  }
+  return right({ itemId: entry.itemId, lot, serial, counted: counted.value })
+}
 
 /**
  * The lines a sheet freezes for one item.
@@ -330,8 +368,18 @@ const described = (variance: Variance) => ({
 function sheetFor(
   itemId: string,
   balance: StockBalance | undefined,
-): { itemId: string; lot: LotCode | null; expected: Quantity }[] {
-  if (!balance) return [{ itemId, lot: null, expected: Quantity.fromMicros(0n) }]
-  if (!balance.isTracked()) return [{ itemId, lot: null, expected: balance.onHand() }]
-  return balance.lots().map((lot) => ({ itemId, lot: lot.code, expected: lot.onHand }))
+): { itemId: string; lot: LotCode | null; serial: SerialNumber | null; expected: Quantity }[] {
+  const single = (expected: Quantity) => [{ itemId, lot: null, serial: null, expected }]
+  if (!balance) return single(Quantity.fromMicros(0n))
+  if (balance.tracksLots())
+    return balance
+      .lots()
+      .map((lot) => ({ itemId, lot: lot.code, serial: null, expected: lot.onHand }))
+  // One line per machine, each expecting the one of it there is. Counting zero of a line
+  // is how a counter says the machine is not where the system thinks it is.
+  if (balance.tracksSerials())
+    return balance
+      .serials()
+      .map((held) => ({ itemId, lot: null, serial: held.serial, expected: unitsOf(1) }))
+  return single(balance.onHand())
 }

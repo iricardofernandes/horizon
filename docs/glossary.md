@@ -559,3 +559,17 @@ went. Every movement records which boxes it touched, and every movement now name
 document behind it — the receipt that brought the goods in, the order that sent them out —
 so following a batch is reading a list rather than joining tables by hand. Followed across
 warehouses, because a batch split between two buildings is one batch.
+
+### serial number
+The name of one unit, which belongs to it for good. Unique for an item across the whole
+workspace and across all time, including after the unit has been sold — the machine a
+customer sends back in a year is the same machine, and a warehouse that gave its name away
+in the meantime has lost the only thread it had. A serial is the other shape of the
+question a lot answers, not a stricter version of it: an item is tracked one way or the
+other, never both.
+
+### unit status
+Where a named unit is in its life: **in stock** on a shelf, **shipped** to a customer,
+**returned** to the supplier it came from, or **scrapped**. The row is never deleted, only
+moved along, which is what makes a unit followable after it has left. A unit is on a shelf
+exactly when it is in stock, and on none when it is not.

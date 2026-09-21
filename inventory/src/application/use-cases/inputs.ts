@@ -1,8 +1,9 @@
 import { type Either, left, right } from '@/core/either'
 import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import type { LotEntry, LotPick } from '@/domain/entities/lot-book'
+import type { Picks, Units } from '@/domain/entities/tracked-units'
 import { Currency, Money, Note, Quantity } from '@/domain/value-objects/inventory-values'
-import { ExpiryDate, LotCode } from '@/domain/value-objects/tracking'
+import { ExpiryDate, LotCode, SerialNumber } from '@/domain/value-objects/tracking'
 
 /** Parsing the edge of the system once, so no use case reimplements it (ADR 0032). */
 
@@ -45,18 +46,67 @@ export function worthOf(quantity: Quantity, unitCost: Money): Money {
 }
 
 /**
- * The lots a caller named, checked into value objects.
+ * Which particular goods a caller named, checked into value objects.
  *
- * Nothing here decides whether lots were *required* — that is the item's tracking policy,
+ * Nothing here decides whether they were *required* — that is the item's tracking policy,
  * and the balance is the thing that knows it. This only turns what arrived over the wire
- * into something the aggregate can reason about.
+ * into something the aggregate can reason about, and returns null when the caller named
+ * nothing at all, which is how an untracked item speaks.
  */
-export function lotEntriesOf(
+export function unitsNamedOf(
+  input: {
+    lots?:
+      | readonly { code: string; expiresOn?: string | null | undefined; quantity: string }[]
+      | null
+      | undefined
+    serials?: readonly string[] | null | undefined
+  },
+  field = '',
+): Either<InvalidInputError, Units | null> {
+  const lots = lotEntriesOf(input.lots, `${field}/lots`)
+  if (lots.isLeft()) return left(lots.value)
+  const serials = serialsOf(input.serials, `${field}/serials`)
+  if (serials.isLeft()) return left(serials.value)
+  if (lots.value === null && serials.value === null) return right(null)
+  return right({ lots: lots.value ?? [], serials: serials.value ?? [] })
+}
+
+/** Which ones to draw from, when the caller would rather choose than let the shelf. */
+export function unitsPickedOf(
+  input: {
+    lots?: readonly { code: string; quantity: string }[] | null | undefined
+    serials?: readonly string[] | null | undefined
+  },
+  field = '',
+): Either<InvalidInputError, Picks | null> {
+  const lots = lotPicksOf(input.lots, `${field}/lots`)
+  if (lots.isLeft()) return left(lots.value)
+  const serials = serialsOf(input.serials, `${field}/serials`)
+  if (serials.isLeft()) return left(serials.value)
+  if (lots.value === null && serials.value === null) return right(null)
+  return right({ lots: lots.value ?? [], serials: serials.value ?? [] })
+}
+
+export function serialsOf(
+  serials: readonly string[] | null | undefined,
+  field = '/serials',
+): Either<InvalidInputError, readonly SerialNumber[] | null> {
+  if (!serials) return right(null)
+  const named: SerialNumber[] = []
+  for (const [index, serial] of serials.entries()) {
+    const parsed = SerialNumber.create(serial, `${field}/${index}`)
+    if (parsed.isLeft()) return left(parsed.value)
+    named.push(parsed.value)
+  }
+  return right(named)
+}
+
+function lotEntriesOf(
   lots:
     | readonly { code: string; expiresOn?: string | null | undefined; quantity: string }[]
     | null
     | undefined,
-  field = '/lots',
+  field: string,
 ): Either<InvalidInputError, readonly LotEntry[] | null> {
   if (!lots) return right(null)
   const entries: LotEntry[] = []
@@ -76,10 +126,9 @@ export function lotEntriesOf(
   return right(entries)
 }
 
-/** Which lots to draw from, when the caller would rather choose than let the shelf. */
-export function lotPicksOf(
+function lotPicksOf(
   picks: readonly { code: string; quantity: string }[] | null | undefined,
-  field = '/lots',
+  field: string,
 ): Either<InvalidInputError, readonly LotPick[] | null> {
   if (!picks) return right(null)
   const chosen: LotPick[] = []

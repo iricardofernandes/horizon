@@ -3,6 +3,7 @@ import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import { type AdjustmentDirection, StockAdjustment } from '@/domain/entities/stock-adjustment'
 import type { StockBalance } from '@/domain/entities/stock-balance'
+import { naming } from '@/domain/entities/tracked-units'
 import { type Money, Note, type Quantity } from '@/domain/value-objects/inventory-values'
 import {
   type AdjustmentReason,
@@ -20,7 +21,7 @@ import {
   type Outcome,
   once,
 } from './commands'
-import { moneyOf, noteOf, quantityOf, worthOf } from './inputs'
+import { moneyOf, noteOf, quantityOf, serialsOf, worthOf } from './inputs'
 import { openBalance } from './manage-inventory'
 
 export interface AdjustStockRequest {
@@ -30,6 +31,8 @@ export interface AdjustStockRequest {
   readonly direction: AdjustmentDirection
   /** Which boxes, for an item the workspace identifies. */
   readonly lot?: string | null | undefined
+  /** Which units, for an item identified one at a time. */
+  readonly serials?: readonly string[] | null | undefined
   readonly quantity: string
   readonly reason: string
   readonly note?: string | null | undefined
@@ -81,6 +84,8 @@ export class AdjustStockUseCase {
       if (code.isLeft()) return Promise.resolve(left(code.value))
       lot = code.value
     }
+    const serials = serialsOf(request.serials)
+    if (serials.isLeft()) return Promise.resolve(left(serials.value))
 
     return once(this.unitOfWork, context, 'adjust-stock', request, async (scope) => {
       const warehouse = await scope.warehouses.findById(request.warehouseId)
@@ -98,6 +103,7 @@ export class AdjustStockUseCase {
         itemId: request.itemId,
         direction: request.direction,
         lot,
+        serials: serials.value ?? [],
         quantity: quantity.value,
         reason,
         note: note.value,
@@ -126,6 +132,7 @@ export class AdjustStockUseCase {
           itemId: made.itemId(),
           direction: made.direction(),
           lot: made.lot()?.value ?? null,
+          serials: made.serials().map((serial) => serial.value),
           quantity: made.quantity().toString(),
           reason: made.reason(),
           value: described(made.value()),
@@ -264,9 +271,13 @@ async function write(
     reason: adjustment.reason(),
     document: { type: 'adjustment', id: adjustment.id.toString() },
   }
-  // The lot was named when the adjustment was asked for, not when it was allowed: the
-  // decision a second person took was about these boxes.
-  const lot = adjustment.lot()
+  // Named when the adjustment was asked for, not when it was allowed: the decision a
+  // second person took was about these very boxes, or these very machines.
+  const { named, picked } = naming({
+    lot: adjustment.lot(),
+    serials: adjustment.serials(),
+    quantity: adjustment.quantity(),
+  })
   const applied =
     adjustment.direction() === 'in'
       ? held.balance.adjustIn(
@@ -274,14 +285,9 @@ async function write(
           adjustment.statedUnitCost(),
           origin,
           now,
-          lot ? [{ code: lot, expiresOn: null, quantity: adjustment.quantity() }] : null,
+          named,
         )
-      : held.balance.adjustOut(
-          adjustment.quantity(),
-          origin,
-          now,
-          lot ? [{ code: lot, quantity: adjustment.quantity() }] : null,
-        )
+      : held.balance.adjustOut(adjustment.quantity(), origin, now, picked)
   if (applied.isLeft()) return left(applied.value)
   if (held.existing) await scope.balances.save(held.balance)
   else await scope.balances.create(held.balance)

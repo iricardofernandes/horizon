@@ -25,9 +25,11 @@ import {
   costOfGoodsSold,
   kardex,
   listLots,
+  listSerials,
   stockAlerts,
   stockPosition,
   traceLot,
+  traceSerial,
   valuation,
 } from './inventory-reports'
 import { makeScope, type Transaction } from './inventory-store'
@@ -199,6 +201,14 @@ export class InventoryDatabase extends InventoryUnitOfWork {
 
   traceLot(tenantId: string, request: Parameters<typeof traceLot>[1]) {
     return this.read(tenantId, (tx) => traceLot(tx, request))
+  }
+
+  listSerials(tenantId: string, filter: Parameters<typeof listSerials>[1]) {
+    return this.read(tenantId, (tx) => listSerials(tx, filter))
+  }
+
+  traceSerial(tenantId: string, request: Parameters<typeof traceSerial>[1]) {
+    return this.read(tenantId, (tx) => traceSerial(tx, request))
   }
 
   listTracking(tenantId: string) {

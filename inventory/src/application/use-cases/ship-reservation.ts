@@ -4,6 +4,13 @@ import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-e
 import type { LotEntry } from '@/domain/entities/lot-book'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import type { ShippedLine, StockReservation } from '@/domain/entities/stock-reservation'
+import {
+  NOTHING_NAMED,
+  namesNothing,
+  ofLots,
+  ofSerials,
+  type Units,
+} from '@/domain/entities/tracked-units'
 import { Quantity } from '@/domain/value-objects/inventory-values'
 import type { MovementOrigin } from '@/domain/value-objects/movement-origin'
 import type { Clock } from '../ports/clock'
@@ -50,7 +57,7 @@ export class ShipReservationUseCase {
     if (dispatched.isLeft()) return left(dispatched.value)
     const origin = originOf(request.orderId)
     const moved = await move(scope, reservation, lines, (balance, quantity) => {
-      const gone = balance.ship(quantity, now, origin)
+      const gone = balance.ship(quantity, now, null, origin)
       return gone.isLeft() ? left(gone.value) : right(undefined)
     })
     if (moved.isLeft()) return left(moved.value)
@@ -83,11 +90,11 @@ export class ReturnToStockUseCase {
     // Goods coming home are the same goods. Which lots they went out in is written on the
     // shipments this order already made, so the return reads them back rather than
     // inventing a code for boxes that already have one.
-    const shipped = await scope.movements.lotsShippedFor(request.orderId)
+    const shipped = await scope.movements.unitsShippedFor(request.orderId)
     const moved = await move(scope, reservation, lines, (balance, quantity) => {
-      const lots = allocate(shipped.get(balance.itemId()) ?? [], quantity)
-      if (lots.isLeft()) return left(lots.value)
-      return balance.takeBack(quantity, now, lots.value, origin)
+      const named = allocate(shipped.get(balance.itemId()) ?? NOTHING_NAMED, quantity)
+      if (named.isLeft()) return left(named.value)
+      return balance.takeBack(quantity, now, named.value, origin)
     })
     if (moved.isLeft()) return left(moved.value)
     await scope.reservations.save(reservation)
@@ -102,14 +109,18 @@ export class ReturnToStockUseCase {
  * a delivery of ten rarely says which four and the warehouse has to put them somewhere
  * defensible. An untracked item allocates nothing, which is the whole of its answer.
  */
-function allocate(
-  shipped: readonly LotEntry[],
-  quantity: Quantity,
-): Either<ConflictError, readonly LotEntry[] | null> {
-  if (shipped.length === 0) return right(null)
+function allocate(shipped: Units, quantity: Quantity): Either<ConflictError, Units | null> {
+  if (namesNothing(shipped)) return right(null)
+  // A unit with a name comes back as itself: the oldest one sent that has not returned.
+  if (shipped.serials.length > 0) {
+    const wanted = Number(quantity.micros / 1_000_000n)
+    if (shipped.serials.length < wanted)
+      return left(new ConflictError('more is coming back than this order ever shipped'))
+    return right(ofSerials(shipped.serials.slice(0, wanted)))
+  }
   const lots: LotEntry[] = []
   let outstanding = quantity
-  for (const lot of [...shipped].sort((a, b) =>
+  for (const lot of [...shipped.lots].sort((a, b) =>
     a.quantity.isLessThan(b.quantity) ? 1 : a.quantity.micros === b.quantity.micros ? 0 : -1,
   )) {
     if (outstanding.isZero()) break
@@ -119,7 +130,7 @@ function allocate(
   }
   if (!outstanding.isZero())
     return left(new ConflictError('more is coming back than this order ever shipped'))
-  return right(lots)
+  return right(ofLots(lots))
 }
 
 /** Apply one movement per delivered line, against the balance the line was held on. */

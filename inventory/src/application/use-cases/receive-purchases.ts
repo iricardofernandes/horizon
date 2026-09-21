@@ -2,13 +2,13 @@ import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
-import type { LotEntry } from '@/domain/entities/lot-book'
+import type { Units } from '@/domain/entities/tracked-units'
 import { Currency, Money, Quantity } from '@/domain/value-objects/inventory-values'
 import type { MovementOrigin } from '@/domain/value-objects/movement-origin'
 import type { Clock } from '../ports/clock'
 import type { InventoryScope } from '../ports/unit-of-work'
-import { lotEntriesOf, lotPicksOf } from './inputs'
-import { openBalance } from './manage-inventory'
+import { unitsNamedOf, unitsPickedOf } from './inputs'
+import { openBalance, refuseKnownSerials } from './manage-inventory'
 
 type InventoryError = InvalidInputError | ConflictError | ResourceNotFoundError
 
@@ -20,6 +20,7 @@ export interface PurchasedLine {
     | readonly { code: string; expiresOn?: string | null | undefined; quantity: string }[]
     | null
     | undefined
+  readonly serials?: readonly string[] | null | undefined
 }
 
 export interface PurchaseDelivery {
@@ -52,6 +53,8 @@ export class ReceivePurchasedGoodsUseCase {
     for (const line of delivery.lines) {
       const parsed = parse(line)
       if (parsed.isLeft()) return left(parsed.value)
+      const known = await refuseKnownSerials(scope, line.itemId, parsed.value.named)
+      if (known) return left(known)
       const existing = await scope.balances.lock(line.itemId, delivery.warehouseId)
       const balance =
         existing ??
@@ -64,7 +67,7 @@ export class ReceivePurchasedGoodsUseCase {
         parsed.value.quantity,
         parsed.value.unitCost,
         this.clock.now(),
-        parsed.value.lots,
+        parsed.value.named,
         origin,
       )
       if (received.isLeft()) return left(received.value)
@@ -91,6 +94,7 @@ export class ReturnPurchasedGoodsUseCase {
         itemId: string
         quantity: string
         lots?: readonly { code: string; quantity: string }[] | null | undefined
+        serials?: readonly string[] | null | undefined
       }[]
     },
   ): Promise<Either<InventoryError, { movements: number }>> {
@@ -99,14 +103,14 @@ export class ReturnPurchasedGoodsUseCase {
     for (const line of delivery.lines) {
       const quantity = Quantity.create(line.quantity)
       if (quantity.isLeft()) return left(quantity.value)
-      const picks = lotPicksOf(line.lots)
-      if (picks.isLeft()) return left(picks.value)
+      const picked = unitsPickedOf(line)
+      if (picked.isLeft()) return left(picked.value)
       const balance = await scope.balances.lock(line.itemId, delivery.warehouseId)
       if (!balance)
         return left(new ResourceNotFoundError('these goods are not in stock to be returned'))
       // Nobody said which boxes go back, so the shelf decides as it does for anything
       // else leaving: earliest date first. A supplier owed a particular lot is named one.
-      const returned = balance.giveBack(quantity.value, this.clock.now(), picks.value, origin)
+      const returned = balance.giveBack(quantity.value, this.clock.now(), picked.value, origin)
       if (returned.isLeft()) return left(returned.value)
       await scope.balances.save(balance)
       for (const event of balance.pullDomainEvents()) await scope.events.append(event)
@@ -118,19 +122,16 @@ export class ReturnPurchasedGoodsUseCase {
 
 function parse(
   line: PurchasedLine,
-): Either<
-  InventoryError,
-  { quantity: Quantity; unitCost: Money; lots: readonly LotEntry[] | null }
-> {
+): Either<InventoryError, { quantity: Quantity; unitCost: Money; named: Units | null }> {
   const quantity = Quantity.create(line.quantity)
   if (quantity.isLeft()) return left(quantity.value)
   const currency = Currency.create(line.unitPrice.currency)
   if (currency.isLeft()) return left(currency.value)
   const unitCost = Money.create(line.unitPrice.amount, currency.value)
   if (unitCost.isLeft()) return left(unitCost.value)
-  const lots = lotEntriesOf(line.lots)
-  if (lots.isLeft()) return left(lots.value)
-  return right({ quantity: quantity.value, unitCost: unitCost.value, lots: lots.value })
+  const named = unitsNamedOf(line)
+  if (named.isLeft()) return left(named.value)
+  return right({ quantity: quantity.value, unitCost: unitCost.value, named: named.value })
 }
 
 /** Goods arrived because they were bought, and the receipt is which delivery brought them. */

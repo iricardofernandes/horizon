@@ -5,8 +5,10 @@ import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InventoryStockMovedEvent } from '../events/inventory-events'
 import { Money, Quantity } from '../value-objects/inventory-values'
 import type { MovementOrigin } from '../value-objects/movement-origin'
-import { type ItemTracking, UNTRACKED } from '../value-objects/tracking'
-import { LotBook, type LotEntry, type LotHolding, type LotPick } from './lot-book'
+import { type ItemTracking, type SerialNumber, UNTRACKED } from '../value-objects/tracking'
+import { LotBook, type LotEntry, type LotHolding } from './lot-book'
+import { SerialBook, type SerialHolding, unitsOf } from './serial-book'
+import { NOTHING_NAMED, ofLots, ofSerials, type Picks, type Units } from './tracked-units'
 
 interface StockBalanceProps {
   tenantId: string
@@ -17,6 +19,7 @@ interface StockBalanceProps {
   averageUnitCost: Money | null
   tracking: ItemTracking
   lots: LotBook
+  serials: SerialBook
   version: number
   updatedAt: Date
 }
@@ -68,6 +71,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
         averageUnitCost: null,
         tracking: props.tracking ?? UNTRACKED,
         lots: new LotBook(),
+        serials: new SerialBook(),
         version: 0,
         updatedAt: props.now ?? new Date(),
       },
@@ -90,13 +94,26 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
       : sellable.minus(this.props.reserved)
   }
 
-  /** On hand, less whatever has gone off. Equal to on hand for an item nobody tracks. */
+  /**
+   * On hand, less whatever has gone off.
+   *
+   * Equal to on hand for everything but a lot with a date on it: a unit with a name has
+   * no expiry, and an item nobody identifies has nothing to have gone off.
+   */
   sellable(now: Date): Quantity {
-    return this.isTracked() ? this.props.lots.sellable(now) : this.props.onHand
+    return this.tracksLots() ? this.props.lots.sellable(now) : this.props.onHand
+  }
+
+  tracksLots(): boolean {
+    return this.props.tracking.kind === 'lot'
+  }
+
+  tracksSerials(): boolean {
+    return this.props.tracking.kind === 'serial'
   }
 
   isTracked(): boolean {
-    return this.props.tracking.kind === 'lot'
+    return this.props.tracking.kind !== 'none'
   }
 
   tracking(): ItemTracking {
@@ -105,6 +122,10 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
 
   lots(): readonly LotHolding[] {
     return this.props.lots.lots()
+  }
+
+  serials(): readonly SerialHolding[] {
+    return this.props.serials.serials()
   }
 
   /** What a unit here is currently worth; null until something has arrived with a cost. */
@@ -128,10 +149,10 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     quantity: Quantity,
     unitCost: Money,
     now: Date,
-    lots: readonly LotEntry[] | null = null,
+    named: Units | null = null,
     origin?: MovementOrigin,
   ): Either<ConflictError, void> {
-    return this.absorb('receipt', quantity, unitCost, now, origin, lots)
+    return this.absorb('receipt', quantity, unitCost, now, origin, named)
   }
 
   /**
@@ -150,13 +171,13 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     quantity: Quantity,
     origin: MovementOrigin,
     now: Date,
-    picks: readonly LotPick[] | null = null,
-  ): Either<ConflictError, { cost: Money | null; drawn: readonly LotEntry[] }> {
+    picked: Picks | null = null,
+  ): Either<ConflictError, { cost: Money | null; drawn: Units }> {
     // Expired goods may be transferred when somebody names them: moving them to where
     // they will be dealt with is exactly what a warehouse does with stock that has gone.
     const gone = this.remove(
       quantity,
-      picks,
+      picked,
       now,
       'these goods are not available to transfer',
       true,
@@ -173,10 +194,10 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     unitCost: Money | null,
     origin: MovementOrigin,
     now: Date,
-    lots: readonly LotEntry[] | null = null,
+    named: Units | null = null,
   ): Either<ConflictError, void> {
-    if (unitCost) return this.absorb('transfer-in', quantity, unitCost, now, origin, lots)
-    const added = this.add(quantity, lots, now)
+    if (unitCost) return this.absorb('transfer-in', quantity, unitCost, now, origin, named)
+    const added = this.add(quantity, named, now)
     if (added.isLeft()) return left(added.value)
     this.recordMovement('transfer-in', quantity, null, now, origin, added.value)
     return right(undefined)
@@ -199,7 +220,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     stated: Money | null,
     origin: MovementOrigin,
     now: Date,
-    lots: readonly LotEntry[] | null = null,
+    named: Units | null = null,
   ): Either<ConflictError, void> {
     const held = this.props.averageUnitCost
     if (held && stated)
@@ -207,8 +228,8 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
         new ConflictError('an adjustment does not re-price stock that already has a cost'),
       )
     const unitCost = held ?? stated
-    if (unitCost) return this.absorb('adjustment-in', quantity, unitCost, now, origin, lots)
-    const added = this.add(quantity, lots, now)
+    if (unitCost) return this.absorb('adjustment-in', quantity, unitCost, now, origin, named)
+    const added = this.add(quantity, named, now)
     if (added.isLeft()) return left(added.value)
     this.recordMovement('adjustment-in', quantity, null, now, origin, added.value)
     return right(undefined)
@@ -219,13 +240,13 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     quantity: Quantity,
     origin: MovementOrigin,
     now: Date,
-    picks: readonly LotPick[] | null = null,
+    picked: Picks | null = null,
   ): Either<ConflictError, void> {
     // Writing off what has expired is the reason the reason code `expiry` exists, so a
     // named lot whose day has gone is exactly what this movement is for.
     const gone = this.remove(
       quantity,
-      picks,
+      picked,
       now,
       'these goods are not available to write off',
       true,
@@ -270,11 +291,12 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
   ship(
     quantity: Quantity,
     now: Date,
+    picked: Picks | null = null,
     origin?: MovementOrigin,
-  ): Either<ConflictError, readonly LotEntry[]> {
+  ): Either<ConflictError, Units> {
     if (quantity.isZero() || this.props.reserved.isLessThan(quantity))
       return left(new ConflictError('shipment exceeds reserved stock'))
-    const gone = this.draw(quantity, null, now, false)
+    const gone = this.draw(quantity, picked, now, false)
     if (gone.isLeft()) return left(gone.value)
     this.props.reserved = this.props.reserved.minus(quantity)
     this.props.onHand = this.props.onHand.minus(quantity)
@@ -295,10 +317,10 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
   takeBack(
     quantity: Quantity,
     now: Date,
-    lots: readonly LotEntry[] | null = null,
+    named: Units | null = null,
     origin?: MovementOrigin,
   ): Either<ConflictError, void> {
-    const added = this.add(quantity, lots, now)
+    const added = this.add(quantity, named, now)
     if (added.isLeft()) return left(added.value)
     this.props.reserved = this.props.reserved.plus(quantity)
     this.recordMovement('return-in', quantity, this.props.averageUnitCost, now, origin, added.value)
@@ -314,12 +336,12 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
   giveBack(
     quantity: Quantity,
     now: Date,
-    picks: readonly LotPick[] | null = null,
+    picked: Picks | null = null,
     origin?: MovementOrigin,
   ): Either<ConflictError, void> {
     const gone = this.remove(
       quantity,
-      picks,
+      picked,
       now,
       'these goods are no longer available to return',
       true,
@@ -365,13 +387,13 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     unitCost: Money,
     now: Date,
     origin: MovementOrigin | undefined,
-    lots: readonly LotEntry[] | null,
+    named: Units | null,
   ): Either<ConflictError, void> {
     const previousCost = this.props.averageUnitCost
     if (previousCost && !previousCost.currency.equals(unitCost.currency))
       return left(new ConflictError('movement currency differs from the balance currency'))
     const previousOnHand = this.props.onHand
-    const added = this.add(quantity, lots, now)
+    const added = this.add(quantity, named, now)
     if (added.isLeft()) return left(added.value)
     const nextOnHand = this.props.onHand
     const previousValue = previousOnHand.micros * (previousCost?.amount ?? 0n)
@@ -384,43 +406,59 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
   }
 
   /**
-   * Goods come onto the shelf, into the lots the caller named.
+   * Goods come onto the shelf, as whatever the item is identified by.
    *
-   * An item nobody tracks must name none: a lot code on an item the workspace never asked
-   * to identify is a picker answering a question nobody is going to read, and accepting
-   * it would leave the book holding boxes the balance knows nothing about.
+   * An item nobody identifies must name nothing: a code on such an item is a picker
+   * answering a question nobody is going to read, and accepting it would leave a book
+   * holding goods the balance knows nothing about. An item that is identified must name
+   * everything, for the same reason in reverse.
    */
-  private add(
-    quantity: Quantity,
-    lots: readonly LotEntry[] | null,
-    now: Date,
-  ): Either<ConflictError, readonly LotEntry[]> {
+  private add(quantity: Quantity, named: Units | null, now: Date): Either<ConflictError, Units> {
     if (quantity.isZero()) return left(new ConflictError('movement quantity must be positive'))
-    const named = lots ?? []
+    const refused = this.refuseMismatch(named, true)
+    if (refused) return left(refused)
     if (!this.isTracked()) {
-      if (named.length > 0)
-        return left(new ConflictError('this item is not tracked by lot: name no lot for it'))
       this.props.onHand = this.props.onHand.plus(quantity)
-      return right([])
+      return right(NOTHING_NAMED)
     }
-    if (named.length === 0)
-      return left(new ConflictError('this item is tracked by lot: say which lot these are'))
-    if (sum(named).micros !== quantity.micros)
-      return left(new ConflictError('the lots named do not add up to the quantity moved'))
-    const put = this.props.lots.put(named, this.props.tracking.expiry, now)
-    if (put.isLeft()) return left(put.value)
+    const taken = this.tracksLots()
+      ? this.putLots(quantity, named?.lots ?? [], now)
+      : this.putSerials(quantity, named?.serials ?? [], now)
+    if (taken.isLeft()) return left(taken.value)
     this.props.onHand = this.props.onHand.plus(quantity)
-    return right(named)
+    return right(taken.value)
+  }
+
+  private putLots(
+    quantity: Quantity,
+    lots: readonly LotEntry[],
+    now: Date,
+  ): Either<ConflictError, Units> {
+    if (sum(lots).micros !== quantity.micros)
+      return left(new ConflictError('the lots named do not add up to the quantity moved'))
+    const put = this.props.lots.put(lots, this.props.tracking.expiry, now)
+    return put.isLeft() ? left(put.value) : right(ofLots(lots))
+  }
+
+  private putSerials(
+    quantity: Quantity,
+    serials: readonly SerialNumber[],
+    now: Date,
+  ): Either<ConflictError, Units> {
+    if (unitsOf(serials.length).micros !== quantity.micros)
+      return left(new ConflictError('the units named do not add up to the quantity moved'))
+    const put = this.props.serials.put(serials, now)
+    return put.isLeft() ? left(put.value) : right(ofSerials(serials))
   }
 
   /** Goods come off the shelf, after the availability rule that movement answers to. */
   private remove(
     quantity: Quantity,
-    picks: readonly LotPick[] | null,
+    picked: Picks | null,
     now: Date,
     refusal: string,
     allowExpired: boolean,
-  ): Either<ConflictError, readonly LotEntry[]> {
+  ): Either<ConflictError, Units> {
     if (quantity.isZero()) return left(new ConflictError('movement quantity must be positive'))
     // Measured against on hand less what is promised, not against what is sellable: a
     // movement that names an expired lot is entitled to it, and one that does not will be
@@ -429,7 +467,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
       ? Quantity.fromMicros(0n)
       : this.props.onHand.minus(this.props.reserved)
     if (free.isLessThan(quantity)) return left(new ConflictError(refusal))
-    const drawn = this.draw(quantity, picks, now, allowExpired)
+    const drawn = this.draw(quantity, picked, now, allowExpired)
     if (drawn.isLeft()) return left(drawn.value)
     this.props.onHand = this.props.onHand.minus(quantity)
     return right(drawn.value)
@@ -437,16 +475,54 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
 
   private draw(
     quantity: Quantity,
-    picks: readonly LotPick[] | null,
+    picked: Picks | null,
     now: Date,
     allowExpired: boolean,
-  ): Either<ConflictError, readonly LotEntry[]> {
-    if (!this.isTracked()) {
-      if (picks && picks.length > 0)
-        return left(new ConflictError('this item is not tracked by lot: name no lot for it'))
-      return right([])
+  ): Either<ConflictError, Units> {
+    const refused = this.refuseMismatch(picked, false)
+    if (refused) return left(refused)
+    if (!this.isTracked()) return right(NOTHING_NAMED)
+    if (this.tracksSerials()) {
+      const gone = this.props.serials.take(quantity, picked?.serials.length ? picked.serials : null)
+      return gone.isLeft() ? left(gone.value) : right(ofSerials(gone.value))
     }
-    return this.props.lots.take(quantity, picks, now, allowExpired)
+    const gone = this.props.lots.take(
+      quantity,
+      picked?.lots.length ? picked.lots : null,
+      now,
+      allowExpired,
+    )
+    return gone.isLeft() ? left(gone.value) : right(ofLots(gone.value))
+  }
+
+  /**
+   * Whether what the caller named is the sort of answer this item takes.
+   *
+   * Naming a lot for a unit-tracked item, or a unit for a lot-tracked one, is not a near
+   * miss to be interpreted: it is somebody working from a different idea of what is on
+   * the shelf, and the useful thing to do is say so.
+   *
+   * `required` is the difference between the two directions. Goods arriving must say what
+   * they are, because nobody else can know. Goods leaving need not: the shelf has a view
+   * about which should go first, and saying nothing is how a caller defers to it.
+   */
+  private refuseMismatch(named: Units | Picks | null, required: boolean): ConflictError | null {
+    const lots = named?.lots.length ?? 0
+    const serials = named?.serials.length ?? 0
+    if (!this.isTracked())
+      return lots + serials > 0
+        ? new ConflictError('this item is not tracked: name no lot or unit for it')
+        : null
+    if (this.tracksLots()) {
+      if (serials > 0) return new ConflictError('this item is tracked by lot, not by unit')
+      return required && lots === 0
+        ? new ConflictError('this item is tracked by lot: say which lot these are')
+        : null
+    }
+    if (lots > 0) return new ConflictError('this item is tracked by unit, not by lot')
+    return required && serials === 0
+      ? new ConflictError('this item is tracked by unit: say which units these are')
+      : null
   }
 
   private recordMovement(
@@ -455,7 +531,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     unitCost: Money | null,
     now: Date,
     origin: MovementOrigin | undefined,
-    lots: readonly LotEntry[],
+    units: Units,
   ): void {
     this.props.version += 1
     this.props.updatedAt = now
@@ -473,7 +549,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
         // here on. Only goods arriving change it, and they change it for every unit.
         averageAfter: this.props.averageUnitCost,
         origin: origin ?? null,
-        lots,
+        units,
       }),
     )
   }

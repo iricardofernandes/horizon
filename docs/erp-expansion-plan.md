@@ -581,9 +581,10 @@ report are delivered as
 which also makes the balance reproducible from the movements in value as well as in
 quantity. Lots, expiry, first-expiry-first-out picking and lot traceability are delivered
 as [plan phase 34](plan.md#phase-34--which-of-them-the-lot-the-date-on-it-and-the-order-they-leave-in).
-The remaining deliverables are sliced after it: serial numbers
-([phase 35](plan.md#phase-35--the-unit-that-has-a-name-serial-numbers)); product families,
-variants, kits, BOM and production orders; and the screens that close the phase.
+Serial numbers are delivered as
+[plan phase 35](plan.md#phase-35--the-unit-that-has-a-name-serial-numbers). The remaining
+deliverables are sliced after it: product families, variants, kits, BOM and production
+orders; and the screens that close the phase.
 
 **Deliverables**
 

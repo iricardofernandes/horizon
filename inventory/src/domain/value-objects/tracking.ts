@@ -7,14 +7,17 @@ import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
  *
  * Most items need no such answer: one screw is every other screw, and asking a picker to
  * name the box would be a cost with nothing on the other side of it. For the items where
- * it matters — a batch that can be recalled, a jar that goes off — it matters completely,
- * which is why this is a decision taken per item rather than a column every item carries.
+ * it matters — a batch that can be recalled, a jar that goes off, a machine somebody will
+ * one day ring up about — it matters completely, which is why this is a decision taken
+ * per item rather than a column every item carries.
  *
- * `serial` is deliberately absent. Naming every single unit is a different shape of
- * answer, not a stricter version of this one, and offering it here before the module can
- * honour it would be a workspace turning on a control that does nothing.
+ * `lot` and `serial` are two different shapes of answer rather than two strengths of the
+ * same one. A lot is a quantity of goods that arrived together and are alike; a serial is
+ * one unit that is not interchangeable with any other and has a life of its own, from the
+ * day it arrived to the day it was scrapped. An item is tracked one way or the other,
+ * never both: a serial already says everything a lot would.
  */
-export const TRACKING_KINDS = ['none', 'lot'] as const
+export const TRACKING_KINDS = ['none', 'lot', 'serial'] as const
 export type TrackingKind = (typeof TRACKING_KINDS)[number]
 
 /**
@@ -41,10 +44,11 @@ export function trackingOf(kind: string, expiry: string): Either<InvalidInputErr
     return left(new InvalidInputError('/tracking', `must be one of ${TRACKING_KINDS.join(', ')}`))
   if (!(EXPIRY_RULES as readonly string[]).includes(expiry))
     return left(new InvalidInputError('/expiry', `must be one of ${EXPIRY_RULES.join(', ')}`))
-  if (kind === 'none' && expiry !== 'none')
-    return left(
-      new InvalidInputError('/expiry', 'an item that is not tracked by lot has no expiry rule'),
-    )
+  // A date belongs to a batch, not to a unit. What goes off is a jar of something, and
+  // the answer for a machine that needs servicing on a date is a service record, not an
+  // expiry that would quietly make the machine unsellable.
+  if (kind !== 'lot' && expiry !== 'none')
+    return left(new InvalidInputError('/expiry', 'only an item tracked by lot has an expiry rule'))
   return right({ kind: kind as TrackingKind, expiry: expiry as ExpiryRule })
 }
 
@@ -109,3 +113,40 @@ export class ExpiryDate extends ValueObject<{ value: string }> {
     return [this.props.value]
   }
 }
+
+/**
+ * The name of one unit, which belongs to it for good.
+ *
+ * Unique for an item across the whole workspace and across all time, including after the
+ * unit has been sold: the machine a customer sends back in a year is the same machine,
+ * and a warehouse that gave its name away to something else in the meantime has lost the
+ * only thread it had. Upper-cased for the same reason a lot code is — it is read off a
+ * plate by a person.
+ */
+export class SerialNumber extends ValueObject<{ value: string }> {
+  static create(value: string, field = '/serial'): Either<InvalidInputError, SerialNumber> {
+    const normalized = value.trim().replace(/\s+/g, ' ').toUpperCase()
+    if (normalized.length < 1 || normalized.length > 80)
+      return left(new InvalidInputError(field, 'must contain between 1 and 80 characters'))
+    return right(new SerialNumber({ value: normalized }))
+  }
+  get value(): string {
+    return this.props.value
+  }
+  override toString(): string {
+    return this.props.value
+  }
+  protected componentsOf(): readonly unknown[] {
+    return [this.props.value]
+  }
+}
+
+/**
+ * Where a unit is in its life.
+ *
+ * `returned` is a unit sent back to the supplier it came from, which is not the same as
+ * `scrapped`: one is somebody else's problem now and the other is a loss. Both are out of
+ * stock, and neither can be picked again.
+ */
+export const SERIAL_STATUSES = ['in-stock', 'shipped', 'returned', 'scrapped'] as const
+export type SerialStatus = (typeof SERIAL_STATUSES)[number]

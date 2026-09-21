@@ -1,14 +1,14 @@
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
-import type { LotPick } from '@/domain/entities/lot-book'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import { StockTransfer, type TransferLine } from '@/domain/entities/stock-transfer'
+import { namesNothing, type Picks } from '@/domain/entities/tracked-units'
 import type { MovementOrigin } from '@/domain/value-objects/movement-origin'
 import type { Clock } from '../ports/clock'
 import type { InventoryScope, InventoryUnitOfWork } from '../ports/unit-of-work'
 import { audit, type Failure, type IdempotentContext, type Outcome, once } from './commands'
-import { lotPicksOf, noteOf, quantityOf } from './inputs'
+import { noteOf, quantityOf, unitsPickedOf } from './inputs'
 import { openBalance } from './manage-inventory'
 
 export interface TransferStockRequest {
@@ -20,6 +20,7 @@ export interface TransferStockRequest {
     quantity: string
     /** Which boxes to send. Left out, the source sends whatever should go first. */
     lots?: readonly { code: string; quantity: string }[] | null | undefined
+    serials?: readonly string[] | null | undefined
   }[]
   readonly note?: string | null | undefined
 }
@@ -43,13 +44,13 @@ export class TransferStockUseCase {
     const note = noteOf(request.note)
     if (note.isLeft()) return Promise.resolve(left(note.value))
     const lines: TransferLine[] = []
-    const picked = new Map<string, readonly LotPick[] | null>()
+    const picked = new Map<string, Picks | null>()
     for (const [index, line] of request.lines.entries()) {
       const quantity = quantityOf(line.quantity, `/lines/${index}/quantity`)
       if (quantity.isLeft()) return Promise.resolve(left(quantity.value))
-      const picks = lotPicksOf(line.lots, `/lines/${index}/lots`)
-      if (picks.isLeft()) return Promise.resolve(left(picks.value))
-      picked.set(line.itemId, picks.value)
+      const chosen = unitsPickedOf(line, `/lines/${index}`)
+      if (chosen.isLeft()) return Promise.resolve(left(chosen.value))
+      picked.set(line.itemId, chosen.value)
       lines.push({ itemId: line.itemId, quantity: quantity.value })
     }
 
@@ -103,7 +104,7 @@ export class TransferStockUseCase {
     scope: InventoryScope,
     transfer: StockTransfer,
     origin: MovementOrigin,
-    picked: ReadonlyMap<string, readonly LotPick[] | null>,
+    picked: ReadonlyMap<string, Picks | null>,
   ): Promise<Either<Failure, void>> {
     const now = this.clock.now()
     const held = await lockAll(scope, transfer, now)
@@ -144,7 +145,7 @@ function carry(
   line: TransferLine,
   origin: MovementOrigin,
   now: Date,
-  picks: readonly LotPick[] | null | undefined,
+  picks: Picks | null | undefined,
 ): Either<Failure, void> {
   const taken = from.transferOut(line.quantity, origin, now, picks ?? null)
   if (taken.isLeft()) return left(taken.value)
@@ -154,7 +155,7 @@ function carry(
     taken.value.cost,
     origin,
     now,
-    drawn.length > 0 ? drawn : null,
+    namesNothing(drawn) ? null : drawn,
   )
 }
 

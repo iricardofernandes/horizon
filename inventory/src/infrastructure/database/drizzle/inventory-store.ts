@@ -9,6 +9,7 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
 import type { LotHolding } from '@/domain/entities/lot-book'
 import { LotBook, outstandingByItem } from '@/domain/entities/lot-book'
+import { SerialBook, type SerialHolding } from '@/domain/entities/serial-book'
 import {
   ADJUSTMENT_STATUSES,
   type AdjustmentDirection,
@@ -21,6 +22,7 @@ import { StockBalance } from '@/domain/entities/stock-balance'
 import { COUNT_STATUSES, type CountStatus, StockCount } from '@/domain/entities/stock-count'
 import { StockReservation } from '@/domain/entities/stock-reservation'
 import { StockTransfer } from '@/domain/entities/stock-transfer'
+import { ofLots, ofSerials, type Units } from '@/domain/entities/tracked-units'
 import { Warehouse } from '@/domain/entities/warehouse'
 import { InventoryStockMovedEvent } from '@/domain/events/inventory-events'
 import type {
@@ -40,6 +42,7 @@ import {
   ExpiryDate,
   type ItemTracking,
   LotCode,
+  SerialNumber,
   trackingOf,
   UNTRACKED,
 } from '@/domain/value-objects/tracking'
@@ -70,6 +73,7 @@ function mapBalance(
   row: typeof schema.stockBalances.$inferSelect,
   tracking: ItemTracking,
   lots: readonly (typeof schema.stockLots.$inferSelect)[],
+  serials: readonly (typeof schema.stockSerials.$inferSelect)[],
 ): StockBalance {
   return StockBalance.rehydrate(
     {
@@ -81,6 +85,7 @@ function mapBalance(
       averageUnitCost: money(row.averageUnitCost, row.currency),
       tracking,
       lots: new LotBook(lots.map(mapLot)),
+      serials: new SerialBook(serials.map(mapSerial)),
       version: row.version,
       updatedAt: row.updatedAt,
     },
@@ -95,6 +100,10 @@ function mapLot(row: typeof schema.stockLots.$inferSelect): LotHolding {
     onHand: Quantity.fromMicros(row.onHand),
     firstReceivedAt: row.firstReceivedAt,
   }
+}
+
+function mapSerial(row: typeof schema.stockSerials.$inferSelect): SerialHolding {
+  return { serial: restored(SerialNumber.create(row.serial)), receivedAt: row.receivedAt }
 }
 
 function mapTracking(row: typeof schema.itemTracking.$inferSelect | undefined): ItemTracking {
@@ -182,6 +191,7 @@ function mapAdjustment(row: typeof schema.stockAdjustments.$inferSelect): StockA
       itemId: row.itemId,
       direction,
       lot: row.lotCode === null ? null : restored(LotCode.create(row.lotCode)),
+      serials: (row.serials ?? []).map((serial) => restored(SerialNumber.create(serial))),
       quantity: Quantity.fromMicros(row.quantity),
       reason,
       note: note(row.note),
@@ -212,6 +222,7 @@ function mapCount(
       lines: lines.map((line) => ({
         itemId: line.itemId,
         lot: line.lotCode === null ? null : restored(LotCode.create(line.lotCode)),
+        serial: line.serial === null ? null : restored(SerialNumber.create(line.serial)),
         expected: Quantity.fromMicros(line.expected),
         counted: line.counted === null ? null : Quantity.fromMicros(line.counted),
       })),
@@ -264,9 +275,9 @@ async function publish(tx: Transaction, tenantId: string, event: DomainEvent): P
       documentId: movement.origin?.document.id ?? null,
       occurredAt: event.occurredAt,
     })
-    if (movement.lots.length > 0)
+    if (movement.units.lots.length > 0)
       await tx.insert(schema.stockMovementLots).values(
-        movement.lots.map((lot) => ({
+        movement.units.lots.map((lot) => ({
           tenantId,
           movementId: movement.movementId,
           lotCode: lot.code.value,
@@ -274,6 +285,22 @@ async function publish(tx: Transaction, tenantId: string, event: DomainEvent): P
           expiresOn: lot.expiresOn?.value ?? null,
         })),
       )
+    if (movement.units.serials.length > 0) {
+      const named = movement.units.serials.map((serial) => serial.value)
+      await tx
+        .insert(schema.stockMovementSerials)
+        .values(named.map((serial) => ({ tenantId, movementId: movement.movementId, serial })))
+      await settleSerials(
+        tx,
+        {
+          kind: movement.kind,
+          itemId: movement.itemId,
+          documentType: movement.origin?.document.type ?? null,
+        },
+        named,
+        event.occurredAt,
+      )
+    }
   }
   const id = new UniqueEntityID().toString()
   const carrier: Record<string, string> = {}
@@ -353,6 +380,91 @@ async function trackingFor(
     .from(schema.itemTracking)
     .where(inArray(schema.itemTracking.itemId, [...itemIds]))
   return new Map(rows.map((row) => [row.itemId, mapTracking(row)]))
+}
+
+function serialsOf(tx: Transaction, balanceIds: readonly string[]) {
+  return tx
+    .select()
+    .from(schema.stockSerials)
+    .where(
+      and(
+        inArray(schema.stockSerials.balanceId, [...balanceIds]),
+        eq(schema.stockSerials.status, 'in-stock'),
+      ),
+    )
+}
+
+/**
+ * The units now on this shelf, claimed for it.
+ *
+ * Only the ones present are written: a unit that has left is not removed here but settled
+ * by the movement that took it, which is the only thing that knows whether it was sold,
+ * sent back or scrapped. A unit arriving that is in stock somewhere else is caught by the
+ * deferred trigger on the shelf it left short.
+ */
+async function writeSerials(
+  tx: Transaction,
+  tenantId: string,
+  itemId: string,
+  balanceId: string,
+  serials: readonly SerialHolding[],
+): Promise<void> {
+  for (const held of serials)
+    await tx
+      .insert(schema.stockSerials)
+      .values({
+        tenantId,
+        itemId,
+        serial: held.serial.value,
+        balanceId,
+        status: 'in-stock',
+        receivedAt: held.receivedAt,
+        updatedAt: held.receivedAt,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.stockSerials.tenantId,
+          schema.stockSerials.itemId,
+          schema.stockSerials.serial,
+        ],
+        set: { balanceId, status: 'in-stock', updatedAt: held.receivedAt },
+      })
+}
+
+/**
+ * Where a unit went, once it has left a shelf.
+ *
+ * A transfer is the one movement that settles nothing: the other half of it, in this very
+ * transaction, claims the unit for the warehouse it arrived at. Everything else is a
+ * departure, and which kind it was is the difference between a sale, a supplier's problem
+ * and a loss.
+ */
+const DEPARTURES = new Set(['shipment', 'adjustment-out'])
+
+async function settleSerials(
+  tx: Transaction,
+  movement: { kind: string; itemId: string; documentType: string | null },
+  serials: readonly string[],
+  now: Date,
+): Promise<void> {
+  // Only a departure settles anything. Goods arriving were claimed for the shelf when the
+  // balance was written, and a transfer's other half claims them in this very transaction.
+  if (!DEPARTURES.has(movement.kind) || serials.length === 0) return
+  const status =
+    movement.kind === 'shipment'
+      ? 'shipped'
+      : movement.documentType === 'receipt'
+        ? 'returned'
+        : 'scrapped'
+  await tx
+    .update(schema.stockSerials)
+    .set({ balanceId: null, status, updatedAt: now })
+    .where(
+      and(
+        eq(schema.stockSerials.itemId, movement.itemId),
+        inArray(schema.stockSerials.serial, [...serials]),
+      ),
+    )
 }
 
 function lotsOf(tx: Transaction, balanceIds: readonly string[]) {
@@ -463,8 +575,12 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           .limit(1)
           .for('update')
         if (!row) return null
-        const [tracking, lots] = await Promise.all([findTracking(tx, itemId), lotsOf(tx, [row.id])])
-        return mapBalance(row, tracking, lots)
+        const [tracking, lots, serials] = await Promise.all([
+          findTracking(tx, itemId),
+          lotsOf(tx, [row.id]),
+          serialsOf(tx, [row.id]),
+        ])
+        return mapBalance(row, tracking, lots, serials)
       },
       inWarehouse: async (warehouseId, itemIds) => {
         const rows = await tx
@@ -480,19 +596,21 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           )
           .orderBy(asc(schema.stockBalances.itemId))
         if (rows.length === 0) return []
-        const lots = await lotsOf(
-          tx,
-          rows.map((row) => row.id),
-        )
-        const tracked = await trackingFor(
-          tx,
-          rows.map((row) => row.itemId),
-        )
+        const ids = rows.map((row) => row.id)
+        const [lots, units, tracked] = await Promise.all([
+          lotsOf(tx, ids),
+          serialsOf(tx, ids),
+          trackingFor(
+            tx,
+            rows.map((row) => row.itemId),
+          ),
+        ])
         return rows.map((row) =>
           mapBalance(
             row,
             tracked.get(row.itemId) ?? UNTRACKED,
             lots.filter((lot) => lot.balanceId === row.id),
+            units.filter((unit) => unit.balanceId === row.id),
           ),
         )
       },
@@ -512,6 +630,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           updatedAt: row.updatedAt,
         })
         await writeLots(tx, tenantId, row.id, balance.lots())
+        await writeSerials(tx, tenantId, row.itemId, row.id, balance.serials())
       },
       save: async (balance) => {
         const row = balance.toSnapshot()
@@ -528,31 +647,61 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           })
           .where(eq(schema.stockBalances.id, row.id))
         await writeLots(tx, tenantId, row.id, balance.lots())
+        await writeSerials(tx, tenantId, row.itemId, row.id, balance.serials())
+      },
+    },
+    serials: {
+      inStock: async (itemId: string, serials: readonly string[]) => {
+        if (serials.length === 0) return []
+        const rows = await tx
+          .select({ serial: schema.stockSerials.serial })
+          .from(schema.stockSerials)
+          .where(
+            and(
+              eq(schema.stockSerials.itemId, itemId),
+              eq(schema.stockSerials.status, 'in-stock'),
+              inArray(schema.stockSerials.serial, [...serials]),
+            ),
+          )
+        return rows.map((row) => row.serial)
       },
     },
     movements: {
-      lotsShippedFor: async (orderId: string) => {
-        const rows = await tx
-          .select({
-            itemId: schema.stockMovements.itemId,
-            lotCode: schema.stockMovementLots.lotCode,
-            expiresOn: schema.stockMovementLots.expiresOn,
-            kind: schema.stockMovements.kind,
-            quantity: schema.stockMovementLots.quantity,
-          })
-          .from(schema.stockMovementLots)
-          .innerJoin(
-            schema.stockMovements,
-            eq(schema.stockMovements.id, schema.stockMovementLots.movementId),
-          )
-          .where(
-            and(
-              eq(schema.stockMovements.documentType, 'order'),
-              eq(schema.stockMovements.documentId, orderId),
-            ),
-          )
-        return outstandingByItem(
-          rows.map((row) => ({
+      unitsShippedFor: async (orderId: string) => {
+        const conditions = and(
+          eq(schema.stockMovements.documentType, 'order'),
+          eq(schema.stockMovements.documentId, orderId),
+        )
+        const [lots, units] = await Promise.all([
+          tx
+            .select({
+              itemId: schema.stockMovements.itemId,
+              lotCode: schema.stockMovementLots.lotCode,
+              expiresOn: schema.stockMovementLots.expiresOn,
+              kind: schema.stockMovements.kind,
+              quantity: schema.stockMovementLots.quantity,
+            })
+            .from(schema.stockMovementLots)
+            .innerJoin(
+              schema.stockMovements,
+              eq(schema.stockMovements.id, schema.stockMovementLots.movementId),
+            )
+            .where(conditions),
+          tx
+            .select({
+              itemId: schema.stockMovements.itemId,
+              serial: schema.stockMovementSerials.serial,
+              kind: schema.stockMovements.kind,
+            })
+            .from(schema.stockMovementSerials)
+            .innerJoin(
+              schema.stockMovements,
+              eq(schema.stockMovements.id, schema.stockMovementSerials.movementId),
+            )
+            .where(conditions),
+        ])
+        const outstanding = outstandingByItem(
+          lots.map((row) => ({
             itemId: row.itemId,
             code: restored(LotCode.create(row.lotCode)),
             expiresOn: row.expiresOn === null ? null : restored(ExpiryDate.create(row.expiresOn)),
@@ -560,6 +709,24 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
             outbound: row.kind === 'shipment',
           })),
         )
+        // A unit that has been sent and not had back is outstanding; one that went both
+        // ways nets to nothing, the same arithmetic lots answer to.
+        const sent = new Map<string, Set<string>>()
+        for (const row of units) {
+          const held = sent.get(row.itemId) ?? new Set<string>()
+          if (row.kind === 'shipment') held.add(row.serial)
+          else held.delete(row.serial)
+          sent.set(row.itemId, held)
+        }
+        const byItem = new Map<string, Units>()
+        for (const [itemId, lotEntries] of outstanding) byItem.set(itemId, ofLots([...lotEntries]))
+        for (const [itemId, serials] of sent)
+          if (serials.size > 0)
+            byItem.set(
+              itemId,
+              ofSerials([...serials].sort().map((serial) => restored(SerialNumber.create(serial)))),
+            )
+        return byItem
       },
     },
     tracking: {
@@ -735,6 +902,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
         assertTenant(row.tenantId)
         await tx.insert(schema.stockAdjustments).values({
           lotCode: row.lot,
+          serials: row.serials.length > 0 ? [...row.serials] : null,
           id: row.id,
           tenantId,
           warehouseId: row.warehouseId,
@@ -817,6 +985,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
             countId: row.id,
             itemId: line.itemId,
             lotCode: line.lot,
+            serial: line.serial,
             expected: micros(line.expected),
             counted: line.counted === null ? null : micros(line.counted),
           })),
@@ -852,6 +1021,9 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
                 line.lot === null
                   ? isNull(schema.stockCountLines.lotCode)
                   : eq(schema.stockCountLines.lotCode, line.lot),
+                line.serial === null
+                  ? isNull(schema.stockCountLines.serial)
+                  : eq(schema.stockCountLines.serial, line.serial),
               ),
             )
       },

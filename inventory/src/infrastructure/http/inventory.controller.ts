@@ -46,6 +46,9 @@ const lotPicks = z
   .array(z.strictObject({ code: lotCode, quantity }))
   .min(1)
   .max(200)
+const serialNumber = z.string().min(1).max(80)
+/** Which units, named one at a time, because that is the whole of what a serial is. */
+const serials = z.array(serialNumber).min(1).max(500)
 
 const receiveStockInput = z.strictObject({
   warehouseId: z.uuid(),
@@ -54,13 +57,21 @@ const receiveStockInput = z.strictObject({
   unitCost: amount,
   currency,
   lots: lotEntries.nullish(),
+  serials: serials.nullish(),
 })
 
 const transferInput = z.strictObject({
   sourceWarehouseId: z.uuid(),
   destinationWarehouseId: z.uuid(),
   lines: z
-    .array(z.strictObject({ itemId: z.uuid(), quantity, lots: lotPicks.nullish() }))
+    .array(
+      z.strictObject({
+        itemId: z.uuid(),
+        quantity,
+        lots: lotPicks.nullish(),
+        serials: serials.nullish(),
+      }),
+    )
     .min(1)
     .max(200),
   note: note.nullish(),
@@ -71,6 +82,7 @@ const adjustmentInput = z.strictObject({
   itemId: z.uuid(),
   direction: z.enum(['in', 'out']),
   lot: lotCode.nullish(),
+  serials: serials.nullish(),
   quantity,
   reason: z.enum(['breakage', 'loss', 'theft', 'expiry', 'found', 'correction']),
   note: note.nullish(),
@@ -85,14 +97,21 @@ const countInput = z.strictObject({
 
 const countFiguresInput = z.strictObject({
   counts: z
-    .array(z.strictObject({ itemId: z.uuid(), lot: lotCode.nullish(), counted: quantity }))
+    .array(
+      z.strictObject({
+        itemId: z.uuid(),
+        lot: lotCode.nullish(),
+        serial: serialNumber.nullish(),
+        counted: quantity,
+      }),
+    )
     .min(1)
     .max(2000),
 })
 
 const trackingInput = z.strictObject({
   itemId: z.uuid(),
-  tracking: z.enum(['none', 'lot']),
+  tracking: z.enum(['none', 'lot', 'serial']),
   expiry: z.enum(['none', 'optional', 'required']).nullish(),
 })
 
@@ -103,6 +122,14 @@ const lotFilter = z.object({
 })
 
 const traceFilter = z.object({ itemId: z.uuid() })
+const serialFilter = z.object({
+  warehouseId: z.uuid().nullish(),
+  itemId: z.uuid().nullish(),
+  status: z.enum(['in-stock', 'shipped', 'returned', 'scrapped']).nullish(),
+})
+
+/** Normalised the way the value object does, so a URL matches what was written down. */
+const named = (value: string) => value.trim().replace(/\s+/g, ' ').toUpperCase()
 
 const levelInput = z.strictObject({
   warehouseId: z.uuid(),
@@ -457,9 +484,40 @@ export class InventoryController {
     const filter = parse(traceFilter, query)
     return this.runtime.database.traceLot(tenantOf(request), {
       itemId: filter.itemId,
-      code: parse(lotCode, code).trim().replace(/\s+/g, ' ').toUpperCase(),
+      code: named(parse(lotCode, code)),
       ...pageOf(query),
     })
+  }
+
+  // ---------------------------------------------------------------- units
+
+  @Get('stock-serials')
+  @RequireInventoryAction('read')
+  serials(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(serialFilter, query)
+    return this.runtime.database.listSerials(tenantOf(request), {
+      warehouseId: filter.warehouseId ?? null,
+      itemId: filter.itemId ?? null,
+      status: filter.status ?? null,
+      ...pageOf(query),
+    })
+  }
+
+  @Get('stock-serials/:serial/trace')
+  @RequireInventoryAction('read')
+  async traceSerial(
+    @Param('serial') serial: string,
+    @Query() query: unknown,
+    @Req() request: InventoryRequest,
+  ) {
+    const filter = parse(traceFilter, query)
+    const trace = await this.runtime.database.traceSerial(tenantOf(request), {
+      itemId: filter.itemId,
+      serial: named(parse(serialNumber, serial)),
+      ...pageOf(query),
+    })
+    if (!trace) throw new NotFoundException('this unit has never been in stock here')
+    return trace
   }
 
   // ---------------------------------------------------------------- tracking

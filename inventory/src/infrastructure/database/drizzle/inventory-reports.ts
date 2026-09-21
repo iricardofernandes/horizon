@@ -823,3 +823,137 @@ export async function traceLot(
     })),
   }
 }
+
+// ------------------------------------------------------- units, and where each one went
+
+export interface SerialRow {
+  readonly itemId: string
+  readonly serial: string
+  readonly status: string
+  readonly warehouseId: string | null
+  readonly warehouseName: string | null
+  readonly receivedAt: string
+  readonly updatedAt: string
+}
+
+/**
+ * Every unit the workspace has ever named, and where it is now.
+ *
+ * Including the ones that have gone: a unit that was sold keeps its name and its row,
+ * because the question somebody eventually asks is "where is the one we sent them", and a
+ * list that quietly dropped it could not answer.
+ */
+export async function listSerials(
+  tx: Transaction,
+  filter: {
+    warehouseId: string | null
+    itemId: string | null
+    status: string | null
+    limit: number
+    offset: number
+  },
+): Promise<readonly SerialRow[]> {
+  const rows = await tx.execute<{
+    item_id: string
+    serial: string
+    status: string
+    warehouse_id: string | null
+    warehouse_name: string | null
+    received_at: string
+    updated_at: string
+  }>(sql`
+    select s.item_id, s.serial, s.status, b.warehouse_id, w.name as warehouse_name,
+      to_char(s.received_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as received_at,
+      to_char(s.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as updated_at
+    from stock_serials s
+    left join stock_balances b on b.id = s.balance_id
+    left join warehouses w on w.id = b.warehouse_id
+    where true
+      ${filter.warehouseId ? sql`and b.warehouse_id = ${filter.warehouseId}` : sql``}
+      ${filter.itemId ? sql`and s.item_id = ${filter.itemId}` : sql``}
+      ${filter.status ? sql`and s.status = ${filter.status}` : sql``}
+    order by s.item_id, s.serial
+    limit ${filter.limit} offset ${filter.offset}
+  `)
+  return [...rows].map((row) => ({
+    itemId: row.item_id,
+    serial: row.serial,
+    status: row.status,
+    warehouseId: row.warehouse_id,
+    warehouseName: row.warehouse_name,
+    receivedAt: row.received_at,
+    updatedAt: row.updated_at,
+  }))
+}
+
+export interface SerialTrace {
+  readonly itemId: string
+  readonly serial: string
+  readonly status: string
+  readonly warehouseId: string | null
+  readonly steps: readonly TraceStep[]
+}
+
+/**
+ * The life of one unit, from the day it arrived.
+ *
+ * The same thread a lot is followed by, read one unit at a time: every movement that
+ * touched this serial, in order, each naming the document behind it. It is the answer to
+ * the question a warranty claim opens with — is this ours, when did we get it, and who
+ * did we send it to.
+ */
+export async function traceSerial(
+  tx: Transaction,
+  request: { itemId: string; serial: string; limit: number; offset: number },
+): Promise<SerialTrace | null> {
+  const [held] = await tx.execute<{ status: string; warehouse_id: string | null }>(sql`
+    select s.status, b.warehouse_id
+    from stock_serials s
+    left join stock_balances b on b.id = s.balance_id
+    where s.item_id = ${request.itemId} and s.serial = ${request.serial}
+    limit 1
+  `)
+  if (!held) return null
+  const rows = await tx.execute<{
+    id: string
+    occurred_at: string
+    warehouse_id: string
+    warehouse_name: string
+    kind: string
+    quantity: string
+    reason: string | null
+    document_type: string | null
+    document_id: string | null
+  }>(sql`
+    select m.id, m.warehouse_id, w.name as warehouse_name, m.kind,
+      to_char(m.occurred_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as occurred_at,
+      ${MICROS}::text as quantity, m.reason, m.document_type, m.document_id
+    from stock_movement_serials ms
+    join stock_movements m on m.id = ms.movement_id
+    join warehouses w on w.id = m.warehouse_id
+    where ms.serial = ${request.serial} and m.item_id = ${request.itemId}
+    order by m.occurred_at, m.balance_version
+    limit ${request.limit} offset ${request.offset}
+  `)
+  return {
+    itemId: request.itemId,
+    serial: request.serial,
+    status: held.status,
+    warehouseId: held.warehouse_id,
+    steps: [...rows].map((row) => ({
+      movementId: row.id,
+      occurredAt: row.occurred_at,
+      warehouseId: row.warehouse_id,
+      warehouseName: row.warehouse_name,
+      kind: row.kind,
+      direction: INBOUND.has(row.kind) ? ('in' as const) : ('out' as const),
+      // One unit moved, every time: that is what naming them one at a time means.
+      quantity: quantity(row.quantity),
+      reason: row.reason,
+      document:
+        row.document_type && row.document_id
+          ? { type: row.document_type, id: row.document_id }
+          : null,
+    })),
+  }
+}

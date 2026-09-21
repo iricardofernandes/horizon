@@ -271,6 +271,8 @@ export const stockAdjustments = pgTable(
     direction: text('direction').notNull(),
     /** Which boxes, for an item the workspace identifies; named when it was asked for. */
     lotCode: text('lot_code'),
+    /** Which units, for an item identified one at a time; named at the same moment. */
+    serials: text('serials').array(),
     quantity: bigint('quantity', { mode: 'bigint' }).notNull(),
     reason: text('reason').notNull(),
     note: text('note'),
@@ -350,12 +352,14 @@ export const stockCountLines = pgTable(
      * useful answer is not that the shelf is two short but that lot AB-1204 is.
      */
     lotCode: text('lot_code'),
+    /** Which unit this line is about, for an item identified one at a time. */
+    serial: text('serial'),
     expected: bigint('expected', { mode: 'bigint' }).notNull(),
     counted: bigint('counted', { mode: 'bigint' }),
   },
   (table) => [
     unique('stock_count_lines_sheet_key')
-      .on(table.tenantId, table.countId, table.itemId, table.lotCode)
+      .on(table.tenantId, table.countId, table.itemId, table.lotCode, table.serial)
       .nullsNotDistinct(),
     foreignKey({
       name: 'stock_count_lines_count_fk',
@@ -488,6 +492,55 @@ export const stockMovementLots = pgTable(
     index('stock_movement_lots_trace_idx').on(table.tenantId, table.lotCode),
     foreignKey({
       name: 'stock_movement_lots_movement_fk',
+      columns: [table.movementId],
+      foreignColumns: [stockMovements.id],
+    }),
+  ],
+)
+
+/**
+ * Every unit the workspace has ever named, and where it is now.
+ *
+ * One row per serial per item, for good: a unit that has been sold keeps its name,
+ * because the machine a customer sends back in a year is the same machine. `balance_id`
+ * says which shelf it is on and is null once it has gone, so a serial is in stock in at
+ * most one place by construction rather than by a rule anybody has to remember.
+ */
+export const stockSerials = pgTable(
+  'stock_serials',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    itemId: uuid('item_id').notNull(),
+    serial: text('serial').notNull(),
+    balanceId: uuid('balance_id'),
+    status: text('status').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true, mode: 'date' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.itemId, table.serial] }),
+    index('stock_serials_tenant_balance_idx').on(table.tenantId, table.balanceId),
+    index('stock_serials_tenant_serial_idx').on(table.tenantId, table.serial),
+  ],
+)
+
+/** Which units a movement touched: the thread for goods that are named one at a time. */
+export const stockMovementSerials = pgTable(
+  'stock_movement_serials',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    movementId: uuid('movement_id').notNull(),
+    serial: text('serial').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.movementId, table.serial] }),
+    index('stock_movement_serials_trace_idx').on(table.tenantId, table.serial),
+    foreignKey({
+      name: 'stock_movement_serials_movement_fk',
       columns: [table.movementId],
       foreignColumns: [stockMovements.id],
     }),

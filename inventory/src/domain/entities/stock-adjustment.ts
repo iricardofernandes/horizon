@@ -4,7 +4,7 @@ import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { Money, Note, Quantity } from '../value-objects/inventory-values'
 import { type AdjustmentReason, reasonAdmits } from '../value-objects/movement-origin'
-import type { LotCode } from '../value-objects/tracking'
+import type { LotCode, SerialNumber } from '../value-objects/tracking'
 
 export const ADJUSTMENT_STATUSES = ['pending', 'posted', 'rejected'] as const
 export type AdjustmentStatus = (typeof ADJUSTMENT_STATUSES)[number]
@@ -27,6 +27,14 @@ interface StockAdjustmentProps {
    * four" and "write off four of AB-1204" are not the same request.
    */
   lot: LotCode | null
+  /**
+   * Which units, for an item identified one at a time.
+   *
+   * A list rather than a single name because a write-off of three machines is one
+   * decision about three machines, and splitting it into three requests would ask the
+   * second person the same question three times.
+   */
+  serials: readonly SerialNumber[]
   quantity: Quantity
   reason: AdjustmentReason
   note: Note | null
@@ -70,6 +78,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
       itemId: string
       direction: AdjustmentDirection
       lot: LotCode | null
+      serials: readonly SerialNumber[]
       quantity: Quantity
       reason: AdjustmentReason
       note: Note | null
@@ -97,6 +106,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
           itemId: props.itemId,
           direction: props.direction,
           lot: props.lot,
+          serials: props.serials,
           quantity: props.quantity,
           reason: props.reason,
           note: props.note,
@@ -175,6 +185,10 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
     return this.props.lot
   }
 
+  serials(): readonly SerialNumber[] {
+    return this.props.serials
+  }
+
   quantity(): Quantity {
     return this.props.quantity
   }
@@ -206,6 +220,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
     itemId: string
     direction: AdjustmentDirection
     lot: string | null
+    serials: readonly string[]
     quantity: string
     reason: AdjustmentReason
     note: string | null
@@ -230,6 +245,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
       itemId: this.props.itemId,
       direction: this.props.direction,
       lot: this.props.lot?.value ?? null,
+      serials: this.props.serials.map((serial) => serial.value),
       quantity: this.props.quantity.toString(),
       reason: this.props.reason,
       note: this.props.note?.value ?? null,

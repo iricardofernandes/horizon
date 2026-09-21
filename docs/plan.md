@@ -1876,11 +1876,87 @@ to themselves.
 
 ## Phase 35 — The unit that has a name: serial numbers
 
-**Planned.** Naming every single unit, which is a different shape of answer from naming
-the box it came in: a serial is unique for an item forever, including after it has been
-sent and come back, and it carries a life of its own — in stock, shipped, returned,
-scrapped — rather than a quantity. Built on the tracking decision of phase 34, which gains
-`serial` as a third value once the module can honour it.
+**Complete.** The fourth slice of Phase I of the [expansion plan](erp-expansion-plan.md).
+
+A lot says these goods arrived together and are alike. That is the whole answer for a
+pallet of flour and no answer at all for a machine: the one a customer rings up about in
+two years is a particular machine, not one of a batch. Naming every unit is the other
+shape of the same question, which is why `serial` is a third value of the tracking
+decision rather than a stricter setting of the second — and why an item is tracked one way
+or the other, never both. A serial already says everything a lot would.
+
+**Deliverables**
+
+- **`serial` as a tracking policy**, under the same rule phase 34 set: decided only while
+  none of the item is in stock anywhere, restatable at any time, never deleted.
+- **A name that belongs to a unit for good.** Unique for an item across the workspace and
+  across all time, including after the unit has been sold — the machine a customer sends
+  back in a year is the same machine, and a warehouse that gave its name away in the
+  meantime has lost the only thread it had. So a serial is never deleted, only moved
+  along its life: in stock, shipped, returned to a supplier, scrapped.
+- **One row per unit, and where it is.** `balance_id` says which shelf, and is null once
+  it has gone, so a unit is in stock in at most one place **by construction** rather than
+  by a rule anybody has to remember.
+- **The quantity cannot disagree with the names.** A lot is a quantity that happens to
+  have a code, so the two can drift and a rule has to stop them; a serial *is* the unit,
+  so three named units is a movement of three and there is no third figure to get wrong.
+  A fraction of something with a name is refused outright.
+- **Goods arriving from outside cannot claim a name some shelf is already holding**,
+  refused in the use case with a clear answer and again by the deferred trigger. Asked
+  only of deliveries and found stock: a transfer and a customer return move units the
+  workspace already owns, and asking there would refuse the very unit being moved for
+  being where it still is.
+- **Units leave longest-here-first**, or the ones somebody scanned. There is no FEFO to
+  apply — one unit is not fresher than another — but the one that has been sitting here
+  since spring is the one somebody should stop paying to store.
+- **A transfer moves the very same units**, and a customer return brings the very same one
+  home, read off the shipments the order made exactly as a lot is.
+- **A unit-tracked item is counted by looking for each one.** One line per unit, each
+  expecting the one of it there is; counting zero is how a counter says the machine is not
+  where the system thinks it is.
+- **A write-off names its units when it is asked for**, as a list: three machines is one
+  decision about three machines, and splitting it into three requests would ask the second
+  person the same question three times.
+- **The thread, one unit at a time.** `GET /stock-serials` is every unit the workspace has
+  ever named and where each is now — including the ones that have gone, because the
+  question somebody eventually asks is "where is the one we sent them".
+  `GET /stock-serials/:serial/trace` is the life of one machine, which is what a warranty
+  claim opens with: is this ours, when did we get it, and who did we send it to.
+- **One shape for "which goods" across every command.** Lots and units now arrive through
+  the same `Units` and `Picks` types, so no command that moves stock has to care which
+  kind of answer its item takes — the balance knows, and refuses the wrong sort.
+- No contracts change. Which unit a warehouse drew from stays off the wire for the same
+  reason a lot does.
+
+**Exit criteria**
+
+- A unit-tracked balance holds exactly as many named units as its on-hand says, asserted
+  in the aggregate and by a trigger that refuses a direct database edit breaking it.
+- The same name cannot be received into two warehouses: refused by the use case, and by
+  the trigger if it ever got past.
+- A shipment draws the unit that has been here longest and records which one went; a scan
+  overrides it.
+- A transfer lands the very same units at the far end, and a customer return brings the
+  very same one back to the shelf it left.
+- A count freezes one line per unit and scrapping follows from counting zero of one.
+- The trace of a unit names the receipt it arrived on and the order it left on, and never
+  crosses into another workspace.
+
+**Non-goals**
+
+- An item tracked by lot *and* serial. A serial already says which batch a unit came from,
+  if anybody records it; carrying both would be two answers to one question.
+- Expiry on a unit. What goes off is a jar of something; a machine due a service needs a
+  service record, not a date that would quietly make it unsellable.
+- Per-unit cost. A named unit is worth the moving average like everything else — the same
+  reason phase 34 gave for lots.
+- A serial pinned to an order when the order is placed. Which unit goes is decided at the
+  shelf, as phase 34 settled for lots.
+- Warranty, service history or ownership after the sale. The module says where a unit is
+  and where it has been; what a customer is owed about it is not a stock question.
+- Repairing a scrapped unit back into stock. It can be received again under its own name,
+  because the row and the thread survive; deciding whether that is allowed is a policy
+  nobody has asked for yet.
 
 ---
 

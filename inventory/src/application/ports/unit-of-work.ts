@@ -3,6 +3,7 @@ import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type {
   AdjustmentPoliciesRepository,
   InventoryEventsRepository,
+  ItemSerialsRepository,
   ItemTrackingRepository,
   StockAdjustmentsRepository,
   StockBalancesRepository,
@@ -48,6 +49,7 @@ export interface InventoryScope {
   readonly balances: StockBalancesRepository
   readonly tracking: ItemTrackingRepository
   readonly movements: StockMovementsRepository
+  readonly serials: ItemSerialsRepository
   readonly reservations: StockReservationsRepository
   readonly transfers: StockTransfersRepository
   readonly adjustments: StockAdjustmentsRepository

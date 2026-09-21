@@ -3,11 +3,12 @@ import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import { StockBalance } from '@/domain/entities/stock-balance'
+import type { Units } from '@/domain/entities/tracked-units'
 import { Warehouse } from '@/domain/entities/warehouse'
 import { Currency, Money, Quantity, WarehouseName } from '@/domain/value-objects/inventory-values'
 import type { Clock } from '../ports/clock'
 import type { InventoryScope, InventoryUnitOfWork } from '../ports/unit-of-work'
-import { lotEntriesOf } from './inputs'
+import { unitsNamedOf } from './inputs'
 
 type InventoryError = InvalidInputError | ConflictError | ResourceNotFoundError
 
@@ -18,6 +19,26 @@ type InventoryError = InvalidInputError | ConflictError | ResourceNotFoundError
  * goods have to be identified is a rule about this stock, so the thing that owns the
  * stock is the thing that enforces it.
  */
+/**
+ * Names arriving from outside that some shelf is already holding.
+ *
+ * Asked only of goods coming in from elsewhere — a delivery, or stock somebody found.
+ * A transfer and a customer return move units the workspace already owns, and asking
+ * there would refuse the very unit being moved for being where it still is.
+ */
+export async function refuseKnownSerials(
+  scope: InventoryScope,
+  itemId: string,
+  named: Units | null,
+): Promise<ConflictError | null> {
+  const arriving = named?.serials.map((serial) => serial.value) ?? []
+  if (arriving.length === 0) return null
+  const held = await scope.serials.inStock(itemId, arriving)
+  return held.length > 0
+    ? new ConflictError(`unit ${held.join(', ')} is already in stock in this workspace`)
+    : null
+}
+
 export async function openBalance(
   scope: InventoryScope,
   where: { tenantId?: string; itemId: string; warehouseId: string },
@@ -97,6 +118,7 @@ export class ReceiveStockUseCase {
       | readonly { code: string; expiresOn?: string | null | undefined; quantity: string }[]
       | null
       | undefined
+    serials?: readonly string[] | null | undefined
   }): Promise<Either<InventoryError, { balanceId: string }>> {
     const quantity = Quantity.create(request.quantity)
     if (quantity.isLeft()) return left(quantity.value)
@@ -104,15 +126,22 @@ export class ReceiveStockUseCase {
     if (currency.isLeft()) return left(currency.value)
     const unitCost = Money.create(request.unitCost, currency.value)
     if (unitCost.isLeft()) return left(unitCost.value)
-    const lots = lotEntriesOf(request.lots)
-    if (lots.isLeft()) return left(lots.value)
+    const named = unitsNamedOf(request)
+    if (named.isLeft()) return left(named.value)
     return this.unitOfWork.inTenant(request.tenantId, async (scope) => {
       const warehouse = await scope.warehouses.findById(request.warehouseId)
       if (!warehouse) return left(new ResourceNotFoundError('warehouse was not found'))
       if (!warehouse.isActive()) return left(new ConflictError('warehouse is inactive'))
       const existing = await scope.balances.lock(request.itemId, request.warehouseId)
+      const known = await refuseKnownSerials(scope, request.itemId, named.value)
+      if (known) return left(known)
       const balance = existing ?? (await openBalance(scope, request, this.clock.now()))
-      const received = balance.receive(quantity.value, unitCost.value, this.clock.now(), lots.value)
+      const received = balance.receive(
+        quantity.value,
+        unitCost.value,
+        this.clock.now(),
+        named.value,
+      )
       if (received.isLeft()) return left(received.value)
       if (existing) await scope.balances.save(balance)
       else await scope.balances.create(balance)

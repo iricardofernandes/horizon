@@ -118,6 +118,8 @@ surface below and require a workspace-scoped Inventory role.
 | `PUT` | `/item-tracking` | Decide it, while none of the item is in stock. |
 | `GET` | `/stock-lots` | What is held by lot, soonest to go off first. |
 | `GET` | `/stock-lots/:code/trace` | Where a lot came from and where it went. |
+| `GET` | `/stock-serials` | Every unit the workspace has named, and where each is now. |
+| `GET` | `/stock-serials/:serial/trace` | The life of one unit, from the day it arrived. |
 
 The reports are read from `stock_movements` alone, never from the balance table they are
 checked against: every movement records the quantity the shelf reached **and** what a unit
@@ -127,13 +129,21 @@ than to the end of today, so a valuation never disagrees with a shelf somebody j
 at. A stock level refuses nothing — it is read by the alert report and by nobody else, and
 a minimum of zero is how a workspace turns one off without deleting the decision.
 
-An item the workspace identifies must say which lot goods arrive under, and may say when
-that lot expires; an item it does not must name no lot at all. Goods leave earliest-date
+An item the workspace identifies must say which goods are arriving — which lot, or which
+units by name — and an item it does not must name neither. A lot may say when it expires;
+a unit may not, because what goes off is a batch of something. An item is tracked one way
+or the other, never both. Goods leave earliest-date
 first unless the caller names the lots, expired stock is on hand but available to nobody,
 and a shipment never sends it. A transfer carries the same codes and dates to the far end,
 a customer return goes back into the lots it went out in, and a tracked item is counted lot
 by lot. What a shelf's lots add up to is what its balance holds — in the aggregate and in a
 deferred constraint trigger.
+
+A named unit keeps its name for good, is in stock in at most one place by construction, and
+is followed through shipping, return and scrapping rather than deleted. Units leave
+longest-here-first unless somebody scans them, a count of a unit-tracked item looks for
+each one in turn, and goods arriving from outside cannot claim a name some shelf is already
+holding.
 
 Every command that moves stock takes an `Idempotency-Key` header and runs at most once
 (ADR 0028); every decision is a line in the tenant's hash-chained audit log (ADR 0025).

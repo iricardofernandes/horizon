@@ -1,6 +1,6 @@
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
-import type { LotEntry } from '../entities/lot-book'
+import type { Units } from '../entities/tracked-units'
 import type { Money, Quantity } from '../value-objects/inventory-values'
 import type { MovementOrigin } from '../value-objects/movement-origin'
 
@@ -144,14 +144,15 @@ export class InventoryStockMovedEvent extends InventoryEvent {
       /** Why it moved and under which document. */
       origin: MovementOrigin | null
       /**
-       * Which boxes moved, when the item is one the workspace identifies.
+       * Which particular goods moved, when the item is one the workspace identifies.
        *
-       * Empty for everything else, and deliberately absent from the payload: which lot a
-       * warehouse drew from is how it keeps its own promises, and a reader elsewhere is
-       * told what moved rather than which of it. A fiscal document that has to name the
-       * lot will ask Inventory for it rather than have it pushed at every listener.
+       * Empty on both sides for everything else, and deliberately absent from the
+       * payload: which lot or which unit a warehouse drew from is how it keeps its own
+       * promises, and a reader elsewhere is told what moved rather than which of it. A
+       * fiscal document that has to name them will ask Inventory rather than have them
+       * pushed at every listener.
        */
-      lots: readonly LotEntry[]
+      units: Units
     },
   ) {
     super(balanceId, tenantId, occurredAt)

@@ -9,18 +9,20 @@ import { AuditTrail, InventoryUnitOfWork } from '@/application/ports/unit-of-wor
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DomainEvent } from '@/core/events/domain-event'
-import { type LotEntry, outstandingByItem } from '@/domain/entities/lot-book'
+import { outstandingByItem } from '@/domain/entities/lot-book'
 import type { StockAdjustment } from '@/domain/entities/stock-adjustment'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import type { StockCount } from '@/domain/entities/stock-count'
 import type { StockReservation } from '@/domain/entities/stock-reservation'
 import type { StockTransfer } from '@/domain/entities/stock-transfer'
+import { ofLots, ofSerials, type Units } from '@/domain/entities/tracked-units'
 import type { Warehouse } from '@/domain/entities/warehouse'
 import { InventoryStockMovedEvent } from '@/domain/events/inventory-events'
 import {
   AdjustmentPoliciesRepository,
   type AdjustmentPolicy,
   InventoryEventsRepository,
+  ItemSerialsRepository,
   ItemTrackingRepository,
   StockAdjustmentsRepository,
   StockBalancesRepository,
@@ -33,6 +35,7 @@ import {
   type TrackedItem,
   WarehousesRepository,
 } from '@/domain/repositories/inventory-repositories'
+import type { SerialNumber } from '@/domain/value-objects/tracking'
 
 class InMemoryBalances extends StockBalancesRepository {
   constructor(
@@ -192,27 +195,58 @@ class InMemoryTracking extends ItemTrackingRepository {
  * real one reads it from — the difference being that this one has never been written to
  * disk.
  */
+/** Which named units are on some shelf, read off the balances the fakes hold. */
+class InMemorySerials extends ItemSerialsRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly balances: StockBalance[],
+  ) {
+    super()
+  }
+  inStock(itemId: string, serials: readonly string[]): Promise<readonly string[]> {
+    const wanted = new Set(serials)
+    const held = this.balances
+      .filter((balance) => balance.belongsTo(this.tenantId) && balance.itemId() === itemId)
+      .flatMap((balance) => balance.serials().map((one) => one.serial.value))
+    return Promise.resolve(held.filter((serial) => wanted.has(serial)))
+  }
+}
+
 class InMemoryMovements extends StockMovementsRepository {
   constructor(private readonly events: DomainEvent[]) {
     super()
   }
-  lotsShippedFor(orderId: string): Promise<ReadonlyMap<string, readonly LotEntry[]>> {
-    const moves = this.events
+  unitsShippedFor(orderId: string): Promise<ReadonlyMap<string, Units>> {
+    const movements = this.events
       .filter(
         (event): event is InventoryStockMovedEvent => event instanceof InventoryStockMovedEvent,
       )
       .map((event) => event.movementOf())
       .filter((movement) => movement.origin?.document.id === orderId)
-      .flatMap((movement) =>
-        movement.lots.map((lot) => ({
+    const outstanding = outstandingByItem(
+      movements.flatMap((movement) =>
+        movement.units.lots.map((lot) => ({
           itemId: movement.itemId,
           code: lot.code,
           expiresOn: lot.expiresOn,
           quantity: lot.quantity,
           outbound: movement.kind === 'shipment',
         })),
-      )
-    return Promise.resolve(outstandingByItem(moves))
+      ),
+    )
+    const sent = new Map<string, Map<string, SerialNumber>>()
+    for (const movement of movements)
+      for (const serial of movement.units.serials) {
+        const held = sent.get(movement.itemId) ?? new Map<string, SerialNumber>()
+        if (movement.kind === 'shipment') held.set(serial.value, serial)
+        else held.delete(serial.value)
+        sent.set(movement.itemId, held)
+      }
+    const byItem = new Map<string, Units>()
+    for (const [itemId, lots] of outstanding) byItem.set(itemId, ofLots([...lots]))
+    for (const [itemId, serials] of sent)
+      if (serials.size > 0) byItem.set(itemId, ofSerials([...serials.values()]))
+    return Promise.resolve(byItem)
   }
 }
 
@@ -376,6 +410,7 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
       balances: new InMemoryBalances(tenantId, this.balances),
       tracking: new InMemoryTracking(tenantId, this.trackedItems, this.balances),
       movements: new InMemoryMovements(this.events),
+      serials: new InMemorySerials(tenantId, this.balances),
       reservations: new InMemoryReservations(tenantId, this.reservations),
       transfers: new InMemoryTransfers(tenantId, this.transfers),
       adjustments: new InMemoryAdjustments(tenantId, this.adjustments),

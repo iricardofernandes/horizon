@@ -67,9 +67,21 @@ describe('deciding whether an item has to be identified', () => {
     expect(item.isLeft()).toBe(true)
   })
 
-  it('refuses serial numbers, which the module cannot yet honour', async () => {
-    // Better a plain refusal than a workspace turning on a control that does nothing.
+  it('takes units by name as the other shape of the same question', async () => {
     const item = await define.execute({ context: context(), itemId, tracking: 'serial' })
+
+    if (item.isLeft()) throw item.value
+    expect(item.value.tracking).toEqual({ kind: 'serial', expiry: 'none' })
+  })
+
+  it('refuses an expiry rule for an item identified one unit at a time', async () => {
+    // What goes off is a jar of something; a machine due a service needs a service record.
+    const item = await define.execute({
+      context: context(),
+      itemId,
+      tracking: 'serial',
+      expiry: 'required',
+    })
 
     expect(item.isLeft()).toBe(true)
   })

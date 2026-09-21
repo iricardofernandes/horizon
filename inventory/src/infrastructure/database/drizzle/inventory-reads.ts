@@ -134,13 +134,18 @@ export async function countDetail(tx: Transaction, id: string) {
     .select()
     .from(schema.stockCountLines)
     .where(eq(schema.stockCountLines.countId, id))
-    .orderBy(asc(schema.stockCountLines.itemId), asc(schema.stockCountLines.lotCode))
+    .orderBy(
+      asc(schema.stockCountLines.itemId),
+      asc(schema.stockCountLines.lotCode),
+      asc(schema.stockCountLines.serial),
+    )
   return {
     ...header(row),
     note: row.note,
     lines: lines.map((line) => ({
       itemId: line.itemId,
       lot: line.lotCode,
+      serial: line.serial,
       expected: quantity(line.expected),
       counted: line.counted === null ? null : quantity(line.counted),
       // The difference is what the sheet would post, not what the balance holds now.
