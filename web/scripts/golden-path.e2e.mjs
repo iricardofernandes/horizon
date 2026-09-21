@@ -131,7 +131,10 @@ try {
   await customerDialog.getByLabel('Phone').fill(existingCustomer.phone)
   await customerDialog.getByLabel('Address').fill(existingCustomer.address)
   await customerDialog.getByRole('button', { name: 'Create customer' }).click()
-  await customerDialog.getByText('must be a CPF or CNPJ with 11 or 14 digits').waitFor()
+  await customerDialog
+    .getByRole('alert')
+    .filter({ hasText: 'must be an 11-digit CPF or a 14-character CNPJ with two check digits' })
+    .waitFor()
   await customerDialog.getByRole('button', { name: 'Close dialog' }).click()
   const customerRow = page.getByRole('row').filter({ hasText: existingCustomer.email })
   await customerRow.getByRole('button', { name: 'Erase data' }).click()
@@ -297,15 +300,17 @@ try {
   )
   await page.reload({ waitUntil: 'domcontentloaded' })
   // The forecast became the receivable rather than sitting beside it, so nothing is
-  // expected any more and the same money is never counted twice.
-  await page
-    .getByRole('article')
-    .filter({ hasText: 'Expected' })
-    .getByText('—', { exact: true })
-    .waitFor()
-  assert(
-    (await page.getByRole('tab', { name: /^Forecasts/ }).innerText()).includes('0'),
-    'a forecast was left behind after invoicing',
+  // expected for this order any more. Other orders in the workspace may still have
+  // forecasts, especially when the browser path runs against an existing local stack.
+  await waitUntil(
+    () =>
+      page.evaluate(async (orderId) => {
+        const response = await fetch('/api/horizon/financial/receivables?view=forecast&limit=100')
+        if (!response.ok) return false
+        const { data } = await response.json()
+        return !data.some((row) => row.origin.documentId === orderId)
+      }, placedOrderId),
+    'the forecast for this order to be realised',
   )
   await page.getByRole('button', { name: `Open receivable ${receivableNumber}` }).click()
   const receivableDialog = page.getByRole('dialog', { name: `Receivable ${receivableNumber}` })
