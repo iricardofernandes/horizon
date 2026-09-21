@@ -10,6 +10,7 @@ import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DomainEvent } from '@/core/events/domain-event'
 import { outstandingByItem } from '@/domain/entities/lot-book'
+import type { ProductionOrder } from '@/domain/entities/production-order'
 import type { StockAdjustment } from '@/domain/entities/stock-adjustment'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import type { StockCount } from '@/domain/entities/stock-count'
@@ -22,8 +23,11 @@ import {
   AdjustmentPoliciesRepository,
   type AdjustmentPolicy,
   InventoryEventsRepository,
+  type ItemComposition,
+  ItemCompositionsRepository,
   ItemSerialsRepository,
   ItemTrackingRepository,
+  ProductionOrdersRepository,
   StockAdjustmentsRepository,
   StockBalancesRepository,
   StockCountsRepository,
@@ -250,6 +254,65 @@ class InMemoryMovements extends StockMovementsRepository {
   }
 }
 
+/** What the catalogue said, as the fakes heard it. */
+class InMemoryCompositions extends ItemCompositionsRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: { tenantId: string; composition: ItemComposition }[],
+  ) {
+    super()
+  }
+  inForce(parentItemId: string, on: string): Promise<ItemComposition | null> {
+    const held = this.records
+      .filter(
+        (record) =>
+          record.tenantId === this.tenantId &&
+          record.composition.parentItemId === parentItemId &&
+          record.composition.effectiveFrom <= on,
+      )
+      .sort((a, b) =>
+        a.composition.effectiveFrom === b.composition.effectiveFrom
+          ? a.composition.version - b.composition.version
+          : a.composition.effectiveFrom.localeCompare(b.composition.effectiveFrom),
+      )
+    return Promise.resolve(held.at(-1)?.composition ?? null)
+  }
+  record(composition: ItemComposition): Promise<void> {
+    const known = this.records.some(
+      (record) =>
+        record.tenantId === this.tenantId &&
+        record.composition.parentItemId === composition.parentItemId &&
+        record.composition.version === composition.version,
+    )
+    if (!known) this.records.push({ tenantId: this.tenantId, composition })
+    return Promise.resolve()
+  }
+}
+
+class InMemoryProduction extends ProductionOrdersRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: ProductionOrder[],
+  ) {
+    super()
+  }
+  findById(id: string): Promise<ProductionOrder | null> {
+    return Promise.resolve(
+      this.records.find((order) => order.belongsTo(this.tenantId) && order.id.toString() === id) ??
+        null,
+    )
+  }
+  create(order: ProductionOrder): Promise<void> {
+    if (!order.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    this.records.push(order)
+    return Promise.resolve()
+  }
+  save(order: ProductionOrder): Promise<void> {
+    if (!order.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
+    return Promise.resolve()
+  }
+}
+
 class InMemoryLevels extends StockLevelsRepository {
   constructor(
     private readonly tenantId: string,
@@ -392,6 +455,8 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
   readonly policies: AdjustmentPolicy[] = []
   readonly levels: StockLevel[] = []
   readonly trackedItems: TrackedItem[] = []
+  readonly compositionsHeard: { tenantId: string; composition: ItemComposition }[] = []
+  readonly productionOrders: ProductionOrder[] = []
   readonly auditRecords: AuditRecord[] = []
   readonly receipts = new Map<string, { receipt: CommandReceipt; response: unknown }>()
   readonly events: DomainEvent[] = []
@@ -415,6 +480,8 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
       transfers: new InMemoryTransfers(tenantId, this.transfers),
       adjustments: new InMemoryAdjustments(tenantId, this.adjustments),
       counts: new InMemoryCounts(tenantId, this.counts),
+      compositions: new InMemoryCompositions(tenantId, this.compositionsHeard),
+      production: new InMemoryProduction(tenantId, this.productionOrders),
       policies: new InMemoryPolicies(tenantId, this.policies),
       levels: new InMemoryLevels(tenantId, this.levels),
       events: new InMemoryEvents(tenantId, this.events),

@@ -126,6 +126,8 @@ export class InventoryStockMovedEvent extends InventoryEvent {
         | 'return-in'
         | 'transfer-in'
         | 'transfer-out'
+        | 'production-out'
+        | 'production-in'
       balanceVersion: number
       quantity: Quantity
       balanceAfter: Quantity

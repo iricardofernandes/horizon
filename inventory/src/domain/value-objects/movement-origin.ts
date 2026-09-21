@@ -21,13 +21,21 @@ export type AdjustmentReason = (typeof ADJUSTMENT_REASONS)[number]
 export const MOVEMENT_REASONS = [
   'sale',
   'purchase',
+  'production',
   'transfer',
   'count',
   ...ADJUSTMENT_REASONS,
 ] as const
 export type MovementReason = (typeof MOVEMENT_REASONS)[number]
 
-export const DOCUMENT_TYPES = ['order', 'receipt', 'transfer', 'adjustment', 'count'] as const
+export const DOCUMENT_TYPES = [
+  'order',
+  'receipt',
+  'production-order',
+  'transfer',
+  'adjustment',
+  'count',
+] as const
 export type DocumentType = (typeof DOCUMENT_TYPES)[number]
 
 /** The document a movement belongs to; the two halves of a transfer share one. */

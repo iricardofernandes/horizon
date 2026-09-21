@@ -584,10 +584,11 @@ as [plan phase 34](plan.md#phase-34--which-of-them-the-lot-the-date-on-it-and-th
 Serial numbers are delivered as
 [plan phase 35](plan.md#phase-35--the-unit-that-has-a-name-serial-numbers); product
 families, variants, kits and BOM as
-[plan phase 36](plan.md#phase-36--what-a-thing-is-and-what-it-is-made-of). The remaining
-deliverables are sliced after them: production orders
-([phase 37](plan.md#phase-37--the-order-that-consumes-and-produces)) and the screens that
-close the phase ([phase 38](plan.md#phase-38--the-inventory-screens)).
+[plan phase 36](plan.md#phase-36--what-a-thing-is-and-what-it-is-made-of). Production orders,
+material issue, finished-goods receipt, scrap and third-party production are delivered as
+[plan phase 37](plan.md#phase-37--the-order-that-consumes-and-produces). Only the screens
+that close the phase remain
+([phase 38](plan.md#phase-38--the-inventory-screens)).
 
 **Deliverables**
 

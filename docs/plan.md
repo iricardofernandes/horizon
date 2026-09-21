@@ -2050,10 +2050,91 @@ is the factory acting on it.
 
 ## Phase 37 — The order that consumes and produces
 
-**Planned.** Production orders in `inventory/`: an order that freezes the recipe it was
-released under, issues its materials, receives the finished goods at the cost of what went
-in, records scrap, and conserves quantity and value across the whole of it. Third-party
-production — materials sent to a subcontractor and the product coming back — closes it.
+**Complete.** The sixth slice of Phase I of the [expansion plan](erp-expansion-plan.md).
+
+The warehouse has been able to say what it holds, what it held, which boxes and which
+units. What it has never been able to do is make anything. A production order is the one
+document that takes goods off the shelf and puts different goods back, and the only
+promise worth making about it is that nothing is created or lost in between.
+
+**Deliverables**
+
+- **The catalogue's recipe, kept where production can reach it.** A copy fed by
+  `catalog.composition.defined`, not a question asked across the boundary: an order has to
+  be releasable when the catalogue is down, and the version it was released under has to
+  stay readable after the catalogue has moved on. A version is heard once and never
+  revised, so a redelivery is the same message arriving twice rather than a change of mind.
+- **The recipe is frozen at release, not read at the end.** One that changed halfway
+  through would leave nobody able to say what this batch was supposed to contain. What is
+  written onto the order is the recipe already multiplied out for its quantity, so a later
+  reader needs neither the recipe nor the batch size to see what was meant to go in.
+- **One level deep, deliberately.** An order for a chair consumes a frame and four legs;
+  the frame is made by its own order. Exploding the whole tree into one order would hide
+  that the frames were made at a different time, at a different cost, possibly by somebody
+  else.
+- **Material leaves as `production-out`, not as a write-off.** Nothing was lost and nobody
+  was billed — material turned into product — and the movement ledger says so rather than
+  leaving a reader to infer it from a reason code. What comes back is `production-in`: a
+  receipt in every way that matters, marked so a reader can tell what was bought from what
+  was built.
+- **What actually went in is recorded, even when it is not what was planned.** A batch that
+  needed an extra metre of something needed it, and an order that refused to say so would
+  leave the material missing from stock with nothing to explain it.
+- **Value is conserved, and that is the whole point.** Everything issued has exactly one of
+  two fates: it became product, or it was ruined. So `issued + conversion = produced +
+  scrapped`, always — asserted in the aggregate, and by a deferred trigger that refuses to
+  let an order be settled any other way.
+- **The finished unit cost cannot be stated, only derived.** It is everything issued, less
+  everything ruined, plus what the work cost, over how many came out. An order that let
+  somebody name a different figure would be an order that could create money between two
+  shelves of the same building.
+- **Scrap moves nothing.** The material left the shelf when it was issued; recording scrap
+  is the order saying where what it took actually went, and it is what stops the finished
+  goods carrying the cost of material that never reached them. Ruining more than was issued
+  is refused: the floor cannot lose what it never had.
+- **A batch may fail completely — if it accounts for itself.** Producing nothing is allowed
+  only when everything issued was recorded as ruined. Otherwise the material is simply
+  unaccounted for, and letting that pass would break the only promise the document makes.
+- **What the work cost, and who did it.** Labour, energy or a subcontractor's bill is added
+  to what the goods are worth. Third-party production is that, with the party named — not a
+  second kind of order, because the difference between making something yourself and paying
+  somebody to make it is who is billed, not what happens to the stock.
+- **An order that has taken material is finished, never abandoned.** Cancelling is free
+  before anything is drawn and refused afterwards: finish it with whatever came out.
+- `@horizon/contracts@0.22.0`: `production-out` and `production-in` movement kinds, the
+  `production` reason, and the `production-order` document type.
+
+**Exit criteria**
+
+- An order releases against the version of the recipe in force on the day, and keeps it
+  after the catalogue has published another.
+- Material leaves as production and the finished goods arrive as production, asserted in
+  the movement ledger.
+- The finished goods are worth exactly what went into them, less what was ruined, plus what
+  the work cost — asserted against the balance table.
+- `produced + scrapped = issued`, asserted against the database after a real order.
+- An order that produced nothing and accounted for nothing is refused by the aggregate and
+  by the trigger.
+- A bundle cannot be made: an `exploded` recipe is refused at release.
+- One workspace's orders never appear in another's.
+
+**Non-goals**
+
+- Operations, routings, work centres and scheduling. The order says what went in and what
+  came out, not who did it, on which machine, or in what order. That is production
+  planning, and it is beyond Phase I.
+- Work in progress as a stock balance. Material that has been issued and not yet become
+  product is on the order, not on a shelf — inventing a WIP location would mean a balance
+  nobody can walk up to and count.
+- Posting production to the ledger. The figures exist and conserve; when a period's
+  production is booked, and against which accounts, is an accounting decision that belongs
+  with whoever owns the chart.
+- Back-flushing — consuming material automatically from the recipe when the goods are
+  received. It would make the common case one click shorter and make the record a guess.
+- Reworking or reopening a finished order. It is another order, consuming the goods that
+  came back.
+- Planned orders generated from demand. What to make and when is MRP, which needs the
+  forecasting Phase M has not built.
 
 ---
 

@@ -45,6 +45,8 @@ type MovementKind =
   | 'return-in'
   | 'transfer-in'
   | 'transfer-out'
+  | 'production-out'
+  | 'production-in'
 
 export class StockBalance extends AggregateRoot<StockBalanceProps> {
   static rehydrate(props: StockBalanceProps, id: UniqueEntityID): StockBalance {
@@ -263,6 +265,50 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
     return right(undefined)
   }
 
+  /**
+   * Material goes to the floor to be made into something else.
+   *
+   * Not an adjustment and not a sale: nothing was lost and nobody was billed. What leaves
+   * carries the cost it was carrying, and that figure is returned because it is what the
+   * finished goods will be worth — a production order that valued its output any other
+   * way would be inventing or destroying money between two shelves of the same warehouse.
+   */
+  consume(
+    quantity: Quantity,
+    origin: MovementOrigin,
+    now: Date,
+    picked: Picks | null = null,
+  ): Either<ConflictError, { cost: Money | null; drawn: Units }> {
+    const gone = this.remove(
+      quantity,
+      picked,
+      now,
+      'these goods are not available to consume',
+      false,
+    )
+    if (gone.isLeft()) return left(gone.value)
+    const cost = this.props.averageUnitCost
+    this.recordMovement('production-out', quantity, cost, now, origin, gone.value)
+    return right({ cost, drawn: gone.value })
+  }
+
+  /**
+   * What the floor made arrives on the shelf, worth what went into making it.
+   *
+   * It is a receipt in every way that matters — goods the warehouse did not have before,
+   * averaged into whatever else is there — and says `production` only so a reader can
+   * tell what was bought from what was built.
+   */
+  produce(
+    quantity: Quantity,
+    unitCost: Money,
+    origin: MovementOrigin,
+    now: Date,
+    named: Units | null = null,
+  ): Either<ConflictError, void> {
+    return this.absorb('production-in', quantity, unitCost, now, origin, named)
+  }
+
   hold(quantity: Quantity, now: Date): Either<ConflictError, void> {
     if (quantity.isZero()) return left(new ConflictError('reservation quantity must be positive'))
     if (this.available(now).isLessThan(quantity))
@@ -382,7 +428,7 @@ export class StockBalance extends AggregateRoot<StockBalanceProps> {
 
   /** Goods arrive and are averaged into what is already here. */
   private absorb(
-    kind: 'receipt' | 'transfer-in' | 'adjustment-in',
+    kind: 'receipt' | 'transfer-in' | 'adjustment-in' | 'production-in',
     quantity: Quantity,
     unitCost: Money,
     now: Date,

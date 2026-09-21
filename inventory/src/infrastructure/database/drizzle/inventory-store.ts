@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, asc, desc, eq, gt, inArray, isNull, notInArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, lte, notInArray, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { AuditRecord, AuditTrail, InventoryScope } from '@/application/ports/unit-of-work'
 import { canonicalJson } from '@/core/audit/canonical-json'
@@ -9,6 +9,11 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
 import type { LotHolding } from '@/domain/entities/lot-book'
 import { LotBook, outstandingByItem } from '@/domain/entities/lot-book'
+import {
+  PRODUCTION_STATUSES,
+  ProductionOrder,
+  type ProductionStatus,
+} from '@/domain/entities/production-order'
 import { SerialBook, type SerialHolding } from '@/domain/entities/serial-book'
 import {
   ADJUSTMENT_STATUSES,
@@ -467,6 +472,83 @@ async function settleSerials(
     )
 }
 
+/**
+ * The order's components, written whole.
+ *
+ * Inserted the first time the order is released and updated after that: what the recipe
+ * asked for never changes, and what actually happened to it changes until the order is
+ * finished.
+ */
+async function writeComponents(
+  tx: Transaction,
+  tenantId: string,
+  row: ReturnType<ProductionOrder['toSnapshot']>,
+): Promise<void> {
+  for (const component of row.components)
+    await tx
+      .insert(schema.productionOrderComponents)
+      .values({
+        tenantId,
+        orderId: row.id,
+        itemId: component.itemId,
+        expected: micros(component.expected),
+        issued: micros(component.issued),
+        issuedValue: component.issuedValue ? BigInt(component.issuedValue.amount) : null,
+        scrapped: micros(component.scrapped),
+        scrappedValue: component.scrappedValue ? BigInt(component.scrappedValue.amount) : null,
+        currency: component.issuedValue?.currency ?? null,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.productionOrderComponents.tenantId,
+          schema.productionOrderComponents.orderId,
+          schema.productionOrderComponents.itemId,
+        ],
+        set: {
+          issued: micros(component.issued),
+          issuedValue: component.issuedValue ? BigInt(component.issuedValue.amount) : null,
+          scrapped: micros(component.scrapped),
+          scrappedValue: component.scrappedValue ? BigInt(component.scrappedValue.amount) : null,
+          currency: component.issuedValue?.currency ?? null,
+        },
+      })
+}
+
+function mapProductionOrder(
+  row: typeof schema.productionOrders.$inferSelect,
+  components: readonly (typeof schema.productionOrderComponents.$inferSelect)[],
+): ProductionOrder {
+  return ProductionOrder.rehydrate(
+    {
+      tenantId: row.tenantId,
+      itemId: row.itemId,
+      warehouseId: row.warehouseId,
+      quantity: Quantity.fromMicros(row.quantity),
+      status: oneOf<ProductionStatus>(PRODUCTION_STATUSES, row.status, 'production status'),
+      compositionVersion: row.compositionVersion,
+      components: components.map((component) => ({
+        itemId: component.itemId,
+        expected: Quantity.fromMicros(component.expected),
+        issued: Quantity.fromMicros(component.issued),
+        issuedValue: money(component.issuedValue, component.currency),
+        scrapped: Quantity.fromMicros(component.scrapped),
+        scrappedValue: money(component.scrappedValue, component.currency),
+      })),
+      produced: Quantity.fromMicros(row.produced),
+      conversionCost: money(row.conversionCost, row.conversionCurrency),
+      subcontractorPartyId: row.subcontractorPartyId,
+      note: note(row.note),
+      openedBy: row.openedBy,
+      openedAt: row.openedAt,
+      releasedAt: row.releasedAt,
+      finishedAt: row.finishedAt,
+      closureReason: note(row.closureReason),
+      updatedAt: row.updatedAt,
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
 function lotsOf(tx: Transaction, balanceIds: readonly string[]) {
   return tx
     .select()
@@ -648,6 +730,137 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           .where(eq(schema.stockBalances.id, row.id))
         await writeLots(tx, tenantId, row.id, balance.lots())
         await writeSerials(tx, tenantId, row.itemId, row.id, balance.serials())
+      },
+    },
+    compositions: {
+      inForce: async (parentItemId: string, on: string) => {
+        const [row] = await tx
+          .select()
+          .from(schema.itemCompositions)
+          .where(
+            and(
+              eq(schema.itemCompositions.parentItemId, parentItemId),
+              lte(schema.itemCompositions.effectiveFrom, on),
+            ),
+          )
+          .orderBy(
+            desc(schema.itemCompositions.effectiveFrom),
+            desc(schema.itemCompositions.version),
+          )
+          .limit(1)
+        if (!row) return null
+        const lines = await tx
+          .select()
+          .from(schema.itemCompositionLines)
+          .where(
+            and(
+              eq(schema.itemCompositionLines.parentItemId, parentItemId),
+              eq(schema.itemCompositionLines.version, row.version),
+            ),
+          )
+          .orderBy(asc(schema.itemCompositionLines.componentItemId))
+        return {
+          parentItemId: row.parentItemId,
+          version: row.version,
+          realisation: oneOf<'assembled' | 'exploded'>(
+            ['assembled', 'exploded'],
+            row.realisation,
+            'composition realisation',
+          ),
+          effectiveFrom: row.effectiveFrom,
+          components: lines.map((line) => ({
+            itemId: line.componentItemId,
+            perUnit: Quantity.fromMicros(line.perUnit),
+          })),
+        }
+      },
+      record: async (composition, receivedAt) => {
+        // Heard once and never revised: a newer recipe is another version, so a repeat is
+        // the same message arriving twice rather than a change of mind.
+        const claimed = await tx
+          .insert(schema.itemCompositions)
+          .values({
+            tenantId,
+            parentItemId: composition.parentItemId,
+            version: composition.version,
+            realisation: composition.realisation,
+            effectiveFrom: composition.effectiveFrom,
+            receivedAt,
+          })
+          .onConflictDoNothing()
+          .returning({ version: schema.itemCompositions.version })
+        if (claimed.length === 0) return
+        await tx.insert(schema.itemCompositionLines).values(
+          composition.components.map((component) => ({
+            tenantId,
+            parentItemId: composition.parentItemId,
+            version: composition.version,
+            componentItemId: component.itemId,
+            perUnit: component.perUnit.micros,
+          })),
+        )
+      },
+    },
+    production: {
+      findById: async (id: string) => {
+        const [row] = await tx
+          .select()
+          .from(schema.productionOrders)
+          .where(eq(schema.productionOrders.id, id))
+          .limit(1)
+          .for('update')
+        if (!row) return null
+        const components = await tx
+          .select()
+          .from(schema.productionOrderComponents)
+          .where(eq(schema.productionOrderComponents.orderId, id))
+          .orderBy(asc(schema.productionOrderComponents.itemId))
+        return mapProductionOrder(row, components)
+      },
+      create: async (order) => {
+        const row = order.toSnapshot()
+        assertTenant(row.tenantId)
+        await tx.insert(schema.productionOrders).values({
+          id: row.id,
+          tenantId,
+          itemId: row.itemId,
+          warehouseId: row.warehouseId,
+          quantity: micros(row.quantity),
+          status: row.status,
+          compositionVersion: row.compositionVersion,
+          produced: micros(row.produced),
+          conversionCost: row.conversionCost ? BigInt(row.conversionCost.amount) : null,
+          conversionCurrency: row.conversionCost?.currency ?? null,
+          subcontractorPartyId: row.subcontractorPartyId,
+          note: row.note,
+          openedBy: row.openedBy,
+          openedAt: row.openedAt,
+          releasedAt: row.releasedAt,
+          finishedAt: row.finishedAt,
+          closureReason: row.closureReason,
+          updatedAt: row.updatedAt,
+        })
+        await writeComponents(tx, tenantId, row)
+      },
+      save: async (order) => {
+        const row = order.toSnapshot()
+        assertTenant(row.tenantId)
+        await tx
+          .update(schema.productionOrders)
+          .set({
+            status: row.status,
+            compositionVersion: row.compositionVersion,
+            produced: micros(row.produced),
+            conversionCost: row.conversionCost ? BigInt(row.conversionCost.amount) : null,
+            conversionCurrency: row.conversionCost?.currency ?? null,
+            subcontractorPartyId: row.subcontractorPartyId,
+            releasedAt: row.releasedAt,
+            finishedAt: row.finishedAt,
+            closureReason: row.closureReason,
+            updatedAt: row.updatedAt,
+          })
+          .where(eq(schema.productionOrders.id, row.id))
+        await writeComponents(tx, tenantId, row)
       },
     },
     serials: {

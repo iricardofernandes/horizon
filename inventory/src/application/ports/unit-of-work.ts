@@ -3,8 +3,10 @@ import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type {
   AdjustmentPoliciesRepository,
   InventoryEventsRepository,
+  ItemCompositionsRepository,
   ItemSerialsRepository,
   ItemTrackingRepository,
+  ProductionOrdersRepository,
   StockAdjustmentsRepository,
   StockBalancesRepository,
   StockCountsRepository,
@@ -27,6 +29,7 @@ export interface AuditRecord {
     | 'policy'
     | 'level'
     | 'item'
+    | 'production'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -54,6 +57,8 @@ export interface InventoryScope {
   readonly transfers: StockTransfersRepository
   readonly adjustments: StockAdjustmentsRepository
   readonly counts: StockCountsRepository
+  readonly compositions: ItemCompositionsRepository
+  readonly production: ProductionOrdersRepository
   readonly policies: AdjustmentPoliciesRepository
   readonly levels: StockLevelsRepository
   readonly events: InventoryEventsRepository

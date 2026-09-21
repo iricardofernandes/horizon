@@ -547,6 +547,121 @@ export const stockMovementSerials = pgTable(
   ],
 )
 
+/**
+ * What the catalogue says an item is made of, as this module heard it.
+ *
+ * A copy rather than a question asked across a boundary: a production order has to be
+ * releasable when the catalogue is down, and the version it was released under has to
+ * stay readable even after the catalogue has moved on. Kept current by the event.
+ */
+export const itemCompositions = pgTable(
+  'item_compositions',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    parentItemId: uuid('parent_item_id').notNull(),
+    version: integer('version').notNull(),
+    realisation: text('realisation').notNull(),
+    effectiveFrom: date('effective_from').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.parentItemId, table.version] }),
+    index('item_compositions_effective_idx').on(
+      table.tenantId,
+      table.parentItemId,
+      table.effectiveFrom,
+    ),
+  ],
+)
+
+export const itemCompositionLines = pgTable(
+  'item_composition_lines',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    parentItemId: uuid('parent_item_id').notNull(),
+    version: integer('version').notNull(),
+    componentItemId: uuid('component_item_id').notNull(),
+    /** How much of the component goes into **one** of the parent. */
+    perUnit: bigint('per_unit', { mode: 'bigint' }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.tenantId, table.parentItemId, table.version, table.componentItemId],
+    }),
+  ],
+)
+
+/**
+ * An order to make something out of other things.
+ *
+ * It conserves value: everything issued became product or was ruined, so
+ * `issued + conversion = produced + scrapped`, always.
+ */
+export const productionOrders = pgTable(
+  'production_orders',
+  {
+    id: uuid('id').primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    itemId: uuid('item_id').notNull(),
+    warehouseId: uuid('warehouse_id').notNull(),
+    quantity: bigint('quantity', { mode: 'bigint' }).notNull(),
+    status: text('status').notNull(),
+    /** Frozen at release, so a recipe that changes later cannot rewrite this batch. */
+    compositionVersion: integer('composition_version'),
+    produced: bigint('produced', { mode: 'bigint' }).notNull(),
+    conversionCost: bigint('conversion_cost', { mode: 'bigint' }),
+    conversionCurrency: text('conversion_currency'),
+    subcontractorPartyId: uuid('subcontractor_party_id'),
+    note: text('note'),
+    openedBy: text('opened_by').notNull(),
+    openedAt: timestamp('opened_at', { withTimezone: true, mode: 'date' }).notNull(),
+    releasedAt: timestamp('released_at', { withTimezone: true, mode: 'date' }),
+    finishedAt: timestamp('finished_at', { withTimezone: true, mode: 'date' }),
+    closureReason: text('closure_reason'),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('production_orders_tenant_id_key').on(table.tenantId, table.id),
+    index('production_orders_tenant_status_idx').on(table.tenantId, table.status, table.openedAt),
+    foreignKey({
+      name: 'production_orders_warehouse_fk',
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id],
+    }),
+  ],
+)
+
+export const productionOrderComponents = pgTable(
+  'production_order_components',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    orderId: uuid('order_id').notNull(),
+    itemId: uuid('item_id').notNull(),
+    expected: bigint('expected', { mode: 'bigint' }).notNull(),
+    issued: bigint('issued', { mode: 'bigint' }).notNull(),
+    issuedValue: bigint('issued_value', { mode: 'bigint' }),
+    scrapped: bigint('scrapped', { mode: 'bigint' }).notNull(),
+    scrappedValue: bigint('scrapped_value', { mode: 'bigint' }),
+    currency: text('currency'),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.orderId, table.itemId] }),
+    foreignKey({
+      name: 'production_order_components_order_fk',
+      columns: [table.tenantId, table.orderId],
+      foreignColumns: [productionOrders.tenantId, productionOrders.id],
+    }),
+  ],
+)
+
 export const commandReceipts = pgTable(
   'command_receipts',
   {

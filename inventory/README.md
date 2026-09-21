@@ -120,6 +120,15 @@ surface below and require a workspace-scoped Inventory role.
 | `GET` | `/stock-lots/:code/trace` | Where a lot came from and where it went. |
 | `GET` | `/stock-serials` | Every unit the workspace has named, and where each is now. |
 | `GET` | `/stock-serials/:serial/trace` | The life of one unit, from the day it arrived. |
+| `GET` | `/production-orders` | The orders on the floor, filtered by status or warehouse. |
+| `GET` | `/production-orders/:id` | One order: what it expected, took, ruined and made. |
+| `POST` | `/production-orders` | Open an order to make something. |
+| `PATCH` | `/production-orders/:id/release` | Freeze the recipe in force and let material be drawn. |
+| `POST` | `/production-orders/:id/material` | Take material off the shelf for the order. |
+| `POST` | `/production-orders/:id/scrap` | Record that part of what was issued was ruined. |
+| `PUT` | `/production-orders/:id/charge` | What the work cost, and who did it. |
+| `PATCH` | `/production-orders/:id/finish` | Receive the goods, worth what went into them. |
+| `PATCH` | `/production-orders/:id/cancel` | Abandon an order that has taken nothing. |
 
 The reports are read from `stock_movements` alone, never from the balance table they are
 checked against: every movement records the quantity the shelf reached **and** what a unit
@@ -144,6 +153,12 @@ is followed through shipping, return and scrapping rather than deleted. Units le
 longest-here-first unless somebody scans them, a count of a unit-tracked item looks for
 each one in turn, and goods arriving from outside cannot claim a name some shelf is already
 holding.
+
+A production order freezes the catalogue's recipe when it is released — the copy this
+module keeps, fed by `catalog.composition.defined`, so an order is releasable when the
+catalogue is down. It conserves value: everything issued became product or was ruined, so
+`issued + conversion = produced + scrapped`, always, in the aggregate and in a deferred
+trigger. The finished unit cost is derived from that and cannot be stated by anybody.
 
 Every command that moves stock takes an `Idempotency-Key` header and runs at most once
 (ADR 0028); every decision is a line in the tenant's hash-chained audit log (ADR 0025).

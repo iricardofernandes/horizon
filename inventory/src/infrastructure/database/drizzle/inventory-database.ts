@@ -17,8 +17,10 @@ import {
   listCounts,
   listLevels,
   listPolicies,
+  listProductionOrders,
   listTransfers,
   listWarehouses,
+  productionOrderDetail,
 } from './inventory-reads'
 import {
   abcCurve,
@@ -165,6 +167,14 @@ export class InventoryDatabase extends InventoryUnitOfWork {
 
   listPolicies(tenantId: string) {
     return this.read(tenantId, (tx) => listPolicies(tx))
+  }
+
+  listProductionOrders(tenantId: string, filter: Parameters<typeof listProductionOrders>[1]) {
+    return this.read(tenantId, (tx) => listProductionOrders(tx, filter))
+  }
+
+  productionOrderDetail(tenantId: string, id: string) {
+    return this.read(tenantId, (tx) => productionOrderDetail(tx, id))
   }
 
   listLevels(tenantId: string, filter: Parameters<typeof listLevels>[1]) {

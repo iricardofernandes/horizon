@@ -1,4 +1,5 @@
 import type { DomainEvent } from '@/core/events/domain-event'
+import type { ProductionOrder } from '../entities/production-order'
 import type { StockAdjustment } from '../entities/stock-adjustment'
 import type { StockBalance } from '../entities/stock-balance'
 import type { StockCount } from '../entities/stock-count'
@@ -6,6 +7,7 @@ import type { StockReservation } from '../entities/stock-reservation'
 import type { StockTransfer } from '../entities/stock-transfer'
 import type { Units } from '../entities/tracked-units'
 import type { Warehouse } from '../entities/warehouse'
+import type { Quantity } from '../value-objects/inventory-values'
 import type { ItemTracking } from '../value-objects/tracking'
 
 export abstract class WarehousesRepository {
@@ -150,6 +152,33 @@ export abstract class StockMovementsRepository {
 export abstract class ItemSerialsRepository {
   /** Of these names, the ones some shelf is already holding. */
   abstract inStock(itemId: string, serials: readonly string[]): Promise<readonly string[]>
+}
+
+/** What the catalogue says an item is made of, as this module heard it. */
+export interface ItemComposition {
+  readonly parentItemId: string
+  readonly version: number
+  readonly realisation: 'assembled' | 'exploded'
+  readonly effectiveFrom: string
+  readonly components: readonly { itemId: string; perUnit: Quantity }[]
+}
+
+export abstract class ItemCompositionsRepository {
+  /**
+   * The version in force on a day: the latest whose date has arrived.
+   *
+   * Kept locally rather than asked for across the boundary, because an order has to be
+   * releasable when the catalogue is down and the version it was released under has to
+   * stay readable after the catalogue has moved on.
+   */
+  abstract inForce(parentItemId: string, on: string): Promise<ItemComposition | null>
+  abstract record(composition: ItemComposition, receivedAt: Date): Promise<void>
+}
+
+export abstract class ProductionOrdersRepository {
+  abstract findById(id: string): Promise<ProductionOrder | null>
+  abstract create(order: ProductionOrder): Promise<void>
+  abstract save(order: ProductionOrder): Promise<void>
 }
 
 /** Persists domain events to the outbox owned by the surrounding transaction. */

@@ -43,6 +43,13 @@
       "when": 1793900000000,
       "tag": "0005_serial_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794100000000,
+      "tag": "0006_production",
+      "breakpoints": true
     }
   ]
 }

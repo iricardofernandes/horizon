@@ -602,3 +602,35 @@ and behave nothing alike in a warehouse, so the composition says which it is.
 Everything one of an item needs, all the way down, with the quantities multiplied through
 the levels and a component reached by two paths summed rather than listed twice. Leaves only
 by default: the things somebody actually has to have in a warehouse.
+
+### production order
+The one document that takes goods off the shelf and puts different goods back. It freezes
+the recipe it was released under — a recipe that changed halfway through would leave nobody
+able to say what the batch was supposed to contain — and records what actually went in,
+which is allowed to differ from the plan. One level deep: an order for a chair consumes a
+frame and four legs, and the frame is made by its own order.
+
+### material issue
+Stock leaving for a production order, at what it was worth on the shelf. Neither an
+adjustment nor a sale — nothing was lost and nobody was billed — so the movement says
+`production-out` rather than leaving a reader to infer it from a reason code.
+
+### scrap
+The part of what an order issued that was ruined rather than becoming product. It moves
+nothing: the material left the shelf when it was issued, and this is the order saying where
+what it took actually went. It is what stops the finished goods carrying the cost of
+material that never reached them.
+
+### conversion cost
+What the making cost beyond the material — labour, energy, or a subcontractor's bill —
+added to what the finished goods are worth. Third-party production is an order whose
+conversion cost is a supplier's invoice, with the supplier named: the difference between
+making something yourself and paying somebody else to make it is who is billed, not what
+happens to the stock.
+
+### value conservation
+The promise a production order makes: everything issued either became product or was
+ruined, so `issued + conversion = produced + scrapped`, always. The finished unit cost
+follows from it and cannot be stated by anybody — an order that let somebody name a
+different figure would be an order that could create money between two shelves of the same
+building.

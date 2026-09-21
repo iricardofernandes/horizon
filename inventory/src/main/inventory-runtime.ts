@@ -1,4 +1,5 @@
 import { type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
+import { InventoryCatalogEventHandlers } from '@/application/consume-catalog-events'
 import { InventoryProcurementEventHandlers } from '@/application/consume-procurement-events'
 import { InventorySalesEventHandlers } from '@/application/consume-sales-events'
 import { AdjustStockUseCase, DecideAdjustmentUseCase } from '@/application/use-cases/adjust-stock'
@@ -18,6 +19,15 @@ import {
   DeactivateWarehouseUseCase,
   ReceiveStockUseCase,
 } from '@/application/use-cases/manage-inventory'
+import {
+  CancelProductionOrderUseCase,
+  ChargeProductionUseCase,
+  FinishProductionOrderUseCase,
+  IssueMaterialUseCase,
+  OpenProductionOrderUseCase,
+  ReleaseProductionOrderUseCase,
+  ScrapMaterialUseCase,
+} from '@/application/use-cases/produce'
 import { TransferStockUseCase } from '@/application/use-cases/transfer-stock'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { InventoryDatabase } from '@/infrastructure/database/drizzle/inventory-database'
@@ -30,6 +40,7 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
   readonly eventHandlers: { readonly handlers: Readonly<Record<string, EventHandler>> }
   readonly salesEvents: InventorySalesEventHandlers
   readonly procurementEvents: InventoryProcurementEventHandlers
+  readonly catalogEvents: InventoryCatalogEventHandlers
   readonly accessTokens: AccessTokenVerifier
   readonly createWarehouse: CreateWarehouseUseCase
   readonly deactivateWarehouse: DeactivateWarehouseUseCase
@@ -44,6 +55,13 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
   readonly defineAdjustmentPolicy: DefineAdjustmentPolicyUseCase
   readonly defineStockLevel: DefineStockLevelUseCase
   readonly defineItemTracking: DefineItemTrackingUseCase
+  readonly openProduction: OpenProductionOrderUseCase
+  readonly releaseProduction: ReleaseProductionOrderUseCase
+  readonly issueMaterial: IssueMaterialUseCase
+  readonly scrapMaterial: ScrapMaterialUseCase
+  readonly chargeProduction: ChargeProductionUseCase
+  readonly finishProduction: FinishProductionOrderUseCase
+  readonly cancelProduction: CancelProductionOrderUseCase
 
   constructor(config: InventoryEnvironment) {
     this.database = new InventoryDatabase({
@@ -65,6 +83,13 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
     this.defineAdjustmentPolicy = new DefineAdjustmentPolicyUseCase(this.database, clock)
     this.defineStockLevel = new DefineStockLevelUseCase(this.database, clock)
     this.defineItemTracking = new DefineItemTrackingUseCase(this.database, clock)
+    this.openProduction = new OpenProductionOrderUseCase(this.database, clock)
+    this.releaseProduction = new ReleaseProductionOrderUseCase(this.database, clock)
+    this.issueMaterial = new IssueMaterialUseCase(this.database, clock)
+    this.scrapMaterial = new ScrapMaterialUseCase(this.database, clock)
+    this.chargeProduction = new ChargeProductionUseCase(this.database, clock)
+    this.finishProduction = new FinishProductionOrderUseCase(this.database, clock)
+    this.cancelProduction = new CancelProductionOrderUseCase(this.database, clock)
     this.accessTokens = new AccessTokenVerifier(
       config.JWKS_URL,
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
@@ -75,8 +100,13 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
       config.RESERVATION_TTL_SECONDS,
     )
     this.procurementEvents = new InventoryProcurementEventHandlers(this.database, clock)
+    this.catalogEvents = new InventoryCatalogEventHandlers(this.database, clock)
     this.eventHandlers = {
-      handlers: { ...this.salesEvents.handlers, ...this.procurementEvents.handlers },
+      handlers: {
+        ...this.salesEvents.handlers,
+        ...this.procurementEvents.handlers,
+        ...this.catalogEvents.handlers,
+      },
     }
   }
 

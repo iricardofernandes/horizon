@@ -195,6 +195,88 @@ export async function listLevels(tx: Transaction, filter: { warehouseId: string 
   }))
 }
 
+/**
+ * The orders on the floor, newest first.
+ *
+ * What each has taken and what it has made are on the detail: a board asking which orders
+ * are open has no use for every component of every one of them.
+ */
+export async function listProductionOrders(
+  tx: Transaction,
+  filter: { status: string | null; warehouseId: string | null } & Page,
+) {
+  const conditions = [
+    filter.status ? eq(schema.productionOrders.status, filter.status) : undefined,
+    filter.warehouseId ? eq(schema.productionOrders.warehouseId, filter.warehouseId) : undefined,
+  ].filter((condition) => condition !== undefined)
+  const rows = await tx
+    .select()
+    .from(schema.productionOrders)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(schema.productionOrders.openedAt))
+    .limit(filter.limit)
+    .offset(filter.offset)
+  return rows.map(productionHeader)
+}
+
+/** One order, with what it expected, what it took, and what became of it. */
+export async function productionOrderDetail(tx: Transaction, id: string) {
+  const [row] = await tx
+    .select()
+    .from(schema.productionOrders)
+    .where(eq(schema.productionOrders.id, id))
+    .limit(1)
+  if (!row) return null
+  const components = await tx
+    .select()
+    .from(schema.productionOrderComponents)
+    .where(eq(schema.productionOrderComponents.orderId, id))
+    .orderBy(asc(schema.productionOrderComponents.itemId))
+  const summed = (of: (component: (typeof components)[number]) => bigint | null) =>
+    components.reduce((total, component) => total + (of(component) ?? 0n), 0n)
+  const issued = summed((component) => component.issuedValue)
+  const scrapped = summed((component) => component.scrappedValue)
+  const currency = components.find((component) => component.currency)?.currency ?? null
+  return {
+    ...productionHeader(row),
+    note: row.note,
+    components: components.map((component) => ({
+      itemId: component.itemId,
+      expected: quantity(component.expected),
+      issued: quantity(component.issued),
+      issuedValue: money(component.issuedValue, component.currency),
+      scrapped: quantity(component.scrapped),
+      scrappedValue: money(component.scrappedValue, component.currency),
+    })),
+    // What the order promises: everything it took became product or was ruined.
+    issuedValue: money(issued, currency),
+    scrappedValue: money(scrapped, currency),
+    outputValue: money(
+      issued - scrapped + (row.conversionCost ?? 0n),
+      currency ?? row.conversionCurrency,
+    ),
+  }
+}
+
+function productionHeader(row: typeof schema.productionOrders.$inferSelect) {
+  return {
+    id: row.id,
+    itemId: row.itemId,
+    warehouseId: row.warehouseId,
+    quantity: quantity(row.quantity),
+    status: row.status,
+    compositionVersion: row.compositionVersion,
+    produced: quantity(row.produced),
+    conversionCost: money(row.conversionCost, row.conversionCurrency),
+    subcontractorPartyId: row.subcontractorPartyId,
+    openedBy: row.openedBy,
+    openedAt: row.openedAt.toISOString(),
+    releasedAt: row.releasedAt?.toISOString() ?? null,
+    finishedAt: row.finishedAt?.toISOString() ?? null,
+    closureReason: row.closureReason,
+  }
+}
+
 function header(row: typeof schema.stockCounts.$inferSelect) {
   return {
     id: row.id,

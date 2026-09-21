@@ -122,6 +122,32 @@ const lotFilter = z.object({
 })
 
 const traceFilter = z.object({ itemId: z.uuid() })
+
+const productionInput = z.strictObject({
+  itemId: z.uuid(),
+  warehouseId: z.uuid(),
+  quantity,
+  note: note.nullish(),
+})
+const releaseInput = z.strictObject({ on: z.iso.date().nullish() })
+const issueInput = z.strictObject({
+  itemId: z.uuid(),
+  quantity,
+  lots: lotPicks.nullish(),
+  serials: serials.nullish(),
+})
+const scrapInput = z.strictObject({ itemId: z.uuid(), quantity })
+const chargeInput = z.strictObject({
+  amount,
+  currency,
+  /** Named when somebody else did the work, which is what subcontracting is. */
+  subcontractorPartyId: z.uuid().nullish(),
+})
+const finishInput = z.strictObject({
+  produced: quantity,
+  lots: lotEntries.nullish(),
+  serials: serials.nullish(),
+})
 const serialFilter = z.object({
   warehouseId: z.uuid().nullish(),
   itemId: z.uuid().nullish(),
@@ -589,6 +615,137 @@ export class InventoryController {
       updatedBy: level.updatedBy,
       updatedAt: level.updatedAt.toISOString(),
     }
+  }
+
+  // ---------------------------------------------------------------- production
+
+  @Get('production-orders')
+  @RequireInventoryAction('read')
+  productionOrders(@Query() query: unknown, @Req() request: InventoryRequest) {
+    const filter = parse(listFilter, query)
+    return this.runtime.database.listProductionOrders(tenantOf(request), {
+      status: filter.status ?? null,
+      warehouseId: filter.warehouseId ?? null,
+      ...pageOf(query),
+    })
+  }
+
+  @Get('production-orders/:id')
+  @RequireInventoryAction('read')
+  async productionOrder(@Param('id') orderId: string, @Req() request: InventoryRequest) {
+    const detail = await this.runtime.database.productionOrderDetail(tenantOf(request), id(orderId))
+    if (!detail) throw new NotFoundException('production order was not found')
+    return detail
+  }
+
+  @Post('production-orders')
+  @RequireInventoryAction('manage')
+  async openProduction(@Body() body: unknown, @Req() request: InventoryRequest) {
+    return unwrap(
+      await this.runtime.openProduction.execute({
+        context: idempotent(request),
+        ...parse(productionInput, body),
+      }),
+    )
+  }
+
+  @Patch('production-orders/:id/release')
+  @RequireInventoryAction('manage')
+  async releaseProduction(
+    @Param('id') orderId: string,
+    @Body() body: unknown,
+    @Req() request: InventoryRequest,
+  ) {
+    return unwrap(
+      await this.runtime.releaseProduction.execute({
+        context: context(request),
+        orderId: id(orderId),
+        on: parse(releaseInput, body ?? {}).on ?? null,
+      }),
+    )
+  }
+
+  @Post('production-orders/:id/material')
+  @RequireInventoryAction('manage')
+  async issueMaterial(
+    @Param('id') orderId: string,
+    @Body() body: unknown,
+    @Req() request: InventoryRequest,
+  ) {
+    return unwrap(
+      await this.runtime.issueMaterial.execute({
+        context: idempotent(request),
+        orderId: id(orderId),
+        ...parse(issueInput, body),
+      }),
+    )
+  }
+
+  @Post('production-orders/:id/scrap')
+  @RequireInventoryAction('manage')
+  async scrapMaterial(
+    @Param('id') orderId: string,
+    @Body() body: unknown,
+    @Req() request: InventoryRequest,
+  ) {
+    return unwrap(
+      await this.runtime.scrapMaterial.execute({
+        context: context(request),
+        orderId: id(orderId),
+        ...parse(scrapInput, body),
+      }),
+    )
+  }
+
+  @Put('production-orders/:id/charge')
+  @RequireInventoryAction('manage')
+  async chargeProduction(
+    @Param('id') orderId: string,
+    @Body() body: unknown,
+    @Req() request: InventoryRequest,
+  ) {
+    const input = parse(chargeInput, body)
+    return unwrap(
+      await this.runtime.chargeProduction.execute({
+        context: context(request),
+        orderId: id(orderId),
+        amount: input.amount,
+        currency: input.currency,
+        subcontractorPartyId: input.subcontractorPartyId ?? null,
+      }),
+    )
+  }
+
+  @Patch('production-orders/:id/finish')
+  @RequireInventoryAction('manage')
+  async finishProduction(
+    @Param('id') orderId: string,
+    @Body() body: unknown,
+    @Req() request: InventoryRequest,
+  ) {
+    return unwrap(
+      await this.runtime.finishProduction.execute({
+        context: idempotent(request),
+        orderId: id(orderId),
+        ...parse(finishInput, body),
+      }),
+    )
+  }
+
+  @Patch('production-orders/:id/cancel')
+  @RequireInventoryAction('manage')
+  async cancelProduction(
+    @Param('id') orderId: string,
+    @Body() body: unknown,
+    @Req() request: InventoryRequest,
+  ) {
+    return unwrap(
+      await this.runtime.cancelProduction.execute({
+        context: context(request),
+        orderId: id(orderId),
+        reason: parse(reasonInput, body).reason,
+      }),
+    )
   }
 
   // ---------------------------------------------------------------- policies

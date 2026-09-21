@@ -64,6 +64,7 @@ export const inventoryStockReleased = defineEvent({
 export const movementReasonSchema = z.enum([
   'sale',
   'purchase',
+  'production',
   'transfer',
   'count',
   'breakage',
@@ -82,7 +83,7 @@ export const movementReasonSchema = z.enum([
  * to name the other side.
  */
 export const movementDocumentSchema = z.object({
-  type: z.enum(['order', 'receipt', 'transfer', 'adjustment', 'count']),
+  type: z.enum(['order', 'receipt', 'production-order', 'transfer', 'adjustment', 'count']),
   id: uuidSchema,
 })
 
@@ -103,6 +104,10 @@ export const inventoryStockMoved = defineEvent({
       'return-in',
       'transfer-in',
       'transfer-out',
+      // Goods consumed by a production order, and the goods it made. Neither is an
+      // adjustment: nothing was lost and nobody was billed — material turned into product.
+      'production-out',
+      'production-in',
     ]),
     balanceVersion: z.number().int().positive(),
     quantity: quantitySchema,
