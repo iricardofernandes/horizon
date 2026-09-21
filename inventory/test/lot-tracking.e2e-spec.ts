@@ -28,8 +28,25 @@ import { InventoryDatabase } from '@/infrastructure/database/drizzle/inventory-d
 const KEEPER = 'user-keeper'
 const MANAGER = 'user-manager'
 
-let instant = new Date('2026-09-20T09:00:00.000Z')
+let instant = new Date()
 const clock = { now: () => instant }
+
+/**
+ * Expiry dates relative to the day the suite runs, never written into the source.
+ *
+ * Whether a lot has gone off is judged against today — by the aggregate and by
+ * `current_date` in the reports — so a date in the source is a test that passes until the
+ * morning the calendar reaches it.
+ */
+const day = (offset: number) => {
+  const when = new Date(instant)
+  when.setUTCDate(when.getUTCDate() + offset)
+  return when.toISOString().slice(0, 10)
+}
+const GONE = day(-20)
+const SOON = day(40)
+const MIDDLE = day(100)
+const LATER = day(400)
 
 let database: InventoryDatabase
 let administrator: ReturnType<typeof postgres>
@@ -63,7 +80,7 @@ interface World {
 
 /** A workspace that identifies one item by lot, with two warehouses to move it between. */
 async function tracked(expiry: 'none' | 'optional' | 'required' = 'optional'): Promise<World> {
-  instant = new Date('2026-09-20T09:00:00.000Z')
+  instant = new Date()
   const tenantId = randomUUID()
   await database.provisionTenant(tenantId)
   const warehouses = new CreateWarehouseUseCase(database, clock)
@@ -167,12 +184,8 @@ it('keeps the lots adding up to the balance, and says so from the database too',
 
 it('sends the earliest date first and says which boxes went', async () => {
   const world = await tracked()
-  unwrap(
-    await receive(world, world.main, [{ code: 'LATE', expiresOn: '2027-06-01', quantity: '10' }]),
-  )
-  unwrap(
-    await receive(world, world.main, [{ code: 'SOON', expiresOn: '2026-11-01', quantity: '10' }]),
-  )
+  unwrap(await receive(world, world.main, [{ code: 'LATE', expiresOn: LATER, quantity: '10' }]))
+  unwrap(await receive(world, world.main, [{ code: 'SOON', expiresOn: SOON, quantity: '10' }]))
 
   const order = await sell(world, world.main, '12')
 
@@ -194,12 +207,8 @@ it('sends the earliest date first and says which boxes went', async () => {
 
 it('will not promise, or send, stock whose day has gone by', async () => {
   const world = await tracked()
-  unwrap(
-    await receive(world, world.main, [{ code: 'GONE', expiresOn: '2026-09-01', quantity: '10' }]),
-  )
-  unwrap(
-    await receive(world, world.main, [{ code: 'GOOD', expiresOn: '2027-01-01', quantity: '4' }]),
-  )
+  unwrap(await receive(world, world.main, [{ code: 'GONE', expiresOn: GONE, quantity: '10' }]))
+  unwrap(await receive(world, world.main, [{ code: 'GOOD', expiresOn: MIDDLE, quantity: '4' }]))
 
   const [position] = await database.stockPosition(world.tenantId, {
     warehouseId: world.main,
@@ -223,20 +232,14 @@ it('will not promise, or send, stock whose day has gone by', async () => {
 
 it('lists what is about to go off, worst first', async () => {
   const world = await tracked()
-  unwrap(
-    await receive(world, world.main, [{ code: 'GONE', expiresOn: '2026-09-01', quantity: '3' }]),
-  )
-  unwrap(
-    await receive(world, world.main, [{ code: 'SOON', expiresOn: '2026-10-01', quantity: '3' }]),
-  )
-  unwrap(
-    await receive(world, world.main, [{ code: 'LATER', expiresOn: '2027-06-01', quantity: '3' }]),
-  )
+  unwrap(await receive(world, world.main, [{ code: 'GONE', expiresOn: GONE, quantity: '3' }]))
+  unwrap(await receive(world, world.main, [{ code: 'SOON', expiresOn: SOON, quantity: '3' }]))
+  unwrap(await receive(world, world.main, [{ code: 'LATER', expiresOn: LATER, quantity: '3' }]))
 
   const lots = await database.listLots(world.tenantId, {
     warehouseId: null,
     itemId: null,
-    expiringBy: '2026-10-31',
+    expiringBy: day(60),
     limit: 50,
     offset: 0,
   })
@@ -249,12 +252,8 @@ it('lists what is about to go off, worst first', async () => {
 
 it('moves the very same boxes between warehouses, dates and all', async () => {
   const world = await tracked()
-  unwrap(
-    await receive(world, world.main, [{ code: 'SOON', expiresOn: '2026-11-01', quantity: '6' }]),
-  )
-  unwrap(
-    await receive(world, world.main, [{ code: 'LATE', expiresOn: '2027-06-01', quantity: '6' }]),
-  )
+  unwrap(await receive(world, world.main, [{ code: 'SOON', expiresOn: SOON, quantity: '6' }]))
+  unwrap(await receive(world, world.main, [{ code: 'LATE', expiresOn: LATER, quantity: '6' }]))
 
   unwrap(
     await new TransferStockUseCase(database, clock).execute({
@@ -274,17 +273,13 @@ it('moves the very same boxes between warehouses, dates and all', async () => {
   const [arrived] = await administrator`select expires_on::text from stock_lots l
     join stock_balances b on b.id = l.balance_id
     where b.warehouse_id = ${world.annex} and l.lot_code = 'SOON'`
-  expect(arrived?.expires_on).toBe('2026-11-01')
+  expect(arrived?.expires_on).toBe(SOON)
 })
 
 it('puts a customer return back into the very lots it went out in', async () => {
   const world = await tracked()
-  unwrap(
-    await receive(world, world.main, [{ code: 'SOON', expiresOn: '2026-11-01', quantity: '5' }]),
-  )
-  unwrap(
-    await receive(world, world.main, [{ code: 'LATE', expiresOn: '2027-06-01', quantity: '5' }]),
-  )
+  unwrap(await receive(world, world.main, [{ code: 'SOON', expiresOn: SOON, quantity: '5' }]))
+  unwrap(await receive(world, world.main, [{ code: 'LATE', expiresOn: LATER, quantity: '5' }]))
   const order = await sell(world, world.main, '7')
 
   await database.inTenant(world.tenantId, (scope) =>
@@ -305,12 +300,8 @@ it('puts a customer return back into the very lots it went out in', async () => 
 
 it('counts a tracked item lot by lot and posts the difference against that lot', async () => {
   const world = await tracked()
-  unwrap(
-    await receive(world, world.main, [{ code: 'AB-1', expiresOn: '2027-01-01', quantity: '10' }]),
-  )
-  unwrap(
-    await receive(world, world.main, [{ code: 'AB-2', expiresOn: '2027-02-01', quantity: '10' }]),
-  )
+  unwrap(await receive(world, world.main, [{ code: 'AB-1', expiresOn: MIDDLE, quantity: '10' }]))
+  unwrap(await receive(world, world.main, [{ code: 'AB-2', expiresOn: LATER, quantity: '10' }]))
   unwrap(
     await new DefineAdjustmentPolicyUseCase(database, clock).execute({
       context: context(world.tenantId, MANAGER),
@@ -357,12 +348,8 @@ it('counts a tracked item lot by lot and posts the difference against that lot',
 
 it('writes off the lot somebody named, expired or not', async () => {
   const world = await tracked()
-  unwrap(
-    await receive(world, world.main, [{ code: 'GONE', expiresOn: '2026-09-01', quantity: '6' }]),
-  )
-  unwrap(
-    await receive(world, world.main, [{ code: 'GOOD', expiresOn: '2027-01-01', quantity: '6' }]),
-  )
+  unwrap(await receive(world, world.main, [{ code: 'GONE', expiresOn: GONE, quantity: '6' }]))
+  unwrap(await receive(world, world.main, [{ code: 'GOOD', expiresOn: MIDDLE, quantity: '6' }]))
   unwrap(
     await new DefineAdjustmentPolicyUseCase(database, clock).execute({
       context: context(world.tenantId, MANAGER),

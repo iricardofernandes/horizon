@@ -20,6 +20,20 @@ import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-bo
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
 
 const clock = { now: () => new Date() }
+
+/**
+ * Dated against the clock the suite runs on, not the calendar it was written on.
+ *
+ * The orders below are issued today, and goods cannot leave before the order that sent
+ * them — so a date written into the source is a test that passes until the morning it
+ * quietly stops being today.
+ */
+const today = () => clock.now().toISOString().slice(0, 10)
+const daysFromToday = (days: number) => {
+  const day = clock.now()
+  day.setUTCDate(day.getUTCDate() + days)
+  return day.toISOString().slice(0, 10)
+}
 let database: SalesDatabase
 let application: ReturnType<typeof postgres>
 let administrator: ReturnType<typeof postgres>
@@ -430,7 +444,7 @@ it('delivers an order in parts, and takes one delivery back', async () => {
     const dispatched = await new DispatchShipmentUseCase(database, clock).execute({
       context: commandOf(tenantId),
       shipmentId: picked.value.shipmentId,
-      dispatchedOn: '2026-09-20',
+      dispatchedOn: today(),
     })
     if (dispatched.isLeft()) throw dispatched.value
     return dispatched.value
@@ -468,7 +482,7 @@ it('delivers an order in parts, and takes one delivery back', async () => {
     context: commandOf(tenantId),
     shipmentId: first.shipmentId,
     reason: 'Damaged in transit',
-    returnedOn: '2026-09-25',
+    returnedOn: daysFromToday(5),
   })
   if (returned.isLeft()) throw returned.value
   expect(returned.value).toMatchObject({ value: '5200', remaining: '5200' })
