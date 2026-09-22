@@ -511,6 +511,7 @@ it('does not resubmit after a crash before the simulator call', async () => {
   const gateway = new DeterministicAuthorityGateway('authorized')
   const first = new FiscalLifecycle(appUrl, gateway)
   try {
+    await bindIllustrativeCalculation(tenantId, draft.id)
     await first.validate(tenantId, draft.id)
     await documents.reserveNumber(tenantId, draft.id)
     await first.prepareSubmission(tenantId, draft.id)
@@ -604,6 +605,7 @@ it('reconciles an uncertain simulation after restart without allocating another 
   const firstProcess = new FiscalLifecycle(appUrl, gateway)
   try {
     await expect(firstProcess.validate(otherTenant, draft.id)).rejects.toThrow('not found')
+    await bindIllustrativeCalculation(tenantId, draft.id)
     await firstProcess.validate(tenantId, draft.id)
     await firstProcess.validate(tenantId, draft.id)
     expect(await documents.reserveNumber(tenantId, draft.id)).toBe(1)
@@ -642,6 +644,27 @@ it('reconciles an uncertain simulation after restart without allocating another 
     await cancellationRecovery.close()
   }
 })
+
+async function bindIllustrativeCalculation(tenantId: string, documentId: string): Promise<void> {
+  const calculationId = randomUUID()
+  await administrator.begin(async (tx) => {
+    await tx`insert into fiscal_calculations (
+      id, tenant_id, document_id, input_ciphertext, input_digest, resolved_rules,
+      rules_digest, result_bytes, result_digest, explanation_template_version,
+      explanation_text, rule_version_ids, package_digests, supported, actor_id
+    ) values (
+      ${calculationId}, ${tenantId}, ${documentId}, ${Buffer.from('test-encrypted-input')},
+      ${'a'.repeat(64)}, ${tx.json({ fixture: true })}, ${'b'.repeat(64)},
+      ${Buffer.from('{"fixture":true}')}, ${'c'.repeat(64)}, 'test-v1',
+      'Illustrative lifecycle fixture', ${[]}, ${[]}, true, 'test:fixture'
+    )`
+    await tx`insert into fiscal_document_calculation_bindings (
+      tenant_id, document_id, calculation_id
+    ) values (${tenantId}, ${documentId}, ${calculationId})`
+    await tx`update fiscal_documents set status = 'validated'
+      where tenant_id = ${tenantId} and id = ${documentId}`
+  })
+}
 
 it('resumes owner API backfill and verifies issuer, party and catalog revisions', async () => {
   const tenantId = randomUUID()

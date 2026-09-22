@@ -22,6 +22,7 @@ try {
     '0009_phase40_origin_payloads.sql',
     '0010_phase41_temporal_rules.sql',
     '0011_phase41_source_payloads.sql',
+    '0012_phase41_calculations.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

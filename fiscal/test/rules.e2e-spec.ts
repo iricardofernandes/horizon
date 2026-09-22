@@ -1,9 +1,11 @@
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
+import type { FiscalCalculationInput } from '@horizon/contracts'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
+import { FiscalCalculations } from '../src/calculations'
 import { FiscalRuleStore } from '../src/rule-store'
 
 let container: StartedPostgreSqlContainer
@@ -11,6 +13,7 @@ let administrator: ReturnType<typeof postgres>
 let app: ReturnType<typeof postgres>
 let appUrl: string
 let store: FiscalRuleStore
+let calculations: FiscalCalculations
 
 beforeAll(async () => {
   container = await new PostgreSqlContainer('postgres:17-alpine')
@@ -36,10 +39,17 @@ beforeAll(async () => {
   })
   app = postgres(appUrl, { max: 2 })
   store = new FiscalRuleStore(appUrl)
+  calculations = new FiscalCalculations(appUrl, randomBytes(32), store)
 }, 120_000)
 
 afterAll(async () => {
-  await Promise.allSettled([store?.close(), app?.end(), administrator?.end(), container?.stop()])
+  await Promise.allSettled([
+    calculations?.close(),
+    store?.close(),
+    app?.end(),
+    administrator?.end(),
+    container?.stop(),
+  ])
 })
 
 it('requires package approval before activation and keeps activation history immutable', async () => {
@@ -192,41 +202,39 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
     actorId: 'admin:test',
     reason: 'illustrative e2e fixture',
   })
-  const resolution = await store.resolve(
-    {
-      schemaVersion: 1,
-      tenantId,
-      issuerEstablishmentId: establishmentId,
-      model: '55',
-      environment: 'simulation',
-      operation: 'illustrative-sale',
-      purpose: 'normal',
-      issuer: { regime: 'normal', stateCode: '35', municipalityCode: '3550308' },
-      recipient: {
-        regime: 'normal',
-        stateCode: '35',
-        municipalityCode: '3550308',
-        taxpayer: true,
-      },
-      origin: { countryCode: '1058', stateCode: '35', municipalityCode: '3550308' },
-      destination: { countryCode: '1058', stateCode: '35', municipalityCode: '3550308' },
-      issueDate: '2026-09-21',
-      currency: 'BRL',
-      lines: [
-        {
-          id: lineId,
-          itemId,
-          quantity: '1',
-          unitPrice: '10',
-          discount: { amount: '0', currency: 'BRL' },
-          charges: { amount: '0', currency: 'BRL' },
-          classifications: { ncm: '12345678' },
-          taxFacts: {},
-        },
-      ],
+  const calculationInput: FiscalCalculationInput = {
+    schemaVersion: 1,
+    tenantId,
+    issuerEstablishmentId: establishmentId,
+    model: '55',
+    environment: 'simulation',
+    operation: 'illustrative-sale',
+    purpose: 'normal',
+    issuer: { regime: 'normal', stateCode: '35', municipalityCode: '3550308' },
+    recipient: {
+      regime: 'normal',
+      stateCode: '35',
+      municipalityCode: '3550308',
+      taxpayer: true,
     },
-    2,
-  )
+    origin: { countryCode: '1058', stateCode: '35', municipalityCode: '3550308' },
+    destination: { countryCode: '1058', stateCode: '35', municipalityCode: '3550308' },
+    issueDate: '2026-09-21',
+    currency: 'BRL',
+    lines: [
+      {
+        id: lineId,
+        itemId,
+        quantity: '1',
+        unitPrice: '10',
+        discount: { amount: '0', currency: 'BRL' },
+        charges: { amount: '0', currency: 'BRL' },
+        classifications: { ncm: '12345678' },
+        taxFacts: {},
+      },
+    ],
+  }
+  const resolution = await store.resolve(calculationInput, 2)
   expect(resolution, JSON.stringify(resolution)).toMatchObject({
     supported: true,
     trace: [{ selectedRuleId: ruleId }],
@@ -235,6 +243,66 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
     where tenant_id = ${tenantId} and package_id = ${imported.packageId}`
   expect(Buffer.from(payload?.source_bytes)).toEqual(source.bytes)
   expect(Number(payload?.byte_size)).toBe(source.bytes.length)
+
+  const documentId = randomUUID()
+  await insertDraft(administrator, tenantId, documentId, establishmentId)
+  const [before] = await administrator`select
+    (select count(*)::integer from fiscal_calculations) as calculations,
+    (select count(*)::integer from fiscal_document_calculation_bindings) as bindings,
+    (select count(*)::integer from fiscal_transitions) as transitions,
+    (select count(*)::integer from fiscal_outbox) as outbox,
+    (select count(*)::integer from fiscal_number_reservations) as reservations`
+  expect((await calculations.preview(calculationInput)).supported).toBe(true)
+  const [after] = await administrator`select
+    (select count(*)::integer from fiscal_calculations) as calculations,
+    (select count(*)::integer from fiscal_document_calculation_bindings) as bindings,
+    (select count(*)::integer from fiscal_transitions) as transitions,
+    (select count(*)::integer from fiscal_outbox) as outbox,
+    (select count(*)::integer from fiscal_number_reservations) as reservations`
+  expect(after).toEqual(before)
+
+  const [first, retry] = await Promise.all([
+    calculations.validateDocument({
+      tenantId,
+      documentId,
+      actorId: 'issuer:test',
+      calculationInput,
+    }),
+    calculations.validateDocument({
+      tenantId,
+      documentId,
+      actorId: 'issuer:test',
+      calculationInput,
+    }),
+  ])
+  expect(first).toEqual(retry)
+  expect(first.supported).toBe(true)
+  expect(await calculations.get(tenantId, documentId)).toEqual(first)
+  expect(await calculations.get(randomUUID(), documentId)).toBeNull()
+  expect(await calculations.replay(tenantId, documentId)).toEqual(first)
+  const [locked] = await administrator`select document.status, calculation.input_ciphertext,
+    calculation.result_digest from fiscal_documents document
+    join fiscal_document_calculation_bindings binding
+      on binding.tenant_id = document.tenant_id and binding.document_id = document.id
+    join fiscal_calculations calculation
+      on calculation.tenant_id = binding.tenant_id and calculation.id = binding.calculation_id
+    where document.tenant_id = ${tenantId} and document.id = ${documentId}`
+  expect(locked?.status).toBe('validated')
+  expect(Buffer.from(locked?.input_ciphertext).toString()).not.toContain(lineId)
+  if (first.supported) expect(locked?.result_digest).toBe(first.resultDigest)
+  await expect(
+    administrator`update fiscal_calculations set actor_id = 'rewritten' where document_id = ${documentId}`,
+  ).rejects.toThrow('append-only')
+
+  const unboundDocumentId = randomUUID()
+  await insertDraft(administrator, tenantId, unboundDocumentId, establishmentId)
+  await expect(
+    app.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      await tx`update fiscal_documents set status = 'validated'
+        where tenant_id = ${tenantId} and id = ${unboundDocumentId}`
+    }),
+  ).rejects.toThrow('requires a supported calculation')
 })
 
 async function insertPackage(
@@ -285,4 +353,27 @@ async function activate(
   await sql`insert into fiscal_rule_activation_events (
     id, tenant_id, rule_id, action, actor_id, reason
   ) values (${randomUUID()}, ${tenantId}, ${ruleId}, ${action}, 'admin:test', ${reason})`
+}
+
+async function insertDraft(
+  sql: ReturnType<typeof postgres>,
+  tenantId: string,
+  documentId: string,
+  establishmentId: string,
+) {
+  const intentId = randomUUID()
+  await sql`insert into fiscal_intents (
+    id, tenant_id, origin_module, origin_document_type, origin_id, purpose,
+    order_id, customer_id, payload_digest
+  ) values (
+    ${intentId}, ${tenantId}, 'sales', 'shipment', ${randomUUID()}, 'original',
+    ${randomUUID()}, ${randomUUID()}, ${'d'.repeat(64)}
+  )`
+  await sql`insert into fiscal_documents (
+    id, tenant_id, intent_id, model, environment, establishment_id, series,
+    snapshot_digest, snapshot_ciphertext
+  ) values (
+    ${documentId}, ${tenantId}, ${intentId}, '55', 'simulation', ${establishmentId}, 1,
+    ${'d'.repeat(64)}, ${Buffer.from('encrypted-placeholder')}
+  )`
 }
