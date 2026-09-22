@@ -13,6 +13,7 @@
     "start": "node dist/worker.js",
     "backfill": "node dist/backfill-cli.js",
     "phase41:rollout": "node dist/phase41-rollout-cli.js",
+    "phase42:verify-sources": "node scripts/verify-phase42-sources.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "lint": "biome check .",

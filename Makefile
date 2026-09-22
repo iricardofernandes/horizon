@@ -48,6 +48,10 @@ smoke-phase41: ## Verify Phase 41 safety through Kong (TENANT=<uuid>, optional D
 		$(if $(DOCUMENT),--document "$(DOCUMENT)") \
 		$(if $(EXPECT_EXPLANATION),--expect-explanation)
 
+.PHONY: verify-phase42-sources
+verify-phase42-sources: ## Verify retained Phase 42 NF-e manuals, notes and XSD bytes
+	@cd fiscal && npm run phase42:verify-sources
+
 .PHONY: setup-phase12
 setup-phase12: ## Install the MCP debugger's least-privilege PostgreSQL wrappers
 	@bash infra/scripts/install-mcp-debugger-db.sh

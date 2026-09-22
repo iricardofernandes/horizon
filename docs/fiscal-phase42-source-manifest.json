@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "phase": 42,
+  "retrievedAt": "2026-09-22T14:37:12.000Z",
+  "authority": "Portal Nacional da Nota Fiscal Eletrônica",
+  "selection": {
+    "documentModel": "55",
+    "environment": "simulation",
+    "jurisdiction": "SP",
+    "operation": "normal-sale",
+    "adapterVersion": "nfe55-simulator-v1",
+    "schemaRelease": "PL_010f_v1.04",
+    "layoutVersion": "4.00",
+    "reason": "PL 010f v1.04 is the newest retained complete NF-e 4.00 schema bundle and contains the base, layout and XMLDSig schemas needed by the Phase 42 model-55 simulation. PL 010d is not combined with it.",
+    "fiscalReviewStatus": "pending",
+    "capabilityActivation": "blocked-until-review-and-executable-evidence"
+  },
+  "artifacts": [
+    {
+      "id": "nfe-moc-7.0-general",
+      "kind": "manual",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=LrBx7WT9PuA%3D",
+      "storagePath": ".artifacts/fiscal/nfe/f664dcf94b77cabb32311620d85a7eb02cdf86adb2d4632ce178af2572dd2ad1/moc-7.0-visao-geral.pdf",
+      "byteSize": 4304647,
+      "sha256": "f664dcf94b77cabb32311620d85a7eb02cdf86adb2d4632ce178af2572dd2ad1"
+    },
+    {
+      "id": "nfe-nt-2026.004-v1.01",
+      "kind": "technical-note",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=BTZQzgsO9Ws%3D",
+      "storagePath": ".artifacts/fiscal/nfe/5f24a25351e790692754b07bbefac42ac67e70167a62a7806395d880f56675be/nt-2026.004-v1.01.pdf",
+      "byteSize": 516956,
+      "sha256": "5f24a25351e790692754b07bbefac42ac67e70167a62a7806395d880f56675be"
+    },
+    {
+      "id": "nfe-nt-2025.002-v1.51",
+      "kind": "technical-note",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=AKD%2FmuSmiIY%3D",
+      "storagePath": ".artifacts/fiscal/nfe/a4aaaa181522b43cd90b502f8ccb9e4bdabea30fed838e2d0790be5ba77254a4/nt-2025.002-v1.51.pdf",
+      "byteSize": 2182361,
+      "sha256": "a4aaaa181522b43cd90b502f8ccb9e4bdabea30fed838e2d0790be5ba77254a4"
+    },
+    {
+      "id": "nfe-pl-010f-v1.04",
+      "kind": "schema-package",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=8ITFuBLltXs%3D",
+      "storagePath": ".artifacts/fiscal/nfe/b8589490a58a09a993a80e6ac4d7ed10f20892061ecfc56719337098d4b95998/pl-010f-v1.04.zip",
+      "publishedAt": "2026-08-31",
+      "byteSize": 41682,
+      "sha256": "b8589490a58a09a993a80e6ac4d7ed10f20892061ecfc56719337098d4b95998",
+      "entries": [
+        {
+          "path": "PL_010f_v1.04/DFeTiposBasicos_v1.00.xsd",
+          "byteSize": 72672,
+          "sha256": "173577a4e3a9dc1d0deced85b89b955b6064bb5a4ae5a96f6727d2da8a694d09"
+        },
+        {
+          "path": "PL_010f_v1.04/leiauteNFe_v4.00.xsd",
+          "byteSize": 352538,
+          "sha256": "2bace939973916d54184ff3e2740041a932de5d79772f3363504504160f22542"
+        },
+        {
+          "path": "PL_010f_v1.04/nfe_v4.00.xsd",
+          "byteSize": 716,
+          "sha256": "adce3646c13ceb54922ec3142fc1dc45bd4fb839ac35ad583e86c733c07d27df"
+        },
+        {
+          "path": "PL_010f_v1.04/tiposBasico_v4.00.xsd",
+          "byteSize": 22532,
+          "sha256": "772619c85723e598840667ca66e7298a250442df47eeb94b397d2a333ce62047"
+        },
+        {
+          "path": "PL_010f_v1.04/xmldsig-core-schema_v1.01.xsd",
+          "byteSize": 3747,
+          "sha256": "f56744a5f51c03f027de13f39f869307091781a9ef1d91b1ebe14719ce28e1ac"
+        }
+      ]
+    }
+  ]
+}

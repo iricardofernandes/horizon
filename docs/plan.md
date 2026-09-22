@@ -2203,9 +2203,10 @@ unsupported and public authority operations remain disabled.
 
 ## Phase 42 — NF-e model 55, simulated end to end
 
-**Planned.** Draft, validate, number, sign, submit, query and cancel an NF-e through a
-deterministic simulator. Retain XML, response and protocol; make an uncertain response
-consultable before retry. Simulated documents remain visibly simulated.
+**In progress — mini-phase 42.1 source/capability gate.** Official NF-e manuals, technical
+notes and PL 010f v1.04 schema bytes are retained and verified by SHA-256. The append-only
+capability definition/review/activation gate is implemented but remains inactive pending
+review and the later executable lifecycle evidence. Next: Phase 42 public contracts.
 [Detailed work and exit evidence](fiscal-implementation-plan.md#42--nf-e-model-55-lifecycle-with-a-simulator).
 [Detailed implementation plan](fiscal-phase42-implementation-plan.md).
 

@@ -1,6 +1,7 @@
 # Phase 42 — NF-e model 55, simulated end to end
 
-Status: **planned on 2026-09-22**. This is the executable plan for
+Status: **in progress since 2026-09-22 — mini-phase 42.1 source/capability gate**. This is
+the executable plan for
 [Phase 42 in the fiscal roadmap](fiscal-implementation-plan.md#42--nf-e-model-55-lifecycle-with-a-simulator).
 Phase 40 delivered durable Fiscal documents, number reservations, authority/cancellation
 attempts, immutable artifacts and a deterministic transport simulator. Phase 41 delivered
@@ -11,6 +12,15 @@ No homologation or production SEFAZ call is part of this phase. A successful res
 **simulated authorization**, is visibly marked as such in every API response and rendered
 artifact, and cannot release a Sales shipment. The first real SEFAZ adapter and the
 pre-dispatch operational gate remain Phase 43 work.
+
+### Execution progress
+
+| Mini-phase | Status | Evidence / next gate |
+|---|---|---|
+| 42.1a Official source pinning | **complete locally** | MOC 7.0, NT 2026.004 v1.01, NT 2025.002 v1.51 and PL 010f v1.04 retained by SHA-256; machine-readable manifest and byte verifier added. |
+| 42.1b Capability gate | **implemented, inactive** | Append-only definitions, independent reviews and activation/deactivation history added. Fiscal review and executable lifecycle evidence are still required before the first row is activated. |
+| 42.2 Public contracts | not started | Starts after this source/capability commit. |
+| 42.3–42.9 | not started | Persistence lifecycle, XML/signature, readiness, worker/simulator, cancellation, APIs/DANFE and rollout follow in plan order. |
 
 ## Result and narrow supported tuple
 

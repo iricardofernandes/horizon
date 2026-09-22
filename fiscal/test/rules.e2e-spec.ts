@@ -6,6 +6,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { FiscalCalculations } from '../src/calculations'
+import { FiscalCapabilities } from '../src/capabilities'
 import { FiscalRuleStore } from '../src/rule-store'
 
 let container: StartedPostgreSqlContainer
@@ -14,6 +15,7 @@ let app: ReturnType<typeof postgres>
 let appUrl: string
 let store: FiscalRuleStore
 let calculations: FiscalCalculations
+let capabilities: FiscalCapabilities
 
 beforeAll(async () => {
   container = await new PostgreSqlContainer('postgres:17-alpine')
@@ -40,16 +42,130 @@ beforeAll(async () => {
   app = postgres(appUrl, { max: 2 })
   store = new FiscalRuleStore(appUrl)
   calculations = new FiscalCalculations(appUrl, randomBytes(32), store)
+  capabilities = new FiscalCapabilities(appUrl)
 }, 120_000)
 
 afterAll(async () => {
   await Promise.allSettled([
     calculations?.close(),
+    capabilities?.close(),
     store?.close(),
     app?.end(),
     administrator?.end(),
     container?.stop(),
   ])
+})
+
+it('keeps capability definitions inactive until independent review and activation', async () => {
+  const tenantId = randomUUID()
+  const otherTenantId = randomUUID()
+  const establishmentId = randomUUID()
+  await administrator`insert into tenants (id) values (${tenantId}), (${otherTenantId})`
+  const definition = {
+    tenantId,
+    model: '55' as const,
+    environment: 'simulation' as const,
+    establishmentId,
+    jurisdictionKind: 'uf' as const,
+    jurisdictionCode: 'SP',
+    operation: 'normal-sale',
+    adapterVersion: 'nfe55-simulator-v1',
+    sourceManifestDigest: '6'.repeat(64),
+    schemaPackageDigest: 'b'.repeat(64),
+    calculationFixtureId: 'rtc-v0057-model55-normal-sale-sp-2026-01',
+    createdBy: 'importer:phase42',
+  }
+  const registered = await capabilities.register(definition)
+  expect(await capabilities.register(definition)).toEqual({ ...registered, existing: true })
+  expect(await capabilities.listActive(tenantId)).toEqual([])
+
+  const activation = {
+    tenantId,
+    capabilityId: registered.id,
+    action: 'activate_simulated' as const,
+    evidenceDigest: 'e'.repeat(64),
+    actorId: 'release:phase42',
+    reason: 'Activate the reviewed Phase 42 simulator tuple',
+    occurredAt: '2026-09-22T15:00:00.000Z',
+  }
+  await expect(capabilities.change(activation)).rejects.toMatchObject({ code: '23514' })
+  await expect(
+    capabilities.review({
+      tenantId,
+      capabilityId: registered.id,
+      approved: true,
+      reviewedBy: definition.createdBy,
+      interpretation: 'Self review must not activate a capability.',
+      reviewedAt: '2026-09-22T14:50:00.000Z',
+    }),
+  ).rejects.toMatchObject({ code: '23514' })
+  await capabilities.review({
+    tenantId,
+    capabilityId: registered.id,
+    approved: true,
+    reviewedBy: 'reviewer:phase42',
+    interpretation: 'Approved only for the exact model-55 SP simulation fixture.',
+    reviewedAt: '2026-09-22T14:50:00.000Z',
+  })
+  const activated = await capabilities.change(activation)
+  expect(await capabilities.change(activation)).toEqual({ ...activated, existing: true })
+  expect(await capabilities.listActive(tenantId)).toEqual([
+    expect.objectContaining({
+      id: registered.id,
+      status: 'simulated',
+      model: '55',
+      environment: 'simulation',
+      jurisdictionCode: 'SP',
+      adapterVersion: 'nfe55-simulator-v1',
+      evidenceDigest: 'e'.repeat(64),
+    }),
+  ])
+  expect(await capabilities.listActive(otherTenantId)).toEqual([])
+
+  const competing = await capabilities.register({
+    ...definition,
+    adapterVersion: 'nfe55-simulator-v2',
+    createdBy: 'importer:phase42-v2',
+  })
+  await capabilities.review({
+    tenantId,
+    capabilityId: competing.id,
+    approved: true,
+    reviewedBy: 'reviewer:phase42',
+    interpretation: 'A reviewed competing adapter used to verify the uniqueness guard.',
+    reviewedAt: '2026-09-22T15:05:00.000Z',
+  })
+  await expect(
+    capabilities.change({
+      ...activation,
+      capabilityId: competing.id,
+      evidenceDigest: 'f'.repeat(64),
+      occurredAt: '2026-09-22T15:10:00.000Z',
+    }),
+  ).rejects.toMatchObject({ code: '23505' })
+
+  await capabilities.change({
+    ...activation,
+    action: 'deactivate',
+    evidenceDigest: 'd'.repeat(64),
+    reason: 'Deactivate the first adapter before replacement',
+    occurredAt: '2026-09-22T15:15:00.000Z',
+  })
+  expect(await capabilities.listActive(tenantId)).toEqual([])
+  await capabilities.change({
+    ...activation,
+    capabilityId: competing.id,
+    evidenceDigest: 'f'.repeat(64),
+    occurredAt: '2026-09-22T15:20:00.000Z',
+  })
+  expect(await capabilities.listActive(tenantId)).toEqual([
+    expect.objectContaining({ id: competing.id, adapterVersion: 'nfe55-simulator-v2' }),
+  ])
+
+  await expect(
+    administrator`update fiscal_capability_definitions set operation = 'changed'
+      where id = ${registered.id}`,
+  ).rejects.toThrow('append-only')
 })
 
 it('requires package approval before activation and keeps activation history immutable', async () => {
