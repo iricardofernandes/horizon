@@ -22,3 +22,9 @@
 # The current test generates them at runtime; retain only these historical findings.
 329cceaaaf5c1699a55f06919c15aabd585a4a6a:fiscal/test/artifact-store.e2e-spec.ts:generic-api-key:21
 329cceaaaf5c1699a55f06919c15aabd585a4a6a:fiscal/test/artifact-store.e2e-spec.ts:generic-api-key:33
+
+# Phase 42 correction tests committed literal idempotency markers. They are request
+# deduplication values, not credentials. The current test generates UUIDs instead;
+# allow only these two already-published historical findings.
+ddadc1a72358e2f4236c219f625279f1fdb4c38a:fiscal/test/ingress.e2e-spec.ts:generic-api-key:683
+ddadc1a72358e2f4236c219f625279f1fdb4c38a:fiscal/test/ingress.e2e-spec.ts:generic-api-key:700

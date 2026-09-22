@@ -680,7 +680,7 @@ it('creates one immutable successor revision from a rejected document', async ()
     tenantId,
     documentId: predecessor.id,
     correctedIntentId: String(correctedIntent.id),
-    idempotencyKey: 'phase42-correction-0001',
+    idempotencyKey: randomUUID(),
     actorId: 'issuer:test',
     reason: 'Correct the owner-approved commercial origin',
   }
@@ -697,7 +697,7 @@ it('creates one immutable successor revision from a rejected document', async ()
   await expect(
     documents.createSuccessor({
       ...request,
-      idempotencyKey: 'phase42-correction-0002',
+      idempotencyKey: randomUUID(),
       correctedIntentId: String(competingIntent.id),
     }),
   ).rejects.toThrow('different successor')
