@@ -90,6 +90,7 @@ it('forces tenant RLS on every Fiscal business table', async () => {
       'fiscal_reference_entries',
       'fiscal_tax_rules',
       'fiscal_rule_activation_events',
+      'fiscal_source_payloads',
     ]),
   )
   expect(
