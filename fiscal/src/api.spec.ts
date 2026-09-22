@@ -72,6 +72,17 @@ const server = createFiscalServer({
       return calculationResult()
     },
   },
+  rules: {
+    async proposeOverride(input) {
+      if (input.tenantId !== tenantId || !input.actorId) throw new Error('Wrong tenant or actor')
+      return {
+        id: randomUUID(),
+        status: 'proposed',
+        beforeDigest: 'e'.repeat(64),
+        proposedDigest: 'f'.repeat(64),
+      }
+    },
+  },
 })
 let base: string
 
@@ -181,6 +192,30 @@ it('reads frozen calculations and saved explanations without selecting current r
   expect((await fetch(`${base}/documents/${otherTenant}/calculation`, { headers })).status).toBe(
     404,
   )
+})
+
+it('restricts immutable override proposals to rules managers', async () => {
+  const request = () =>
+    fetch(`${base}/rule-overrides`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer test', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        predecessorRuleId: randomUUID(),
+        proposedDefinition: { rate: { numerator: '2', denominator: '10' } },
+        sourceBasisUri: 'https://example.invalid/correction',
+        sourceBasisSection: 'fixture-only',
+        reason: 'Illustrative correction request',
+      }),
+    })
+  expect((await request()).status).toBe(403)
+  role = 'admin'
+  try {
+    const response = await request()
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({ status: 'proposed' })
+  } finally {
+    role = 'viewer'
+  }
 })
 
 function calculationResult() {

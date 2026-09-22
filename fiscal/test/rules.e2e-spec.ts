@@ -202,6 +202,27 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
     actorId: 'admin:test',
     reason: 'illustrative e2e fixture',
   })
+  const override = {
+    tenantId,
+    predecessorRuleId: ruleId,
+    proposedDefinition: { rate: { numerator: '2', denominator: '10' } },
+    sourceBasisUri: 'https://example.invalid/correction',
+    sourceBasisSection: 'fixture:correction:1',
+    reason: 'Illustrative correction proposal',
+    actorId: 'admin:test',
+  }
+  const proposed = await store.proposeOverride(override)
+  expect(await store.proposeOverride(override)).toEqual(proposed)
+  const [proposalCounts] = await administrator`select
+    (select count(*)::integer from fiscal_rule_override_proposals
+      where tenant_id = ${tenantId}) as proposals,
+    (select count(*)::integer from fiscal_tax_rules
+      where tenant_id = ${tenantId}) as rules`
+  expect(proposalCounts).toMatchObject({ proposals: 1, rules: 1 })
+  await expect(
+    administrator`update fiscal_rule_override_proposals set actor_id = 'rewritten'
+      where id = ${proposed.id}`,
+  ).rejects.toThrow('append-only')
   const calculationInput: FiscalCalculationInput = {
     schemaVersion: 1,
     tenantId,

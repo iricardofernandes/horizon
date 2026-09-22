@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { type FiscalCalculationInput, fiscalCalculationInputSchema } from '@horizon/contracts'
 import postgres from 'postgres'
 import { z } from 'zod'
+import { appendAudit } from './audit'
 import { canonicalDigest } from './canonical-json'
 import { type RuleResolution, resolveTaxRules, type TaxRule } from './rules'
 
@@ -193,6 +194,76 @@ export class FiscalRuleStore {
       )`
     })
     return id
+  }
+
+  async proposeOverride(input: {
+    tenantId: string
+    predecessorRuleId: string
+    proposedDefinition: Record<string, unknown>
+    sourceBasisUri: string
+    sourceBasisSection: string
+    reason: string
+    actorId: string
+  }): Promise<{
+    id: string
+    status: 'proposed'
+    beforeDigest: string
+    proposedDigest: string
+  }> {
+    const value = z
+      .object({
+        tenantId: z.uuid(),
+        predecessorRuleId: z.uuid(),
+        proposedDefinition: z.record(z.string(), z.unknown()),
+        sourceBasisUri: z.url(),
+        sourceBasisSection: z.string().min(1).max(300),
+        reason: z.string().min(10).max(1000),
+        actorId: z.string().min(1).max(200),
+      })
+      .parse(input)
+    const id = randomUUID()
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const [predecessor] = await tx`select definition_digest from fiscal_tax_rules
+        where tenant_id = ${value.tenantId} and id = ${value.predecessorRuleId}`
+      if (!predecessor) throw new Error('Fiscal predecessor rule not found')
+      const beforeDigest = String(predecessor.definition_digest)
+      const proposedDigest = canonicalDigest(value.proposedDefinition)
+      const inserted = await tx`insert into fiscal_rule_override_proposals (
+        id, tenant_id, predecessor_rule_id, proposed_definition, before_digest,
+        proposed_digest, source_basis_uri, source_basis_section, reason, actor_id
+      ) values (
+        ${id}, ${value.tenantId}, ${value.predecessorRuleId},
+        ${tx.json(value.proposedDefinition as postgres.JSONValue)}, ${beforeDigest}, ${proposedDigest},
+        ${value.sourceBasisUri}, ${value.sourceBasisSection}, ${value.reason}, ${value.actorId}
+      ) on conflict (
+        tenant_id, predecessor_rule_id, proposed_digest, reason
+      ) do nothing returning id`
+      let resultId: string = id
+      if (inserted.length === 0) {
+        const [prior] = await tx`select id from fiscal_rule_override_proposals
+          where tenant_id = ${value.tenantId} and predecessor_rule_id = ${value.predecessorRuleId}
+            and proposed_digest = ${proposedDigest} and reason = ${value.reason}`
+        if (!prior) throw new Error('Fiscal override idempotency failure')
+        resultId = String(prior.id)
+      } else {
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.actorId,
+          action: 'rule.override-proposed',
+          resourceId: id,
+          detail: {
+            predecessorRuleId: value.predecessorRuleId,
+            beforeDigest,
+            proposedDigest,
+            sourceBasisUri: value.sourceBasisUri,
+            sourceBasisSection: value.sourceBasisSection,
+            reason: value.reason,
+          },
+        })
+      }
+      return { id: resultId, status: 'proposed' as const, beforeDigest, proposedDigest }
+    })
   }
 
   async resolve(

@@ -4,12 +4,14 @@ import type { FiscalArtifacts } from './artifacts'
 import { type FiscalPermission, type FiscalPrincipal, type FiscalTokenVerifier, may } from './auth'
 import type { FiscalCalculations } from './calculations'
 import type { FiscalDocuments } from './documents'
+import type { FiscalRuleStore } from './rule-store'
 
 export function createFiscalServer(dependencies: {
   verifier: Pick<FiscalTokenVerifier, 'verify'>
   documents: Pick<FiscalDocuments, 'get' | 'createDraft'>
   artifacts: Pick<FiscalArtifacts, 'get'>
   calculations: Pick<FiscalCalculations, 'preview' | 'get'>
+  rules: Pick<FiscalRuleStore, 'proposeOverride'>
 }): Server {
   return createServer((request, response) => {
     void handle(request, response, dependencies).catch(() =>
@@ -26,6 +28,7 @@ async function handle(
     documents: Pick<FiscalDocuments, 'get' | 'createDraft'>
     artifacts: Pick<FiscalArtifacts, 'get'>
     calculations: Pick<FiscalCalculations, 'preview' | 'get'>
+    rules: Pick<FiscalRuleStore, 'proposeOverride'>
   },
 ): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://fiscal.local')
@@ -70,6 +73,34 @@ async function handle(
     } catch (error) {
       if (error instanceof SyntaxError)
         problem(response, 400, 'Bad Request', 'Invalid Fiscal calculation preview request')
+      else throw error
+    }
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/rule-overrides') {
+    if (!requirePermission(principal, 'rules:manage', response)) return
+    try {
+      const body = z
+        .object({
+          predecessorRuleId: z.uuid(),
+          proposedDefinition: z.record(z.string(), z.unknown()),
+          sourceBasisUri: z.url(),
+          sourceBasisSection: z.string().min(1).max(300),
+          reason: z.string().min(10).max(1000),
+        })
+        .parse(await readJson(request))
+      const proposal = await dependencies.rules.proposeOverride({
+        ...body,
+        tenantId: principal.tenantId,
+        actorId: principal.subject,
+      })
+      json(response, 201, proposal)
+    } catch (error) {
+      if (error instanceof z.ZodError || error instanceof SyntaxError)
+        problem(response, 400, 'Bad Request', 'Invalid Fiscal rule override proposal')
+      else if (error instanceof Error && error.message.endsWith('not found'))
+        problem(response, 404, 'Not Found', 'Fiscal predecessor rule not found')
       else throw error
     }
     return

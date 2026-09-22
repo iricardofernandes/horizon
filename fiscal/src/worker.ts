@@ -59,7 +59,13 @@ const artifactStore = new EncryptedFiscalArtifactStore(
 const artifacts = new FiscalArtifacts(config.DATABASE_URL, artifactStore)
 const denylist = new RedisDenylist(config.REDIS_URL)
 const verifier = new FiscalTokenVerifier(`${config.IDENTITY_URL}/.well-known/jwks.json`, denylist)
-const server = createFiscalServer({ verifier, documents, artifacts, calculations })
+const server = createFiscalServer({
+  verifier,
+  documents,
+  artifacts,
+  calculations,
+  rules: ruleStore,
+})
 const keys = z
   .record(z.uuid(), z.string().min(20))
   .parse(JSON.parse(config.FISCAL_SERVICE_KEYS_JSON))
