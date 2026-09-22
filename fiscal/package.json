@@ -19,7 +19,7 @@
     "test:e2e": "vitest run --config vitest.config.e2e.mts"
   },
   "dependencies": {
-    "@horizon/contracts": "0.23.0",
+    "@horizon/contracts": "0.24.0",
     "amqplib": "2.0.1",
     "postgres": "^3.4.9",
     "zod": "^4.6.2"

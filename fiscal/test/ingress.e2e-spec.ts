@@ -9,6 +9,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { FiscalBackfill, HttpOwnerFiscalClient, type OwnerFiscalClient } from '../src/backfill'
 import { FiscalConsumer } from '../src/consumer'
+import { FiscalDocuments } from '../src/documents'
 import { FiscalIngress } from '../src/ingress'
 import { FiscalProjections } from '../src/projections'
 
@@ -18,6 +19,7 @@ let app: ReturnType<typeof postgres>
 let administrator: ReturnType<typeof postgres>
 let ingress: FiscalIngress
 let projections: FiscalProjections
+let documents: FiscalDocuments
 
 beforeAll(async () => {
   ;[container, rabbitmq] = await Promise.all([
@@ -47,12 +49,14 @@ beforeAll(async () => {
   app = postgres(appUrl, { max: 1 })
   ingress = new FiscalIngress(appUrl)
   projections = new FiscalProjections(appUrl)
+  documents = new FiscalDocuments(appUrl)
 }, 120_000)
 
 afterAll(async () => {
   await Promise.allSettled([
     ingress?.close(),
     projections?.close(),
+    documents?.close(),
     app?.end(),
     administrator?.end(),
     container?.stop(),
@@ -363,6 +367,58 @@ it('creates one intent for two messages about one delivery and isolates tenants'
   const [count] = await administrator`select count(*)::integer as value from fiscal_intents
     where tenant_id = ${tenantId} and origin_id = ${shipmentId} and purpose = 'original'`
   expect(count?.value).toBe(1)
+})
+
+it('keeps one immutable draft per origin and reserves unique numbers under concurrent retries', async () => {
+  const tenantId = randomUUID()
+  const otherTenant = randomUUID()
+  await ingress.accept(origin(tenantId, randomUUID()))
+  await ingress.accept(origin(tenantId, randomUUID()))
+  await ingress.accept(origin(otherTenant, randomUUID()))
+  const intents = await administrator`select id, tenant_id from fiscal_intents
+    where tenant_id in (${tenantId}, ${otherTenant}) order by created_at, id`
+  const own = intents.filter((row) => row.tenant_id === tenantId)
+  const foreign = intents.find((row) => row.tenant_id === otherTenant)
+  if (!own[0] || !own[1] || !foreign) throw new Error('Test intents were not stored')
+  const establishmentId = randomUUID()
+  const input = {
+    tenantId,
+    intentId: String(own[0].id),
+    model: '55' as const,
+    environment: 'simulation' as const,
+    establishmentId,
+    series: 1,
+    snapshot: { origin: String(own[0].id), amount: '1000' },
+  }
+  const [first, duplicate] = await Promise.all([
+    documents.createDraft(input),
+    documents.createDraft(input),
+  ])
+  expect(duplicate.id).toBe(first.id)
+  await expect(documents.createDraft({ ...input, snapshot: { amount: '2000' } })).rejects.toThrow(
+    'Conflicting fiscal draft',
+  )
+  await expect(documents.createDraft({ ...input, intentId: String(foreign.id) })).rejects.toThrow()
+  const second = await documents.createDraft({
+    ...input,
+    intentId: String(own[1].id),
+    snapshot: { origin: String(own[1].id) },
+  })
+  const [numberA, retryA, numberB] = await Promise.all([
+    documents.reserveNumber(tenantId, first.id),
+    documents.reserveNumber(tenantId, first.id),
+    documents.reserveNumber(tenantId, second.id),
+  ])
+  expect(numberA).toBe(retryA)
+  expect(new Set([numberA, numberB]).size).toBe(2)
+  expect([numberA, numberB].sort()).toEqual([1, 2])
+  await expect(documents.reserveNumber(otherTenant, first.id)).rejects.toThrow('not found')
+  const [count] = await administrator`select count(*)::integer as value
+    from fiscal_number_reservations where tenant_id = ${tenantId}`
+  expect(count?.value).toBe(2)
+  const [transitions] = await administrator`select count(*)::integer as value
+    from fiscal_transitions where tenant_id = ${tenantId}`
+  expect(transitions?.value).toBe(4)
 })
 
 it('resumes owner API backfill and verifies issuer, party and catalog revisions', async () => {

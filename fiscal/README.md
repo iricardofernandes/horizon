@@ -1,12 +1,15 @@
-# Fiscal — Phase 39 ingress and projections
+# Fiscal — Phase 39 ingress and Phase 40 durable-record foundation
 
 This module owns fiscal intents and its own encrypted copies of issuer and recipient
 profiles. It listens only to `sales.fiscal-origin.recorded`, the dedicated owner profile
 notices, catalog classification notices and party erasure. A Sales delivery or return
 creates one intent keyed by `(tenant, module, document type, document id, purpose)`.
-The intent remains `blocked_profile`: this module does not choose tax rules, allocate a
-fiscal number, send a document to an authority or create a stock or financial effect.
-Those lifecycles start in later phases under an enabled capability row.
+The intent remains `blocked_profile`. Phase 40 has started with tenant-scoped,
+immutable simulation draft identities, snapshot digests and concurrent-safe number
+reservations. Raw commercial and personal snapshots await encrypted storage. These are internal
+persistence operations, not an HTTP issuance path. The worker does not calculate tax,
+send a document to an authority or create a stock or financial effect. A reserved number
+is never silently reused after a timeout or restart.
 
 ## Run locally
 
@@ -44,9 +47,10 @@ erasure arrives before a delayed projection. The retained ciphertext is then unr
 `npm run test:e2e` starts PostgreSQL and RabbitMQ with Testcontainers. It runs the
 real migration under a non-superuser owner role, checks broker duplicate delivery,
 origin uniqueness, encrypted revisions, erasure, owner-API backfill resume and tenant
-isolation. `npm run typecheck`, `npm run lint` and `npm run build` check the package.
+isolation. It also checks duplicate drafts, cross-tenant draft rejection and concurrent
+number reservation. `npm run typecheck`, `npm run lint` and `npm run build` check the
+package.
 
 Issuance remains unavailable for every tuple in
-[the capability matrix](../docs/fiscal-capabilities.md). The authority adapters,
-document artifacts, certificate handling, audit chain and HTTP operator API belong to
-the independent service lifecycle in Phase 40 and later phases.
+[the capability matrix](../docs/fiscal-capabilities.md). Authority adapters, artifacts,
+certificate handling, the audit chain and the HTTP operator API remain Phase 40 work.

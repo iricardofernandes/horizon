@@ -2184,7 +2184,7 @@ gate is verified when that operation becomes supported.
 
 ## Phase 40 — The independent fiscal service
 
-**Planned.** Extend the Phase 39 `fiscal/` ingress on port 3011 with contracts, roles,
+**In progress.** Extend the Phase 39 `fiscal/` ingress on port 3011 with contracts, roles,
 audit, outbox, immutable artifacts and concurrent-safe numbering. Prove the complete
 document lifecycle and crash recovery before connecting an authority.
 [Detailed work and exit evidence](fiscal-implementation-plan.md#40--independent-fiscal-service-and-durable-records).

@@ -10,9 +10,9 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 try {
   await client`create table if not exists fiscal_migrations
     (name text primary key, applied_at timestamptz not null default now())`
-  const name = '0001_phase39_ingress.sql'
-  const [existing] = await client`select name from fiscal_migrations where name = ${name}`
-  if (!existing) {
+  for (const name of ['0001_phase39_ingress.sql', '0002_phase40_documents.sql']) {
+    const [existing] = await client`select name from fiscal_migrations where name = ${name}`
+    if (existing) continue
     const source = readFileSync(join(root, 'migrations', name), 'utf8')
     await client.begin(async (tx) => {
       await tx.unsafe(source, [], { prepare: false })

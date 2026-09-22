@@ -32,4 +32,9 @@ describe('role assignments', () => {
     expect(isValidRole('sales', 'representative')).toBe(true)
     expect(isValidRole('sales', 'operator')).toBe(false)
   })
+
+  it('declares fiscal roles without granting one module another module role', () => {
+    expect(roleAssignmentSchema.safeParse({ module: 'fiscal', role: 'issuer' }).success).toBe(true)
+    expect(roleAssignmentSchema.safeParse({ module: 'fiscal', role: 'buyer' }).success).toBe(false)
+  })
 })

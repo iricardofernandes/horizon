@@ -18,6 +18,7 @@ describe('published role contract', () => {
       [
         'catalog',
         'financial',
+        'fiscal',
         'identity',
         'inventory',
         'parties',
