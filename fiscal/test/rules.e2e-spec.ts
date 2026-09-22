@@ -8,6 +8,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import { FiscalCalculations } from '../src/calculations'
 import { FiscalCapabilities } from '../src/capabilities'
 import { FiscalDispatch } from '../src/dispatch'
+import { FiscalDocuments } from '../src/documents'
 import { FiscalRuleStore } from '../src/rule-store'
 
 let container: StartedPostgreSqlContainer
@@ -725,6 +726,137 @@ it('resolves an uncertain issuance through an explicit query without a second su
       (select count(*)::integer from fiscal_dispatch_commands
         where tenant_id = ${tenantId} and document_id = ${documentId} and kind = 'issuance') as submissions`
   expect(evidence).toMatchObject({ numbers: 1, submissions: 1 })
+})
+
+it('queues an immutable cancellation and resolves uncertainty through the original event identity', async () => {
+  const tenantId = randomUUID()
+  const documentId = randomUUID()
+  const establishmentId = randomUUID()
+  const eventDigest = 'd'.repeat(64)
+  await administrator`insert into tenants (id) values (${tenantId})`
+  await insertDraft(administrator, tenantId, documentId, establishmentId)
+  await bindTestCalculation(administrator, tenantId, documentId)
+  await administrator`update fiscal_documents set status = 'ready' where id = ${documentId}`
+  await bindTestIssuance(administrator, tenantId, documentId, establishmentId, '2'.repeat(64))
+  const issuance = await dispatch.queueIssuance({
+    tenantId,
+    documentId,
+    idempotencyKey: '00000000000000000000000000000012',
+    requestDigest: '1'.repeat(64),
+    artifactDigest: '2'.repeat(64),
+    actorId: 'issuer:test',
+  })
+  await dispatch.claim({ tenantId, workerId: 'worker:issue' })
+  await dispatch.recordObservation({
+    tenantId,
+    commandId: issuance.commandId,
+    workerId: 'worker:issue',
+    observationKind: 'response',
+    outcome: 'authorized',
+    providerCorrelation: 'simulation:authorized',
+    responseDigest: 'a'.repeat(64),
+    protocolDigest: 'b'.repeat(64),
+  })
+  await administrator`insert into fiscal_artifacts (
+      id, tenant_id, document_id, kind, purpose, object_key, digest,
+      size_bytes, media_type, source_schema
+    ) values (
+      ${randomUUID()}, ${tenantId}, ${documentId}, 'cancellation_request',
+      'cancellation_request', ${`${tenantId}/${documentId}/cancellation_request/${eventDigest}`},
+      ${eventDigest}, 1, 'application/xml', 'PL_010d_v1.03:test'
+    )`
+  const command = {
+    tenantId,
+    documentId,
+    idempotencyKey: '00000000000000000000000000000013',
+    requestDigest: 'c'.repeat(64),
+    artifactDigest: eventDigest,
+    actorId: 'issuer:test',
+  }
+  const cancellation = await dispatch.queueCancellation(command)
+  expect(cancellation).toMatchObject({ kind: 'cancellation', status: 'cancellation_pending' })
+  expect(await dispatch.queueCancellation(command)).toEqual({ ...cancellation, existing: true })
+  const first = await dispatch.claim({ tenantId, workerId: 'worker:cancel' })
+  expect(first).toMatchObject({ kind: 'cancellation', artifactDigest: eventDigest })
+  await dispatch.recordObservation({
+    tenantId,
+    commandId: cancellation.commandId,
+    workerId: 'worker:cancel',
+    observationKind: 'response',
+    outcome: 'unknown',
+    providerCorrelation: null,
+    responseDigest: 'e'.repeat(64),
+    protocolDigest: null,
+  })
+  await dispatch.retry(
+    tenantId,
+    cancellation.commandId,
+    'worker:cancel',
+    new Date(Date.now() + 60_000),
+  )
+  const query = await dispatch.queueCancellationQuery({
+    tenantId,
+    documentId,
+    idempotencyKey: 'phase42-cancel-query-0001',
+    requestDigest: 'f'.repeat(64),
+    actorId: 'issuer:test',
+  })
+  const queryLease = await dispatch.claim({ tenantId, workerId: 'worker:query' })
+  expect(queryLease).toMatchObject({
+    kind: 'cancellation_query',
+    commandId: query.commandId,
+    cancellationCommandId: cancellation.commandId,
+    requestDigest: 'c'.repeat(64),
+    artifactDigest: eventDigest,
+  })
+  await dispatch.recordObservation({
+    tenantId,
+    commandId: query.commandId,
+    workerId: 'worker:query',
+    observationKind: 'consultation',
+    outcome: 'cancelled',
+    providerCorrelation: 'simulation:cancelled',
+    responseDigest: '4'.repeat(64),
+    protocolDigest: '5'.repeat(64),
+  })
+  expect(
+    (await administrator`select status from fiscal_documents where id = ${documentId}`)[0]?.status,
+  ).toBe('cancelled')
+  expect(await dispatch.claim({ tenantId, workerId: 'worker:idle' })).toBeNull()
+  expect(
+    (
+      await administrator`select state from fiscal_dispatch_jobs
+      where tenant_id = ${tenantId} and command_id = ${cancellation.commandId}`
+    )[0]?.state,
+  ).toBe('done')
+  const events = await administrator`select event_type, payload from fiscal_outbox
+    where tenant_id = ${tenantId} order by created_at, event_id`
+  expect(events.map((event) => event.event_type).sort()).toEqual([
+    'fiscal.document.simulation-authorized',
+    'fiscal.document.simulation-cancelled',
+  ])
+  expect(
+    events.find((event) => event.event_type === 'fiscal.document.simulation-cancelled')?.payload,
+  ).toMatchObject({
+    documentId,
+    environment: 'simulation',
+    simulated: true,
+  })
+  const documents = new FiscalDocuments(appUrl, randomBytes(32))
+  try {
+    expect(
+      (await documents.timeline(tenantId, documentId))?.transitions.map((item) => item.to),
+    ).toEqual([
+      'queued',
+      'submitted',
+      'authorized',
+      'cancellation_pending',
+      'cancellation_unknown',
+      'cancelled',
+    ])
+  } finally {
+    await documents.close()
+  }
 })
 
 it('isolates manual origins and dispatch evidence while allowing worker lease updates', async () => {

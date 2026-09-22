@@ -1,6 +1,6 @@
 # Phase 42 — NF-e model 55, simulated end to end
 
-Status: **in progress since 2026-09-22 — mini-phase 42.7 consultation and correction**. This is
+Status: **in progress since 2026-09-22 — mini-phase 42.7 cancellation and 42.8 integration**. This is
 the executable plan for
 [Phase 42 in the fiscal roadmap](fiscal-implementation-plan.md#42--nf-e-model-55-lifecycle-with-a-simulator).
 Phase 40 delivered durable Fiscal documents, number reservations, authority/cancellation
@@ -24,8 +24,9 @@ pre-dispatch operational gate remain Phase 43 work.
 | 42.4 NF-e XML/signature core | **complete locally** | Deterministic UTF-8 model-55 serialization, numeric/alphanumeric access key, MOC XMLDSig, independent signature verification and signed-document validation against the pinned PL 010f package pass stable-digest and mutation-negative tests. |
 | 42.5 Readiness orchestration | **implemented locally** | Public validation derives the Phase 41 input from the frozen Sales origin and exact effective issuer, recipient and Catalog revisions; an immutable capability/revision/reconciliation binding is stored. Zero-tolerance line/total mismatch, missing classification, retry and API authorization tests pass. |
 | 42.6 Durable issue worker/simulator | **implemented locally** | Number-stable XML preparation, explicit simulation XML profile, typed issuance artifacts, issuance binding, durable queue handoff, observation persistence, restart-stable deterministic outcomes and the worker loop are implemented and covered by unit/e2e queue evidence. Public activation still requires the configured simulation credential/profile and a full-stack issuance run. |
-| 42.7 Cancellation and corrected revision | **in progress locally** | Corrected Sales-origin successor is exposed through the scoped API. Explicit status consultation uses the original issuance identity, resolves the original job and is covered by worker/API/PostgreSQL tests. The official PL 010d v1.03 event package is retained and hashed as a second candidate. Its generic event types accept alphanumeric CNPJ/access keys, but `detEvento` uses `xs:any processContents="skip"`; cancellation-specific detail and combining its event schemas with PL 010f still require review. |
-| 42.8–42.9 | not started | Events/DANFE and rollout follow after the cancellation source/profile gate. |
+| 42.7 Cancellation and corrected revision | **implemented locally; source review pending** | Corrected Sales-origin successor, status consultation, signed cancellation event generation, durable cancellation/consultation jobs and accepted/rejected/unknown simulator paths are implemented. PL 010d v1.03 validates the event envelope and application checks constrain cancellation detail. The official PL 010d/010f combination and detail interpretation still require Fiscal review before activation. |
+| 42.8 API, events and DANFE | **in progress locally** | Scoped cancellation and consultation routes, transition timeline and a transactionally appended, RabbitMQ-confirmed simulation outbox are implemented. Manual-origin HTTP creation, document artifact metadata and watermarked DANFE remain. |
+| 42.9 Local rollout | **not started** | Activate only after the source/profile review and the full create-to-cancel, restore, rollback and Kong evidence pass. |
 
 ## Result and narrow supported tuple
 
@@ -74,7 +75,9 @@ evidence in this plan pass.
 - Public `validate` and capability reads are enabled behind tenant/role checks. `issue`
   is enabled only when the complete simulation credential, schema bytes and reviewed XML
   profile are configured; explicit status consultation and rejected-Sales correction are
-  wired. Cancellation, outbox publication and DANFE remain rollout gates.
+  wired. Cancellation is gated by an additional event-schema path and an active capability.
+  Simulation outbox publication is implemented; manual-origin HTTP creation, full-stack
+  cancellation evidence and DANFE remain rollout gates.
 - The source register hashes MOC 7.0 and multiple overlapping NF-e XSD packages. Phase 42
   must select one compatible schema set, pin its exact bytes and record the selection. A
   portal listing or an old checksum alone is not an adapter approval.

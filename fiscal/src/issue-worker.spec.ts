@@ -128,6 +128,103 @@ describe('durable NF-e issue worker', () => {
       outcome: 'authorized',
     })
   })
+
+  it('recovers accepted cancellation after lost response using its original command identity', async () => {
+    const simulator = new DeterministicNfe55Simulator(() => 'timeout-after-accept')
+    const submit = vi.spyOn(simulator, 'submitCancellation')
+    const consult = vi.spyOn(simulator, 'consultCancellation')
+    const queryId = randomUUID()
+    const leases = [
+      { ...lease(1), kind: 'cancellation' as const },
+      {
+        ...lease(1),
+        kind: 'cancellation_query' as const,
+        commandId: queryId,
+        cancellationCommandId: commandId,
+      },
+    ]
+    const observations: Array<Record<string, unknown>> = []
+    const worker = new FiscalIssueWorker(
+      {
+        async claim() {
+          return leases.shift() ?? null
+        },
+        async recordObservation(input: Record<string, unknown>) {
+          observations.push(input)
+          return { id: randomUUID(), existing: false }
+        },
+        async retry() {},
+      },
+      memoryArtifacts(),
+      simulator,
+    )
+    await worker.processOne(tenantId, 'worker:cancel')
+    await worker.processOne(tenantId, 'worker:query')
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(consult).toHaveBeenCalledWith({
+      commandId,
+      requestDigest: '1'.repeat(64),
+      eventXmlDigest: signedXmlDigest,
+      attemptCount: 2,
+    })
+    expect(observations.map((observation) => observation.outcome)).toEqual(['unknown', 'cancelled'])
+  })
+
+  it('records a rejected cancellation without changing the issuance protocol', async () => {
+    const simulator = new DeterministicNfe55Simulator(() => 'rejected')
+    const observations: Array<Record<string, unknown>> = []
+    const worker = new FiscalIssueWorker(
+      {
+        async claim() {
+          return { ...lease(1), kind: 'cancellation' as const }
+        },
+        async recordObservation(input: Record<string, unknown>) {
+          observations.push(input)
+          return { id: randomUUID(), existing: false }
+        },
+        async retry() {},
+      },
+      memoryArtifacts(),
+      simulator,
+    )
+    await worker.processOne(tenantId, 'worker:cancel')
+    expect(observations[0]).toMatchObject({ outcome: 'rejected', observationKind: 'response' })
+  })
+
+  it('resends a cancellation only after consultation confirms no event was accepted', async () => {
+    const simulator = new DeterministicNfe55Simulator(() => 'timeout-before-accept')
+    const submit = vi.spyOn(simulator, 'submitCancellation')
+    const consult = vi.spyOn(simulator, 'consultCancellation')
+    const leases = [
+      { ...lease(1), kind: 'cancellation' as const },
+      {
+        ...lease(1),
+        kind: 'cancellation_query' as const,
+        commandId: randomUUID(),
+        cancellationCommandId: commandId,
+      },
+    ]
+    const outcomes: string[] = []
+    const worker = new FiscalIssueWorker(
+      {
+        async claim() {
+          return leases.shift() ?? null
+        },
+        async recordObservation(input: { outcome: string }) {
+          outcomes.push(input.outcome)
+          return { id: randomUUID(), existing: false }
+        },
+        async retry() {},
+      },
+      memoryArtifacts(),
+      simulator,
+    )
+    await worker.processOne(tenantId, 'worker:cancel')
+    await worker.processOne(tenantId, 'worker:query')
+    expect(consult).toHaveBeenCalledOnce()
+    expect(submit).toHaveBeenCalledTimes(2)
+    expect(outcomes).toEqual(['unknown', 'cancelled'])
+  })
 })
 
 function lease(attemptCount: number) {

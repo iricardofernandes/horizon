@@ -8,6 +8,7 @@ import { FiscalArtifacts } from './artifacts'
 import { FiscalTokenVerifier, RedisDenylist } from './auth'
 import { HttpOwnerFiscalClient } from './backfill'
 import { FiscalCalculations } from './calculations'
+import { FiscalCancellation } from './cancellation'
 import { FiscalCapabilities } from './capabilities'
 import { FiscalConsumer } from './consumer'
 import { FiscalDispatch } from './dispatch'
@@ -16,6 +17,7 @@ import { FiscalIngress } from './ingress'
 import { FiscalIssuance } from './issuance'
 import { FiscalIssueWorker } from './issue-worker'
 import { DeterministicNfe55Simulator } from './nfe55/simulator'
+import { FiscalOutboxRelay } from './outbox'
 import { FiscalProjections } from './projections'
 import { FiscalReadiness } from './readiness'
 import { FiscalRuleStore } from './rule-store'
@@ -40,6 +42,7 @@ const config = z
     FISCAL_SIMULATION_PRIVATE_KEY_PATH: z.string().min(1).optional(),
     FISCAL_SIMULATION_CERTIFICATE_PATH: z.string().min(1).optional(),
     FISCAL_PHASE42_SCHEMA_PATH: z.string().min(1).optional(),
+    FISCAL_PHASE42_EVENT_SCHEMA_PATH: z.string().min(1).optional(),
   })
   .parse(process.env)
 
@@ -102,6 +105,22 @@ const issuance = issuanceConfiguration.every(Boolean)
       'b8589490a58a09a993a80e6ac4d7ed10f20892061ecfc56719337098d4b95998',
     )
   : undefined
+if (config.FISCAL_PHASE42_EVENT_SCHEMA_PATH && !issuance)
+  throw new Error('Phase 42 cancellation requires the complete issuance configuration')
+const cancellation = config.FISCAL_PHASE42_EVENT_SCHEMA_PATH
+  ? new FiscalCancellation(
+      config.DATABASE_URL,
+      documents,
+      artifacts,
+      dispatch,
+      {
+        privateKey: readFileSync(config.FISCAL_SIMULATION_PRIVATE_KEY_PATH as string),
+        certificate: readFileSync(config.FISCAL_SIMULATION_CERTIFICATE_PATH as string),
+      },
+      readFileSync(config.FISCAL_PHASE42_EVENT_SCHEMA_PATH),
+      '45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b',
+    )
+  : undefined
 const server = createFiscalServer({
   verifier,
   documents,
@@ -111,15 +130,20 @@ const server = createFiscalServer({
   capabilities,
   readiness,
   ...(issuance ? { issuance } : {}),
+  ...(cancellation ? { cancellation } : {}),
   rules: ruleStore,
 })
 const issueWorker = new FiscalIssueWorker(dispatch, artifacts, new DeterministicNfe55Simulator())
+const outbox = new FiscalOutboxRelay(config.DATABASE_URL, config.RABBITMQ_URL)
 let issueWorkerBusy = false
 const issueWorkerTimer = setInterval(() => {
   if (issueWorkerBusy) return
   issueWorkerBusy = true
   void Promise.all(
-    Object.keys(keys).map((tenantId) => issueWorker.processOne(tenantId, 'fiscal:issue-worker')),
+    Object.keys(keys).map(async (tenantId) => {
+      await issueWorker.processOne(tenantId, 'fiscal:issue-worker')
+      await outbox.flush(tenantId)
+    }),
   )
     .catch((error: unknown) =>
       console.error('Fiscal issue worker cycle failed', {
@@ -156,6 +180,8 @@ async function stop(): Promise<void> {
     capabilities.close(),
     dispatch.close(),
     issuance?.close(),
+    cancellation?.close(),
+    outbox.close(),
     ruleStore.close(),
     denylist.close(),
   ])
@@ -184,6 +210,8 @@ void consumer
       capabilities.close(),
       dispatch.close(),
       issuance?.close(),
+      cancellation?.close(),
+      outbox.close(),
       ruleStore.close(),
       denylist.close(),
     ])

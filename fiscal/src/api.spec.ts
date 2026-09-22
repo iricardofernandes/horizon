@@ -11,6 +11,8 @@ let previewInput: unknown
 let readinessInput: unknown
 let correctionInput: unknown
 let statusQueryInput: unknown
+let cancellationInput: unknown
+let cancellationQueryInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
 const server = createFiscalServer({
   verifier: {
@@ -20,6 +22,25 @@ const server = createFiscalServer({
     },
   },
   documents: {
+    async timeline(requestedTenant, requestedDocument) {
+      if (requestedTenant !== tenantId || requestedDocument !== documentId) return null
+      return {
+        documentId,
+        transitions: [
+          {
+            id: randomUUID(),
+            documentId,
+            from: null,
+            to: 'draft',
+            actorId: 'system:fiscal',
+            commandId: null,
+            reason: null,
+            correlationId: null,
+            occurredAt: '2026-09-21T00:00:00.000Z',
+          },
+        ],
+      }
+    },
     async createSuccessor(input) {
       correctionInput = input
       return {
@@ -70,6 +91,16 @@ const server = createFiscalServer({
         documentId,
         kind: 'status_query',
         status: 'unknown',
+        existing: false,
+      }
+    },
+    async queueCancellationQuery(input) {
+      cancellationQueryInput = input
+      return {
+        commandId: randomUUID(),
+        documentId,
+        kind: 'cancellation_query',
+        status: 'cancellation_unknown',
         existing: false,
       }
     },
@@ -141,6 +172,19 @@ const server = createFiscalServer({
       }
     },
   },
+  cancellation: {
+    async request(input) {
+      cancellationInput = input
+      return {
+        commandId: randomUUID(),
+        documentId,
+        status: 'cancellation_pending',
+        statusUrl: `/fiscal/documents/${documentId}`,
+        simulated: true,
+        existing: false,
+      }
+    },
+  },
   rules: {
     async proposeOverride(input) {
       if (input.tenantId !== tenantId || !input.actorId) throw new Error('Wrong tenant or actor')
@@ -194,6 +238,44 @@ it('scopes correction and explicit status consultation to the caller tenant', as
   role = 'viewer'
 })
 
+it('requires the cancellation role and a reviewed reason for both cancellation commands', async () => {
+  const headers = {
+    authorization: 'Bearer test',
+    'idempotency-key': '00000000000000000000000000000011',
+    'content-type': 'application/json',
+  }
+  const request = () =>
+    fetch(`${base}/documents/${documentId}/cancellation-requests`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ reason: 'Cancelamento solicitado pelo emitente' }),
+    })
+  expect((await request()).status).toBe(403)
+  role = 'issuer'
+  try {
+    expect(
+      (
+        await fetch(`${base}/documents/${documentId}/cancellation-requests`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ reason: 'curta' }),
+        })
+      ).status,
+    ).toBe(422)
+    const result = await request()
+    expect(result.status).toBe(202)
+    expect(cancellationInput).toMatchObject({ tenantId, documentId })
+    const consultation = await fetch(`${base}/documents/${documentId}/cancellation-queries`, {
+      method: 'POST',
+      headers,
+    })
+    expect(consultation.status).toBe(202)
+    expect(cancellationQueryInput).toMatchObject({ tenantId, documentId })
+  } finally {
+    role = 'viewer'
+  }
+})
+
 it('serves typed simulation artifacts with digest selection and sandbox headers', async () => {
   const response = await fetch(
     `${base}/documents/${documentId}/artifacts/signed_xml?digest=${'a'.repeat(64)}`,
@@ -203,6 +285,19 @@ it('serves typed simulation artifacts with digest selection and sandbox headers'
   expect(response.headers.get('cache-control')).toBe('private, no-store')
   expect(response.headers.get('content-security-policy')).toBe('sandbox')
   expect(await response.text()).toBe('<xml/>')
+})
+
+it('serves a tenant-scoped document transition timeline', async () => {
+  const headers = { authorization: 'Bearer test' }
+  const response = await fetch(`${base}/documents/${documentId}/transitions`, { headers })
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({
+    documentId,
+    transitions: [{ from: null, to: 'draft' }],
+  })
+  expect((await fetch(`${base}/documents/${otherTenant}/transitions`, { headers })).status).toBe(
+    404,
+  )
 })
 
 it('requires a token and reports every capability unsupported', async () => {

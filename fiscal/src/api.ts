@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
 import { type FiscalPermission, type FiscalPrincipal, type FiscalTokenVerifier, may } from './auth'
 import type { FiscalCalculations } from './calculations'
+import type { FiscalCancellation } from './cancellation'
 import { canonicalDigest } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
 import type { FiscalDispatch } from './dispatch'
@@ -13,13 +14,14 @@ import type { FiscalRuleStore } from './rule-store'
 
 export function createFiscalServer(dependencies: {
   verifier: Pick<FiscalTokenVerifier, 'verify'>
-  documents: Pick<FiscalDocuments, 'get' | 'createDraft' | 'createSuccessor'>
-  dispatch?: Pick<FiscalDispatch, 'queueStatusQuery'>
+  documents: Pick<FiscalDocuments, 'get' | 'timeline' | 'createDraft' | 'createSuccessor'>
+  dispatch?: Pick<FiscalDispatch, 'queueStatusQuery' | 'queueCancellationQuery'>
   artifacts: Pick<FiscalArtifacts, 'get'>
   calculations: Pick<FiscalCalculations, 'preview' | 'get'>
   capabilities: Pick<FiscalCapabilities, 'listActive'>
   readiness: Pick<FiscalReadiness, 'validate'>
   issuance?: Pick<FiscalIssuance, 'issue'>
+  cancellation?: Pick<FiscalCancellation, 'request'>
   rules: Pick<FiscalRuleStore, 'proposeOverride'>
 }): Server {
   return createServer((request, response) => {
@@ -34,13 +36,14 @@ async function handle(
   response: ServerResponse,
   dependencies: {
     verifier: Pick<FiscalTokenVerifier, 'verify'>
-    documents: Pick<FiscalDocuments, 'get' | 'createDraft' | 'createSuccessor'>
-    dispatch?: Pick<FiscalDispatch, 'queueStatusQuery'>
+    documents: Pick<FiscalDocuments, 'get' | 'timeline' | 'createDraft' | 'createSuccessor'>
+    dispatch?: Pick<FiscalDispatch, 'queueStatusQuery' | 'queueCancellationQuery'>
     artifacts: Pick<FiscalArtifacts, 'get'>
     calculations: Pick<FiscalCalculations, 'preview' | 'get'>
     capabilities: Pick<FiscalCapabilities, 'listActive'>
     readiness: Pick<FiscalReadiness, 'validate'>
     issuance?: Pick<FiscalIssuance, 'issue'>
+    cancellation?: Pick<FiscalCancellation, 'request'>
     rules: Pick<FiscalRuleStore, 'proposeOverride'>
   },
 ): Promise<void> {
@@ -221,6 +224,14 @@ async function handle(
     return
   }
 
+  const timeline = /^\/documents\/([0-9a-f-]{36})\/transitions$/.exec(url.pathname)
+  if (request.method === 'GET' && timeline?.[1]) {
+    const found = await dependencies.documents.timeline(principal.tenantId, timeline[1])
+    if (!found) problem(response, 404, 'Not Found', 'Fiscal document not found')
+    else json(response, 200, found)
+    return
+  }
+
   const calculation = /^\/documents\/([0-9a-f-]{36})\/calculation(\/explanation)?$/.exec(
     url.pathname,
   )
@@ -354,6 +365,89 @@ async function handle(
     return
   }
 
+  const cancellationQuery = /^\/documents\/([0-9a-f-]{36})\/cancellation-queries$/.exec(
+    url.pathname,
+  )
+  if (
+    request.method === 'POST' &&
+    cancellationQuery?.[1] &&
+    dependencies.dispatch &&
+    dependencies.cancellation
+  ) {
+    if (!requirePermission(principal, 'cancellation:request', response)) return
+    const key = request.headers['idempotency-key']
+    if (typeof key !== 'string' || key.length < 16 || key.length > 128) {
+      problem(response, 400, 'Bad Request', 'Idempotency-Key must have 16 to 128 characters')
+      return
+    }
+    try {
+      const result = await dependencies.dispatch.queueCancellationQuery({
+        tenantId: principal.tenantId,
+        documentId: cancellationQuery[1],
+        idempotencyKey: key,
+        actorId: principal.subject,
+        requestDigest: canonicalDigest({
+          documentId: cancellationQuery[1],
+          command: 'cancellation_query',
+        }),
+      })
+      json(response, 202, {
+        commandId: result.commandId,
+        documentId: result.documentId,
+        status: 'cancellation_pending',
+        statusUrl: `/fiscal/documents/${result.documentId}`,
+        simulated: true,
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Fiscal document not found')
+        problem(response, 404, 'Not Found', error.message)
+      else if (error instanceof Error && error.message.startsWith('Conflicting'))
+        problem(response, 409, 'Conflict', error.message)
+      else if (error instanceof Error && error.message.includes('not consultable'))
+        lifecycleProblem(response, 409, 'INVALID_STATE_TRANSITION', error.message)
+      else throw error
+    }
+    return
+  }
+
+  const cancellationRequest = /^\/documents\/([0-9a-f-]{36})\/cancellation-requests$/.exec(
+    url.pathname,
+  )
+  if (request.method === 'POST' && cancellationRequest?.[1] && dependencies.cancellation) {
+    if (!requirePermission(principal, 'cancellation:request', response)) return
+    const key = request.headers['idempotency-key']
+    if (typeof key !== 'string' || key.length < 16 || key.length > 128) {
+      problem(response, 400, 'Bad Request', 'Idempotency-Key must have 16 to 128 characters')
+      return
+    }
+    try {
+      const body = z
+        .strictObject({ reason: z.string().trim().min(15).max(255) })
+        .parse(await readJson(request))
+      const result = await dependencies.cancellation.request({
+        tenantId: principal.tenantId,
+        documentId: cancellationRequest[1],
+        idempotencyKey: key,
+        actorId: principal.subject,
+        reason: body.reason,
+      })
+      json(response, 202, result)
+    } catch (error) {
+      if (error instanceof z.ZodError || error instanceof SyntaxError)
+        problem(response, 422, 'Unprocessable Content', 'Invalid cancellation request')
+      else if (error instanceof Error && error.message === 'Fiscal document not found')
+        problem(response, 404, 'Not Found', error.message)
+      else if (error instanceof Error && error.message.startsWith('Conflicting'))
+        problem(response, 409, 'Conflict', error.message)
+      else if (error instanceof Error && error.message.includes('capability'))
+        lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
+      else if (error instanceof Error && error.message.includes('not allowed'))
+        lifecycleProblem(response, 409, 'CANCELLATION_NOT_ALLOWED', error.message)
+      else throw error
+    }
+    return
+  }
+
   const correction = /^\/documents\/([0-9a-f-]{36})\/corrections$/.exec(url.pathname)
   if (request.method === 'POST' && correction?.[1]) {
     if (!requirePermission(principal, 'draft:create', response)) return
@@ -396,9 +490,11 @@ async function handle(
 
   if (
     request.method === 'POST' &&
-    /^\/documents\/[0-9a-f-]{36}\/(issue|cancellation-requests)$/.test(url.pathname)
+    /^\/documents\/[0-9a-f-]{36}\/(issue|cancellation-requests|cancellation-queries)$/.test(
+      url.pathname,
+    )
   ) {
-    const permission: FiscalPermission = url.pathname.endsWith('/cancellation-requests')
+    const permission: FiscalPermission = url.pathname.includes('/cancellation-')
       ? 'cancellation:request'
       : 'transmission:submit'
     if (!requirePermission(principal, permission, response)) return

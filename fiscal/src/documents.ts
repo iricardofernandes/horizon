@@ -62,6 +62,18 @@ export type DocumentView = Omit<Draft, 'status'> & {
   createdAt: string
 }
 
+export type DocumentTransition = {
+  id: string
+  documentId: string
+  from: DocumentView['status'] | null
+  to: DocumentView['status']
+  actorId: string
+  commandId: string | null
+  reason: string | null
+  correlationId: string | null
+  occurredAt: string
+}
+
 /** Internal Phase 40 persistence. Public issuance remains unavailable. */
 export class FiscalDocuments {
   readonly #db: ReturnType<typeof postgres>
@@ -129,6 +141,54 @@ export class FiscalDocuments {
       statusUrl: `/fiscal/documents/${row.id}`,
       createdAt: new Date(row.created_at).toISOString(),
     }
+  }
+
+  async timeline(
+    tenantId: string,
+    documentId: string,
+  ): Promise<{ documentId: string; transitions: DocumentTransition[] } | null> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(documentId)
+    const result = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      const [document] = await tx`select id from fiscal_documents
+        where tenant_id = ${tenantId} and id = ${documentId}`
+      if (!document) return null
+      const [rows, commands] = await Promise.all([
+        tx`select id, kind, detail, occurred_at from fiscal_transitions
+          where tenant_id = ${tenantId} and document_id = ${documentId}
+          order by occurred_at, id`,
+        tx`select id, actor_id from fiscal_dispatch_commands
+          where tenant_id = ${tenantId} and document_id = ${documentId}`,
+      ])
+      return { rows, commands }
+    })
+    if (!result) return null
+    const actors = new Map(result.commands.map((row) => [String(row.id), String(row.actor_id)]))
+    let previous: DocumentView['status'] | null = null
+    const transitions: DocumentTransition[] = []
+    for (const row of result.rows) {
+      if (row.kind === 'number_reserved') continue
+      const to = row.kind === 'draft_created' ? 'draft' : (row.kind as DocumentView['status'])
+      const detail = typeof row.detail === 'string' ? JSON.parse(row.detail) : (row.detail ?? {})
+      const commandId =
+        detail && typeof detail === 'object' && typeof detail.commandId === 'string'
+          ? detail.commandId
+          : null
+      transitions.push({
+        id: String(row.id),
+        documentId,
+        from: previous,
+        to,
+        actorId: (commandId && actors.get(commandId)) || 'system:fiscal',
+        commandId,
+        reason: null,
+        correlationId: null,
+        occurredAt: new Date(row.occurred_at).toISOString(),
+      })
+      previous = to
+    }
+    return { documentId, transitions }
   }
 
   async createDraft(input: DraftInput): Promise<Draft> {

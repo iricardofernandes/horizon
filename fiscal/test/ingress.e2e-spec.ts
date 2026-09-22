@@ -18,6 +18,7 @@ import { FiscalConsumer } from '../src/consumer'
 import { FiscalDocuments } from '../src/documents'
 import { FiscalIngress } from '../src/ingress'
 import { FiscalLifecycle } from '../src/lifecycle'
+import { FiscalOutboxRelay } from '../src/outbox'
 import { DeterministicAuthorityGateway } from '../src/ports'
 import { FiscalProjections } from '../src/projections'
 
@@ -76,6 +77,75 @@ afterAll(async () => {
     rabbitmq?.stop(),
     artifactRoot && rm(artifactRoot, { recursive: true, force: true }),
   ])
+})
+
+it('publishes tenant-scoped simulation outbox events with confirms and marks delivery once', async () => {
+  const tenantId = randomUUID()
+  const otherTenantId = randomUUID()
+  const eventId = randomUUID()
+  const otherEventId = randomUUID()
+  const documentId = randomUUID()
+  const payload = {
+    documentId,
+    rootDocumentId: documentId,
+    revision: 1,
+    originModule: 'sales',
+    originDocumentType: 'shipment',
+    originId: randomUUID(),
+    originPurpose: 'original',
+    model: '55',
+    environment: 'simulation',
+    simulated: true,
+    adapterVersion: 'nfe55-simulator-v1',
+    statusDigest: 'a'.repeat(64),
+    observedAt: '2026-09-22T17:00:00.000Z',
+    authorityReference: 'simulation:authorized',
+    protocolDigest: 'b'.repeat(64),
+  }
+  await administrator`insert into tenants (id) values (${tenantId}), (${otherTenantId})`
+  await administrator`insert into fiscal_outbox (tenant_id, event_id, event_type, payload)
+    values (${tenantId}, ${eventId}, 'fiscal.document.simulation-authorized',
+      ${administrator.json(payload)}),
+      (${otherTenantId}, ${otherEventId}, 'fiscal.document.simulation-authorized',
+      ${administrator.json({ ...payload, documentId: randomUUID() })})`
+  const connection = await connect(rabbitmq.getAmqpUrl())
+  const channel = await connection.createChannel()
+  const relay = new FiscalOutboxRelay(appUrl, rabbitmq.getAmqpUrl())
+  try {
+    await channel.assertExchange('horizon.events', 'topic', { durable: true })
+    await channel.assertQueue('phase42.fiscal-outbox.test', { durable: true })
+    await channel.bindQueue(
+      'phase42.fiscal-outbox.test',
+      'horizon.events',
+      'fiscal.document.simulation-authorized',
+    )
+    expect(await relay.flush(tenantId)).toBe(1)
+    expect(await relay.flush(tenantId)).toBe(0)
+    const received = await channel.get('phase42.fiscal-outbox.test', { noAck: true })
+    expect(received).not.toBe(false)
+    if (!received) throw new Error('Fiscal outbox event was not published')
+    expect(JSON.parse(received.content.toString())).toMatchObject({
+      eventId,
+      tenantId,
+      eventType: 'fiscal.document.simulation-authorized',
+      eventVersion: 1,
+      payload: { documentId, simulated: true },
+    })
+    expect(await channel.get('phase42.fiscal-outbox.test', { noAck: true })).toBe(false)
+    const rows = await administrator`select tenant_id, delivered_at from fiscal_outbox
+      where event_id in (${eventId}, ${otherEventId}) order by tenant_id`
+    expect(rows.find((row) => row.tenant_id === tenantId)?.delivered_at).not.toBeNull()
+    expect(rows.find((row) => row.tenant_id === otherTenantId)?.delivered_at).toBeNull()
+    await expect(
+      administrator`update fiscal_outbox set payload = ${administrator.json({ altered: true })}
+        where tenant_id = ${tenantId} and event_id = ${eventId}`,
+    ).rejects.toMatchObject({ code: '23514' })
+  } finally {
+    await relay.close()
+    await channel.deleteQueue('phase42.fiscal-outbox.test')
+    await channel.close()
+    await connection.close()
+  }
 })
 
 it('forces tenant RLS on every Fiscal business table', async () => {
