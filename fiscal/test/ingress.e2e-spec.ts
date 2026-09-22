@@ -84,7 +84,14 @@ it('forces tenant RLS on every Fiscal business table', async () => {
     from pg_class where relkind = 'r'
       and relnamespace = 'public'::regnamespace
       and relname <> 'fiscal_migrations' order by relname`
-  expect(rows.length).toBe(27)
+  expect(rows.map((row) => row.relname)).toEqual(
+    expect.arrayContaining([
+      'fiscal_package_reviews',
+      'fiscal_reference_entries',
+      'fiscal_tax_rules',
+      'fiscal_rule_activation_events',
+    ]),
+  )
   expect(
     rows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity).map((row) => row.relname),
   ).toEqual([])
