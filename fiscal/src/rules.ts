@@ -12,6 +12,7 @@ export type TaxRule = ResolvedComponentRule & {
   scope: {
     model: FiscalCalculationInput['model']
     environment: FiscalCalculationInput['environment']
+    purpose: FiscalCalculationInput['purpose']
     operation?: string
     issuerEstablishmentId?: string
     issuerRegime?: string
@@ -133,6 +134,7 @@ function matches(
   if (rule.effectiveTo && selectionDate >= rule.effectiveTo) return false
   const scope = rule.scope
   if (scope.model !== input.model || scope.environment !== input.environment) return false
+  if (scope.purpose !== input.purpose) return false
   if (scope.operation && scope.operation !== input.operation) return false
   if (scope.issuerEstablishmentId && scope.issuerEstablishmentId !== input.issuerEstablishmentId)
     return false

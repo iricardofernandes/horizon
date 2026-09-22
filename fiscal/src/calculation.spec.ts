@@ -198,4 +198,30 @@ describe('pure Fiscal calculation', () => {
       ),
     ).toEqual(outcome)
   })
+
+  it('requires an explicit return formula before producing negative return amounts', () => {
+    const returned = {
+      ...input,
+      purpose: 'return' as const,
+      referencedDocumentId: '018f5d4e-0000-7000-8000-000000000014',
+    }
+    expect(calculateFiscal(returned, rules())).toMatchObject({
+      supported: false,
+      code: 'UNSUPPORTED_RULE',
+    })
+    const returnRules = rules()
+    const selected = returnRules.lines[lineId]?.[0]
+    if (!selected) throw new Error('fixture has no rule')
+    returnRules.lines = {
+      [lineId]: [{ ...selected, formula: 'RETURN_LINE_NET_TIMES_RATE' }],
+    }
+    const outcome = calculateFiscal(returned, returnRules)
+    expect(outcome.supported).toBe(true)
+    if (!outcome.supported) return
+    expect(outcome.lines[0]).toMatchObject({
+      gross: { amount: '-2513' },
+      net: { amount: '-2501' },
+      components: { legacy: [{ amount: { amount: '-250' } }] },
+    })
+  })
 })

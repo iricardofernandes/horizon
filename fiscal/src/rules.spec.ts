@@ -51,7 +51,7 @@ function rule(overrides: Partial<TaxRule> = {}): TaxRule {
     effectiveFrom: '2026-09-01',
     effectiveTo: '2026-10-01',
     active: true,
-    scope: { model: '55', environment: 'simulation' },
+    scope: { model: '55', environment: 'simulation', purpose: 'normal' },
     rate: { numerator: '1', denominator: '10' },
     formula: 'LINE_NET_TIMES_RATE',
     rule: { id: '018f5d4e-1000-7000-8000-000000000006', version: 1 },
@@ -147,5 +147,29 @@ describe('temporal tax rule resolution', () => {
       supported: false,
       code: 'UNSUPPORTED_RULE',
     })
+  })
+
+  it('never reuses a normal-operation rule for a return', () => {
+    const returned = {
+      ...input,
+      purpose: 'return' as const,
+      referencedDocumentId: '018f5d4e-1000-7000-8000-000000000011',
+    }
+    expect(resolveTaxRules(returned, [rule()], 2)).toMatchObject({
+      supported: false,
+      code: 'UNSUPPORTED_RULE',
+    })
+    expect(
+      resolveTaxRules(
+        returned,
+        [
+          rule({
+            scope: { ...rule().scope, purpose: 'return' },
+            formula: 'RETURN_LINE_NET_TIMES_RATE',
+          }),
+        ],
+        2,
+      ).supported,
+    ).toBe(true)
   })
 })

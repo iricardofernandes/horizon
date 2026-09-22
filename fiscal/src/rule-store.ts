@@ -54,7 +54,8 @@ const taxRuleImportSchema = z.object({
     numerator: z.string().regex(/^-?\d+$/),
     denominator: z.string().regex(/^[1-9]\d*$/),
   }),
-  formula: z.enum(['LINE_NET_TIMES_RATE', 'DOCUMENT_NET_TIMES_RATE']),
+  purpose: z.enum(['normal', 'return', 'complementary', 'adjustment']).default('normal'),
+  formula: z.enum(['LINE_NET_TIMES_RATE', 'DOCUMENT_NET_TIMES_RATE', 'RETURN_LINE_NET_TIMES_RATE']),
   sourceLocator: z.string().min(1).max(300),
 })
 
@@ -280,14 +281,15 @@ export class FiscalRuleStore {
     const id = randomUUID()
     await sql`insert into fiscal_tax_rules (
       id, tenant_id, package_id, rule_key, version, component_group, component_code,
-      precedence, priority, date_basis, model, environment, operation, issuer_establishment_id,
+      precedence, priority, date_basis, purpose, model, environment, operation, issuer_establishment_id,
       issuer_regime, recipient_regime, origin_state, destination_state, subject_kind,
       subject_id, classification_kind, classification_code, effective_from, effective_to,
       rate_numerator, rate_denominator, formula, source_locator, definition_digest
     ) values (
       ${id}, ${tenantId}, ${packageId}, ${rule.ruleKey}, ${rule.version},
       ${rule.group === 'ibsCbs' ? 'ibs_cbs' : 'legacy'}, ${rule.code}, ${rule.precedence},
-      ${rule.priority}, ${rule.dateBasis}, ${rule.model}, ${rule.environment}, ${rule.operation ?? '*'},
+      ${rule.priority}, ${rule.dateBasis}, ${rule.purpose}, ${rule.model}, ${rule.environment},
+      ${rule.operation ?? '*'},
       ${rule.issuerEstablishmentId ?? '*'}, ${rule.issuerRegime ?? '*'},
       ${rule.recipientRegime ?? '*'}, ${rule.originState ?? '*'},
       ${rule.destinationState ?? '*'}, ${rule.subject?.kind ?? '*'},
@@ -323,6 +325,7 @@ function toTaxRule(row: postgres.Row): TaxRule {
     scope: {
       model: row.model as TaxRule['scope']['model'],
       environment: row.environment as TaxRule['scope']['environment'],
+      purpose: row.purpose as TaxRule['scope']['purpose'],
       ...(operation ? { operation } : {}),
       ...(issuerEstablishmentId ? { issuerEstablishmentId } : {}),
       ...(issuerRegime ? { issuerRegime } : {}),

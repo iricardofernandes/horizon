@@ -19,7 +19,7 @@ export type ResolvedComponentRule = {
   group: 'legacy' | 'ibsCbs'
   code: string
   rate: { numerator: string; denominator: string }
-  formula: 'LINE_NET_TIMES_RATE' | 'DOCUMENT_NET_TIMES_RATE'
+  formula: 'LINE_NET_TIMES_RATE' | 'DOCUMENT_NET_TIMES_RATE' | 'RETURN_LINE_NET_TIMES_RATE'
   rule: { id: string; version: number }
   source: {
     packageId: string
@@ -67,10 +67,14 @@ export function calculateFiscal(
     const lineRules = normalizedRules.lines[line.id]
     if (!lineRules) throw new Error('Resolved rule validation invariant failed')
     const calculated = calculateLine(input, line, lineRules, normalizedRules.currencyMinorUnitScale)
-    if (BigInt(calculated.net.amount) < 0n)
+    const invalidDirection =
+      calculationInputDirection(input) === 1n
+        ? BigInt(calculated.net.amount) < 0n
+        : BigInt(calculated.net.amount) > 0n
+    if (invalidDirection)
       return unsupported(
         'INVALID_FISCAL_INPUT',
-        'Discount cannot make a line net amount negative',
+        'Discount and charges produce an invalid line direction',
         line.id,
         inputDigest,
       )
@@ -128,8 +132,13 @@ function calculateLine(
 ): CalculatedLine {
   const scale = integer(10n ** BigInt(currencyMinorUnitScale))
   const grossRational = multiply(multiply(decimal(line.quantity), decimal(line.unitPrice)), scale)
-  const gross = roundHalfAwayFromZero(grossRational)
-  const net = gross - BigInt(line.discount.amount) + BigInt(line.charges.amount)
+  const direction = calculationInputDirection(input)
+  const gross = roundHalfAwayFromZero(grossRational) * direction
+  const net =
+    (roundHalfAwayFromZero(grossRational) -
+      BigInt(line.discount.amount) +
+      BigInt(line.charges.amount)) *
+    direction
   const components = { legacy: [] as CalculatedComponent[], ibsCbs: [] as CalculatedComponent[] }
   for (const rule of rules)
     components[rule.group].push(calculateComponent(net, input.currency, rule))
@@ -242,6 +251,14 @@ function validateRules(
       )
     const identities = new Set<string>()
     for (const rule of lineRules) {
+      const returnFormula = rule.formula === 'RETURN_LINE_NET_TIMES_RATE'
+      if ((input.purpose === 'return') !== returnFormula)
+        return unsupported(
+          'UNSUPPORTED_RULE',
+          'The selected formula does not match the document purpose',
+          `${rule.group}:${rule.code}`,
+          inputDigest,
+        )
       if (!rule.source.approved)
         return unsupported(
           'SOURCE_NOT_APPROVED',
@@ -335,4 +352,8 @@ function renderExplanation(lines: readonly CalculatedLine[]): string {
       ),
     ])
     .join('\n')
+}
+
+function calculationInputDirection(input: FiscalCalculationInput): bigint {
+  return input.purpose === 'return' ? -1n : 1n
 }
