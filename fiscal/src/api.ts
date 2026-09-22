@@ -2,12 +2,14 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
 import { type FiscalPermission, type FiscalPrincipal, type FiscalTokenVerifier, may } from './auth'
+import type { FiscalCalculations } from './calculations'
 import type { FiscalDocuments } from './documents'
 
 export function createFiscalServer(dependencies: {
   verifier: Pick<FiscalTokenVerifier, 'verify'>
   documents: Pick<FiscalDocuments, 'get' | 'createDraft'>
   artifacts: Pick<FiscalArtifacts, 'get'>
+  calculations: Pick<FiscalCalculations, 'preview' | 'get'>
 }): Server {
   return createServer((request, response) => {
     void handle(request, response, dependencies).catch(() =>
@@ -23,6 +25,7 @@ async function handle(
     verifier: Pick<FiscalTokenVerifier, 'verify'>
     documents: Pick<FiscalDocuments, 'get' | 'createDraft'>
     artifacts: Pick<FiscalArtifacts, 'get'>
+    calculations: Pick<FiscalCalculations, 'preview' | 'get'>
   },
 ): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://fiscal.local')
@@ -45,6 +48,30 @@ async function handle(
       supported: [],
       requested: Object.fromEntries(url.searchParams),
     })
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/calculations/preview') {
+    try {
+      const body = await readJson(request)
+      if (!body || typeof body !== 'object' || Array.isArray(body)) throw new SyntaxError()
+      const outcome = await dependencies.calculations.preview({
+        ...(body as Record<string, unknown>),
+        tenantId: principal.tenantId,
+      })
+      response.setHeader('cache-control', 'private, no-store')
+      if (outcome.supported) json(response, 200, outcome)
+      else
+        fiscalProblem(
+          response,
+          outcome.code === 'AMBIGUOUS_RULE' || outcome.code === 'SOURCE_NOT_APPROVED' ? 409 : 422,
+          outcome,
+        )
+    } catch (error) {
+      if (error instanceof SyntaxError)
+        problem(response, 400, 'Bad Request', 'Invalid Fiscal calculation preview request')
+      else throw error
+    }
     return
   }
 
@@ -125,6 +152,32 @@ async function handle(
     return
   }
 
+  const calculation = /^\/documents\/([0-9a-f-]{36})\/calculation(\/explanation)?$/.exec(
+    url.pathname,
+  )
+  if (request.method === 'GET' && calculation?.[1]) {
+    const found = await dependencies.calculations.get(principal.tenantId, calculation[1])
+    response.setHeader('cache-control', 'private, no-store')
+    if (!found) problem(response, 404, 'Not Found', 'Fiscal calculation not found')
+    else if (calculation[2])
+      json(response, 200, {
+        documentId: calculation[1],
+        inputDigest: found.inputDigest,
+        rulesDigest: found.rulesDigest,
+        resultDigest: found.resultDigest,
+        explanation: found.explanation,
+        sources: [
+          ...new Map(
+            found.lines
+              .flatMap((line) => [...line.components.legacy, ...line.components.ibsCbs])
+              .map((component) => [component.source.digest, component.source]),
+          ).values(),
+        ],
+      })
+    else json(response, 200, found)
+    return
+  }
+
   if (
     request.method === 'POST' &&
     /^\/documents\/[0-9a-f-]{36}\/(validate|issue|cancellation-requests)$/.test(url.pathname)
@@ -170,4 +223,21 @@ function problem(response: ServerResponse, status: number, title: string, detail
   if (response.headersSent) return
   response.writeHead(status, { 'content-type': 'application/problem+json; charset=utf-8' })
   response.end(JSON.stringify({ type: 'about:blank', title, status, detail }))
+}
+
+function fiscalProblem(
+  response: ServerResponse,
+  status: number,
+  outcome: Extract<Awaited<ReturnType<FiscalCalculations['preview']>>, { supported: false }>,
+): void {
+  if (response.headersSent) return
+  response.writeHead(status, { 'content-type': 'application/problem+json; charset=utf-8' })
+  response.end(
+    JSON.stringify({
+      type: `https://horizon.dev/problems/fiscal/${outcome.code.toLowerCase().replaceAll('_', '-')}`,
+      title: 'Fiscal calculation is not supported',
+      status,
+      ...outcome,
+    }),
+  )
 }

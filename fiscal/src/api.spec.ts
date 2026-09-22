@@ -6,6 +6,8 @@ import type { FiscalPrincipal } from './auth'
 const tenantId = randomUUID()
 const documentId = randomUUID()
 const otherTenant = randomUUID()
+const lineId = randomUUID()
+let previewInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
 const server = createFiscalServer({
   verifier: {
@@ -51,6 +53,23 @@ const server = createFiscalServer({
           createdAt: '2026-09-21T00:00:00.000Z',
         },
       }
+    },
+  },
+  calculations: {
+    async preview(input) {
+      previewInput = input
+      return {
+        schemaVersion: 1,
+        supported: false,
+        code: 'UNSUPPORTED_RULE',
+        detail: 'No reviewed rule matches',
+        missingDimension: lineId,
+        inputDigest: 'b'.repeat(64),
+      }
+    },
+    async get(requestedTenant, requestedDocument) {
+      if (requestedTenant !== tenantId || requestedDocument !== documentId) return null
+      return calculationResult()
     },
   },
 })
@@ -127,3 +146,93 @@ it('creates only simulation drafts with an idempotency key for an issuer', async
     role = 'viewer'
   }
 })
+
+it('previews with the authenticated tenant and returns a stable typed problem', async () => {
+  const response = await fetch(`${base}/calculations/preview`, {
+    method: 'POST',
+    headers: { authorization: 'Bearer test', 'content-type': 'application/json' },
+    body: JSON.stringify({ schemaVersion: 1, tenantId: otherTenant }),
+  })
+  expect(response.status).toBe(422)
+  expect(response.headers.get('cache-control')).toBe('private, no-store')
+  expect(previewInput).toMatchObject({ tenantId })
+  expect(await response.json()).toMatchObject({
+    type: 'https://horizon.dev/problems/fiscal/unsupported-rule',
+    code: 'UNSUPPORTED_RULE',
+    missingDimension: lineId,
+  })
+})
+
+it('reads frozen calculations and saved explanations without selecting current rules', async () => {
+  const headers = { authorization: 'Bearer test' }
+  const calculation = await fetch(`${base}/documents/${documentId}/calculation`, { headers })
+  expect(calculation.status).toBe(200)
+  expect(calculation.headers.get('cache-control')).toBe('private, no-store')
+  expect(await calculation.json()).toMatchObject({ supported: true, resultDigest: 'c'.repeat(64) })
+  const explanation = await fetch(`${base}/documents/${documentId}/calculation/explanation`, {
+    headers,
+  })
+  expect(explanation.status).toBe(200)
+  expect(await explanation.json()).toMatchObject({
+    documentId,
+    explanation: { templateVersion: 'fiscal-explanation-v1' },
+    sources: [{ digest: 'd'.repeat(64) }],
+  })
+  expect((await fetch(`${base}/documents/${otherTenant}/calculation`, { headers })).status).toBe(
+    404,
+  )
+})
+
+function calculationResult() {
+  const source = {
+    packageId: randomUUID(),
+    digest: 'd'.repeat(64),
+    uri: 'https://example.invalid/source',
+    section: 'fixture-only',
+  }
+  return {
+    schemaVersion: 1 as const,
+    supported: true as const,
+    inputDigest: 'a'.repeat(64),
+    rulesDigest: 'b'.repeat(64),
+    resultDigest: 'c'.repeat(64),
+    lines: [
+      {
+        lineId,
+        gross: { amount: '1000', currency: 'BRL' },
+        net: { amount: '1000', currency: 'BRL' },
+        components: {
+          legacy: [
+            {
+              code: 'ILLUSTRATIVE_TAX',
+              base: { amount: '1000', currency: 'BRL' },
+              rate: { numerator: '1', denominator: '10' },
+              unrounded: { numerator: '100', denominator: '1', currency: 'BRL' },
+              amount: { amount: '100', currency: 'BRL' },
+              formula: 'LINE_NET_TIMES_RATE',
+              rounding: { mode: 'half-away-from-zero' as const, scale: 0 },
+              rule: { id: randomUUID(), version: 1 },
+              source,
+            },
+          ],
+          ibsCbs: [],
+        },
+      },
+    ],
+    totals: {
+      gross: { amount: '1000', currency: 'BRL' },
+      discounts: { amount: '0', currency: 'BRL' },
+      charges: { amount: '0', currency: 'BRL' },
+      net: { amount: '1000', currency: 'BRL' },
+      legacyTax: { amount: '100', currency: 'BRL' },
+      ibsCbsTax: { amount: '0', currency: 'BRL' },
+    },
+    reconciliation: {
+      lineNetSum: { amount: '1000', currency: 'BRL' },
+      legacyComponentSum: { amount: '100', currency: 'BRL' },
+      ibsCbsComponentSum: { amount: '0', currency: 'BRL' },
+      balanced: true as const,
+    },
+    explanation: { templateVersion: 'fiscal-explanation-v1', text: 'Illustrative explanation' },
+  }
+}

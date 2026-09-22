@@ -6,10 +6,12 @@ import { EncryptedFiscalArtifactStore, S3ObjectStore } from './artifact-store'
 import { FiscalArtifacts } from './artifacts'
 import { FiscalTokenVerifier, RedisDenylist } from './auth'
 import { HttpOwnerFiscalClient } from './backfill'
+import { FiscalCalculations } from './calculations'
 import { FiscalConsumer } from './consumer'
 import { FiscalDocuments } from './documents'
 import { FiscalIngress } from './ingress'
 import { FiscalProjections } from './projections'
+import { FiscalRuleStore } from './rule-store'
 import { FiscalServiceTokens } from './service-tokens'
 import { stopTelemetry } from './telemetry'
 
@@ -39,6 +41,12 @@ const documents = new FiscalDocuments(
   config.DATABASE_URL,
   Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
 )
+const ruleStore = new FiscalRuleStore(config.DATABASE_URL)
+const calculations = new FiscalCalculations(
+  config.DATABASE_URL,
+  Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
+  ruleStore,
+)
 const s3 = new S3Client({
   region: config.FISCAL_ARTIFACT_REGION,
   forcePathStyle: Boolean(config.FISCAL_ARTIFACT_ENDPOINT),
@@ -51,7 +59,7 @@ const artifactStore = new EncryptedFiscalArtifactStore(
 const artifacts = new FiscalArtifacts(config.DATABASE_URL, artifactStore)
 const denylist = new RedisDenylist(config.REDIS_URL)
 const verifier = new FiscalTokenVerifier(`${config.IDENTITY_URL}/.well-known/jwks.json`, denylist)
-const server = createFiscalServer({ verifier, documents, artifacts })
+const server = createFiscalServer({ verifier, documents, artifacts, calculations })
 const keys = z
   .record(z.uuid(), z.string().min(20))
   .parse(JSON.parse(config.FISCAL_SERVICE_KEYS_JSON))
@@ -76,6 +84,8 @@ async function stop(): Promise<void> {
     projections.close(),
     documents.close(),
     artifacts.close(),
+    calculations.close(),
+    ruleStore.close(),
     denylist.close(),
   ])
   s3.destroy()
@@ -99,6 +109,8 @@ void consumer
       projections.close(),
       documents.close(),
       artifacts.close(),
+      calculations.close(),
+      ruleStore.close(),
       denylist.close(),
     ])
     s3.destroy()
