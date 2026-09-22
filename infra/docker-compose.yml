@@ -30,8 +30,39 @@ volumes:
   loki-data:
   grafana-data:
   mcp-debugger-audit:
+  fiscal-artifacts:
 
 services:
+  minio:
+    <<: *restart
+    profiles: [fiscal]
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: horizon-minio
+    networks: [horizon]
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${HORIZON_MINIO_USER:-horizon-fiscal-local}
+      MINIO_ROOT_PASSWORD: ${HORIZON_MINIO_PASSWORD:-horizon-fiscal-local-secret}
+    volumes:
+      - fiscal-artifacts:/data
+
+  minio-init:
+    profiles: [fiscal]
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    networks: [horizon]
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${HORIZON_MINIO_USER:-horizon-fiscal-local}
+      MINIO_ROOT_PASSWORD: ${HORIZON_MINIO_PASSWORD:-horizon-fiscal-local-secret}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done
+        mc mb --ignore-existing local/horizon-fiscal-artifacts
+        mc version enable local/horizon-fiscal-artifacts
+
   # ---------------------------------------------------------------- data
   postgres:
     <<: *restart

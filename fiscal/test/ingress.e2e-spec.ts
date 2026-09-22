@@ -1,16 +1,24 @@
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { RabbitMQContainer, type StartedRabbitMQContainer } from '@testcontainers/rabbitmq'
 import { connect } from 'amqplib'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
+import { EncryptedFiscalArtifactStore, LocalObjectStore } from '../src/artifact-store'
+import { FiscalArtifacts } from '../src/artifacts'
+import { type AuditRow, verifyAuditRows } from '../src/audit'
 import { FiscalBackfill, HttpOwnerFiscalClient, type OwnerFiscalClient } from '../src/backfill'
 import { FiscalConsumer } from '../src/consumer'
 import { FiscalDocuments } from '../src/documents'
 import { FiscalIngress } from '../src/ingress'
+import { FiscalLifecycle } from '../src/lifecycle'
+import { DeterministicAuthorityGateway } from '../src/ports'
 import { FiscalProjections } from '../src/projections'
 
 let container: StartedPostgreSqlContainer
@@ -20,6 +28,9 @@ let administrator: ReturnType<typeof postgres>
 let ingress: FiscalIngress
 let projections: FiscalProjections
 let documents: FiscalDocuments
+let artifactRoot: string
+let artifactKey: Buffer
+let appUrl: string
 
 beforeAll(async () => {
   ;[container, rabbitmq] = await Promise.all([
@@ -41,15 +52,17 @@ beforeAll(async () => {
     { prepare: false },
   )
   const migrationUrl = container.getConnectionUri().replace('postgres:test@', 'horizon_owner:test@')
-  const appUrl = container.getConnectionUri().replace('postgres:test@', 'horizon_app:test@')
+  appUrl = container.getConnectionUri().replace('postgres:test@', 'horizon_app:test@')
+  artifactRoot = await mkdtemp(join(tmpdir(), 'horizon-fiscal-artifacts-'))
+  artifactKey = randomBytes(32)
   await promisify(execFile)(process.execPath, ['scripts/migrate.mjs'], {
     cwd: process.cwd(),
     env: { ...process.env, DATABASE_MIGRATION_URL: migrationUrl },
   })
   app = postgres(appUrl, { max: 1 })
-  ingress = new FiscalIngress(appUrl)
+  ingress = new FiscalIngress(appUrl, artifactKey)
   projections = new FiscalProjections(appUrl)
-  documents = new FiscalDocuments(appUrl)
+  documents = new FiscalDocuments(appUrl, artifactKey)
 }, 120_000)
 
 afterAll(async () => {
@@ -61,7 +74,20 @@ afterAll(async () => {
     administrator?.end(),
     container?.stop(),
     rabbitmq?.stop(),
+    artifactRoot && rm(artifactRoot, { recursive: true, force: true }),
   ])
+})
+
+it('forces tenant RLS on every Fiscal business table', async () => {
+  const rows = await administrator`
+    select relname, relrowsecurity, relforcerowsecurity
+    from pg_class where relkind = 'r'
+      and relnamespace = 'public'::regnamespace
+      and relname <> 'fiscal_migrations' order by relname`
+  expect(rows.length).toBe(27)
+  expect(
+    rows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity).map((row) => row.relname),
+  ).toEqual([])
 })
 
 it('consumes duplicate broker deliveries into one fiscal intent', async () => {
@@ -372,38 +398,64 @@ it('creates one intent for two messages about one delivery and isolates tenants'
 it('keeps one immutable draft per origin and reserves unique numbers under concurrent retries', async () => {
   const tenantId = randomUUID()
   const otherTenant = randomUUID()
-  await ingress.accept(origin(tenantId, randomUUID()))
+  const firstOrigin = origin(tenantId, randomUUID())
+  await ingress.accept(firstOrigin)
   await ingress.accept(origin(tenantId, randomUUID()))
   await ingress.accept(origin(otherTenant, randomUUID()))
-  const intents = await administrator`select id, tenant_id from fiscal_intents
+  const intents = await administrator`select id, tenant_id, origin_id from fiscal_intents
     where tenant_id in (${tenantId}, ${otherTenant}) order by created_at, id`
   const own = intents.filter((row) => row.tenant_id === tenantId)
+  const firstIntent = own.find((row) => row.origin_id === firstOrigin.payload.originId)
+  const secondIntent = own.find((row) => row.origin_id !== firstOrigin.payload.originId)
   const foreign = intents.find((row) => row.tenant_id === otherTenant)
-  if (!own[0] || !own[1] || !foreign) throw new Error('Test intents were not stored')
+  if (!firstIntent || !secondIntent || !foreign) throw new Error('Test intents were not stored')
   const establishmentId = randomUUID()
   const input = {
     tenantId,
-    intentId: String(own[0].id),
+    intentId: String(firstIntent.id),
     model: '55' as const,
     environment: 'simulation' as const,
     establishmentId,
     series: 1,
-    snapshot: { origin: String(own[0].id), amount: '1000' },
   }
   const [first, duplicate] = await Promise.all([
     documents.createDraft(input),
     documents.createDraft(input),
   ])
   expect(duplicate.id).toBe(first.id)
-  await expect(documents.createDraft({ ...input, snapshot: { amount: '2000' } })).rejects.toThrow(
+  expect(await documents.readSnapshot(tenantId, first.id)).toEqual(firstOrigin.payload)
+  const [capturedOrigin] = await administrator`select payload_ciphertext
+    from fiscal_origin_payloads where tenant_id = ${tenantId} and intent_id = ${firstIntent.id}`
+  expect(Buffer.from(capturedOrigin?.payload_ciphertext).includes(Buffer.from('Item'))).toBe(false)
+  const [storedSnapshot] = await administrator`select snapshot_ciphertext
+    from fiscal_documents where tenant_id = ${tenantId} and id = ${first.id}`
+  expect(Buffer.from(storedSnapshot?.snapshot_ciphertext).includes(Buffer.from('1000'))).toBe(false)
+  await expect(documents.createDraft({ ...input, model: '65' })).rejects.toThrow(
     'Conflicting fiscal draft',
   )
   await expect(documents.createDraft({ ...input, intentId: String(foreign.id) })).rejects.toThrow()
   const second = await documents.createDraft({
     ...input,
-    intentId: String(own[1].id),
-    snapshot: { origin: String(own[1].id) },
+    intentId: String(secondIntent.id),
+    idempotencyKey: randomUUID(),
   })
+  const [secondKey] = await administrator`select key from fiscal_idempotency
+    where tenant_id = ${tenantId} and document_id = ${second.id}`
+  expect(
+    (
+      await documents.createDraft({
+        ...input,
+        intentId: String(secondIntent.id),
+        idempotencyKey: String(secondKey?.key),
+      })
+    ).id,
+  ).toBe(second.id)
+  await expect(
+    documents.createDraft({
+      ...input,
+      idempotencyKey: String(secondKey?.key),
+    }),
+  ).rejects.toThrow('Conflicting fiscal idempotency key')
   const [numberA, retryA, numberB] = await Promise.all([
     documents.reserveNumber(tenantId, first.id),
     documents.reserveNumber(tenantId, first.id),
@@ -419,6 +471,168 @@ it('keeps one immutable draft per origin and reserves unique numbers under concu
   const [transitions] = await administrator`select count(*)::integer as value
     from fiscal_transitions where tenant_id = ${tenantId}`
   expect(transitions?.value).toBe(4)
+  const auditRows = await administrator`select * from fiscal_audit_entries
+    where tenant_id = ${tenantId} order by sequence`
+  const [auditHead] = await administrator`select sequence, hash from fiscal_audit_heads
+    where tenant_id = ${tenantId}`
+  expect(
+    verifyAuditRows(
+      auditRows as unknown as AuditRow[],
+      auditHead as { sequence: number; hash: string },
+    ),
+  ).toBe(true)
+  const altered = auditRows.map((row) => ({ ...row })) as AuditRow[]
+  if (!altered[0]) throw new Error('Audit chain was not recorded')
+  altered[0].action = 'document.changed'
+  expect(verifyAuditRows(altered, auditHead as { sequence: number; hash: string })).toBe(false)
+})
+
+it('does not resubmit after a crash before the simulator call', async () => {
+  const tenantId = randomUUID()
+  await ingress.accept(origin(tenantId, randomUUID()))
+  const [intent] = await administrator`select id from fiscal_intents where tenant_id = ${tenantId}`
+  if (!intent) throw new Error('Test intent was not stored')
+  const draft = await documents.createDraft({
+    tenantId,
+    intentId: String(intent.id),
+    model: '55',
+    environment: 'simulation',
+    establishmentId: randomUUID(),
+    series: 1,
+  })
+  const gateway = new DeterministicAuthorityGateway('authorized')
+  const first = new FiscalLifecycle(appUrl, gateway)
+  try {
+    await first.validate(tenantId, draft.id)
+    await documents.reserveNumber(tenantId, draft.id)
+    await first.prepareSubmission(tenantId, draft.id)
+  } finally {
+    await first.close()
+  }
+  const restarted = new FiscalLifecycle(appUrl, gateway)
+  try {
+    expect((await restarted.submit(tenantId, draft.id)).outcome).toBe('unknown')
+    const [attempts] = await administrator`select count(*)::integer as value
+      from authority_attempts where tenant_id = ${tenantId} and document_id = ${draft.id}`
+    const [numbers] = await administrator`select count(*)::integer as value
+      from fiscal_number_reservations where tenant_id = ${tenantId} and document_id = ${draft.id}`
+    expect([attempts?.value, numbers?.value]).toEqual([1, 1])
+    expect((await documents.get(tenantId, draft.id))?.status).toBe('unknown')
+  } finally {
+    await restarted.close()
+  }
+})
+
+it('retains encrypted artifacts after restart and denies another tenant', async () => {
+  const tenantId = randomUUID()
+  const otherTenant = randomUUID()
+  await ingress.accept(origin(tenantId, randomUUID()))
+  const [intent] = await administrator`select id from fiscal_intents where tenant_id = ${tenantId}`
+  if (!intent) throw new Error('Test intent was not stored')
+  const draft = await documents.createDraft({
+    tenantId,
+    intentId: String(intent.id),
+    model: '55',
+    environment: 'simulation',
+    establishmentId: randomUUID(),
+    series: 1,
+  })
+  const store = new EncryptedFiscalArtifactStore(new LocalObjectStore(artifactRoot), artifactKey)
+  const artifacts = new FiscalArtifacts(appUrl, store)
+  const bytes = Buffer.from('<NFe>simulated-only</NFe>')
+  const input = {
+    tenantId,
+    documentId: draft.id,
+    kind: 'xml' as const,
+    mediaType: 'application/xml',
+    sourceSchema: 'test-schema-v1',
+  }
+  try {
+    const first = await artifacts.put(input, bytes)
+    expect((await artifacts.put(input, bytes)).digest).toBe(first.digest)
+    const key = `${tenantId}/${draft.id}/xml/${first.digest}`
+    const path = join(artifactRoot, key)
+    expect((await readFile(path)).includes(bytes)).toBe(false)
+    await artifacts.close()
+    const restarted = new FiscalArtifacts(
+      appUrl,
+      new EncryptedFiscalArtifactStore(new LocalObjectStore(artifactRoot), artifactKey),
+    )
+    try {
+      expect((await restarted.get(tenantId, draft.id, 'xml', first.digest)).bytes).toEqual(bytes)
+      await expect(restarted.get(otherTenant, draft.id, 'xml', first.digest)).rejects.toThrow(
+        'not found',
+      )
+      await expect(restarted.put({ ...input, tenantId: otherTenant }, bytes)).rejects.toThrow(
+        'not found',
+      )
+      const packed = await readFile(path)
+      packed[packed.length - 1] = (packed.at(-1) ?? 0) ^ 1
+      await writeFile(path, packed)
+      await expect(restarted.get(tenantId, draft.id, 'xml', first.digest)).rejects.toThrow()
+    } finally {
+      await restarted.close()
+    }
+  } finally {
+    await artifacts.close()
+  }
+})
+
+it('reconciles an uncertain simulation after restart without allocating another number', async () => {
+  const tenantId = randomUUID()
+  const otherTenant = randomUUID()
+  await ingress.accept(origin(tenantId, randomUUID()))
+  const [intent] = await administrator`select id from fiscal_intents where tenant_id = ${tenantId}`
+  if (!intent) throw new Error('Test intent was not stored')
+  const draft = await documents.createDraft({
+    tenantId,
+    intentId: String(intent.id),
+    model: '55',
+    environment: 'simulation',
+    establishmentId: randomUUID(),
+    series: 1,
+  })
+  const gateway = new DeterministicAuthorityGateway('authorized', true)
+  const firstProcess = new FiscalLifecycle(appUrl, gateway)
+  try {
+    await expect(firstProcess.validate(otherTenant, draft.id)).rejects.toThrow('not found')
+    await firstProcess.validate(tenantId, draft.id)
+    await firstProcess.validate(tenantId, draft.id)
+    expect(await documents.reserveNumber(tenantId, draft.id)).toBe(1)
+    expect((await firstProcess.submit(tenantId, draft.id)).outcome).toBe('unknown')
+  } finally {
+    await firstProcess.close()
+  }
+  const restarted = new FiscalLifecycle(appUrl, gateway)
+  try {
+    expect((await restarted.reconcile(tenantId, draft.id)).outcome).toBe('authorized')
+    expect((await restarted.submit(tenantId, draft.id)).outcome).toBe('authorized')
+    const [attempts] = await administrator`select count(*)::integer as value
+      from authority_attempts where tenant_id = ${tenantId} and document_id = ${draft.id}`
+    const [numbers] = await administrator`select count(*)::integer as value
+      from fiscal_number_reservations where tenant_id = ${tenantId} and document_id = ${draft.id}`
+    const [lines] = await administrator`select count(*)::integer as value
+      from fiscal_document_lines where tenant_id = ${tenantId} and document_id = ${draft.id}`
+    expect([attempts?.value, numbers?.value, lines?.value]).toEqual([1, 1, 1])
+    expect((await documents.get(tenantId, draft.id))?.status).toBe('authorized')
+    expect(
+      (await restarted.requestCancellation(tenantId, draft.id, 'Requested in simulation')).outcome,
+    ).toBe('unknown')
+  } finally {
+    await restarted.close()
+  }
+  const cancellationRecovery = new FiscalLifecycle(appUrl, gateway)
+  try {
+    expect((await cancellationRecovery.reconcileCancellation(tenantId, draft.id)).outcome).toBe(
+      'cancelled',
+    )
+    expect((await documents.get(tenantId, draft.id))?.status).toBe('cancelled')
+    const [cancellations] = await administrator`select count(*)::integer as value
+      from cancellation_attempts where tenant_id = ${tenantId} and document_id = ${draft.id}`
+    expect(cancellations?.value).toBe(1)
+  } finally {
+    await cancellationRecovery.close()
+  }
 })
 
 it('resumes owner API backfill and verifies issuer, party and catalog revisions', async () => {

@@ -136,6 +136,18 @@ services:
           - /procurement
         strip_path: true
 
+  - name: fiscal
+    url: http://fiscal:3011
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 10000
+    read_timeout: 10000
+    routes:
+      - name: fiscal-api
+        paths:
+          - /fiscal
+        strip_path: true
+
   - name: webhooks
     url: http://webhooks:3005
     retries: 3

@@ -370,19 +370,34 @@ services:
       context: ../fiscal
       network: host
     container_name: horizon-fiscal
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3011/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     depends_on:
       fiscal-migrate:
         condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     environment:
       <<: *env
       OTEL_SERVICE_NAME: fiscal
+      PORT: '3011'
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_fiscal
       PARTIES_URL: http://parties:3006
       IDENTITY_URL: http://identity:3001
       CATALOG_URL: http://catalog:3002
       FISCAL_SERVICE_KEYS_JSON: ${HORIZON_FISCAL_SERVICE_KEYS_JSON:-{}}
+      FISCAL_ARTIFACT_BUCKET: horizon-fiscal-artifacts
+      FISCAL_ARTIFACT_ENDPOINT: http://minio:9000
+      FISCAL_ARTIFACT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${HORIZON_MINIO_USER:-horizon-fiscal-local}
+      AWS_SECRET_ACCESS_KEY: ${HORIZON_MINIO_PASSWORD:-horizon-fiscal-local-secret}
+      FISCAL_ARTIFACT_KEY_HEX: ${HORIZON_FISCAL_ARTIFACT_KEY_HEX:-}
 
   webhooks-migrate:
     <<: *service

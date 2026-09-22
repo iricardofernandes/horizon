@@ -1,6 +1,7 @@
 const roots = new Set([
   'catalog',
   'financial',
+  'fiscal',
   'identity',
   'inventory',
   'parties',

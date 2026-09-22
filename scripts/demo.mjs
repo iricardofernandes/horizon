@@ -1036,6 +1036,7 @@ async function seedIdentity(modules, database, admin, clock) {
         { module: 'treasury', role: 'admin' },
         { module: 'ledger', role: 'admin' },
         { module: 'procurement', role: 'admin' },
+        { module: 'fiscal', role: 'admin' },
       ],
       actor: { type: 'user', id: ownerId },
     })
@@ -1049,6 +1050,7 @@ async function seedIdentity(modules, database, admin, clock) {
     { module: 'treasury', role: 'admin' },
     { module: 'ledger', role: 'admin' },
     { module: 'procurement', role: 'admin' },
+    { module: 'fiscal', role: 'admin' },
   ]) {
     if (operator.holds(assignment)) continue
     const granted = operator.grant(assignment, clock.now())

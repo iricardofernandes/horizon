@@ -2,7 +2,7 @@
   "name": "@horizon/fiscal",
   "version": "0.0.0",
   "private": true,
-  "description": "Fiscal ingress and restricted projections for Phase 39.",
+  "description": "Fiscal ingress, restricted projections and durable records.",
   "license": "MIT",
   "type": "commonjs",
   "engines": {
@@ -19,8 +19,18 @@
     "test:e2e": "vitest run --config vitest.config.e2e.mts"
   },
   "dependencies": {
-    "@horizon/contracts": "0.24.0",
+    "@aws-sdk/client-s3": "3.1137.0",
+    "@horizon/contracts": "0.25.0",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/auto-instrumentations-node": "0.80.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.222.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "0.222.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
+    "@opentelemetry/resources": "2.11.0",
+    "@opentelemetry/sdk-node": "0.222.0",
     "amqplib": "2.0.1",
+    "ioredis": "6.0.0",
+    "jose": "6.2.12",
     "postgres": "^3.4.9",
     "zod": "^4.6.2"
   },
@@ -30,6 +40,7 @@
     "@testcontainers/rabbitmq": "12.1.0",
     "@types/amqplib": "0.10.8",
     "@types/node": "^26.5.1",
+    "testcontainers": "12.1.0",
     "tsup": "8.5.1",
     "typescript": "5.9.3",
     "vitest": "^5.0.0"

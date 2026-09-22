@@ -12,6 +12,7 @@ locals {
     inventory = 3003
     sales     = 3004
     webhooks  = 3005
+    fiscal    = 3011
   }
   container_names = toset(concat(keys(local.business_services), ["web", "gateway"]))
   common_environment = {
@@ -199,7 +200,17 @@ module "service" {
   additional_security_group_ids = [aws_security_group.data_access.id]
   namespace_id                  = aws_service_discovery_private_dns_namespace.this.id
   discovery_name                = each.key
-  environment                   = merge(local.common_environment, { PORT = tostring(each.value) })
+  environment = merge(
+    local.common_environment,
+    { PORT = tostring(each.value) },
+    each.key == "fiscal" ? {
+      PARTIES_URL            = "http://parties.horizon.local:3006"
+      IDENTITY_URL           = "http://identity.horizon.local:3001"
+      CATALOG_URL            = "http://catalog.horizon.local:3002"
+      FISCAL_ARTIFACT_BUCKET = aws_s3_bucket.fiscal_artifacts.bucket
+      FISCAL_ARTIFACT_REGION = var.aws_region
+    } : {},
+  )
   secrets = merge(
     lookup(var.service_secret_arns, each.key, {}),
     {
@@ -210,4 +221,43 @@ module "service" {
     },
   )
   tags = local.tags
+}
+
+resource "aws_s3_bucket" "fiscal_artifacts" {
+  bucket_prefix = "${local.name}-fiscal-documents-"
+  force_destroy = false
+  tags          = merge(local.tags, { DataClass = "fiscal-documents" })
+}
+
+resource "aws_s3_bucket_public_access_block" "fiscal_artifacts" {
+  bucket                  = aws_s3_bucket.fiscal_artifacts.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "fiscal_artifacts" {
+  bucket = aws_s3_bucket.fiscal_artifacts.id
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "fiscal_artifacts" {
+  bucket = aws_s3_bucket.fiscal_artifacts.id
+  rule {
+    apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
+  }
+}
+
+resource "aws_iam_role_policy" "fiscal_artifacts" {
+  name = "fiscal-artifacts"
+  role = module.service["fiscal"].task_role_name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject"]
+      Resource = "${aws_s3_bucket.fiscal_artifacts.arn}/*"
+    }]
+  })
 }

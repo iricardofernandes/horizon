@@ -14,6 +14,10 @@ describe('buildUpstreamPath', () => {
     )
   })
 
+  it('proxies the fiscal operator API', () => {
+    expect(buildUpstreamPath(['fiscal', 'capabilities'])).toBe('/fiscal/capabilities')
+  })
+
   it('rejects empty and unknown roots', () => {
     expect(buildUpstreamPath([])).toBeNull()
     expect(buildUpstreamPath(['admin', 'secrets'])).toBeNull()

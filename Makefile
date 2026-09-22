@@ -4,7 +4,7 @@
 # Makefile shells out per project rather than sharing state between them.
 
 PROJECTS_JSON := scripts/modules.json
-SERVICES := identity catalog inventory sales webhooks parties financial treasury ledger procurement
+SERVICES := identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal
 
 .DEFAULT_GOAL := help
 
@@ -108,6 +108,12 @@ up-apps: infra/.env infra/keys/public kong-config ## Start the platform plus Hor
 		curl -fsS "http://localhost:$${HORIZON_KONG_ADMIN_PORT:-8001}/status" >/dev/null && exit 0; \
 		sleep 1; \
 	done; exit 1
+
+.PHONY: up-fiscal
+up-fiscal: infra/.env infra/keys/public kong-config ## Start the optional Fiscal API, worker and artifact store
+	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
+		$(COMPOSE) -f infra/docker-compose.apps.yml --profile fiscal up -d --build --wait fiscal
+	@$(COMPOSE) -f infra/docker-compose.apps.yml restart kong
 
 .PHONY: down
 down: ## Stop the platform, keeping data

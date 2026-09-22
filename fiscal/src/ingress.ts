@@ -8,6 +8,7 @@ import {
   salesFiscalOriginRecorded,
 } from '@horizon/contracts'
 import postgres from 'postgres'
+import { sealOrigin } from './origin-crypto'
 
 type Sql = ReturnType<typeof postgres>
 type Transaction = postgres.TransactionSql
@@ -27,7 +28,11 @@ export const FISCAL_EVENT_TYPES = [
 export class FiscalIngress {
   readonly #db: Sql
 
-  constructor(url: string) {
+  constructor(
+    url: string,
+    private readonly masterKey: Buffer,
+  ) {
+    if (masterKey.length !== 32) throw new Error('Fiscal origin key must be 32 bytes')
     this.#db = postgres(url, { max: 10, connection: { statement_timeout: 5000 } })
   }
 
@@ -53,7 +58,7 @@ export class FiscalIngress {
       switch (envelope.eventType) {
         case 'sales.fiscal-origin.recorded': {
           const payload = salesFiscalOriginRecorded.payload.parse(envelope.payload)
-          await recordOrigin(tx, envelope.tenantId, payload)
+          await recordOrigin(tx, envelope.tenantId, payload, this.masterKey)
           break
         }
         case 'parties.party.fiscal-profile-changed': {
@@ -108,24 +113,34 @@ async function recordOrigin(
   tx: Transaction,
   tenantId: string,
   payload: ReturnType<typeof salesFiscalOriginRecorded.payload.parse>,
+  masterKey: Buffer,
 ): Promise<void> {
-  const digest = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
-  const inserted = await tx`
+  const plaintext = JSON.stringify(payload)
+  const digest = createHash('sha256').update(plaintext).digest('hex')
+  await tx`
     insert into fiscal_intents (
       id, tenant_id, origin_module, origin_document_type, origin_id,
       purpose, order_id, customer_id, payload_digest
     ) values (
       ${randomUUID()}, ${tenantId}, ${payload.originModule}, ${payload.originDocumentType},
       ${payload.originId}, ${payload.purpose}, ${payload.orderId}, ${payload.customerId}, ${digest}
-    ) on conflict on constraint fiscal_intents_origin_key do nothing returning id`
-  if (inserted.length > 0) return
+    ) on conflict on constraint fiscal_intents_origin_key do nothing`
   const [existing] = await tx`
-    select payload_digest from fiscal_intents where tenant_id = ${tenantId}
+    select id, payload_digest from fiscal_intents where tenant_id = ${tenantId}
       and origin_module = ${payload.originModule}
       and origin_document_type = ${payload.originDocumentType}
       and origin_id = ${payload.originId} and purpose = ${payload.purpose}`
   if (existing?.payload_digest !== digest)
     throw new Error('Conflicting fiscal origin payload for an existing delivery')
+  const intentId = String(existing.id)
+  const ciphertext = sealOrigin(masterKey, tenantId, intentId, plaintext)
+  await tx`insert into fiscal_origin_payloads
+    (tenant_id, intent_id, payload_ciphertext, payload_digest)
+    values (${tenantId}, ${intentId}, ${ciphertext}, ${digest})
+    on conflict do nothing`
+  const [stored] = await tx`select payload_digest from fiscal_origin_payloads
+    where tenant_id = ${tenantId} and intent_id = ${intentId}`
+  if (stored?.payload_digest !== digest) throw new Error('Conflicting encrypted fiscal origin')
 }
 
 async function recordProfileNotice(

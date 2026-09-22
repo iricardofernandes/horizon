@@ -20,17 +20,19 @@ make clean       # stop and delete the volumes
 `make up` generates development keys if they are missing, renders the Kong
 configuration, and waits for every healthcheck. Cold start is around 30 seconds.
 
-### Phase 39 Fiscal worker
+### Phase 40 Fiscal service
 
-The optional `fiscal` Compose profile runs the Fiscal inbox and encrypted projection
-worker. Set `HORIZON_FISCAL_SERVICE_KEYS_JSON` to a secret JSON map of tenant IDs to
+The optional `fiscal` Compose profile runs the Fiscal inbox, API and versioned MinIO
+artifact store. Run `make up-fiscal` after setting `HORIZON_FISCAL_ARTIFACT_KEY_HEX`
+to a persistent random 32-byte key in `infra/.env`. Set
+`HORIZON_FISCAL_SERVICE_KEYS_JSON` to a secret JSON map of tenant IDs to
 rotatable Identity API keys. Each key needs the owner read scopes and its issuer needs
 the dedicated `identity:fiscal-reader` and `parties:fiscal-reader` roles plus
 `catalog:viewer`. The worker exchanges these
 keys for short tokens and refreshes them before expiry. Then run:
 
 ```bash
-docker compose --profile fiscal -f infra/docker-compose.yml -f infra/docker-compose.apps.yml up -d fiscal
+make up-fiscal
 ```
 
 A fresh PostgreSQL volume creates `horizon_fiscal` automatically. For a volume created

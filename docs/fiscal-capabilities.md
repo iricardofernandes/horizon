@@ -16,7 +16,6 @@ and release approval. An issuer, UF or municipality never inherits another's sta
 | National NFS-e | production | none configured | no municipality configured | issue/query/cancel | none | unsupported | none |
 
 This matrix is configuration and release evidence, not a guess from a service URL.
-Operators must see unsupported rows once the operator API exists; Phase 39 has no
-transmission endpoint, so no unsupported tuple can be sent. The future API must reject
-transmission for unsupported tuples. Source
+The Phase 40 read API returns `unsupported` by default and no supported rows. Its
+transmission and cancellation routes reject every tuple. Source
 artifacts and checksums are tracked in [fiscal-source-register.md](fiscal-source-register.md).

@@ -17,17 +17,17 @@ run "topology_plans" {
   command = plan
 
   assert {
-    condition     = length(module.ecr.repository_urls) == 7
-    error_message = "All seven deployable containers need immutable ECR repositories."
+    condition     = length(module.ecr.repository_urls) == 8
+    error_message = "All eight deployable containers need immutable ECR repositories."
   }
 
   assert {
-    condition     = length(module.rds.endpoints) == 5
-    error_message = "Database-per-module requires five independent RDS instances."
+    condition     = length(module.rds.endpoints) == 6
+    error_message = "Database-per-module requires six independent RDS instances."
   }
 
   assert {
-    condition     = length(module.service) == 5
-    error_message = "The root stack must instantiate all five business services."
+    condition     = length(module.service) == 6
+    error_message = "The root stack must instantiate all six business services."
   }
 }

@@ -5,9 +5,10 @@
 > Vercel/Neon demo from phase 11 is a separate, reduced topology; it is not this stack.
 
 The root stack targets ECS Fargate in two Availability Zones: `web` and Kong behind an
-Application Load Balancer; five independently scalable application services discovered
+Application Load Balancer; six independently scalable application services discovered
 through Cloud Map; one encrypted RDS PostgreSQL instance per module; ElastiCache Redis;
-Amazon MQ for RabbitMQ; ECR; Secrets Manager; ADOT sidecars and CloudWatch. The eight
+Amazon MQ for RabbitMQ; a private, versioned, server-encrypted Fiscal artifact bucket;
+ECR; Secrets Manager; ADOT sidecars and CloudWatch. The eight
 modules under `modules/` are the reviewable infrastructure boundaries.
 
 `envs/dev` and `envs/prod` contain values only. Both feed the exact same root module, so
@@ -42,12 +43,26 @@ to create the `horizon_app` and `horizon_relay` roles with the generated passwor
 run that module's migrations. Identity key material and application encryption keys are
 pre-provisioned by a security bootstrap and passed as Secrets Manager ARNs through
 `service_secret_arns`; secret values never belong in `tfvars` or image layers.
+Fiscal additionally requires `FISCAL_SERVICE_KEYS_JSON` and a 32-byte
+`FISCAL_ARTIFACT_KEY_HEX` as independently managed secrets. Its task role has only
+`GetObject` and `PutObject` on the business-document bucket. The bucket is separate
+from Terraform state, blocks public access, enables versioning and server encryption.
+
+For artifact recovery, preserve the bucket and application encryption key together.
+Restore a prior object version to the same immutable key only after comparing its
+plaintext SHA-256 to `fiscal_artifacts.digest` under a tenant-scoped operator tool;
+the service rechecks the digest on every read. Test this procedure in a temporary
+environment before a production cutover. Bucket deletion is disabled in Terraform.
 
 No migration task is launched from Terraform. That is a release action with database
 effects, while these modules only describe infrastructure. The release workflow builds
 immutable images and can create a speculative plan, but has no apply step.
 
 ## Cost estimate
+
+The estimate below predates the Phase 40 Fiscal task, its sixth module database and
+the artifact bucket. Recalculate it for the current topology before using it for a
+budget decision.
 
 Estimate date: **2026-09-14**, `us-east-1`, 730 hours/month, on-demand pricing, low
 traffic, no free-tier credits, support, tax, heavy log ingestion or internet egress.
