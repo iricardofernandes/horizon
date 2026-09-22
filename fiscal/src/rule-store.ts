@@ -20,45 +20,69 @@ const referenceEntrySchema = z.object({
   sourceLocator: z.string().min(1).max(300),
 })
 
-const taxRuleImportSchema = z.object({
-  ruleKey: z.string().min(1).max(120),
-  version: z.int().positive(),
-  group: z.enum(['legacy', 'ibsCbs']),
-  code: z.string().regex(/^[A-Z][A-Z0-9_]{0,39}$/),
-  precedence: z.enum(['operation', 'establishment', 'item', 'party', 'default']),
-  priority: z.int().nonnegative(),
-  dateBasis: z.enum(['issue_date', 'competence_date']).default('issue_date'),
-  model: z.enum(['55', '65', 'nfse']),
-  environment: z.enum(['simulation', 'homologation', 'production']),
-  operation: z.string().min(1).max(80).optional(),
-  issuerEstablishmentId: z.uuid().optional(),
-  issuerRegime: z.string().min(1).max(80).optional(),
-  recipientRegime: z.string().min(1).max(80).optional(),
-  originState: z
-    .string()
-    .regex(/^\d{2}$/)
-    .optional(),
-  destinationState: z
-    .string()
-    .regex(/^\d{2}$/)
-    .optional(),
-  subject: z.object({ kind: z.enum(['item', 'service']), id: z.uuid() }).optional(),
-  classification: z
-    .object({
-      kind: z.enum(['ncm', 'cest', 'service', 'origin']),
-      code: z.string().min(1).max(40),
-    })
-    .optional(),
-  effectiveFrom: date,
-  effectiveTo: date.optional(),
-  rate: z.object({
-    numerator: z.string().regex(/^-?\d+$/),
-    denominator: z.string().regex(/^[1-9]\d*$/),
-  }),
-  purpose: z.enum(['normal', 'return', 'complementary', 'adjustment']).default('normal'),
-  formula: z.enum(['LINE_NET_TIMES_RATE', 'DOCUMENT_NET_TIMES_RATE', 'RETURN_LINE_NET_TIMES_RATE']),
-  sourceLocator: z.string().min(1).max(300),
-})
+const taxRuleImportSchema = z
+  .object({
+    ruleKey: z.string().min(1).max(120),
+    version: z.int().positive(),
+    group: z.enum(['legacy', 'ibsCbs']),
+    code: z.string().regex(/^[A-Z][A-Z0-9_]{0,39}$/),
+    precedence: z.enum(['operation', 'establishment', 'item', 'party', 'default']),
+    priority: z.int().nonnegative(),
+    dateBasis: z.enum(['issue_date', 'competence_date']).default('issue_date'),
+    model: z.enum(['55', '65', 'nfse']),
+    environment: z.enum(['simulation', 'homologation', 'production']),
+    operation: z.string().min(1).max(80).optional(),
+    issuerEstablishmentId: z.uuid().optional(),
+    issuerRegime: z.string().min(1).max(80).optional(),
+    recipientPartyId: z.uuid().optional(),
+    recipientRegime: z.string().min(1).max(80).optional(),
+    originState: z
+      .string()
+      .regex(/^\d{2}$/)
+      .optional(),
+    destinationState: z
+      .string()
+      .regex(/^\d{2}$/)
+      .optional(),
+    subject: z.object({ kind: z.enum(['item', 'service']), id: z.uuid() }).optional(),
+    classification: z
+      .object({
+        kind: z.enum(['ncm', 'cest', 'service', 'origin']),
+        code: z.string().min(1).max(40),
+      })
+      .optional(),
+    effectiveFrom: date,
+    effectiveTo: date.optional(),
+    rate: z.object({
+      numerator: z.string().regex(/^-?\d+$/),
+      denominator: z.string().regex(/^[1-9]\d*$/),
+    }),
+    purpose: z.enum(['normal', 'return', 'complementary', 'adjustment']).default('normal'),
+    formula: z.enum([
+      'LINE_NET_TIMES_RATE',
+      'DOCUMENT_NET_TIMES_RATE',
+      'RETURN_LINE_NET_TIMES_RATE',
+    ]),
+    sourceLocator: z.string().min(1).max(300),
+  })
+  .superRefine((rule, context) => {
+    const required =
+      rule.precedence === 'operation'
+        ? rule.operation
+        : rule.precedence === 'establishment'
+          ? rule.issuerEstablishmentId
+          : rule.precedence === 'item'
+            ? rule.subject?.id
+            : rule.precedence === 'party'
+              ? rule.recipientPartyId
+              : 'default'
+    if (!required)
+      context.addIssue({
+        code: 'custom',
+        path: ['precedence'],
+        message: `precedence ${rule.precedence} requires its exact scope dimension`,
+      })
+  })
 
 const sourceImportSchema = z.object({
   tenantId: z.uuid(),
@@ -353,7 +377,7 @@ export class FiscalRuleStore {
     await sql`insert into fiscal_tax_rules (
       id, tenant_id, package_id, rule_key, version, component_group, component_code,
       precedence, priority, date_basis, purpose, model, environment, operation, issuer_establishment_id,
-      issuer_regime, recipient_regime, origin_state, destination_state, subject_kind,
+      issuer_regime, recipient_party_id, recipient_regime, origin_state, destination_state, subject_kind,
       subject_id, classification_kind, classification_code, effective_from, effective_to,
       rate_numerator, rate_denominator, formula, source_locator, definition_digest
     ) values (
@@ -362,7 +386,7 @@ export class FiscalRuleStore {
       ${rule.priority}, ${rule.dateBasis}, ${rule.purpose}, ${rule.model}, ${rule.environment},
       ${rule.operation ?? '*'},
       ${rule.issuerEstablishmentId ?? '*'}, ${rule.issuerRegime ?? '*'},
-      ${rule.recipientRegime ?? '*'}, ${rule.originState ?? '*'},
+      ${rule.recipientPartyId ?? '*'}, ${rule.recipientRegime ?? '*'}, ${rule.originState ?? '*'},
       ${rule.destinationState ?? '*'}, ${rule.subject?.kind ?? '*'},
       ${rule.subject?.id ?? '*'}, ${rule.classification?.kind ?? '*'},
       ${rule.classification?.code ?? '*'}, ${rule.effectiveFrom}, ${rule.effectiveTo ?? null},
@@ -378,6 +402,7 @@ function toTaxRule(row: postgres.Row): TaxRule {
   const operation = optional(row.operation)
   const issuerEstablishmentId = optional(row.issuer_establishment_id)
   const issuerRegime = optional(row.issuer_regime)
+  const recipientPartyId = optional(row.recipient_party_id)
   const recipientRegime = optional(row.recipient_regime)
   const originState = optional(row.origin_state)
   const destinationState = optional(row.destination_state)
@@ -400,6 +425,7 @@ function toTaxRule(row: postgres.Row): TaxRule {
       ...(operation ? { operation } : {}),
       ...(issuerEstablishmentId ? { issuerEstablishmentId } : {}),
       ...(issuerRegime ? { issuerRegime } : {}),
+      ...(recipientPartyId ? { recipientPartyId } : {}),
       ...(recipientRegime ? { recipientRegime } : {}),
       ...(originState ? { originState } : {}),
       ...(destinationState ? { destinationState } : {}),

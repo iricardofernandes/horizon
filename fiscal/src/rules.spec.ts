@@ -11,6 +11,7 @@ const input: FiscalCalculationInput = {
   schemaVersion: 1,
   tenantId,
   issuerEstablishmentId: '018f5d4e-1000-7000-8000-000000000005',
+  recipientPartyId: '018f5d4e-1000-7000-8000-000000000012',
   model: '55',
   environment: 'simulation',
   operation: 'illustrative-sale',
@@ -171,5 +172,19 @@ describe('temporal tax rule resolution', () => {
         2,
       ).supported,
     ).toBe(true)
+  })
+
+  it('matches a party override only to the frozen recipient identity', () => {
+    const partyRule = rule({
+      precedence: 'party',
+      scope: {
+        ...rule().scope,
+        recipientPartyId: '018f5d4e-1000-7000-8000-000000000012',
+      },
+    })
+    expect(resolveTaxRules(input, [partyRule], 2).supported).toBe(true)
+    expect(
+      resolveTaxRules({ ...input, recipientPartyId: otherTenantId }, [partyRule], 2),
+    ).toMatchObject({ supported: false, code: 'UNSUPPORTED_RULE' })
   })
 })

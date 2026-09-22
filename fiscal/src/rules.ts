@@ -16,6 +16,7 @@ export type TaxRule = ResolvedComponentRule & {
     operation?: string
     issuerEstablishmentId?: string
     issuerRegime?: string
+    recipientPartyId?: string
     recipientRegime?: string
     originState?: string
     destinationState?: string
@@ -139,6 +140,7 @@ function matches(
   if (scope.issuerEstablishmentId && scope.issuerEstablishmentId !== input.issuerEstablishmentId)
     return false
   if (scope.issuerRegime && scope.issuerRegime !== input.issuer.regime) return false
+  if (scope.recipientPartyId && scope.recipientPartyId !== input.recipientPartyId) return false
   if (scope.recipientRegime && scope.recipientRegime !== input.recipient.regime) return false
   if (scope.originState && scope.originState !== input.origin.stateCode) return false
   if (scope.destinationState && scope.destinationState !== input.destination.stateCode) return false

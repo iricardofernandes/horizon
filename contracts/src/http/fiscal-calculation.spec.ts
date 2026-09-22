@@ -8,6 +8,9 @@ function validInput() {
     schemaVersion: 1 as const,
     tenantId: randomUUID(),
     issuerEstablishmentId: randomUUID(),
+    issuerProfileRevision: 3,
+    recipientPartyId: randomUUID(),
+    recipientProfileRevision: 7,
     model: '55' as const,
     environment: 'simulation' as const,
     operation: 'internal-sale',
@@ -27,6 +30,7 @@ function validInput() {
       {
         id: randomUUID(),
         itemId: randomUUID(),
+        classificationRevision: 2,
         quantity: '2.500000',
         unitPrice: '10.25',
         discount: { amount: '25', currency: 'BRL' },
