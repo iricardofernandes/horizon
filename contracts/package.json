@@ -1,6 +1,6 @@
 {
   "name": "@horizon/contracts",
-  "version": "0.27.0",
+  "version": "0.27.1",
   "description": "Versioned Zod schemas for every published event and cross-module HTTP payload.",
   "license": "MIT",
   "type": "commonjs",

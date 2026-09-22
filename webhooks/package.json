@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@casl/ability": "^7.0.1",
-    "@horizon/contracts": "0.27.0",
+    "@horizon/contracts": "0.27.1",
     "@nestjs/common": "^12.0.1",
     "@nestjs/config": "^12.0.0",
     "@nestjs/core": "^12.0.1",

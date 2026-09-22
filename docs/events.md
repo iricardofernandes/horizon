@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.27.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.27.1**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -243,6 +243,80 @@ A recorded settlement was undone — a bounced payment, a wrong installment. The
 | `reversedAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
 | `reason` | string | yes | min length 3. max length 500 |
 | `outstanding` | object | yes | — |
+
+## `fiscal`
+
+### `fiscal.document.simulation-authorized` — v1
+
+The deterministic simulator authorized an NF-e model 55. This simulated fact never releases a shipment or creates a stock or money effect.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `documentId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `rootDocumentId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `revision` | integer | yes | — |
+| `originModule` | `sales` \| `fiscal` | yes | — |
+| `originDocumentType` | `shipment` \| `manual-simulation` | yes | — |
+| `originId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `originPurpose` | `original` \| `manual` | yes | — |
+| `model` | string | yes | — |
+| `environment` | string | yes | — |
+| `simulated` | boolean | yes | — |
+| `adapterVersion` | string | yes | min length 1. max length 80 |
+| `statusDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `observedAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
+| `authorityReference` | string | yes | min length 1. max length 256 |
+| `protocolDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+### `fiscal.document.simulation-cancelled` — v1
+
+The deterministic simulator accepted a cancellation linked to an authorized NF-e model 55. Original authorization evidence remains immutable.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `documentId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `rootDocumentId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `revision` | integer | yes | — |
+| `originModule` | `sales` \| `fiscal` | yes | — |
+| `originDocumentType` | `shipment` \| `manual-simulation` | yes | — |
+| `originId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `originPurpose` | `original` \| `manual` | yes | — |
+| `model` | string | yes | — |
+| `environment` | string | yes | — |
+| `simulated` | boolean | yes | — |
+| `adapterVersion` | string | yes | min length 1. max length 80 |
+| `statusDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `observedAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
+| `cancellationReference` | string | yes | min length 1. max length 256 |
+| `cancellationProtocolDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+### `fiscal.document.simulation-rejected` — v1
+
+The deterministic simulator rejected an NF-e model 55; the immutable document may be followed by a corrected revision.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `documentId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `rootDocumentId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `revision` | integer | yes | — |
+| `originModule` | `sales` \| `fiscal` | yes | — |
+| `originDocumentType` | `shipment` \| `manual-simulation` | yes | — |
+| `originId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `originPurpose` | `original` \| `manual` | yes | — |
+| `model` | string | yes | — |
+| `environment` | string | yes | — |
+| `simulated` | boolean | yes | — |
+| `adapterVersion` | string | yes | min length 1. max length 80 |
+| `statusDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `observedAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
+| `authorityReference` | any | yes | — |
+| `rejectionCode` | string | yes | min length 1. max length 40 |
+| `rejectionReason` | string | yes | min length 1. max length 1000 |
+| `responseDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
 
 ## `identity`
 

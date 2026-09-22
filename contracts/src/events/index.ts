@@ -16,6 +16,7 @@ import {
   financialSettlementRecorded,
   financialSettlementReversed,
 } from './financial'
+import { fiscalDocumentAuthorized, fiscalDocumentCancelled, fiscalDocumentRejected } from './fiscal'
 import {
   apiKeyRevoked,
   companyFiscalProfileChanged,
@@ -83,6 +84,7 @@ import {
 export * from './catalog'
 export * from './define'
 export * from './financial'
+export * from './fiscal'
 export * from './identity'
 export * from './inventory'
 export * from './ledger'
@@ -134,6 +136,9 @@ export const EVENTS: readonly EventDefinition[] = [
   financialSettlementReversed,
   financialPayablePosted,
   financialPayableReversed,
+  fiscalDocumentAuthorized,
+  fiscalDocumentRejected,
+  fiscalDocumentCancelled,
   treasuryAccountOpened,
   treasuryEntryRecorded,
   treasuryTransferPosted,
