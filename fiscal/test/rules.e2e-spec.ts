@@ -7,6 +7,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { FiscalCalculations } from '../src/calculations'
 import { FiscalCapabilities } from '../src/capabilities'
+import { FiscalDispatch } from '../src/dispatch'
 import { FiscalRuleStore } from '../src/rule-store'
 
 let container: StartedPostgreSqlContainer
@@ -16,6 +17,7 @@ let appUrl: string
 let store: FiscalRuleStore
 let calculations: FiscalCalculations
 let capabilities: FiscalCapabilities
+let dispatch: FiscalDispatch
 
 beforeAll(async () => {
   container = await new PostgreSqlContainer('postgres:17-alpine')
@@ -43,12 +45,14 @@ beforeAll(async () => {
   store = new FiscalRuleStore(appUrl)
   calculations = new FiscalCalculations(appUrl, randomBytes(32), store)
   capabilities = new FiscalCapabilities(appUrl)
+  dispatch = new FiscalDispatch(appUrl)
 }, 120_000)
 
 afterAll(async () => {
   await Promise.allSettled([
     calculations?.close(),
     capabilities?.close(),
+    dispatch?.close(),
     store?.close(),
     app?.end(),
     administrator?.end(),
@@ -536,7 +540,7 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
     join fiscal_calculations calculation
       on calculation.tenant_id = binding.tenant_id and calculation.id = binding.calculation_id
     where document.tenant_id = ${tenantId} and document.id = ${documentId}`
-  expect(locked?.status).toBe('validated')
+  expect(locked?.status).toBe('ready')
   expect(Buffer.from(locked?.input_ciphertext).toString()).not.toContain(lineId)
   if (first.supported) expect(locked?.result_digest).toBe(first.resultDigest)
   await expect(
@@ -548,10 +552,179 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
   await expect(
     app.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
-      await tx`update fiscal_documents set status = 'validated'
+      await tx`update fiscal_documents set status = 'ready'
         where tenant_id = ${tenantId} and id = ${unboundDocumentId}`
     }),
   ).rejects.toThrow('requires a supported calculation')
+})
+
+it('queues one issuance, leases it once and safely reclaims an expired worker lease', async () => {
+  const tenantId = randomUUID()
+  const documentId = randomUUID()
+  const establishmentId = randomUUID()
+  await administrator`insert into tenants (id) values (${tenantId})`
+  await insertDraft(administrator, tenantId, documentId, establishmentId)
+  await bindTestCalculation(administrator, tenantId, documentId)
+  await administrator`update fiscal_documents set status = 'ready' where id = ${documentId}`
+  const command = {
+    tenantId,
+    documentId,
+    idempotencyKey: 'phase42-queue-issuance-0001',
+    requestDigest: '1'.repeat(64),
+    artifactDigest: '2'.repeat(64),
+    actorId: 'issuer:test',
+  }
+  await expect(dispatch.queueIssuance(command)).rejects.toThrow('active capability')
+  await bindTestIssuance(
+    administrator,
+    tenantId,
+    documentId,
+    establishmentId,
+    command.artifactDigest,
+  )
+  const queued = await dispatch.queueIssuance(command)
+  expect(queued).toMatchObject({ status: 'queued', existing: false })
+  expect(await dispatch.queueIssuance(command)).toEqual({ ...queued, existing: true })
+  await expect(
+    dispatch.queueIssuance({ ...command, requestDigest: '3'.repeat(64) }),
+  ).rejects.toThrow('Conflicting Fiscal dispatch idempotency key')
+
+  const [first, competing] = await Promise.all([
+    dispatch.claim({ tenantId, workerId: 'worker:first', leaseMilliseconds: 1_000 }),
+    dispatch.claim({ tenantId, workerId: 'worker:second', leaseMilliseconds: 1_000 }),
+  ])
+  expect([first, competing].filter(Boolean)).toHaveLength(1)
+  const lease = first ?? competing
+  if (!lease) throw new Error('Expected a dispatch lease')
+  expect(lease).toMatchObject({ commandId: queued.commandId, attemptCount: 1 })
+  const [submitted] =
+    await administrator`select status from fiscal_documents where id = ${documentId}`
+  expect(submitted?.status).toBe('submitted')
+  await expect(dispatch.complete(tenantId, queued.commandId, 'worker:other')).rejects.toThrow(
+    'not owned',
+  )
+  await administrator`update fiscal_dispatch_jobs set lease_until = now() - interval '1 second'
+    where tenant_id = ${tenantId} and command_id = ${queued.commandId}`
+  await expect(
+    dispatch.complete(
+      tenantId,
+      queued.commandId,
+      lease === first ? 'worker:first' : 'worker:second',
+    ),
+  ).rejects.toThrow('not owned')
+  const reclaimed = await dispatch.claim({
+    tenantId,
+    workerId: 'worker:restarted',
+    leaseMilliseconds: 30_000,
+  })
+  expect(reclaimed).toMatchObject({ commandId: queued.commandId, attemptCount: 2 })
+  await dispatch.recordObservation({
+    tenantId,
+    commandId: queued.commandId,
+    workerId: 'worker:restarted',
+    observationKind: 'consultation',
+    outcome: 'unknown',
+    providerCorrelation: null,
+    responseDigest: 'a'.repeat(64),
+    protocolDigest: null,
+  })
+  const [unknown] =
+    await administrator`select status from fiscal_documents where id = ${documentId}`
+  expect(unknown?.status).toBe('unknown')
+  await dispatch.retry(tenantId, queued.commandId, 'worker:restarted', new Date(0))
+  const resolution = await dispatch.claim({
+    tenantId,
+    workerId: 'worker:resolver',
+    leaseMilliseconds: 30_000,
+  })
+  expect(resolution).toMatchObject({ commandId: queued.commandId, attemptCount: 3 })
+  await dispatch.recordObservation({
+    tenantId,
+    commandId: queued.commandId,
+    workerId: 'worker:resolver',
+    observationKind: 'consultation',
+    outcome: 'authorized',
+    providerCorrelation: 'simulation:authorized',
+    responseDigest: 'b'.repeat(64),
+    protocolDigest: 'c'.repeat(64),
+  })
+  const [authorized] =
+    await administrator`select status from fiscal_documents where id = ${documentId}`
+  expect(authorized?.status).toBe('authorized')
+  expect(await dispatch.claim({ tenantId, workerId: 'worker:idle' })).toBeNull()
+  const [counts] = await administrator`select
+      (select count(*)::integer from fiscal_number_reservations
+        where tenant_id = ${tenantId} and document_id = ${documentId}) as numbers,
+      (select count(*)::integer from fiscal_dispatch_commands
+        where tenant_id = ${tenantId} and document_id = ${documentId}) as commands`
+  expect(counts).toMatchObject({ numbers: 1, commands: 1 })
+})
+
+it('resolves an uncertain issuance through an explicit query without a second submission', async () => {
+  const tenantId = randomUUID()
+  const documentId = randomUUID()
+  const establishmentId = randomUUID()
+  await administrator`insert into tenants (id) values (${tenantId})`
+  await insertDraft(administrator, tenantId, documentId, establishmentId)
+  await bindTestCalculation(administrator, tenantId, documentId)
+  await administrator`update fiscal_documents set status = 'ready' where id = ${documentId}`
+  await bindTestIssuance(administrator, tenantId, documentId, establishmentId, '2'.repeat(64))
+  const issuance = await dispatch.queueIssuance({
+    tenantId,
+    documentId,
+    idempotencyKey: 'phase42-query-issuance-0001',
+    requestDigest: '1'.repeat(64),
+    artifactDigest: '2'.repeat(64),
+    actorId: 'issuer:test',
+  })
+  await dispatch.claim({ tenantId, workerId: 'worker:original' })
+  await dispatch.recordObservation({
+    tenantId,
+    commandId: issuance.commandId,
+    workerId: 'worker:original',
+    observationKind: 'response',
+    outcome: 'unknown',
+    providerCorrelation: null,
+    responseDigest: 'a'.repeat(64),
+    protocolDigest: null,
+  })
+  const queryInput = {
+    tenantId,
+    documentId,
+    idempotencyKey: 'phase42-status-query-0001',
+    requestDigest: '3'.repeat(64),
+    actorId: 'issuer:test',
+  }
+  const query = await dispatch.queueStatusQuery(queryInput)
+  expect(await dispatch.queueStatusQuery(queryInput)).toEqual({ ...query, existing: true })
+  const lease = await dispatch.claim({ tenantId, workerId: 'worker:query' })
+  expect(lease).toMatchObject({
+    kind: 'status_query',
+    commandId: query.commandId,
+    issuanceCommandId: issuance.commandId,
+    requestDigest: '1'.repeat(64),
+    artifactDigest: '2'.repeat(64),
+  })
+  await dispatch.recordObservation({
+    tenantId,
+    commandId: query.commandId,
+    workerId: 'worker:query',
+    observationKind: 'consultation',
+    outcome: 'authorized',
+    providerCorrelation: 'simulation:query',
+    responseDigest: 'b'.repeat(64),
+    protocolDigest: 'c'.repeat(64),
+  })
+  expect(
+    (await administrator`select status from fiscal_documents where id = ${documentId}`)[0]?.status,
+  ).toBe('authorized')
+  expect(await dispatch.claim({ tenantId, workerId: 'worker:idle' })).toBeNull()
+  const [evidence] = await administrator`select
+      (select count(*)::integer from fiscal_number_reservations
+        where tenant_id = ${tenantId} and document_id = ${documentId}) as numbers,
+      (select count(*)::integer from fiscal_dispatch_commands
+        where tenant_id = ${tenantId} and document_id = ${documentId} and kind = 'issuance') as submissions`
+  expect(evidence).toMatchObject({ numbers: 1, submissions: 1 })
 })
 
 it('isolates manual origins and dispatch evidence while allowing worker lease updates', async () => {
@@ -706,5 +879,65 @@ async function insertDraft(
   ) values (
     ${documentId}, ${tenantId}, ${intentId}, '55', 'simulation', ${establishmentId}, 1,
     ${'d'.repeat(64)}, ${Buffer.from('encrypted-placeholder')}
+  )`
+}
+
+async function bindTestCalculation(
+  sql: ReturnType<typeof postgres>,
+  tenantId: string,
+  documentId: string,
+) {
+  const calculationId = randomUUID()
+  await sql`insert into fiscal_calculations (
+    id, tenant_id, document_id, input_ciphertext, input_digest, resolved_rules,
+    rules_digest, result_bytes, result_digest, explanation_template_version,
+    explanation_text, rule_version_ids, package_digests, supported, actor_id
+  ) values (
+    ${calculationId}, ${tenantId}, ${documentId}, ${Buffer.from('encrypted-test-input')},
+    ${'4'.repeat(64)}, ${sql.json({ fixture: true })}, ${'5'.repeat(64)},
+    ${Buffer.from('{"fixture":true}')}, ${'6'.repeat(64)}, 'test-v1',
+    'Phase 42 queue fixture', ${[]}, ${[]}, true, 'test:phase42'
+  )`
+  await sql`insert into fiscal_document_calculation_bindings
+    (tenant_id, document_id, calculation_id)
+    values (${tenantId}, ${documentId}, ${calculationId})`
+}
+
+async function bindTestIssuance(
+  sql: ReturnType<typeof postgres>,
+  tenantId: string,
+  documentId: string,
+  establishmentId: string,
+  signedXmlDigest: string,
+) {
+  const capabilityId = randomUUID()
+  await sql`insert into fiscal_capability_definitions (
+    id, tenant_id, model, environment, establishment_id, jurisdiction_kind,
+    jurisdiction_code, operation, adapter_version, source_manifest_digest,
+    schema_package_digest, calculation_fixture_id, created_by
+  ) values (
+    ${capabilityId}, ${tenantId}, '55', 'simulation', ${establishmentId}, 'uf', 'SP',
+    'normal-sale', 'nfe55-simulator-v1', ${'7'.repeat(64)}, ${'8'.repeat(64)},
+    'phase42-queue-fixture', 'importer:test'
+  )`
+  await sql`insert into fiscal_capability_reviews (
+    id, tenant_id, capability_id, approved, reviewed_by, interpretation, reviewed_at
+  ) values (
+    ${randomUUID()}, ${tenantId}, ${capabilityId}, true, 'reviewer:test',
+    'Approved only for the Phase 42 queue fixture.', '2026-09-22T15:00:00.000Z'
+  )`
+  await sql`insert into fiscal_capability_activation_events (
+    id, tenant_id, capability_id, action, evidence_digest, actor_id, reason, occurred_at
+  ) values (
+    ${randomUUID()}, ${tenantId}, ${capabilityId}, 'activate_simulated', ${'9'.repeat(64)},
+    'release:test', 'Activate only the Phase 42 queue fixture.', '2026-09-22T15:01:00.000Z'
+  )`
+  await sql`insert into fiscal_document_issuance_bindings (
+    tenant_id, document_id, capability_id, environment, access_key,
+    reconciliation_digest, signed_xml_digest
+  ) values (
+    ${tenantId}, ${documentId}, ${capabilityId}, 'simulation',
+    '35260900000000E08G12550010000000011123456783', ${'a'.repeat(64)},
+    ${signedXmlDigest}
   )`
 }

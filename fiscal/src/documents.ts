@@ -25,15 +25,23 @@ const draftInputSchema = z.object({
 
 export type DraftInput = z.infer<typeof draftInputSchema>
 export type Draft = { id: string; status: 'draft'; snapshotDigest: string }
+export type CorrectedDraft = Draft & {
+  rootDocumentId: string
+  predecessorDocumentId: string
+  revision: number
+  existing: boolean
+}
 export type DocumentView = Omit<Draft, 'status'> & {
   status:
     | 'draft'
-    | 'validated'
+    | 'ready'
+    | 'queued'
     | 'submitted'
     | 'unknown'
     | 'authorized'
     | 'rejected'
     | 'cancellation_pending'
+    | 'cancellation_unknown'
     | 'cancelled'
   simulated: true
   model: '55' | '65' | 'nfse'
@@ -41,6 +49,16 @@ export type DocumentView = Omit<Draft, 'status'> & {
   establishmentId: string
   series: number
   number: number | null
+  rootDocumentId: string
+  predecessorDocumentId: string | null
+  revision: number
+  origin: { kind: 'sales'; intentId: string } | { kind: 'manual'; manualOriginId: string }
+  accessKey: string | null
+  calculationDigest: string | null
+  signedXmlDigest: string | null
+  adapterVersion: string | null
+  schemaPackageDigest: string | null
+  statusUrl: string
   createdAt: string
 }
 
@@ -66,9 +84,22 @@ export class FiscalDocuments {
     const [row] = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
       return tx`select d.id, d.status, d.model, d.environment, d.establishment_id,
-        d.series, d.snapshot_digest, d.created_at, r.number
+        d.series, d.snapshot_digest, d.created_at, d.root_document_id,
+        d.predecessor_document_id, d.revision, d.intent_id, d.manual_origin_id, r.number,
+        issuance.access_key, issuance.signed_xml_digest, calculation.result_digest,
+        capability.adapter_version, capability.schema_package_digest
         from fiscal_documents d left join fiscal_number_reservations r
           on r.tenant_id = d.tenant_id and r.document_id = d.id
+        left join fiscal_document_issuance_bindings issuance
+          on issuance.tenant_id = d.tenant_id and issuance.document_id = d.id
+        left join fiscal_capability_definitions capability
+          on capability.tenant_id = issuance.tenant_id and capability.id = issuance.capability_id
+        left join fiscal_document_calculation_bindings calculation_binding
+          on calculation_binding.tenant_id = d.tenant_id
+          and calculation_binding.document_id = d.id
+        left join fiscal_calculations calculation
+          on calculation.tenant_id = calculation_binding.tenant_id
+          and calculation.id = calculation_binding.calculation_id
         where d.tenant_id = ${tenantId} and d.id = ${documentId}`
     })
     if (!row) return null
@@ -82,6 +113,20 @@ export class FiscalDocuments {
       establishmentId: String(row.establishment_id),
       series: Number(row.series),
       number: row.number === null ? null : Number(row.number),
+      rootDocumentId: String(row.root_document_id),
+      predecessorDocumentId:
+        row.predecessor_document_id === null ? null : String(row.predecessor_document_id),
+      revision: Number(row.revision),
+      origin: row.intent_id
+        ? { kind: 'sales', intentId: String(row.intent_id) }
+        : { kind: 'manual', manualOriginId: String(row.manual_origin_id) },
+      accessKey: row.access_key === null ? null : String(row.access_key),
+      calculationDigest: row.result_digest === null ? null : String(row.result_digest),
+      signedXmlDigest: row.signed_xml_digest === null ? null : String(row.signed_xml_digest),
+      adapterVersion: row.adapter_version === null ? null : String(row.adapter_version),
+      schemaPackageDigest:
+        row.schema_package_digest === null ? null : String(row.schema_package_digest),
+      statusUrl: `/fiscal/documents/${row.id}`,
       createdAt: new Date(row.created_at).toISOString(),
     }
   }
@@ -128,7 +173,7 @@ export class FiscalDocuments {
         ) values (
           ${id}, ${value.tenantId}, ${value.intentId}, ${value.model},
           ${value.environment}, ${value.establishmentId}, ${value.series}, ${digest}, ${ciphertext}
-        ) on conflict on constraint fiscal_documents_intent_key do nothing returning id`
+        ) on conflict do nothing returning id`
       let resultId: string = id
       if (inserted.length > 0) {
         for (const [lineIndex, line] of lines.entries()) {
@@ -197,6 +242,134 @@ export class FiscalDocuments {
     return JSON.parse(plaintext)
   }
 
+  async createSuccessor(input: {
+    tenantId: string
+    documentId: string
+    correctedIntentId: string
+    idempotencyKey: string
+    actorId: string
+    reason: string
+  }): Promise<CorrectedDraft> {
+    const value = z
+      .object({
+        tenantId: z.uuid(),
+        documentId: z.uuid(),
+        correctedIntentId: z.uuid(),
+        idempotencyKey: z.string().min(16).max(128),
+        actorId: z.string().min(1).max(200),
+        reason: z.string().trim().min(10).max(1000),
+      })
+      .parse(input)
+    const requestDigest = createHash('sha256')
+      .update(
+        JSON.stringify({
+          documentId: value.documentId,
+          correctedIntentId: value.correctedIntentId,
+          reason: value.reason,
+        }),
+      )
+      .digest('hex')
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const [priorKey] = await tx`select request_digest, document_id from fiscal_idempotency
+        where tenant_id = ${value.tenantId} and key = ${value.idempotencyKey}`
+      if (priorKey) {
+        if (priorKey.request_digest !== requestDigest)
+          throw new Error('Conflicting fiscal idempotency key')
+        const [existing] = await tx`select id, root_document_id, predecessor_document_id,
+          revision, snapshot_digest from fiscal_documents
+          where tenant_id = ${value.tenantId} and id = ${priorKey.document_id}`
+        if (!existing || existing.predecessor_document_id !== value.documentId)
+          throw new Error('Conflicting fiscal correction idempotency key')
+        return correctedDraft(existing, true)
+      }
+
+      const [predecessor] = await tx`select status, root_document_id, revision, model,
+          environment, establishment_id, series
+        from fiscal_documents where tenant_id = ${value.tenantId}
+          and id = ${value.documentId} for update`
+      if (!predecessor) throw new Error('Fiscal document not found')
+      if (predecessor.status !== 'rejected')
+        throw new Error('Only a rejected Fiscal document can be corrected')
+      if (predecessor.model !== '55' || predecessor.environment !== 'simulation')
+        throw new Error('Fiscal correction is supported only for simulated model 55')
+      const [priorSuccessor] = await tx`select id, root_document_id, predecessor_document_id,
+          revision, snapshot_digest, intent_id from fiscal_documents
+        where tenant_id = ${value.tenantId} and predecessor_document_id = ${value.documentId}`
+      if (priorSuccessor) {
+        if (priorSuccessor.intent_id !== value.correctedIntentId)
+          throw new Error('Fiscal document already has a different successor')
+        await tx`insert into fiscal_idempotency
+          (tenant_id, key, command, request_digest, document_id)
+          values (${value.tenantId}, ${value.idempotencyKey}, 'document.correct',
+            ${requestDigest}, ${priorSuccessor.id})`
+        return correctedDraft(priorSuccessor, true)
+      }
+      const [origin] = await tx`select p.payload_ciphertext, p.payload_digest,
+          i.payload_digest as intent_digest
+        from fiscal_intents i join fiscal_origin_payloads p
+          on p.tenant_id = i.tenant_id and p.intent_id = i.id
+        where i.tenant_id = ${value.tenantId} and i.id = ${value.correctedIntentId}`
+      if (!origin) throw new Error('Corrected Fiscal origin snapshot unavailable')
+      const snapshot = openOrigin(
+        this.masterKey,
+        value.tenantId,
+        value.correctedIntentId,
+        Buffer.from(origin.payload_ciphertext),
+      )
+      const snapshotDigest = createHash('sha256').update(snapshot).digest('hex')
+      if (snapshotDigest !== origin.payload_digest || snapshotDigest !== origin.intent_digest)
+        throw new Error('Corrected Fiscal origin snapshot digest mismatch')
+      const payload = salesFiscalOriginRecorded.payload.parse(JSON.parse(snapshot))
+      const id = randomUUID()
+      const revision = Number(predecessor.revision) + 1
+      await tx`insert into fiscal_documents (
+        id, tenant_id, intent_id, model, environment, establishment_id, series,
+        snapshot_digest, snapshot_ciphertext, root_document_id, predecessor_document_id,
+        revision
+      ) values (
+        ${id}, ${value.tenantId}, ${value.correctedIntentId}, ${predecessor.model},
+        ${predecessor.environment}, ${predecessor.establishment_id}, ${predecessor.series},
+        ${snapshotDigest}, ${encryptSnapshot(this.masterKey, value.tenantId, id, snapshot)},
+        ${predecessor.root_document_id}, ${value.documentId}, ${revision}
+      )`
+      for (const [lineIndex, line] of payload.lines.entries()) {
+        const lineDigest = createHash('sha256').update(JSON.stringify(line)).digest('hex')
+        await tx`insert into fiscal_document_lines
+          (tenant_id, document_id, line_index, item_id, line_digest)
+          values (${value.tenantId}, ${id}, ${lineIndex}, ${line.itemId ?? null}, ${lineDigest})`
+      }
+      await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind, detail)
+        values (${randomUUID()}, ${value.tenantId}, ${id}, 'draft_created',
+          ${JSON.stringify({ predecessorDocumentId: value.documentId, reasonDigest: createHash('sha256').update(value.reason).digest('hex') })}::jsonb)`
+      await tx`insert into fiscal_idempotency
+        (tenant_id, key, command, request_digest, document_id)
+        values (${value.tenantId}, ${value.idempotencyKey}, 'document.correct',
+          ${requestDigest}, ${id})`
+      await appendAudit(tx, {
+        tenantId: value.tenantId,
+        actorId: value.actorId,
+        action: 'document.successor-created',
+        resourceId: id,
+        detail: {
+          predecessorDocumentId: value.documentId,
+          correctedIntentId: value.correctedIntentId,
+          revision,
+          requestDigest,
+        },
+      })
+      return {
+        id,
+        status: 'draft',
+        snapshotDigest,
+        rootDocumentId: String(predecessor.root_document_id),
+        predecessorDocumentId: value.documentId,
+        revision,
+        existing: false,
+      }
+    })
+  }
+
   async reserveNumber(tenantId: string, documentId: string): Promise<number> {
     z.uuid().parse(tenantId)
     z.uuid().parse(documentId)
@@ -245,6 +418,18 @@ export class FiscalDocuments {
       })
       return number
     })
+  }
+}
+
+function correctedDraft(row: Record<string, unknown>, existing: boolean): CorrectedDraft {
+  return {
+    id: String(row.id),
+    status: 'draft',
+    snapshotDigest: String(row.snapshot_digest),
+    rootDocumentId: String(row.root_document_id),
+    predecessorDocumentId: String(row.predecessor_document_id),
+    revision: Number(row.revision),
+    existing,
   }
 }
 

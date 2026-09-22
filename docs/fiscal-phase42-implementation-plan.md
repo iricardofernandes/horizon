@@ -1,6 +1,6 @@
 # Phase 42 — NF-e model 55, simulated end to end
 
-Status: **in progress since 2026-09-22 — mini-phase 42.3 persistence/state upgrade**. This is
+Status: **in progress since 2026-09-22 — mini-phase 42.7 consultation and correction**. This is
 the executable plan for
 [Phase 42 in the fiscal roadmap](fiscal-implementation-plan.md#42--nf-e-model-55-lifecycle-with-a-simulator).
 Phase 40 delivered durable Fiscal documents, number reservations, authority/cancellation
@@ -19,9 +19,13 @@ pre-dispatch operational gate remain Phase 43 work.
 |---|---|---|
 | 42.1a Official source pinning | **complete locally** | MOC 7.0, NT 2026.004 v1.01, NT 2025.002 v1.51 and PL 010f v1.04 retained by SHA-256; machine-readable manifest and byte verifier added. |
 | 42.1b Capability gate | **implemented, inactive** | Append-only definitions, independent reviews and activation/deactivation history added. Fiscal review and executable lifecycle evidence are still required before the first row is activated. |
-| 42.2 Public contracts | **complete locally** | `@horizon/contracts` v0.27.1 publishes 19 additive lifecycle schemas and three explicitly simulated status events; registry, compatibility, exact pins, Fiscal and Sales checks pass. Routes remain disabled. |
-| 42.3 Persistence/state upgrade | **in progress** | Migration `0020` adds audited manual-origin storage, document revision identity, immutable commands/observations, worker leases, callback deduplication and artifact bindings. RLS, immutability and conflicting-final-observation tests pass. `ready`/`queued` guards, successor creation and worker orchestration still need implementation. |
-| 42.4–42.9 | not started | XML/signature, readiness, worker/simulator, cancellation, APIs/DANFE and rollout follow in plan order. |
+| 42.2 Public contracts | **complete locally** | `@horizon/contracts` v0.28.0 publishes 19 additive lifecycle schemas and three explicitly simulated status events; registry, compatibility, exact pins, Fiscal and Sales checks pass. Readiness/capability/issue response shapes are wired; cancellation and status commands remain disabled. |
+| 42.3 Persistence/state upgrade | **complete locally** | Migrations `0020`–`0023` add audited manual origins, revision identity, `ready`/`queued`/cancellation-uncertainty guards, immutable readiness/issuance bindings, typed artifact purposes, observations, callback deduplication and reclaimable worker leases. Idempotent queueing, concurrent claims, expired-lease recovery, successor creation, RLS and immutability pass against PostgreSQL. |
+| 42.4 NF-e XML/signature core | **complete locally** | Deterministic UTF-8 model-55 serialization, numeric/alphanumeric access key, MOC XMLDSig, independent signature verification and signed-document validation against the pinned PL 010f package pass stable-digest and mutation-negative tests. |
+| 42.5 Readiness orchestration | **implemented locally** | Public validation derives the Phase 41 input from the frozen Sales origin and exact effective issuer, recipient and Catalog revisions; an immutable capability/revision/reconciliation binding is stored. Zero-tolerance line/total mismatch, missing classification, retry and API authorization tests pass. |
+| 42.6 Durable issue worker/simulator | **implemented locally** | Number-stable XML preparation, explicit simulation XML profile, typed issuance artifacts, issuance binding, durable queue handoff, observation persistence, restart-stable deterministic outcomes and the worker loop are implemented and covered by unit/e2e queue evidence. Public activation still requires the configured simulation credential/profile and a full-stack issuance run. |
+| 42.7 Cancellation and corrected revision | **in progress locally** | Corrected Sales-origin successor is exposed through the scoped API. Explicit status consultation uses the original issuance identity, resolves the original job and is covered by worker/API/PostgreSQL tests. The official 2014 cancellation event package is retained and hashed as a candidate, but its numeric-only CNPJ/access-key types conflict with the selected 2026 alphanumeric schema; cancellation awaits a reviewed compatible event profile. |
+| 42.8–42.9 | not started | Events/DANFE and rollout follow after the cancellation source/profile gate. |
 
 ## Result and narrow supported tuple
 
@@ -54,24 +58,30 @@ evidence in this plan pass.
 - No manual-origin aggregate exists. The manual simulation path needs its own immutable,
   tenant-scoped origin, actor/reason audit and owner-revision references; it must not be an
   API escape hatch for caller-supplied tax results or raw XML.
-- `FiscalCalculations.lock` binds a supported calculation and moves a draft to internal
-  `validated`. Phase 42 must expose that invariant as `ready`, reconcile commercial and
-  fiscal totals, and prevent every later step without the exact binding.
-- `FiscalLifecycle` currently moves `validated -> submitted -> authorized | rejected |
-  unknown` directly and its in-memory simulator accepts only digests and numbers. It does
-  not have a durable `queued` boundary, signed XML, access key, raw response/protocol
-  artifacts, callback identity or public HTTP commands.
+- `FiscalCalculations.lock` now has a Phase 42 readiness path: it derives the input from
+  frozen owner projections, reconciles commercial and fiscal totals and records exact
+  issuer/recipient/catalog revisions before exposing `ready`.
+- The new dispatch path moves `ready -> queued -> submitted`, retains signed XML and
+  typed response/protocol artifacts, persists observations and consults deterministic
+  unknown outcomes. The older Phase 40 `FiscalLifecycle` remains for compatibility and
+  is not the public Phase 42 issue path.
 - The authority and cancellation tables are append-only and retry-safe for the Phase 40
   test simulator, but one attempt per document is not enough to represent a corrected
   rejected document without rewriting history. The correction model must be explicit.
-- `FiscalArtifacts` can store `xml`, `response`, `protocol` and `pdf`, but artifact purpose,
-  sequence, signed/authorized distinction and binding to an attempt are not represented.
-- Public `validate`, `issue` and cancellation routes intentionally return `409`; the
-  capabilities endpoint returns no supported rows. No status/consult command or status
-  event contract is exposed.
+- `FiscalArtifacts` retains the historic kinds and now also stores explicit Phase 42
+  purposes (`unsigned_xml`, `signed_xml`, issuance/cancellation response/protocol and
+  `danfe`) with optional command ownership.
+- Public `validate` and capability reads are enabled behind tenant/role checks. `issue`
+  is enabled only when the complete simulation credential, schema bytes and reviewed XML
+  profile are configured; explicit status consultation and rejected-Sales correction are
+  wired. Cancellation, outbox publication and DANFE remain rollout gates.
 - The source register hashes MOC 7.0 and multiple overlapping NF-e XSD packages. Phase 42
   must select one compatible schema set, pin its exact bytes and record the selection. A
   portal listing or an old checksum alone is not an adapter approval.
+- The official cancellation event package dated 2014-05-30 is retained as a candidate with
+  byte-level verification. Its `TCnpjOpc` and `TChNFe` types permit only digits, while the
+  selected PL 010f model-55 package admits alphanumeric issuer positions. It is therefore
+  not yet an approved cancellation schema for the supported tuple.
 
 ## Decisions frozen by this plan
 
@@ -132,7 +142,7 @@ The following invariants hold in the database and application layer:
 
 - one active document revision per fiscal origin, with every historical revision retained;
 - one number per document and one document per issuer/environment/model/series/number;
-- one access key per tenant/environment and a check digit verified before signing;
+- one 44-character access key per tenant/environment and a check digit verified before signing;
 - one canonical signed XML digest per issuance attempt;
 - a `ready` document has one supported frozen calculation whose input matches the document;
 - a queued/submitted document cannot acquire a different calculation, number or XML;
@@ -149,8 +159,8 @@ The following invariants hold in the database and application layer:
 | 2. Public contracts | Versioned document/status/artifact/capability commands, results, problems and fiscal status events in `@horizon/contracts`. | 1 | Registry tests, exact consumer pins and backward-compatibility check. |
 | 3. Persistence/state upgrade | Add `ready`, `queued`, cancellation uncertainty, revisions, access keys, dispatch jobs, attempt observations and artifact bindings through forward migrations. | 2 | Migration, immutability, RLS, uniqueness and concurrent-transition tests. |
 | 4. NF-e XML and signature core | Pure deterministic model-55 access-key, canonical XML, XSD validation and XMLDSig pipeline with a simulation credential provider. | 1–3 | Golden bytes/digests, schema tests, signature verification and mutation-negative fixtures. |
-| 5. Readiness orchestration | Build calculation input from frozen projections, lock the approved calculation, reconcile totals and transition `draft -> ready`. | 2–4 | Boundary, mismatch, unsupported, retry and cross-tenant tests. |
-| 6. Durable issue worker and simulator | Queue, submit, store observations/artifacts, recover crashes, consult unknown outcomes and deduplicate callbacks. | 3–5 | Authorization, rejection, accepted-then-timeout, restart and duplicate-delivery tests. |
+| 5. Readiness orchestration | **implemented locally** — build calculation input from frozen projections, lock the approved calculation, reconcile totals and transition `draft -> ready`. | 2–4 | Boundary, mismatch, unsupported, retry, API authorization and unit evidence pass; full database-origin readiness run remains. |
+| 6. Durable issue worker and simulator | **implemented locally** — queue, submit, store observations/artifacts, recover leases, consult unknown outcomes and preserve exact bytes. | 3–5 | Authorization/rejection/timeout-after-accept/timeout-before-accept, restart-stable simulator and worker tests pass; configured full-stack run remains. |
 | 7. Cancellation and corrected revision | Durable cancellation consultation and immutable successor flow for rejected issuance. | 3–6 | Accepted/rejected/unknown cancellation and one-active-revision tests. |
 | 8. API, events and DANFE | Enable scoped HTTP commands/read models, status timeline, artifacts, simulated events and watermarked rendering. | 2–7 | Auth/idempotency/API/event tests; no shipment, stock or money side effects. |
 | 9. Local rollout | Activate one simulation capability, run the approved origin end to end, restore artifacts and exercise rollback. | 1–8 | CI, Docker/Kong smoke, database counts/digests and Phase 42 evidence record. |
@@ -171,13 +181,15 @@ capability at `unsupported` until the selected schema set is reviewed.
 Build the XML pipeline as pure stages:
 
 1. `FrozenDocument + FrozenCalculation + ReservedNumber -> NFeModel55Data`;
-2. construct the 44-digit access key and verify its modulo-11 check digit;
+2. construct the 44-character access key (including the selected schema's alphanumeric CNPJ
+   positions) and verify its ASCII-minus-48 modulo-11 check digit;
 3. serialize deterministic UTF-8 XML with stable namespace, element order and decimal/date
    formatting; reject rather than omit required fiscal facts;
-4. validate the unsigned document against the pinned XSD set;
+4. validate the unsigned data model and its reconciliation invariants (the official
+   `NFe` XSD requires a `ds:Signature`, so it cannot validate an unsigned envelope);
 5. sign the required NF-e element using the configured XMLDSig algorithms and a
    simulation-only key exposed through `CertificateProvider`;
-6. verify the signature independently, validate signed XML again where applicable, then
+6. verify the signature independently, validate the signed XML against the pinned XSD, then
    persist the exact bytes before queue publication.
 
 The private key and certificate bytes never enter PostgreSQL, logs, fixtures, API bodies or
@@ -336,10 +348,12 @@ store/database backup into a clean local stack and verifies every digest and ten
 | Security | Role matrix, revoked token, body/line limits, XML parser hardening, secret redaction and no private key/raw XML logs. |
 
 Unit tests cover key generation, XML mapping, canonical bytes, signature verification,
-state guards and renderer inputs. PostgreSQL/Testcontainers tests cover RLS, constraints,
-concurrency, job leases, idempotency and outbox. API tests cover RFC 9457 responses and
-permissions. End-to-end tests run through RabbitMQ, object storage, worker and Kong with a
-real database and restart the worker between submit and consultation.
+readiness derivation, queue observation and simulator restart behavior. PostgreSQL/
+Testcontainers tests cover RLS, constraints, concurrency, job leases, idempotency and
+reclaim/consult transitions. API tests cover typed readiness/issue responses and
+permissions. The remaining evidence is a configured full-stack run through object
+storage, worker and Kong with a real signed credential and a restart between submit and
+consultation.
 
 ## Expected code changes
 
@@ -349,8 +363,8 @@ real database and restart the worker between submit and consultation.
 | `fiscal/migrations/0019_*` onward | Add capability activation, ready/queue states, revisions, access keys, dispatch/reconciliation jobs, richer observations and artifact bindings. |
 | `fiscal/src/documents.ts`, `calculations.ts` | Gate model 55 creation, derive/lock calculation, reconcile totals and create corrected successors. |
 | New `fiscal/src/nfe55/*` | Access key, pure mapping, XML serialization, XSD validation, XMLDSig verification and fixture adapters. |
-| `fiscal/src/ports.ts`, `lifecycle.ts` | Pass exact bytes/correlations, persist durable simulator state and enforce consult-before-resend. |
-| `fiscal/src/artifacts.ts`, new renderer adapter | Store typed issuance/cancellation evidence and deterministic watermarked DANFE. |
+| `fiscal/src/nfe55/simulator.ts`, `issue-worker.ts` | Derive restart-stable outcomes from command identity, persist exact response/protocol bytes and enforce consult-before-resend. |
+| `fiscal/src/artifacts.ts`, new renderer adapter | Store typed issuance/cancellation evidence; deterministic watermarked DANFE remains. |
 | `fiscal/src/api.ts`, `worker.ts` | Enable scoped commands/read models, queue worker, status consultation and outbox publication. |
 | `fiscal/fixtures/`, `fiscal/test/`, `scripts/` | Add reviewed XML/lifecycle fixtures, concurrency/restart tests and a Phase 42 Kong smoke. |
 | `docs/` | Add source manifest, capability row, runbook and `fiscal-phase42-evidence.md`. |

@@ -92,7 +92,7 @@ export const fiscalDocumentSchema = z.strictObject({
   number: z.number().int().min(1).max(999_999_999).nullable(),
   accessKey: z
     .string()
-    .regex(/^\d{44}$/)
+    .regex(/^[0-9]{6}[0-9A-Z]{12}[0-9]{26}$/)
     .nullable(),
   snapshotDigest: sha256Schema,
   calculationDigest: sha256Schema.nullable(),

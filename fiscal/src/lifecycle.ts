@@ -47,21 +47,21 @@ export class FiscalLifecycle {
       const [document] = await tx`select status, environment, snapshot_ciphertext
         from fiscal_documents where tenant_id = ${tenantId} and id = ${documentId} for update`
       if (!document) throw new Error('Fiscal document not found')
-      if (document.status === 'validated') return
+      if (document.status === 'ready') return
       if (
         document.status !== 'draft' ||
         document.environment !== 'simulation' ||
         !document.snapshot_ciphertext
       )
         throw new Error('Fiscal document is not a valid simulation draft')
-      await tx`update fiscal_documents set status = 'validated'
+      await tx`update fiscal_documents set status = 'ready'
         where tenant_id = ${tenantId} and id = ${documentId}`
       await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind)
-        values (${randomUUID()}, ${tenantId}, ${documentId}, 'validated')`
+        values (${randomUUID()}, ${tenantId}, ${documentId}, 'ready')`
       await appendAudit(tx, {
         tenantId,
         actorId: 'system:fiscal',
-        action: 'document.validated',
+        action: 'document.ready',
         resourceId: documentId,
         detail: { environment: 'simulation' },
       })
@@ -95,7 +95,7 @@ export class FiscalLifecycle {
           final,
         }
       }
-      if (document.status !== 'validated') throw new Error('Fiscal document is not validated')
+      if (document.status !== 'ready') throw new Error('Fiscal document is not ready')
       const [reservation] = await tx`select number from fiscal_number_reservations
         where tenant_id = ${tenantId} and document_id = ${documentId}`
       if (!reservation) throw new Error('Fiscal number has not been reserved')
@@ -105,6 +105,11 @@ export class FiscalLifecycle {
         (id, tenant_id, document_id, request_id, number, payload_digest)
         values (${randomUUID()}, ${tenantId}, ${documentId}, ${requestId},
           ${number}, ${document.snapshot_digest})`
+      await tx`update fiscal_documents set status = 'queued'
+        where tenant_id = ${tenantId} and id = ${documentId}`
+      await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind, detail)
+        values (${randomUUID()}, ${tenantId}, ${documentId}, 'queued',
+          ${JSON.stringify({ requestId })}::jsonb)`
       await tx`update fiscal_documents set status = 'submitted'
         where tenant_id = ${tenantId} and id = ${documentId}`
       await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind, detail)
@@ -263,7 +268,7 @@ export class FiscalLifecycle {
       const [attempt] = await tx`select id from cancellation_attempts
         where tenant_id = ${request.tenantId} and request_id = ${request.requestId}`
       if (!document || !attempt) throw new Error('Fiscal cancellation attempt not found')
-      if (document.status !== 'cancellation_pending') {
+      if (!['cancellation_pending', 'cancellation_unknown'].includes(document.status)) {
         const final = document.status === 'cancelled' ? 'cancelled' : 'rejected'
         if (final !== value.outcome) throw new Error('Conflicting Fiscal cancellation outcome')
         return
@@ -274,7 +279,16 @@ export class FiscalLifecycle {
         values (${randomUUID()}, ${request.tenantId}, ${attempt.id}, ${value.outcome},
           ${value.providerReference}, ${responseDigest}, ${this.clock.now()})
         on conflict on constraint cancellation_response_unique do nothing`
-      if (value.outcome === 'unknown') return
+      if (value.outcome === 'unknown') {
+        if (document.status === 'cancellation_pending') {
+          await tx`update fiscal_documents set status = 'cancellation_unknown'
+            where tenant_id = ${request.tenantId} and id = ${request.documentId}`
+          await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind)
+            values (${randomUUID()}, ${request.tenantId}, ${request.documentId},
+              'cancellation_unknown')`
+        }
+        return
+      }
       const status = value.outcome === 'cancelled' ? 'cancelled' : 'authorized'
       await tx`update fiscal_documents set status = ${status}
         where tenant_id = ${request.tenantId} and id = ${request.documentId}`

@@ -31,6 +31,9 @@ try {
     '0018_phase41_external_source_artifacts.sql',
     '0019_phase42_capabilities.sql',
     '0020_phase42_lifecycle_foundations.sql',
+    '0021_phase42_ready_queue.sql',
+    '0022_phase42_readiness.sql',
+    '0023_phase42_artifact_purposes.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

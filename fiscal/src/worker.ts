@@ -1,4 +1,5 @@
 import './telemetry'
+import { readFileSync } from 'node:fs'
 import { S3Client } from '@aws-sdk/client-s3'
 import { z } from 'zod'
 import { createFiscalServer } from './api'
@@ -7,10 +8,16 @@ import { FiscalArtifacts } from './artifacts'
 import { FiscalTokenVerifier, RedisDenylist } from './auth'
 import { HttpOwnerFiscalClient } from './backfill'
 import { FiscalCalculations } from './calculations'
+import { FiscalCapabilities } from './capabilities'
 import { FiscalConsumer } from './consumer'
+import { FiscalDispatch } from './dispatch'
 import { FiscalDocuments } from './documents'
 import { FiscalIngress } from './ingress'
+import { FiscalIssuance } from './issuance'
+import { FiscalIssueWorker } from './issue-worker'
+import { DeterministicNfe55Simulator } from './nfe55/simulator'
 import { FiscalProjections } from './projections'
+import { FiscalReadiness } from './readiness'
 import { FiscalRuleStore } from './rule-store'
 import { FiscalServiceTokens } from './service-tokens'
 import { stopTelemetry } from './telemetry'
@@ -29,6 +36,10 @@ const config = z
     FISCAL_ARTIFACT_REGION: z.string().min(1),
     FISCAL_ARTIFACT_ENDPOINT: z.url().optional(),
     FISCAL_ARTIFACT_KEY_HEX: z.string().regex(/^[0-9a-f]{64}$/i),
+    FISCAL_SIMULATION_PROFILE_JSON: z.string().min(2).optional(),
+    FISCAL_SIMULATION_PRIVATE_KEY_PATH: z.string().min(1).optional(),
+    FISCAL_SIMULATION_CERTIFICATE_PATH: z.string().min(1).optional(),
+    FISCAL_PHASE42_SCHEMA_PATH: z.string().min(1).optional(),
   })
   .parse(process.env)
 
@@ -47,6 +58,8 @@ const calculations = new FiscalCalculations(
   Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
   ruleStore,
 )
+const capabilities = new FiscalCapabilities(config.DATABASE_URL)
+const readiness = new FiscalReadiness(documents, projections, capabilities, calculations)
 const s3 = new S3Client({
   region: config.FISCAL_ARTIFACT_REGION,
   forcePathStyle: Boolean(config.FISCAL_ARTIFACT_ENDPOINT),
@@ -59,17 +72,65 @@ const artifactStore = new EncryptedFiscalArtifactStore(
 const artifacts = new FiscalArtifacts(config.DATABASE_URL, artifactStore)
 const denylist = new RedisDenylist(config.REDIS_URL)
 const verifier = new FiscalTokenVerifier(`${config.IDENTITY_URL}/.well-known/jwks.json`, denylist)
-const server = createFiscalServer({
-  verifier,
-  documents,
-  artifacts,
-  calculations,
-  rules: ruleStore,
-})
 const keys = z
   .record(z.uuid(), z.string().min(20))
   .parse(JSON.parse(config.FISCAL_SERVICE_KEYS_JSON))
 const tokens = new FiscalServiceTokens(config.IDENTITY_URL, keys)
+const dispatch = new FiscalDispatch(config.DATABASE_URL)
+const issuanceConfiguration = [
+  config.FISCAL_SIMULATION_PROFILE_JSON,
+  config.FISCAL_SIMULATION_PRIVATE_KEY_PATH,
+  config.FISCAL_SIMULATION_CERTIFICATE_PATH,
+  config.FISCAL_PHASE42_SCHEMA_PATH,
+]
+if (issuanceConfiguration.some(Boolean) && !issuanceConfiguration.every(Boolean))
+  throw new Error('Phase 42 issuance configuration must be supplied as one complete set')
+const issuance = issuanceConfiguration.every(Boolean)
+  ? new FiscalIssuance(
+      config.DATABASE_URL,
+      documents,
+      projections,
+      calculations,
+      artifacts,
+      dispatch,
+      JSON.parse(config.FISCAL_SIMULATION_PROFILE_JSON as string),
+      {
+        privateKey: readFileSync(config.FISCAL_SIMULATION_PRIVATE_KEY_PATH as string),
+        certificate: readFileSync(config.FISCAL_SIMULATION_CERTIFICATE_PATH as string),
+      },
+      readFileSync(config.FISCAL_PHASE42_SCHEMA_PATH as string),
+      'b8589490a58a09a993a80e6ac4d7ed10f20892061ecfc56719337098d4b95998',
+    )
+  : undefined
+const server = createFiscalServer({
+  verifier,
+  documents,
+  dispatch,
+  artifacts,
+  calculations,
+  capabilities,
+  readiness,
+  ...(issuance ? { issuance } : {}),
+  rules: ruleStore,
+})
+const issueWorker = new FiscalIssueWorker(dispatch, artifacts, new DeterministicNfe55Simulator())
+let issueWorkerBusy = false
+const issueWorkerTimer = setInterval(() => {
+  if (issueWorkerBusy) return
+  issueWorkerBusy = true
+  void Promise.all(
+    Object.keys(keys).map((tenantId) => issueWorker.processOne(tenantId, 'fiscal:issue-worker')),
+  )
+    .catch((error: unknown) =>
+      console.error('Fiscal issue worker cycle failed', {
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+      }),
+    )
+    .finally(() => {
+      issueWorkerBusy = false
+    })
+}, 1_000)
+issueWorkerTimer.unref()
 const urls = {
   parties: config.PARTIES_URL,
   identity: config.IDENTITY_URL,
@@ -83,6 +144,7 @@ const consumer = new FiscalConsumer(
 )
 
 async function stop(): Promise<void> {
+  clearInterval(issueWorkerTimer)
   await new Promise<void>((resolve) => server.close(() => resolve()))
   await consumer.close()
   await Promise.all([
@@ -91,6 +153,9 @@ async function stop(): Promise<void> {
     documents.close(),
     artifacts.close(),
     calculations.close(),
+    capabilities.close(),
+    dispatch.close(),
+    issuance?.close(),
     ruleStore.close(),
     denylist.close(),
   ])
@@ -116,6 +181,9 @@ void consumer
       documents.close(),
       artifacts.close(),
       calculations.close(),
+      capabilities.close(),
+      dispatch.close(),
+      issuance?.close(),
       ruleStore.close(),
       denylist.close(),
     ])

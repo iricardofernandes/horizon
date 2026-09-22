@@ -3,14 +3,23 @@ import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
 import { type FiscalPermission, type FiscalPrincipal, type FiscalTokenVerifier, may } from './auth'
 import type { FiscalCalculations } from './calculations'
+import { canonicalDigest } from './canonical-json'
+import type { FiscalCapabilities } from './capabilities'
+import type { FiscalDispatch } from './dispatch'
 import type { FiscalDocuments } from './documents'
+import type { FiscalIssuance } from './issuance'
+import type { FiscalReadiness } from './readiness'
 import type { FiscalRuleStore } from './rule-store'
 
 export function createFiscalServer(dependencies: {
   verifier: Pick<FiscalTokenVerifier, 'verify'>
-  documents: Pick<FiscalDocuments, 'get' | 'createDraft'>
+  documents: Pick<FiscalDocuments, 'get' | 'createDraft' | 'createSuccessor'>
+  dispatch?: Pick<FiscalDispatch, 'queueStatusQuery'>
   artifacts: Pick<FiscalArtifacts, 'get'>
   calculations: Pick<FiscalCalculations, 'preview' | 'get'>
+  capabilities: Pick<FiscalCapabilities, 'listActive'>
+  readiness: Pick<FiscalReadiness, 'validate'>
+  issuance?: Pick<FiscalIssuance, 'issue'>
   rules: Pick<FiscalRuleStore, 'proposeOverride'>
 }): Server {
   return createServer((request, response) => {
@@ -25,9 +34,13 @@ async function handle(
   response: ServerResponse,
   dependencies: {
     verifier: Pick<FiscalTokenVerifier, 'verify'>
-    documents: Pick<FiscalDocuments, 'get' | 'createDraft'>
+    documents: Pick<FiscalDocuments, 'get' | 'createDraft' | 'createSuccessor'>
+    dispatch?: Pick<FiscalDispatch, 'queueStatusQuery'>
     artifacts: Pick<FiscalArtifacts, 'get'>
     calculations: Pick<FiscalCalculations, 'preview' | 'get'>
+    capabilities: Pick<FiscalCapabilities, 'listActive'>
+    readiness: Pick<FiscalReadiness, 'validate'>
+    issuance?: Pick<FiscalIssuance, 'issue'>
     rules: Pick<FiscalRuleStore, 'proposeOverride'>
   },
 ): Promise<void> {
@@ -46,10 +59,34 @@ async function handle(
   if (!requirePermission(principal, 'read', response)) return
 
   if (request.method === 'GET' && url.pathname === '/capabilities') {
+    const supported = (await dependencies.capabilities.listActive(principal.tenantId))
+      .filter(
+        (capability) =>
+          capability.model === '55' &&
+          capability.environment === 'simulation' &&
+          capability.operation === 'normal-sale',
+      )
+      .map((capability) => ({
+        id: capability.id,
+        model: '55' as const,
+        environment: 'simulation' as const,
+        establishmentId: capability.establishmentId,
+        jurisdiction: {
+          kind: capability.jurisdictionKind as 'uf',
+          code: capability.jurisdictionCode,
+        },
+        operation: 'normal-sale' as const,
+        adapterVersion: capability.adapterVersion,
+        status: 'simulated' as const,
+        sourceManifestDigest: capability.sourceManifestDigest,
+        schemaPackageDigest: capability.schemaPackageDigest,
+        calculationFixtureId: capability.calculationFixtureId,
+        evidenceDigest: capability.evidenceDigest,
+        activatedAt: capability.activatedAt,
+      }))
     json(response, 200, {
       defaultStatus: 'unsupported',
-      supported: [],
-      requested: Object.fromEntries(url.searchParams),
+      supported,
     })
     return
   }
@@ -146,12 +183,13 @@ async function handle(
     return
   }
 
-  const artifact = /^\/documents\/([0-9a-f-]{36})\/artifacts\/(xml|response|protocol|pdf)$/.exec(
-    url.pathname,
-  )
+  const artifact =
+    /^\/documents\/([0-9a-f-]{36})\/artifacts\/(xml|response|protocol|pdf|unsigned_xml|signed_xml|issuance_request|issuance_response|authorization_protocol|cancellation_request|cancellation_response|cancellation_protocol|danfe)$/.exec(
+      url.pathname,
+    )
   if (request.method === 'GET' && artifact) {
     const documentId = artifact[1]
-    const kind = artifact[2] as 'xml' | 'response' | 'protocol' | 'pdf'
+    const kind = artifact[2] as Parameters<FiscalArtifacts['get']>[2]
     const digest = url.searchParams.get('digest')
     if (!documentId || !digest) {
       problem(response, 400, 'Bad Request', 'A document and digest are required')
@@ -209,9 +247,156 @@ async function handle(
     return
   }
 
+  const readiness = /^\/documents\/([0-9a-f-]{36})\/validate$/.exec(url.pathname)
+  if (request.method === 'POST' && readiness?.[1]) {
+    if (!requirePermission(principal, 'transmission:submit', response)) return
+    try {
+      const result = await dependencies.readiness.validate({
+        tenantId: principal.tenantId,
+        documentId: readiness[1],
+        actorId: principal.subject,
+      })
+      if (result.supported) {
+        const document = await dependencies.documents.get(principal.tenantId, readiness[1])
+        if (!document) throw new Error('Fiscal document not found')
+        json(response, 200, {
+          document,
+          inputDigest: result.inputDigest,
+          rulesDigest: result.rulesDigest,
+          resultDigest: result.resultDigest,
+          reconciliationDigest: result.reconciliationDigest,
+        })
+      } else fiscalProblem(response, 422, result)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Fiscal document not found')
+        problem(response, 404, 'Not Found', error.message)
+      else if (error instanceof Error && error.message === 'Fiscal capability is unsupported')
+        lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
+      else if (error instanceof Error && error.message.includes('does not reconcile'))
+        lifecycleProblem(response, 409, 'CALCULATION_MISMATCH', error.message)
+      else if (error instanceof Error && error.message.includes('projection is unavailable'))
+        lifecycleProblem(response, 409, 'DOCUMENT_NOT_READY', error.message)
+      else if (error instanceof Error && error.message === 'Fiscal document is not a draft')
+        lifecycleProblem(response, 409, 'INVALID_STATE_TRANSITION', error.message)
+      else throw error
+    }
+    return
+  }
+
+  const issuance = /^\/documents\/([0-9a-f-]{36})\/issue$/.exec(url.pathname)
+  if (request.method === 'POST' && issuance?.[1] && dependencies.issuance) {
+    if (!requirePermission(principal, 'transmission:submit', response)) return
+    const key = request.headers['idempotency-key']
+    if (typeof key !== 'string' || key.length < 16 || key.length > 128) {
+      problem(response, 400, 'Bad Request', 'Idempotency-Key must have 16 to 128 characters')
+      return
+    }
+    try {
+      const result = await dependencies.issuance.issue({
+        tenantId: principal.tenantId,
+        documentId: issuance[1],
+        idempotencyKey: key,
+        actorId: principal.subject,
+      })
+      json(response, 202, {
+        commandId: result.commandId,
+        documentId: result.documentId,
+        status: 'queued',
+        statusUrl: `/fiscal/documents/${result.documentId}`,
+        simulated: true,
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Fiscal document not found')
+        problem(response, 404, 'Not Found', error.message)
+      else if (error instanceof Error && error.message === 'Fiscal document is not ready')
+        lifecycleProblem(response, 409, 'DOCUMENT_NOT_READY', error.message)
+      else if (error instanceof Error && error.message.includes('capability'))
+        lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
+      else if (error instanceof Error && error.message.startsWith('Conflicting'))
+        problem(response, 409, 'Conflict', error.message)
+      else throw error
+    }
+    return
+  }
+
+  const statusQuery = /^\/documents\/([0-9a-f-]{36})\/status-queries$/.exec(url.pathname)
+  if (request.method === 'POST' && statusQuery?.[1] && dependencies.dispatch) {
+    if (!requirePermission(principal, 'transmission:submit', response)) return
+    const key = request.headers['idempotency-key']
+    if (typeof key !== 'string' || key.length < 16 || key.length > 128) {
+      problem(response, 400, 'Bad Request', 'Idempotency-Key must have 16 to 128 characters')
+      return
+    }
+    try {
+      const result = await dependencies.dispatch.queueStatusQuery({
+        tenantId: principal.tenantId,
+        documentId: statusQuery[1],
+        idempotencyKey: key,
+        actorId: principal.subject,
+        requestDigest: canonicalDigest({ documentId: statusQuery[1], command: 'status_query' }),
+      })
+      json(response, 202, {
+        commandId: result.commandId,
+        documentId: result.documentId,
+        status: 'queued',
+        statusUrl: `/fiscal/documents/${result.documentId}`,
+        simulated: true,
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Fiscal document not found')
+        problem(response, 404, 'Not Found', error.message)
+      else if (error instanceof Error && error.message.startsWith('Conflicting'))
+        problem(response, 409, 'Conflict', error.message)
+      else if (error instanceof Error && error.message.includes('not consultable'))
+        lifecycleProblem(response, 409, 'INVALID_STATE_TRANSITION', error.message)
+      else throw error
+    }
+    return
+  }
+
+  const correction = /^\/documents\/([0-9a-f-]{36})\/corrections$/.exec(url.pathname)
+  if (request.method === 'POST' && correction?.[1]) {
+    if (!requirePermission(principal, 'draft:create', response)) return
+    const key = request.headers['idempotency-key']
+    if (typeof key !== 'string' || key.length < 16 || key.length > 128) {
+      problem(response, 400, 'Bad Request', 'Idempotency-Key must have 16 to 128 characters')
+      return
+    }
+    try {
+      const body = z
+        .strictObject({
+          reason: z.string().trim().min(10).max(1000),
+          correctedOrigin: z.strictObject({ kind: z.literal('sales'), intentId: z.uuid() }),
+        })
+        .parse(await readJson(request))
+      const result = await dependencies.documents.createSuccessor({
+        tenantId: principal.tenantId,
+        documentId: correction[1],
+        correctedIntentId: body.correctedOrigin.intentId,
+        idempotencyKey: key,
+        actorId: principal.subject,
+        reason: body.reason,
+      })
+      json(response, result.existing ? 200 : 201, result)
+    } catch (error) {
+      if (error instanceof z.ZodError || error instanceof SyntaxError)
+        problem(response, 400, 'Bad Request', 'Invalid Fiscal correction request')
+      else if (error instanceof Error && error.message === 'Fiscal document not found')
+        problem(response, 404, 'Not Found', error.message)
+      else if (error instanceof Error && error.message.includes('origin snapshot unavailable'))
+        problem(response, 404, 'Not Found', error.message)
+      else if (error instanceof Error && error.message.startsWith('Conflicting'))
+        problem(response, 409, 'Conflict', error.message)
+      else if (error instanceof Error && error.message.includes('rejected Fiscal document'))
+        lifecycleProblem(response, 409, 'INVALID_STATE_TRANSITION', error.message)
+      else throw error
+    }
+    return
+  }
+
   if (
     request.method === 'POST' &&
-    /^\/documents\/[0-9a-f-]{36}\/(validate|issue|cancellation-requests)$/.test(url.pathname)
+    /^\/documents\/[0-9a-f-]{36}\/(issue|cancellation-requests)$/.test(url.pathname)
   ) {
     const permission: FiscalPermission = url.pathname.endsWith('/cancellation-requests')
       ? 'cancellation:request'
@@ -221,6 +406,24 @@ async function handle(
     return
   }
   problem(response, 404, 'Not Found', 'Fiscal route not found')
+}
+
+function lifecycleProblem(
+  response: ServerResponse,
+  status: number,
+  code: string,
+  detail: string,
+): void {
+  response.writeHead(status, { 'content-type': 'application/problem+json; charset=utf-8' })
+  response.end(
+    JSON.stringify({
+      type: `https://horizon.dev/problems/fiscal/${code.toLowerCase().replaceAll('_', '-')}`,
+      title: 'Fiscal lifecycle command failed',
+      status,
+      code,
+      detail,
+    }),
+  )
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {

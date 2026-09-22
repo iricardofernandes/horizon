@@ -645,6 +645,70 @@ it('reconciles an uncertain simulation after restart without allocating another 
   }
 })
 
+it('creates one immutable successor revision from a rejected document', async () => {
+  const tenantId = randomUUID()
+  const original = origin(tenantId, randomUUID())
+  const corrected = origin(tenantId, randomUUID())
+  const competing = origin(tenantId, randomUUID())
+  await ingress.accept(original)
+  await ingress.accept(corrected)
+  await ingress.accept(competing)
+  const intents = await administrator`select id, origin_id from fiscal_intents
+    where tenant_id = ${tenantId}`
+  const originalIntent = intents.find((row) => row.origin_id === original.payload.originId)
+  const correctedIntent = intents.find((row) => row.origin_id === corrected.payload.originId)
+  const competingIntent = intents.find((row) => row.origin_id === competing.payload.originId)
+  if (!originalIntent || !correctedIntent || !competingIntent)
+    throw new Error('Correction test origins were not stored')
+  const predecessor = await documents.createDraft({
+    tenantId,
+    intentId: String(originalIntent.id),
+    model: '55',
+    environment: 'simulation',
+    establishmentId: randomUUID(),
+    series: 1,
+  })
+  await bindIllustrativeCalculation(tenantId, predecessor.id)
+  await documents.reserveNumber(tenantId, predecessor.id)
+  const lifecycle = new FiscalLifecycle(appUrl, new DeterministicAuthorityGateway('rejected'))
+  try {
+    expect((await lifecycle.submit(tenantId, predecessor.id)).outcome).toBe('rejected')
+  } finally {
+    await lifecycle.close()
+  }
+  const request = {
+    tenantId,
+    documentId: predecessor.id,
+    correctedIntentId: String(correctedIntent.id),
+    idempotencyKey: 'phase42-correction-0001',
+    actorId: 'issuer:test',
+    reason: 'Correct the owner-approved commercial origin',
+  }
+  const successor = await documents.createSuccessor(request)
+  expect(successor).toMatchObject({
+    status: 'draft',
+    rootDocumentId: predecessor.id,
+    predecessorDocumentId: predecessor.id,
+    revision: 2,
+    existing: false,
+  })
+  expect(await documents.readSnapshot(tenantId, successor.id)).toEqual(corrected.payload)
+  expect(await documents.createSuccessor(request)).toEqual({ ...successor, existing: true })
+  await expect(
+    documents.createSuccessor({
+      ...request,
+      idempotencyKey: 'phase42-correction-0002',
+      correctedIntentId: String(competingIntent.id),
+    }),
+  ).rejects.toThrow('different successor')
+  const [evidence] = await administrator`select
+      (select count(*)::integer from fiscal_documents
+        where tenant_id = ${tenantId} and root_document_id = ${predecessor.id}) as revisions,
+      (select count(*)::integer from fiscal_number_reservations
+        where tenant_id = ${tenantId} and document_id = ${successor.id}) as successor_numbers`
+  expect(evidence).toMatchObject({ revisions: 2, successor_numbers: 0 })
+})
+
 async function bindIllustrativeCalculation(tenantId: string, documentId: string): Promise<void> {
   const calculationId = randomUUID()
   await administrator.begin(async (tx) => {
@@ -661,7 +725,7 @@ async function bindIllustrativeCalculation(tenantId: string, documentId: string)
     await tx`insert into fiscal_document_calculation_bindings (
       tenant_id, document_id, calculation_id
     ) values (${tenantId}, ${documentId}, ${calculationId})`
-    await tx`update fiscal_documents set status = 'validated'
+    await tx`update fiscal_documents set status = 'ready'
       where tenant_id = ${tenantId} and id = ${documentId}`
   })
 }

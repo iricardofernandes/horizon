@@ -7,7 +7,22 @@ import { appendAudit } from './audit'
 const metadataSchema = z.object({
   tenantId: z.uuid(),
   documentId: z.uuid(),
-  kind: z.enum(['xml', 'response', 'protocol', 'pdf']),
+  kind: z.enum([
+    'xml',
+    'response',
+    'protocol',
+    'pdf',
+    'unsigned_xml',
+    'signed_xml',
+    'issuance_request',
+    'issuance_response',
+    'authorization_protocol',
+    'cancellation_request',
+    'cancellation_response',
+    'cancellation_protocol',
+    'danfe',
+  ]),
+  commandId: z.uuid().optional(),
   mediaType: z.string().min(3).max(100),
   sourceSchema: z.string().min(1).max(160),
 })
@@ -49,9 +64,11 @@ export class FiscalArtifacts {
     return this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
       const inserted = await tx`insert into fiscal_artifacts (
-        id, tenant_id, document_id, kind, object_key, digest, size_bytes, media_type, source_schema
+        id, tenant_id, document_id, kind, purpose, command_id, object_key, digest,
+        size_bytes, media_type, source_schema
       ) values (
         ${randomUUID()}, ${value.tenantId}, ${value.documentId}, ${value.kind},
+        ${isExplicitPurpose(value.kind) ? value.kind : null}, ${value.commandId ?? null},
         ${objectKey}, ${digest}, ${bytes.length}, ${value.mediaType}, ${value.sourceSchema}
       ) on conflict on constraint fiscal_artifact_identity_key do nothing returning id`
       if (inserted.length > 0)
@@ -92,7 +109,7 @@ export class FiscalArtifacts {
   }> {
     z.uuid().parse(tenantId)
     z.uuid().parse(documentId)
-    z.enum(['xml', 'response', 'protocol', 'pdf']).parse(kind)
+    metadataSchema.shape.kind.parse(kind)
     z.string()
       .regex(/^[0-9a-f]{64}$/)
       .parse(digest)
@@ -121,4 +138,8 @@ export class FiscalArtifacts {
       bytes,
     }
   }
+}
+
+function isExplicitPurpose(kind: ArtifactMetadata['kind']): boolean {
+  return !['xml', 'response', 'protocol', 'pdf'].includes(kind)
 }

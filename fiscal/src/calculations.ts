@@ -67,11 +67,33 @@ export class FiscalCalculations {
     documentId: string
     actorId: string
     calculationInput: FiscalCalculationInput
+    readiness?: {
+      capabilityId: string
+      issuerProfileRevision: number
+      recipientPartyId: string
+      recipientProfileRevision: number
+      classificationRevisions: Record<string, number>
+      originDigest: string
+      reconciliationDigest: string
+    }
   }): Promise<FiscalCalculationOutcome> {
     const command = z
       .object({ tenantId: z.uuid(), documentId: z.uuid(), actorId: z.string().min(1).max(200) })
       .parse(input)
     const calculationInput = fiscalCalculationInputSchema.parse(input.calculationInput)
+    const readiness = input.readiness
+      ? z
+          .strictObject({
+            capabilityId: z.uuid(),
+            issuerProfileRevision: z.number().int().positive(),
+            recipientPartyId: z.uuid(),
+            recipientProfileRevision: z.number().int().positive(),
+            classificationRevisions: z.record(z.uuid(), z.number().int().positive()),
+            originDigest: z.string().regex(/^[0-9a-f]{64}$/),
+            reconciliationDigest: z.string().regex(/^[0-9a-f]{64}$/),
+          })
+          .parse(input.readiness)
+      : null
     if (calculationInput.tenantId !== command.tenantId)
       throw new Error('Calculation input tenant does not match command tenant')
     const scale = currencyScale(calculationInput.currency)
@@ -112,7 +134,8 @@ export class FiscalCalculations {
         where binding.tenant_id = ${command.tenantId} and binding.document_id = ${command.documentId}`
       if (binding) {
         if (binding.input_digest !== result.inputDigest)
-          throw new Error('Conflicting calculation for validated Fiscal document')
+          throw new Error('Conflicting calculation for ready Fiscal document')
+        if (readiness) await assertStoredReadiness(tx, command, readiness)
         return parseStoredResult(binding.result_bytes)
       }
       if (document.status !== 'draft') throw new Error('Fiscal document is not a draft')
@@ -148,10 +171,21 @@ export class FiscalCalculations {
       await tx`insert into fiscal_document_calculation_bindings (
         tenant_id, document_id, calculation_id
       ) values (${command.tenantId}, ${command.documentId}, ${calculationId})`
-      await tx`update fiscal_documents set status = 'validated'
+      if (readiness)
+        await tx`insert into fiscal_document_readiness_bindings (
+          tenant_id, document_id, capability_id, issuer_profile_revision,
+          recipient_party_id, recipient_profile_revision, classification_revisions,
+          origin_digest, reconciliation_digest
+        ) values (
+          ${command.tenantId}, ${command.documentId}, ${readiness.capabilityId},
+          ${readiness.issuerProfileRevision}, ${readiness.recipientPartyId},
+          ${readiness.recipientProfileRevision}, ${tx.json(readiness.classificationRevisions)},
+          ${readiness.originDigest}, ${readiness.reconciliationDigest}
+        )`
+      await tx`update fiscal_documents set status = 'ready'
         where tenant_id = ${command.tenantId} and id = ${command.documentId}`
       await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind, detail)
-        values (${randomUUID()}, ${command.tenantId}, ${command.documentId}, 'validated',
+        values (${randomUUID()}, ${command.tenantId}, ${command.documentId}, 'ready',
           ${JSON.stringify({ calculationId, resultDigest: result.resultDigest })}::jsonb)`
       await appendAudit(tx, {
         tenantId: command.tenantId,
@@ -206,6 +240,58 @@ export class FiscalCalculations {
       throw new Error('Fiscal calculation replay integrity failure')
     return replayed
   }
+
+  async readFrozen(
+    tenantId: string,
+    documentId: string,
+  ): Promise<{ input: FiscalCalculationInput; result: FiscalCalculationResult } | null> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(documentId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select calculation.id, calculation.input_ciphertext,
+          calculation.input_digest, calculation.result_bytes
+        from fiscal_document_calculation_bindings binding
+        join fiscal_calculations calculation on calculation.tenant_id = binding.tenant_id
+          and calculation.id = binding.calculation_id
+        where binding.tenant_id = ${tenantId} and binding.document_id = ${documentId}`
+    })
+    if (!row) return null
+    const inputBytes = openCalculationInput(
+      this.masterKey,
+      tenantId,
+      String(row.id),
+      Buffer.from(row.input_ciphertext),
+    )
+    const input = fiscalCalculationInputSchema.parse(JSON.parse(inputBytes))
+    if (canonicalDigest(normalizeInput(input)) !== row.input_digest)
+      throw new Error('Fiscal calculation input integrity failure')
+    return { input, result: parseStoredResult(row.result_bytes) }
+  }
+}
+
+async function assertStoredReadiness(
+  tx: postgres.TransactionSql,
+  command: { tenantId: string; documentId: string },
+  expected: NonNullable<Parameters<FiscalCalculations['validateDocument']>[0]['readiness']>,
+): Promise<void> {
+  const [row] = await tx`select capability_id, issuer_profile_revision,
+      recipient_party_id, recipient_profile_revision, classification_revisions,
+      origin_digest, reconciliation_digest
+    from fiscal_document_readiness_bindings
+    where tenant_id = ${command.tenantId} and document_id = ${command.documentId}`
+  if (
+    !row ||
+    String(row.capability_id) !== expected.capabilityId ||
+    Number(row.issuer_profile_revision) !== expected.issuerProfileRevision ||
+    String(row.recipient_party_id) !== expected.recipientPartyId ||
+    Number(row.recipient_profile_revision) !== expected.recipientProfileRevision ||
+    canonicalJson(row.classification_revisions) !==
+      canonicalJson(expected.classificationRevisions) ||
+    row.origin_digest !== expected.originDigest ||
+    row.reconciliation_digest !== expected.reconciliationDigest
+  )
+    throw new Error('Conflicting readiness evidence for Fiscal document')
 }
 
 function normalizeInput(input: FiscalCalculationInput): FiscalCalculationInput {

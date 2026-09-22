@@ -113,6 +113,15 @@ describe('Fiscal lifecycle HTTP contracts', () => {
       createdAt: '2026-09-22T15:00:00.000Z',
     } as const
     expect(fiscalDocumentSchema.parse(document)).toEqual(document)
+    expect(
+      fiscalDocumentSchema.parse({
+        ...document,
+        accessKey: '35260900000000E08G12550010000000011123456783',
+      }).accessKey,
+    ).toContain('E08G')
+    expect(fiscalDocumentSchema.safeParse({ ...document, accessKey: 'a'.repeat(44) }).success).toBe(
+      false,
+    )
     expect(fiscalDocumentSchema.safeParse({ ...document, simulated: false }).success).toBe(false)
     expect(
       fiscalArtifactMetadataSchema.safeParse({

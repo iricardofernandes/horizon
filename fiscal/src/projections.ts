@@ -66,6 +66,12 @@ export const issuerFiscalExportSchema = z.strictObject({
 
 export type PartyFiscalExport = z.infer<typeof partyFiscalExportSchema>
 export type IssuerFiscalExport = z.infer<typeof issuerFiscalExportSchema>
+export type CatalogClassification = {
+  itemId: string
+  revision: number
+  effectiveFrom: string
+  ncm: string | null
+}
 type Source = 'parties' | 'identity'
 type FiscalExport = PartyFiscalExport | IssuerFiscalExport
 type Sql = ReturnType<typeof postgres>
@@ -126,6 +132,52 @@ export class FiscalProjections {
 
   async readIssuer(tenantId: string, revision: number): Promise<IssuerFiscalExport | null> {
     return (await this.read(tenantId, 'identity', tenantId, revision)) as IssuerFiscalExport | null
+  }
+
+  async resolveIssuer(tenantId: string, issueDate: string): Promise<IssuerFiscalExport | null> {
+    return (await this.resolveProfile(
+      tenantId,
+      'identity',
+      tenantId,
+      issueDate,
+    )) as IssuerFiscalExport | null
+  }
+
+  async resolveParty(
+    tenantId: string,
+    partyId: string,
+    issueDate: string,
+  ): Promise<PartyFiscalExport | null> {
+    return (await this.resolveProfile(
+      tenantId,
+      'parties',
+      partyId,
+      issueDate,
+    )) as PartyFiscalExport | null
+  }
+
+  async resolveClassification(
+    tenantId: string,
+    itemId: string,
+    issueDate: string,
+  ): Promise<CatalogClassification | null> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(itemId)
+    date.parse(issueDate)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select item_id, revision, effective_from, ncm
+        from catalog_classifications where tenant_id = ${tenantId} and item_id = ${itemId}
+          and effective_from <= ${issueDate}
+        order by effective_from desc, revision desc limit 1`
+    })
+    if (!row) return null
+    return {
+      itemId: String(row.item_id),
+      revision: Number(row.revision),
+      effectiveFrom: calendarDate(row.effective_from) ?? issueDate,
+      ncm: row.ncm === null ? null : String(row.ncm),
+    }
   }
 
   async storeClassification(
@@ -243,6 +295,26 @@ export class FiscalProjections {
         ? partyFiscalExportSchema.parse(value)
         : issuerFiscalExportSchema.parse(value)
     })
+  }
+
+  private async resolveProfile(
+    tenantId: string,
+    source: Source,
+    subjectId: string,
+    issueDate: string,
+  ): Promise<FiscalExport | null> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(subjectId)
+    date.parse(issueDate)
+    const revision = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      const [row] = await tx`select revision from profile_revisions
+        where tenant_id = ${tenantId} and source_module = ${source}
+          and subject_id = ${subjectId} and effective_from <= ${issueDate}
+        order by effective_from desc, revision desc limit 1`
+      return row ? Number(row.revision) : null
+    })
+    return revision === null ? null : this.read(tenantId, source, subjectId, revision)
   }
 }
 

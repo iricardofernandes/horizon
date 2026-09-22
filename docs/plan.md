@@ -2203,12 +2203,15 @@ unsupported and public authority operations remain disabled.
 
 ## Phase 42 — NF-e model 55, simulated end to end
 
-**In progress — mini-phase 42.3 persistence/state upgrade.** Official NF-e manuals, technical
+**In progress — mini-phase 42.7 consultation and correction.** Official NF-e manuals, technical
 notes and PL 010f v1.04 schema bytes are retained and verified by SHA-256. The append-only
 capability definition/review/activation gate is implemented but remains inactive pending
 review and the later executable lifecycle evidence. Public contracts are published as
-`@horizon/contracts` v0.27.1 with exact consumer pins; next is the additive persistence
-and state migration.
+`@horizon/contracts` v0.28.0 with exact consumer pins. The additive persistence/state
+upgrade includes the public state vocabulary, immutable issuance bindings, idempotent
+dispatch jobs with reclaimable leases and corrected successor revisions. The model-55 XML,
+signature, readiness, durable issuance and explicit consultation paths are implemented
+locally; cancellation and rollout evidence remain pending.
 [Detailed work and exit evidence](fiscal-implementation-plan.md#42--nf-e-model-55-lifecycle-with-a-simulator).
 [Detailed implementation plan](fiscal-phase42-implementation-plan.md).
 

@@ -17,6 +17,10 @@ for (const artifact of manifest.artifacts) {
   const path = resolve(repositoryRoot, artifact.storagePath)
   const bytes = readFileSync(path)
   verifyBytes(artifact.id, bytes, artifact.byteSize, artifact.sha256)
+  if (artifact.testFixturePath) {
+    const fixture = readFileSync(resolve(repositoryRoot, artifact.testFixturePath))
+    verifyBytes(`${artifact.id}:test-fixture`, fixture, artifact.byteSize, artifact.sha256)
+  }
   for (const entry of artifact.entries ?? []) {
     const entryBytes = execFileSync('unzip', ['-p', path, entry.path], {
       cwd: dirname(path),

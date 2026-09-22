@@ -74,7 +74,61 @@
           "byteSize": 3747,
           "sha256": "f56744a5f51c03f027de13f39f869307091781a9ef1d91b1ebe14719ce28e1ac"
         }
-      ]
+      ],
+      "testFixturePath": "fiscal/fixtures/official/pl-010f-v1.04.zip"
+    },
+    {
+      "id": "nfe-evento-canc-v1.01-candidate",
+      "kind": "candidate-event-schema-package",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=Ig8Y9i6kgOc%3D",
+      "storagePath": ".artifacts/fiscal/nfe/85fab8cd554119f74e5fac67383b91710421e116815bda58b605c515cf2bad23/evento-canc-v1.01.zip",
+      "publishedAt": "2014-05-30",
+      "selectionStatus": "pending-compatibility-review",
+      "byteSize": 10224,
+      "sha256": "85fab8cd554119f74e5fac67383b91710421e116815bda58b605c515cf2bad23",
+      "entries": [
+        {
+          "path": "Evento_Canc_PL_v1.01/e110111_v1.00.xsd",
+          "byteSize": 1770,
+          "sha256": "56fcdad336b281a9de5e7aae27850bc2c5bd7714e267c891e1b4d0dc227c65da"
+        },
+        {
+          "path": "Evento_Canc_PL_v1.01/envEventoCancNFe_v1.00.xsd",
+          "byteSize": 595,
+          "sha256": "d3f1550b1c3fa6974690cc27e5b74a55fbec3dd11ecdd2992fbcd248b015d534"
+        },
+        {
+          "path": "Evento_Canc_PL_v1.01/eventoCancNFe_v1.00.xsd",
+          "byteSize": 572,
+          "sha256": "3e5a2840a42f1f66bbbcb21066dcde6aa90407c1ef05456ad9ac38456d96982d"
+        },
+        {
+          "path": "Evento_Canc_PL_v1.01/leiauteEventoCancNFe_v1.00.xsd",
+          "byteSize": 15163,
+          "sha256": "02bb13b0b6fc18c9da34231ce79559d3a854e103b0884ae0f2bfc18d8bad2b09"
+        },
+        {
+          "path": "Evento_Canc_PL_v1.01/procEventoCancNFe_v1.00.xsd",
+          "byteSize": 581,
+          "sha256": "7e85da1583df86aee753400286d4aad48160846090cd6ecd2c1400fed4afaa69"
+        },
+        {
+          "path": "Evento_Canc_PL_v1.01/retEnvEventoCancNFe_v1.00.xsd",
+          "byteSize": 589,
+          "sha256": "a0a81bf59c9c166f4061f52f8d74cd7aa21bdc1bd8c9b0e0b8bc44d0df34e665"
+        },
+        {
+          "path": "Evento_Canc_PL_v1.01/tiposBasico_v1.03.xsd",
+          "byteSize": 30140,
+          "sha256": "1456f384d8eeab66648ba079b231a95376938afdd7f3cb288a33b7eb2768c7dd"
+        },
+        {
+          "path": "Evento_Canc_PL_v1.01/xmldsig-core-schema_v1.01.xsd",
+          "byteSize": 3749,
+          "sha256": "8ce2a385b593c85acf09cb03521f9e730dad2b2e6a5d02cc6f5b688ca94ce230"
+        }
+      ],
+      "retrievedAt": "2026-09-22T19:40:09.504Z"
     }
   ]
 }

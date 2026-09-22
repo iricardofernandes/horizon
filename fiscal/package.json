@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1137.0",
-    "@horizon/contracts": "0.27.1",
+    "@horizon/contracts": "0.28.0",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/auto-instrumentations-node": "0.80.0",
     "@opentelemetry/exporter-logs-otlp-http": "0.222.0",
@@ -30,10 +30,14 @@
     "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
     "@opentelemetry/resources": "2.11.0",
     "@opentelemetry/sdk-node": "0.222.0",
+    "@xmldom/xmldom": "0.9.12",
     "amqplib": "2.0.1",
+    "fflate": "0.8.3",
     "ioredis": "6.0.0",
     "jose": "6.2.12",
     "postgres": "^3.4.9",
+    "xml-crypto": "6.3.1",
+    "xmllint-wasm": "5.3.0",
     "zod": "^4.6.2"
   },
   "devDependencies": {

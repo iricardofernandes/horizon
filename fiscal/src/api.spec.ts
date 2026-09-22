@@ -8,6 +8,9 @@ const documentId = randomUUID()
 const otherTenant = randomUUID()
 const lineId = randomUUID()
 let previewInput: unknown
+let readinessInput: unknown
+let correctionInput: unknown
+let statusQueryInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
 const server = createFiscalServer({
   verifier: {
@@ -17,6 +20,18 @@ const server = createFiscalServer({
     },
   },
   documents: {
+    async createSuccessor(input) {
+      correctionInput = input
+      return {
+        id: randomUUID(),
+        status: 'draft',
+        snapshotDigest: 'a'.repeat(64),
+        rootDocumentId: documentId,
+        predecessorDocumentId: documentId,
+        revision: 2,
+        existing: false,
+      }
+    },
     async createDraft(input) {
       if (input.tenantId !== tenantId || !input.actorId) throw new Error('Wrong tenant or actor')
       return { id: documentId, status: 'draft', snapshotDigest: 'a'.repeat(64) }
@@ -33,7 +48,29 @@ const server = createFiscalServer({
         establishmentId: randomUUID(),
         series: 1,
         number: null,
+        rootDocumentId: documentId,
+        predecessorDocumentId: null,
+        revision: 1,
+        origin: { kind: 'sales', intentId: randomUUID() },
+        accessKey: null,
+        calculationDigest: null,
+        signedXmlDigest: null,
+        adapterVersion: null,
+        schemaPackageDigest: null,
+        statusUrl: `/fiscal/documents/${documentId}`,
         createdAt: '2026-09-21T00:00:00.000Z',
+      }
+    },
+  },
+  dispatch: {
+    async queueStatusQuery(input) {
+      statusQueryInput = input
+      return {
+        commandId: randomUUID(),
+        documentId,
+        kind: 'status_query',
+        status: 'unknown',
+        existing: false,
       }
     },
   },
@@ -72,6 +109,38 @@ const server = createFiscalServer({
       return calculationResult()
     },
   },
+  capabilities: {
+    async listActive() {
+      return []
+    },
+  },
+  readiness: {
+    async validate(input) {
+      readinessInput = input
+      return {
+        ...calculationResult(),
+        capabilityId: randomUUID(),
+        reconciliationDigest: '9'.repeat(64),
+      }
+    },
+  },
+  issuance: {
+    async issue(input) {
+      if (input.tenantId !== tenantId || input.documentId !== documentId)
+        throw new Error('Wrong issuance scope')
+      return {
+        commandId: randomUUID(),
+        documentId,
+        kind: 'issuance',
+        status: 'queued',
+        existing: false,
+        accessKey: '35260900000000E08G12550010000000011123456783',
+        unsignedXmlDigest: '7'.repeat(64),
+        signedXmlDigest: '8'.repeat(64),
+        simulated: true,
+      }
+    },
+  },
   rules: {
     async proposeOverride(input) {
       if (input.tenantId !== tenantId || !input.actorId) throw new Error('Wrong tenant or actor')
@@ -97,6 +166,45 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()))
 })
 
+it('scopes correction and explicit status consultation to the caller tenant', async () => {
+  role = 'issuer'
+  const headers = { authorization: 'Bearer test', 'idempotency-key': 'phase42-api-command-0001' }
+  const correctedIntentId = randomUUID()
+  const correction = await fetch(`${base}/documents/${documentId}/corrections`, {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      reason: 'Correct owner-approved commercial facts',
+      correctedOrigin: { kind: 'sales', intentId: correctedIntentId },
+    }),
+  })
+  expect(correction.status).toBe(201)
+  expect(correctionInput).toMatchObject({
+    tenantId,
+    documentId,
+    correctedIntentId,
+    idempotencyKey: headers['idempotency-key'],
+  })
+  const query = await fetch(`${base}/documents/${documentId}/status-queries`, {
+    method: 'POST',
+    headers,
+  })
+  expect(query.status).toBe(202)
+  expect(statusQueryInput).toMatchObject({ tenantId, documentId })
+  role = 'viewer'
+})
+
+it('serves typed simulation artifacts with digest selection and sandbox headers', async () => {
+  const response = await fetch(
+    `${base}/documents/${documentId}/artifacts/signed_xml?digest=${'a'.repeat(64)}`,
+    { headers: { authorization: 'Bearer test' } },
+  )
+  expect(response.status).toBe(200)
+  expect(response.headers.get('cache-control')).toBe('private, no-store')
+  expect(response.headers.get('content-security-policy')).toBe('sandbox')
+  expect(await response.text()).toBe('<xml/>')
+})
+
 it('requires a token and reports every capability unsupported', async () => {
   expect((await fetch(`${base}/capabilities`)).status).toBe(401)
   const response = await fetch(`${base}/capabilities?model=55`, {
@@ -117,7 +225,27 @@ it('restricts transmission and returns only tenant-scoped document reads', async
   try {
     expect(
       (await fetch(`${base}/documents/${documentId}/issue`, { method: 'POST', headers })).status,
-    ).toBe(409)
+    ).toBe(400)
+    const issued = await fetch(`${base}/documents/${documentId}/issue`, {
+      method: 'POST',
+      headers: { ...headers, 'idempotency-key': 'phase42-api-issue-0001' },
+    })
+    expect(issued.status).toBe(202)
+    expect(await issued.json()).toMatchObject({
+      documentId,
+      status: 'queued',
+      simulated: true,
+    })
+    const ready = await fetch(`${base}/documents/${documentId}/validate`, {
+      method: 'POST',
+      headers,
+    })
+    expect(ready.status).toBe(200)
+    expect(readinessInput).toMatchObject({ tenantId, documentId })
+    expect(await ready.json()).toMatchObject({
+      document: { id: documentId, status: 'draft' },
+      reconciliationDigest: '9'.repeat(64),
+    })
   } finally {
     role = 'viewer'
   }
