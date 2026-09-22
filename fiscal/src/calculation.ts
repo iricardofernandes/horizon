@@ -6,6 +6,7 @@ import {
 } from '@horizon/contracts'
 import { canonicalDigest } from './canonical-json'
 import {
+  add,
   decimal,
   integer,
   multiply,
@@ -18,7 +19,7 @@ export type ResolvedComponentRule = {
   group: 'legacy' | 'ibsCbs'
   code: string
   rate: { numerator: string; denominator: string }
-  formula: 'LINE_NET_TIMES_RATE'
+  formula: 'LINE_NET_TIMES_RATE' | 'DOCUMENT_NET_TIMES_RATE'
   rule: { id: string; version: number }
   source: {
     packageId: string
@@ -75,6 +76,7 @@ export function calculateFiscal(
       )
     lines.push(calculated)
   }
+  allocateDocumentRoundedComponents(lines)
   const currency = input.currency
   const totals = {
     gross: money(sum(lines.map((line) => line.gross.amount)), currency),
@@ -164,6 +166,43 @@ function calculateComponent(
       uri: rule.source.uri,
       section: rule.source.section,
     },
+  }
+}
+
+function allocateDocumentRoundedComponents(lines: CalculatedLine[]): void {
+  const groups = new Map<string, Array<{ lineId: string; component: CalculatedComponent }>>()
+  for (const line of lines) {
+    for (const component of [...line.components.legacy, ...line.components.ibsCbs]) {
+      if (component.formula !== 'DOCUMENT_NET_TIMES_RATE') continue
+      const key = `${component.code}:${component.rule.id}:${component.rule.version}`
+      const entries = groups.get(key) ?? []
+      entries.push({ lineId: line.lineId, component })
+      groups.set(key, entries)
+    }
+  }
+  for (const entries of groups.values()) {
+    let total: Rational = integer(0n)
+    let allocated = 0n
+    for (const { component } of entries) {
+      const unrounded = {
+        numerator: BigInt(component.unrounded.numerator),
+        denominator: BigInt(component.unrounded.denominator),
+      }
+      total = add(total, unrounded)
+      const provisional = unrounded.numerator / unrounded.denominator
+      component.amount.amount = provisional.toString()
+      allocated += provisional
+    }
+    const target = roundHalfAwayFromZero(total)
+    let residual = target - allocated
+    const stable = [...entries].sort((left, right) => left.lineId.localeCompare(right.lineId))
+    for (let index = 0; residual !== 0n; index += 1) {
+      const entry = stable[index % stable.length]
+      if (!entry) throw new Error('Document allocation invariant failed')
+      const step = residual > 0n ? 1n : -1n
+      entry.component.amount.amount = (BigInt(entry.component.amount.amount) + step).toString()
+      residual -= step
+    }
   }
 }
 

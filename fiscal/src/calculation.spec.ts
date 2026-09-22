@@ -145,4 +145,57 @@ describe('pure Fiscal calculation', () => {
       code: 'AMBIGUOUS_RULE',
     })
   })
+
+  it('allocates document-rounding residuals by stable line id and reconciles totals', () => {
+    const lineIds = [
+      '018f5d4e-0000-7000-8000-000000000011',
+      '018f5d4e-0000-7000-8000-000000000012',
+      '018f5d4e-0000-7000-8000-000000000013',
+    ]
+    const baseLine = input.lines[0]
+    const baseRule = rules().lines[lineId]?.[0]
+    if (!baseLine || !baseRule) throw new Error('fixture is incomplete')
+    const documentInput = {
+      ...input,
+      lines: lineIds.map((id) => ({
+        ...baseLine,
+        id,
+        quantity: '1',
+        unitPrice: '0.01',
+        discount: { amount: '0', currency: 'BRL' },
+        charges: { amount: '0', currency: 'BRL' },
+      })),
+    }
+    const documentRules: ResolvedRuleSet = {
+      ...rules(),
+      lines: Object.fromEntries(
+        lineIds.map((id) => [
+          id,
+          [
+            {
+              ...baseRule,
+              rate: { numerator: '1', denominator: '2' },
+              formula: 'DOCUMENT_NET_TIMES_RATE' as const,
+            },
+          ],
+        ]),
+      ),
+    }
+    const outcome = calculateFiscal(documentInput, documentRules)
+    expect(outcome.supported).toBe(true)
+    if (!outcome.supported) return
+    expect(outcome.lines.map((line) => line.components.legacy[0]?.amount.amount)).toEqual([
+      '1',
+      '1',
+      '0',
+    ])
+    expect(outcome.totals.legacyTax.amount).toBe('2')
+    expect(outcome.reconciliation.legacyComponentSum).toEqual(outcome.totals.legacyTax)
+    expect(
+      calculateFiscal(
+        { ...documentInput, lines: [...documentInput.lines].reverse() },
+        documentRules,
+      ),
+    ).toEqual(outcome)
+  })
 })

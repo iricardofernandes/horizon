@@ -54,7 +54,7 @@ const taxRuleImportSchema = z.object({
     numerator: z.string().regex(/^-?\d+$/),
     denominator: z.string().regex(/^[1-9]\d*$/),
   }),
-  formula: z.literal('LINE_NET_TIMES_RATE'),
+  formula: z.enum(['LINE_NET_TIMES_RATE', 'DOCUMENT_NET_TIMES_RATE']),
   sourceLocator: z.string().min(1).max(300),
 })
 
@@ -342,7 +342,7 @@ function toTaxRule(row: postgres.Row): TaxRule {
         : {}),
     },
     rate: { numerator: String(row.rate_numerator), denominator: String(row.rate_denominator) },
-    formula: 'LINE_NET_TIMES_RATE',
+    formula: row.formula as TaxRule['formula'],
     rule: { id: String(row.id), version: Number(row.version) },
     source: {
       packageId: String(row.package_id),
