@@ -2197,6 +2197,7 @@ without contacting an authority. Public authority capabilities remain `unsupport
 calculations for legacy taxes and IBS/CBS, with saved inputs, rounding and source
 references. Recalculating a historical document must reproduce its original result.
 [Detailed work and exit evidence](fiscal-implementation-plan.md#41--temporal-tax-rules-with-explanations).
+[Detailed implementation plan](fiscal-phase41-implementation-plan.md).
 
 ## Phase 42 — NF-e model 55, simulated end to end
 

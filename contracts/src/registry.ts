@@ -3,7 +3,13 @@ import { z } from 'zod'
 import { instantSchema, moneySchema, quantitySchema, uuidSchema } from './common'
 import { eventEnvelopeSchema } from './envelope'
 import { EVENTS } from './events'
-import { paginationQuerySchema, problemDetailsSchema, validationProblemSchema } from './http'
+import {
+  fiscalCalculationInputSchema,
+  fiscalCalculationOutcomeSchema,
+  paginationQuerySchema,
+  problemDetailsSchema,
+  validationProblemSchema,
+} from './http'
 import { pageInfoSchema } from './http/pagination'
 import { permissionIdSchema, roleAssignmentSchema } from './roles'
 
@@ -60,6 +66,18 @@ const staticEntries: readonly RegistryEntry[] = [
     kind: 'primitive',
     description: 'A non-negative decimal quantity, as a string.',
     schema: quantitySchema,
+  },
+  {
+    id: 'http:fiscal-calculation-input-v1',
+    kind: 'http',
+    description: 'Complete, versioned facts used to preview or persist a Fiscal calculation.',
+    schema: fiscalCalculationInputSchema,
+  },
+  {
+    id: 'http:fiscal-calculation-outcome-v1',
+    kind: 'http',
+    description: 'Supported Fiscal calculation or a typed unsupported outcome.',
+    schema: fiscalCalculationOutcomeSchema,
   },
   {
     id: 'http:problem-details',

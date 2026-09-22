@@ -192,6 +192,8 @@ contacted yet.
 
 ### 41 — Temporal tax rules with explanations
 
+[Detailed Phase 41 execution plan](fiscal-phase41-implementation-plan.md).
+
 **Work**
 
 1. Import versioned source tables for CFOP, NCM/CEST, CST/CSOSN, IBS/CBS and service

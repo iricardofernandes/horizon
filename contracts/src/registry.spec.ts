@@ -33,6 +33,9 @@ const NOT_INDEPENDENTLY_VERSIONED = new Set([
   'instantSchema',
   'moneySchema',
   'quantitySchema',
+  'fiscalCalculationProblemCodeSchema',
+  'fiscalCalculationResultSchema',
+  'fiscalUnsupportedCalculationSchema',
 ])
 
 describe('schema registry', () => {
