@@ -5,6 +5,7 @@ export type TaxRule = ResolvedComponentRule & {
   tenantId: string
   precedence: 'operation' | 'establishment' | 'item' | 'party' | 'default'
   priority: number
+  dateBasis: 'issue_date' | 'competence_date'
   effectiveFrom: string
   effectiveTo?: string
   active: boolean
@@ -126,8 +127,10 @@ function matches(
   input: FiscalCalculationInput,
   line: FiscalCalculationInput['lines'][number],
 ): boolean {
-  if (!rule.active || input.issueDate < rule.effectiveFrom) return false
-  if (rule.effectiveTo && input.issueDate >= rule.effectiveTo) return false
+  const selectionDate =
+    rule.dateBasis === 'competence_date' ? input.competenceDate : input.issueDate
+  if (!selectionDate || !rule.active || selectionDate < rule.effectiveFrom) return false
+  if (rule.effectiveTo && selectionDate >= rule.effectiveTo) return false
   const scope = rule.scope
   if (scope.model !== input.model || scope.environment !== input.environment) return false
   if (scope.operation && scope.operation !== input.operation) return false

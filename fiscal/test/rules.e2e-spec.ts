@@ -239,6 +239,21 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
     supported: true,
     trace: [{ selectedRuleId: ruleId }],
   })
+  const calculationLine = calculationInput.lines[0]
+  if (!calculationLine) throw new Error('fixture has no calculation line')
+  expect(
+    await store.resolve(
+      {
+        ...calculationInput,
+        lines: [{ ...calculationLine, classifications: { ncm: '99999999' } }],
+      },
+      2,
+    ),
+  ).toMatchObject({
+    supported: false,
+    code: 'MISSING_CLASSIFICATION',
+    missingDimension: 'ncm:99999999',
+  })
   const [payload] = await administrator`select source_bytes, byte_size from fiscal_source_payloads
     where tenant_id = ${tenantId} and package_id = ${imported.packageId}`
   expect(Buffer.from(payload?.source_bytes)).toEqual(source.bytes)

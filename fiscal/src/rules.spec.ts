@@ -47,6 +47,7 @@ function rule(overrides: Partial<TaxRule> = {}): TaxRule {
     code: 'ILLUSTRATIVE_TAX',
     precedence: 'default',
     priority: 0,
+    dateBasis: 'issue_date',
     effectiveFrom: '2026-09-01',
     effectiveTo: '2026-10-01',
     active: true,
@@ -131,5 +132,20 @@ describe('temporal tax rule resolution', () => {
         2,
       ),
     ).toMatchObject({ supported: false, code: 'MISSING_CLASSIFICATION' })
+  })
+
+  it('uses competence date only when the selected component declares it', () => {
+    const competenceRule = rule({
+      dateBasis: 'competence_date',
+      effectiveFrom: '2026-08-01',
+      effectiveTo: '2026-09-01',
+    })
+    expect(
+      resolveTaxRules({ ...input, competenceDate: '2026-08-31' }, [competenceRule], 2).supported,
+    ).toBe(true)
+    expect(resolveTaxRules(input, [competenceRule], 2)).toMatchObject({
+      supported: false,
+      code: 'UNSUPPORTED_RULE',
+    })
   })
 })

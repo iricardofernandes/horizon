@@ -26,6 +26,7 @@ const taxRuleImportSchema = z.object({
   code: z.string().regex(/^[A-Z][A-Z0-9_]{0,39}$/),
   precedence: z.enum(['operation', 'establishment', 'item', 'party', 'default']),
   priority: z.int().nonnegative(),
+  dateBasis: z.enum(['issue_date', 'competence_date']).default('issue_date'),
   model: z.enum(['55', '65', 'nfse']),
   environment: z.enum(['simulation', 'homologation', 'production']),
   operation: z.string().min(1).max(80).optional(),
@@ -198,9 +199,9 @@ export class FiscalRuleStore {
     currencyMinorUnitScale: number,
   ): Promise<RuleResolution> {
     const value = fiscalCalculationInputSchema.parse(input)
-    const rows = await this.#db.begin(async (tx) => {
+    const { rows, references } = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
-      return tx`select rule.*, rule.effective_from::text as effective_from,
+      const rows = await tx`select rule.*, rule.effective_from::text as effective_from,
         rule.effective_to::text as effective_to, package.source_uri, package.package_digest,
         coalesce(review.approved, false) as approved, latest.action
         from fiscal_tax_rules rule
@@ -214,10 +215,23 @@ export class FiscalRuleStore {
           order by event.sequence desc limit 1
         ) latest on true
         where rule.tenant_id = ${value.tenantId} and rule.model = ${value.model}
-          and rule.environment = ${value.environment}
-          and rule.effective_from <= ${value.issueDate}
-          and (rule.effective_to is null or rule.effective_to > ${value.issueDate})`
+          and rule.environment = ${value.environment}`
+      const references = await tx`select entry.family, entry.code, entry.model,
+        entry.jurisdiction, entry.effective_from::text, entry.effective_to::text
+        from fiscal_reference_entries entry
+        join fiscal_package_reviews review on review.tenant_id = entry.tenant_id
+          and review.package_id = entry.package_id and review.approved
+        where entry.tenant_id = ${value.tenantId}`
+      return { rows, references }
     })
+    const missing = missingApprovedReference(value, references)
+    if (missing)
+      return {
+        supported: false,
+        code: 'MISSING_CLASSIFICATION',
+        detail: 'Classification is absent, expired or has no approved source',
+        missingDimension: missing,
+      }
     return resolveTaxRules(value, rows.map(toTaxRule), currencyMinorUnitScale)
   }
 
@@ -266,14 +280,14 @@ export class FiscalRuleStore {
     const id = randomUUID()
     await sql`insert into fiscal_tax_rules (
       id, tenant_id, package_id, rule_key, version, component_group, component_code,
-      precedence, priority, model, environment, operation, issuer_establishment_id,
+      precedence, priority, date_basis, model, environment, operation, issuer_establishment_id,
       issuer_regime, recipient_regime, origin_state, destination_state, subject_kind,
       subject_id, classification_kind, classification_code, effective_from, effective_to,
       rate_numerator, rate_denominator, formula, source_locator, definition_digest
     ) values (
       ${id}, ${tenantId}, ${packageId}, ${rule.ruleKey}, ${rule.version},
       ${rule.group === 'ibsCbs' ? 'ibs_cbs' : 'legacy'}, ${rule.code}, ${rule.precedence},
-      ${rule.priority}, ${rule.model}, ${rule.environment}, ${rule.operation ?? '*'},
+      ${rule.priority}, ${rule.dateBasis}, ${rule.model}, ${rule.environment}, ${rule.operation ?? '*'},
       ${rule.issuerEstablishmentId ?? '*'}, ${rule.issuerRegime ?? '*'},
       ${rule.recipientRegime ?? '*'}, ${rule.originState ?? '*'},
       ${rule.destinationState ?? '*'}, ${rule.subject?.kind ?? '*'},
@@ -302,6 +316,7 @@ function toTaxRule(row: postgres.Row): TaxRule {
     code: String(row.component_code),
     precedence: row.precedence as TaxRule['precedence'],
     priority: Number(row.priority),
+    dateBasis: row.date_basis as TaxRule['dateBasis'],
     effectiveFrom: String(row.effective_from),
     ...(row.effective_to ? { effectiveTo: String(row.effective_to) } : {}),
     active: row.action === 'activate',
@@ -337,4 +352,32 @@ function toTaxRule(row: postgres.Row): TaxRule {
       approved: row.approved === true,
     },
   }
+}
+
+function missingApprovedReference(
+  input: FiscalCalculationInput,
+  rows: postgres.Row[],
+): string | null {
+  for (const line of input.lines) {
+    const expected: Array<{ family: string; code: string }> = []
+    if (line.itemId && line.classifications.ncm)
+      expected.push({ family: 'ncm', code: line.classifications.ncm })
+    if (line.serviceId && line.classifications.service)
+      expected.push({ family: 'service', code: line.classifications.service })
+    if (line.classifications.cest)
+      expected.push({ family: 'cest', code: line.classifications.cest })
+    for (const classification of expected) {
+      const valid = rows.some(
+        (row) =>
+          row.family === classification.family &&
+          row.code === classification.code &&
+          (row.model === '*' || row.model === input.model) &&
+          (row.jurisdiction === '*' || row.jurisdiction === input.destination.stateCode) &&
+          String(row.effective_from) <= input.issueDate &&
+          (!row.effective_to || String(row.effective_to) > input.issueDate),
+      )
+      if (!valid) return `${classification.family}:${classification.code}`
+    }
+  }
+  return null
 }
