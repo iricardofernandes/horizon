@@ -46,6 +46,10 @@ for (const [label, script] of [
   ['action references', 'check-action-refs.mjs'],
   ['Terraform apply guard', 'assert-no-terraform-apply.mjs'],
 ]) run(label, process.execPath, [join(ROOT, 'scripts', script)])
+run('secret scan', 'docker', [
+  'run', '--rm', '-v', `${ROOT}:/repo`, 'zricethezav/gitleaks:latest',
+  'detect', '--source=/repo', '--redact', '--exit-code', '1',
+])
 run('compatibility analysis tests', process.execPath, ['--test', 'scripts/lib/contract-diff.test.mjs'])
 
 for (const project of projects) {
