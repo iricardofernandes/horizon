@@ -17,3 +17,8 @@
 2529b62f3e0be161d396ff080d43bb73f3ef5135:infra/scripts/smoke.sh:curl-auth-user:113
 2529b62f3e0be161d396ff080d43bb73f3ef5135:infra/scripts/smoke.sh:curl-auth-user:223
 2529b62f3e0be161d396ff080d43bb73f3ef5135:infra/scripts/smoke.sh:curl-auth-user:231
+
+# Local-only MinIO credentials appeared in a published Phase 40 test commit.
+# The current test generates them at runtime; retain only these historical findings.
+329cceaaaf5c1699a55f06919c15aabd585a4a6a:fiscal/test/artifact-store.e2e-spec.ts:generic-api-key:21
+329cceaaaf5c1699a55f06919c15aabd585a4a6a:fiscal/test/artifact-store.e2e-spec.ts:generic-api-key:33

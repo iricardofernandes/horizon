@@ -15,10 +15,12 @@ let container: StartedTestContainer
 let client: S3Client
 
 beforeAll(async () => {
+  const accessKeyId = `fiscal${randomBytes(8).toString('hex')}`
+  const secretAccessKey = randomBytes(24).toString('base64url')
   container = await new GenericContainer('quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z')
     .withEnvironment({
-      MINIO_ROOT_USER: 'fiscal-test-user',
-      MINIO_ROOT_PASSWORD: 'fiscal-test-secret-123',
+      MINIO_ROOT_USER: accessKeyId,
+      MINIO_ROOT_PASSWORD: secretAccessKey,
     })
     .withCommand(['server', '/data'])
     .withExposedPorts(9000)
@@ -29,8 +31,8 @@ beforeAll(async () => {
     endpoint: `http://${container.getHost()}:${container.getMappedPort(9000)}`,
     forcePathStyle: true,
     credentials: {
-      accessKeyId: 'fiscal-test-user',
-      secretAccessKey: 'fiscal-test-secret-123',
+      accessKeyId,
+      secretAccessKey,
     },
   })
   await client.send(new CreateBucketCommand({ Bucket: 'fiscal-artifact-tests' }))
