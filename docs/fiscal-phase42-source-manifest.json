@@ -78,6 +78,39 @@
       "testFixturePath": "fiscal/fixtures/official/pl-010f-v1.04.zip"
     },
     {
+      "id": "nfe-pl-010d-v1.03-event-candidate",
+      "kind": "candidate-event-schema-package",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=%20pBOYTXBtbk%3D",
+      "storagePath": ".artifacts/fiscal/nfe/45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b/010d-v1.03.zip",
+      "publishedAt": "2026-07-10",
+      "selectionStatus": "pending-cancellation-detail-and-cross-package-review",
+      "byteSize": 67813,
+      "sha256": "45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b",
+      "entries": [
+        {
+          "path": "PL_010d_v1.03/Evento/envEvento_v1.00.xsd",
+          "byteSize": 575,
+          "sha256": "e4d61ba81582b5f1f9a2a4b135d33f4c1ec1c8f9138a2343a9abfffa02bb2777"
+        },
+        {
+          "path": "PL_010d_v1.03/Evento/leiauteEvento_v1.00.xsd",
+          "byteSize": 14594,
+          "sha256": "9a48df8603f685653dfde27dbda72e0f47b5d3c13be0090952f1e82f8d2bc476"
+        },
+        {
+          "path": "PL_010d_v1.03/Evento/tiposBasico_v1.03.xsd",
+          "byteSize": 33686,
+          "sha256": "d89d4fe1136f89abc7878b440d91ac0e770fbc128dd35b483284c961d6c3fd5d"
+        },
+        {
+          "path": "PL_010d_v1.03/Evento/xmldsig-core-schema_v1.01.xsd",
+          "byteSize": 3747,
+          "sha256": "f56744a5f51c03f027de13f39f869307091781a9ef1d91b1ebe14719ce28e1ac"
+        }
+      ],
+      "testFixturePath": "fiscal/fixtures/official/pl-010d-v1.03.zip"
+    },
+    {
       "id": "nfe-evento-canc-v1.01-candidate",
       "kind": "candidate-event-schema-package",
       "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=Ig8Y9i6kgOc%3D",

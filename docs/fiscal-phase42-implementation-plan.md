@@ -24,7 +24,7 @@ pre-dispatch operational gate remain Phase 43 work.
 | 42.4 NF-e XML/signature core | **complete locally** | Deterministic UTF-8 model-55 serialization, numeric/alphanumeric access key, MOC XMLDSig, independent signature verification and signed-document validation against the pinned PL 010f package pass stable-digest and mutation-negative tests. |
 | 42.5 Readiness orchestration | **implemented locally** | Public validation derives the Phase 41 input from the frozen Sales origin and exact effective issuer, recipient and Catalog revisions; an immutable capability/revision/reconciliation binding is stored. Zero-tolerance line/total mismatch, missing classification, retry and API authorization tests pass. |
 | 42.6 Durable issue worker/simulator | **implemented locally** | Number-stable XML preparation, explicit simulation XML profile, typed issuance artifacts, issuance binding, durable queue handoff, observation persistence, restart-stable deterministic outcomes and the worker loop are implemented and covered by unit/e2e queue evidence. Public activation still requires the configured simulation credential/profile and a full-stack issuance run. |
-| 42.7 Cancellation and corrected revision | **in progress locally** | Corrected Sales-origin successor is exposed through the scoped API. Explicit status consultation uses the original issuance identity, resolves the original job and is covered by worker/API/PostgreSQL tests. The official 2014 cancellation event package is retained and hashed as a candidate, but its numeric-only CNPJ/access-key types conflict with the selected 2026 alphanumeric schema; cancellation awaits a reviewed compatible event profile. |
+| 42.7 Cancellation and corrected revision | **in progress locally** | Corrected Sales-origin successor is exposed through the scoped API. Explicit status consultation uses the original issuance identity, resolves the original job and is covered by worker/API/PostgreSQL tests. The official PL 010d v1.03 event package is retained and hashed as a second candidate. Its generic event types accept alphanumeric CNPJ/access keys, but `detEvento` uses `xs:any processContents="skip"`; cancellation-specific detail and combining its event schemas with PL 010f still require review. |
 | 42.8–42.9 | not started | Events/DANFE and rollout follow after the cancellation source/profile gate. |
 
 ## Result and narrow supported tuple
@@ -82,6 +82,11 @@ evidence in this plan pass.
   byte-level verification. Its `TCnpjOpc` and `TChNFe` types permit only digits, while the
   selected PL 010f model-55 package admits alphanumeric issuer positions. It is therefore
   not yet an approved cancellation schema for the supported tuple.
+- The official PL 010d v1.03 event bundle published 2026-07-10 is retained as a second
+  candidate with pinned archive and consumed XSD hashes. Its generic event schema admits
+  alphanumeric CNPJ and access keys but skips validation of the event-specific `detEvento`
+  children. A cancellation-specific validation rule and the PL 010d/010f combination must
+  be reviewed before this profile can be selected or the capability activated.
 
 ## Decisions frozen by this plan
 
