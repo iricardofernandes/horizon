@@ -20,7 +20,7 @@ pre-dispatch operational gate remain Phase 43 work.
 | 42.1a Official source pinning | **complete locally** | MOC 7.0, NT 2026.004 v1.01, NT 2025.002 v1.51 and PL 010f v1.04 retained by SHA-256; machine-readable manifest and byte verifier added. |
 | 42.1b Capability gate | **implemented, inactive** | Append-only definitions, independent reviews and activation/deactivation history added. Fiscal review and executable lifecycle evidence are still required before the first row is activated. |
 | 42.2 Public contracts | **complete locally** | `@horizon/contracts` v0.27.1 publishes 19 additive lifecycle schemas and three explicitly simulated status events; registry, compatibility, exact pins, Fiscal and Sales checks pass. Routes remain disabled. |
-| 42.3 Persistence/state upgrade | next | Add `ready`/`queued`, immutable revisions and observations, artifact bindings and durable jobs through forward migrations. |
+| 42.3 Persistence/state upgrade | **in progress** | Migration `0020` adds audited manual-origin storage, document revision identity, immutable commands/observations, worker leases, callback deduplication and artifact bindings. RLS, immutability and conflicting-final-observation tests pass. `ready`/`queued` guards, successor creation and worker orchestration still need implementation. |
 | 42.4–42.9 | not started | XML/signature, readiness, worker/simulator, cancellation, APIs/DANFE and rollout follow in plan order. |
 
 ## Result and narrow supported tuple

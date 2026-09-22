@@ -554,6 +554,88 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
   ).rejects.toThrow('requires a supported calculation')
 })
 
+it('isolates manual origins and dispatch evidence while allowing worker lease updates', async () => {
+  const tenantId = randomUUID()
+  const otherTenantId = randomUUID()
+  const documentId = randomUUID()
+  const originId = randomUUID()
+  const commandId = randomUUID()
+  const observationId = randomUUID()
+  await administrator`insert into tenants (id) values (${tenantId}), (${otherTenantId})`
+  await insertDraft(administrator, tenantId, documentId, randomUUID())
+  const [root] = await administrator`select root_document_id, revision
+    from fiscal_documents where id = ${documentId}`
+  expect(root).toMatchObject({ root_document_id: documentId, revision: 1 })
+
+  await app.begin(async (tx) => {
+    await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+    await tx`insert into fiscal_manual_origins (
+      id, tenant_id, establishment_id, issuer_profile_revision,
+      recipient_party_id, recipient_profile_revision, issue_date,
+      actor_id, reason_digest, payload_ciphertext, payload_digest
+    ) values (
+      ${originId}, ${tenantId}, ${randomUUID()}, 1, ${randomUUID()}, 1,
+      '2026-09-22', 'issuer:test', ${'a'.repeat(64)},
+      ${Buffer.from('encrypted-manual-origin')}, ${'b'.repeat(64)}
+    )`
+    await tx`insert into fiscal_dispatch_commands (
+      id, tenant_id, document_id, kind, idempotency_key, request_digest, actor_id
+    ) values (
+      ${commandId}, ${tenantId}, ${documentId}, 'issuance',
+      'phase42-issuance-0001', ${'c'.repeat(64)}, 'issuer:test'
+    )`
+    await tx`insert into fiscal_dispatch_jobs (tenant_id, command_id)
+      values (${tenantId}, ${commandId})`
+    await tx`update fiscal_dispatch_jobs set state = 'leased',
+      lease_owner = 'worker:test', lease_until = now() + interval '1 minute',
+      attempt_count = 1 where tenant_id = ${tenantId} and command_id = ${commandId}`
+    await tx`insert into fiscal_dispatch_observations (
+      id, tenant_id, command_id, observation_kind, outcome, response_digest
+    ) values (
+      ${observationId}, ${tenantId}, ${commandId}, 'response', 'unknown', ${'d'.repeat(64)}
+    )`
+  })
+
+  await app.begin(async (tx) => {
+    await tx`select set_config('app.current_tenant', ${otherTenantId}, true)`
+    expect(await tx`select id from fiscal_manual_origins where id = ${originId}`).toHaveLength(0)
+    expect(await tx`select id from fiscal_dispatch_commands where id = ${commandId}`).toHaveLength(
+      0,
+    )
+    expect(
+      await tx`select id from fiscal_dispatch_observations where id = ${observationId}`,
+    ).toHaveLength(0)
+  })
+  await expect(
+    administrator`update fiscal_manual_origins set actor_id = 'rewritten' where id = ${originId}`,
+  ).rejects.toThrow('append-only')
+  await expect(
+    administrator`update fiscal_dispatch_commands set actor_id = 'rewritten' where id = ${commandId}`,
+  ).rejects.toThrow('append-only')
+  await expect(
+    administrator`update fiscal_dispatch_observations set outcome = 'authorized'
+      where id = ${observationId}`,
+  ).rejects.toThrow('append-only')
+  await app.begin(async (tx) => {
+    await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+    await tx`insert into fiscal_dispatch_observations (
+      id, tenant_id, command_id, observation_kind, outcome, response_digest
+    ) values (
+      ${randomUUID()}, ${tenantId}, ${commandId}, 'consultation', 'authorized', ${'e'.repeat(64)}
+    )`
+  })
+  await expect(
+    app.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      await tx`insert into fiscal_dispatch_observations (
+        id, tenant_id, command_id, observation_kind, outcome, response_digest
+      ) values (
+        ${randomUUID()}, ${tenantId}, ${commandId}, 'callback', 'rejected', ${'f'.repeat(64)}
+      )`
+    }),
+  ).rejects.toMatchObject({ code: '23505' })
+})
+
 async function insertPackage(
   sql: postgres.TransactionSql,
   tenantId: string,
