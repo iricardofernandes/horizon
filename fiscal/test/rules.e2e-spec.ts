@@ -316,6 +316,78 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
   expect(await calculations.get(tenantId, documentId)).toEqual(first)
   expect(await calculations.get(randomUUID(), documentId)).toBeNull()
   expect(await calculations.replay(tenantId, documentId)).toEqual(first)
+
+  const unsupportedDocumentId = randomUUID()
+  await insertDraft(administrator, tenantId, unsupportedDocumentId, establishmentId)
+  const unsupported = await calculations.validateDocument({
+    tenantId,
+    documentId: unsupportedDocumentId,
+    actorId: 'issuer:test',
+    calculationInput: {
+      ...calculationInput,
+      lines: [{ ...calculationLine, classifications: { ncm: '99999999' } }],
+    },
+  })
+  expect(unsupported).toMatchObject({ supported: false, code: 'MISSING_CLASSIFICATION' })
+  const [unsupportedDocument] = await administrator`select document.status,
+    (select count(*)::integer from fiscal_calculations calculation
+      where calculation.tenant_id = document.tenant_id
+        and calculation.document_id = document.id) as calculation_count
+    from fiscal_documents document where document.id = ${unsupportedDocumentId}`
+  expect(unsupportedDocument).toMatchObject({ status: 'draft', calculation_count: 0 })
+
+  const successorSource = {
+    ...source,
+    bytes: Buffer.from('{"fixture":"phase41-successor"}'),
+    publishedAt: '2026-12-01',
+    effectiveFrom: '2027-01-01',
+    entries: [
+      {
+        family: 'ncm' as const,
+        code: '12345678',
+        description: 'Illustrative successor classification',
+        effectiveFrom: '2027-01-01',
+        sourceLocator: 'fixture:ncm:successor',
+      },
+    ],
+    rules: [
+      {
+        ruleKey: 'illustrative.sale.tax',
+        version: 2,
+        group: 'legacy' as const,
+        code: 'ILLUSTRATIVE_TAX',
+        precedence: 'default' as const,
+        priority: 0,
+        model: '55' as const,
+        environment: 'simulation' as const,
+        effectiveFrom: '2027-01-01',
+        effectiveTo: '2028-01-01',
+        rate: { numerator: '2', denominator: '10' },
+        formula: 'LINE_NET_TIMES_RATE' as const,
+        sourceLocator: 'fixture:rule:successor',
+      },
+    ],
+  }
+  const successor = await store.importSource(successorSource)
+  await store.reviewPackage({
+    tenantId,
+    packageId: successor.packageId,
+    approved: true,
+    reviewedBy: 'specialist:test',
+    reviewedAt: '2026-12-15T12:00:00.000Z',
+    interpretation: 'Illustrative successor fixture approval only',
+    fixtureIds: ['illustrative-successor'],
+  })
+  const successorRuleId = successor.ruleIds[0]
+  if (!successorRuleId) throw new Error('successor import did not create a rule')
+  await store.activateRule({
+    tenantId,
+    ruleId: successorRuleId,
+    action: 'activate',
+    actorId: 'admin:test',
+    reason: 'illustrative successor fixture',
+  })
+  expect(await calculations.replay(tenantId, documentId)).toEqual(first)
   const [locked] = await administrator`select document.status, calculation.input_ciphertext,
     calculation.result_digest from fiscal_documents document
     join fiscal_document_calculation_bindings binding
