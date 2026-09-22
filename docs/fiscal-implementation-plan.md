@@ -221,6 +221,8 @@ an explicit code and cannot be transmitted. No floating-point tax path exists.
 
 ### 42 — NF-e model 55 lifecycle with a simulator
 
+[Detailed Phase 42 execution plan](fiscal-phase42-implementation-plan.md).
+
 **Work**
 
 1. Create an outgoing draft from an explicit Sales origin or an authorized manual

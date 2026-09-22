@@ -37,6 +37,7 @@ infra/keys/
 # local infrastructure state
 infra/data/
 infra/verdaccio/storage/
+.artifacts/
 
 # tooling
 .DS_Store

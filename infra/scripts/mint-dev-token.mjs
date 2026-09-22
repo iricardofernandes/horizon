@@ -7,6 +7,7 @@
  * for poking at the gateway by hand; services mint their own tokens through `jose`.
  *
  *   node infra/scripts/mint-dev-token.mjs [--kid dev-1] [--sub <uuid>] [--ttl 900]
+ *     [--tenant <uuid>] [--role <module:role>]...
  *   node infra/scripts/mint-dev-token.mjs --bogus     # signed by a throwaway key
  *
  * `--bogus` signs with a freshly generated key that the gateway has never seen, which
@@ -24,12 +25,22 @@ const flag = (name, fallback) => {
   const index = args.indexOf(`--${name}`)
   return index === -1 ? fallback : args[index + 1]
 }
+const flags = (name) =>
+  args.flatMap((argument, index) =>
+    argument === `--${name}` && args[index + 1] ? [args[index + 1]] : [],
+  )
 
 const kid = flag('kid', 'dev-1')
 const subject = flag('sub', randomUUID())
 const tenant = flag('tenant', randomUUID())
 const ttl = Number(flag('ttl', '900'))
 const bogus = args.includes('--bogus')
+const roles = flags('role').map((assignment) => {
+  const [module, role, extra] = assignment.split(':')
+  if (!module || !role || extra)
+    throw new Error(`invalid --role ${assignment}; expected <module:role>`)
+  return { module, role }
+})
 
 const base64url = (input) =>
   Buffer.from(input).toString('base64').replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
@@ -55,7 +66,7 @@ const payload = {
   iss: `horizon-identity-${kid}`,
   sub: subject,
   tenant_id: tenant,
-  roles: [],
+  roles,
   jti: randomUUID(),
   iat: now,
   exp: now + ttl,

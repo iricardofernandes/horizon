@@ -91,6 +91,14 @@ const sourceImportSchema = z.object({
   publishedAt: date,
   effectiveFrom: date,
   importedBy: z.string().min(1).max(200),
+  artifact: z
+    .object({
+      digest,
+      byteSize: z.int().positive(),
+      storageUri: z.url(),
+      verifiedAt: z.iso.datetime({ offset: true }),
+    })
+    .optional(),
   entries: z.array(referenceEntrySchema).max(100_000),
   rules: z.array(taxRuleImportSchema).max(100_000),
 })
@@ -106,8 +114,11 @@ export type SourceImportResult = {
 export class FiscalRuleStore {
   readonly #db: ReturnType<typeof postgres>
 
-  constructor(databaseUrl: string) {
-    this.#db = postgres(databaseUrl, { max: 10, connection: { statement_timeout: 10_000 } })
+  constructor(databaseUrl: string, statementTimeout = 10_000) {
+    this.#db = postgres(databaseUrl, {
+      max: 10,
+      connection: { statement_timeout: statementTimeout },
+    })
   }
 
   async close(): Promise<void> {
@@ -118,13 +129,16 @@ export class FiscalRuleStore {
     if (!Buffer.isBuffer(candidate.bytes) || candidate.bytes.length === 0)
       throw new Error('Fiscal source bytes are required')
     const value = sourceImportSchema.parse(candidate)
-    const packageDigest = createHash('sha256').update(candidate.bytes).digest('hex')
+    const packageDigest =
+      value.artifact?.digest ?? createHash('sha256').update(candidate.bytes).digest('hex')
     return this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
       const [prior] = await tx`select id, source_uri, published_at::text, effective_from::text
         from fiscal_source_packages where tenant_id = ${value.tenantId}
           and authority = ${value.authority} and package_digest = ${packageDigest}`
-      const packageId = prior ? String(prior.id) : randomUUID()
+      const packageId = prior
+        ? String(prior.id)
+        : deterministicUuid(value.tenantId, value.authority, packageDigest)
       if (prior) {
         if (
           prior.source_uri !== value.sourceUri ||
@@ -150,6 +164,13 @@ export class FiscalRuleStore {
         ${value.tenantId}, ${packageId}, ${candidate.bytes}, ${candidate.bytes.length},
         ${value.importedBy}
       ) on conflict (tenant_id, package_id) do nothing`
+      if (value.artifact)
+        await tx`insert into fiscal_source_artifacts (
+          tenant_id, package_id, artifact_digest, byte_size, storage_uri, verified_at, retained_by
+        ) values (
+          ${value.tenantId}, ${packageId}, ${value.artifact.digest}, ${value.artifact.byteSize},
+          ${value.artifact.storageUri}, ${value.artifact.verifiedAt}, ${value.importedBy}
+        ) on conflict (tenant_id, package_id) do nothing`
       for (const entry of value.entries)
         await this.#insertReference(tx, value.tenantId, packageId, entry)
       const ruleIds: string[] = []
@@ -342,7 +363,15 @@ export class FiscalRuleStore {
       id, tenant_id, package_id, family, code, description, model, jurisdiction,
       effective_from, effective_to, source_locator, row_digest
     ) values (
-      ${randomUUID()}, ${tenantId}, ${packageId}, ${entry.family}, ${entry.code},
+      ${deterministicUuid(
+        tenantId,
+        packageId,
+        entry.family,
+        entry.code,
+        entry.model,
+        entry.jurisdiction,
+        entry.effectiveFrom,
+      )}, ${tenantId}, ${packageId}, ${entry.family}, ${entry.code},
       ${entry.description}, ${entry.model}, ${entry.jurisdiction}, ${entry.effectiveFrom},
       ${entry.effectiveTo ?? null}, ${entry.sourceLocator}, ${rowDigest}
     ) on conflict (tenant_id, package_id, family, code, model, jurisdiction, effective_from)
@@ -373,7 +402,7 @@ export class FiscalRuleStore {
         throw new Error('Conflicting Fiscal tax rule version')
       return String(prior.id)
     }
-    const id = randomUUID()
+    const id = deterministicUuid(tenantId, packageId, rule.ruleKey, String(rule.version))
     await sql`insert into fiscal_tax_rules (
       id, tenant_id, package_id, rule_key, version, component_group, component_code,
       precedence, priority, date_basis, purpose, model, environment, operation, issuer_establishment_id,
@@ -395,6 +424,14 @@ export class FiscalRuleStore {
     )`
     return id
   }
+}
+
+function deterministicUuid(...parts: string[]): string {
+  const bytes = createHash('sha256').update(parts.join('\0')).digest().subarray(0, 16)
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x50
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
+  const hex = bytes.toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 function toTaxRule(row: postgres.Row): TaxRule {
@@ -472,7 +509,9 @@ function missingApprovedReference(
           row.family === classification.family &&
           row.code === classification.code &&
           (row.model === '*' || row.model === input.model) &&
-          (row.jurisdiction === '*' || row.jurisdiction === input.destination.stateCode) &&
+          (row.jurisdiction === '*' ||
+            row.jurisdiction === 'BR' ||
+            row.jurisdiction === input.destination.stateCode) &&
           String(row.effective_from) <= input.issueDate &&
           (!row.effective_to || String(row.effective_to) > input.issueDate),
       )

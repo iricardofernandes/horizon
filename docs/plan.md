@@ -2193,9 +2193,11 @@ without contacting an authority. Public authority capabilities remain `unsupport
 
 ## Phase 41 — Temporal tax rules and explanations
 
-**Planned.** Import versioned classifications and implement deterministic, dated tax
-calculations for legacy taxes and IBS/CBS, with saved inputs, rounding and source
-references. Recalculating a historical document must reproduce its original result.
+**Delivered locally on 2026-09-22.** Versioned classifications and deterministic, dated
+tax calculations now retain official source bytes by digest, save immutable inputs,
+rounding and source references, and reproduce historical results after rule rollback.
+One approved model-55 simulation scenario is active; all other scenarios remain
+unsupported and public authority operations remain disabled.
 [Detailed work and exit evidence](fiscal-implementation-plan.md#41--temporal-tax-rules-with-explanations).
 [Detailed implementation plan](fiscal-phase41-implementation-plan.md).
 
@@ -2205,6 +2207,7 @@ references. Recalculating a historical document must reproduce its original resu
 deterministic simulator. Retain XML, response and protocol; make an uncertain response
 consultable before retry. Simulated documents remain visibly simulated.
 [Detailed work and exit evidence](fiscal-implementation-plan.md#42--nf-e-model-55-lifecycle-with-a-simulator).
+[Detailed implementation plan](fiscal-phase42-implementation-plan.md).
 
 ## Phase 43 — NF-e homologation for one issuer and UF
 

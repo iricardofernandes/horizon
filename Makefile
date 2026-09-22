@@ -42,6 +42,12 @@ test-phase7: ## Run the Inventory/Sales choreography against isolated infrastruc
 test-phase10: ## Complete the golden path in Chromium and verify its joined trace
 	@cd web && npm run test:browser
 
+.PHONY: smoke-phase41
+smoke-phase41: ## Verify Phase 41 safety through Kong (TENANT=<uuid>, optional DOCUMENT=<uuid>)
+	@node scripts/phase41-smoke.mjs --tenant "$(TENANT)" \
+		$(if $(DOCUMENT),--document "$(DOCUMENT)") \
+		$(if $(EXPECT_EXPLANATION),--expect-explanation)
+
 .PHONY: setup-phase12
 setup-phase12: ## Install the MCP debugger's least-privilege PostgreSQL wrappers
 	@bash infra/scripts/install-mcp-debugger-db.sh

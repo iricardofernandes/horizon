@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-09-22T13:19:30Z",
+  "authority": "Receita Federal do Brasil / SERPRO",
+  "landingPage": "https://piloto-cbs.tributos.gov.br/servico/calculadora-consumo/calculadora/calculadora-offline",
+  "downloadResolver": "https://piloto-cbs.tributos.gov.br/servico/calculadora-consumo/api/calculadora/download/url?platform=default",
+  "resolvedUrl": "https://obs-13820-calcpr-apr.obsv3.br-df-1.hcs.serpro.gov.br/calculadora.zip",
+  "artifact": {
+    "name": "calculadora.zip",
+    "mediaType": "application/zip",
+    "byteSize": 346174581,
+    "sha256": "f451c3902621f02f3a63da29cd63d1e8e0f0456cce44425f1e22c89c079cb68e",
+    "etag": "9ebc4482ad97d83f71e74a2a2b8aaaeb-23",
+    "lastModified": "2026-09-10T13:28:06Z",
+    "zipIntegrity": "passed"
+  },
+  "members": [
+    {
+      "name": "calculadora.tar.gz",
+      "byteSize": 345981037,
+      "sha256": "419d7918bbcedcbcecaf02795d10e263200037b2dce7d46edbcf3abd3c7c751a"
+    },
+    {
+      "name": "codigo-fonte-backend.zip",
+      "byteSize": 1810361,
+      "sha256": "28a21a5cf080056c753eaa6e1bc10bccb645c500a888d3c89d904464a76abfad"
+    },
+    {
+      "name": "codigo-fonte-simples-nacional.zip",
+      "byteSize": 225393,
+      "sha256": "1fda5af9308ad3def166a1e7ac9d0b748d7365742635f3348d5ae2aaebb3dd79"
+    },
+    {
+      "name": "scripts-python-exemplo.zip",
+      "byteSize": 12652,
+      "sha256": "af472015cbfbaa752d676a5d0de1aaf740e1da075faa04895ef77ec4223eab22"
+    }
+  ],
+  "containerDistribution": {
+    "format": "gzip-compressed root filesystem",
+    "installationCommand": "docker import ../calculadora.tar.gz calculadora-image",
+    "publishedOciDigest": null,
+    "reason": "The official package is a root filesystem import, not an OCI image archive or registry reference; the calculadora.tar.gz SHA-256 is the immutable container payload identifier."
+  },
+  "embeddedRuleDatabase": {
+    "path": "calculadora.tar.gz:/calculadora/calculadora/db/calculadora-pro.db",
+    "sha256": "9a9143b12b38d02fb73630f89ea2b6c215508edc2bc3ac8d15f68c81ac12175d",
+    "version": "V0057",
+    "versionDate": "2026-09-03",
+    "description": "Remoção de alíquotas da monofasia."
+  },
+  "observedModel55Facts": {
+    "document": "NF-e",
+    "effectiveFrom": "2026-01-01",
+    "effectiveTo": null,
+    "referenceRatesThrough": "2026-12-31",
+    "rates": [
+      { "component": "CBS", "publishedValue": "0.9" },
+      { "component": "IBSUF", "publishedValue": "0.1" },
+      { "component": "IBSMun", "publishedValue": "0.0" }
+    ]
+  },
+  "versionDiscrepancy": {
+    "landingPageLabel": "V0042 - 1.3.0-af611293 - APR",
+    "embeddedDatabase": "V0057",
+    "onlineApiAtRetrieval": {
+      "application": "1.5.1-b9fa97a7",
+      "database": "V0057"
+    },
+    "status": "accepted by workspace-owner on 2026-09-22 for fixture rtc-v0057-model55-normal-sale-sp-2026-01 only"
+  },
+  "retention": {
+    "retainedLocally": true,
+    "localPath": ".artifacts/fiscal/rtc/f451c3902621f02f3a63da29cd63d1e8e0f0456cce44425f1e22c89c079cb68e/calculadora.zip",
+    "committedToRepository": false,
+    "databaseBinding": "fiscal_source_artifacts",
+    "packageId": "2dd2ffbe-2571-5c1d-a7a0-73162538f1da",
+    "reason": "The 346 MB upstream binary is retained in a gitignored content-addressed path and verified by SHA-256 before rollout; its append-only database binding records digest, size and location."
+  }
+}

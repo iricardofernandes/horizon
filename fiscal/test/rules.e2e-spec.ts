@@ -141,6 +141,7 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
         family: 'ncm' as const,
         code: '12345678',
         description: 'Illustrative classification',
+        jurisdiction: 'BR',
         effectiveFrom: '2026-01-01',
         sourceLocator: 'fixture:ncm:1',
       },
@@ -165,6 +166,30 @@ it('imports exact source bytes idempotently and resolves only reviewed active ru
   }
   const imported = await store.importSource(source)
   expect(await store.importSource(source)).toEqual({ ...imported, existing: true })
+  expect(
+    await store.importSource({
+      ...source,
+      artifact: {
+        digest: imported.packageDigest,
+        byteSize: 999,
+        storageUri: 'file:///retained/phase41-fixture.json',
+        verifiedAt: '2026-09-22T13:19:30.000Z',
+      },
+    }),
+  ).toEqual({ ...imported, existing: true })
+  const [retained] = await app.begin(async (tx) => {
+    await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+    return tx`select artifact_digest, byte_size::integer, storage_uri
+      from fiscal_source_artifacts where package_id = ${imported.packageId}`
+  })
+  expect(retained).toMatchObject({
+    artifact_digest: imported.packageDigest,
+    byte_size: 999,
+    storage_uri: 'file:///retained/phase41-fixture.json',
+  })
+  await expect(
+    administrator`delete from fiscal_source_artifacts where package_id = ${imported.packageId}`,
+  ).rejects.toThrow('append-only')
   const changed = await store.importSource({
     ...source,
     bytes: Buffer.from('{"fixture":"changed"}'),

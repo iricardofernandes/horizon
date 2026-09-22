@@ -1,6 +1,6 @@
 # Phase 41 — Temporal tax rules and explanations
 
-Status: **technical implementation complete; exit evidence and fiscal approval pending**. This is the execution plan for [Phase 41 in the fiscal roadmap](fiscal-implementation-plan.md#41--temporal-tax-rules-with-explanations). Phase 40 delivered the independent Fiscal service, immutable source packages and rule versions, tenant isolation and simulation drafts. Phase 41 adds reviewed reference data, deterministic calculations and explanations. Authority transmission remains outside this phase.
+Status: **delivered locally on 2026-09-22**. This is the execution plan for [Phase 41 in the fiscal roadmap](fiscal-implementation-plan.md#41--temporal-tax-rules-with-explanations). Phase 40 delivered the independent Fiscal service, immutable source packages and rule versions, tenant isolation and simulation drafts. Phase 41 adds reviewed reference data, deterministic calculations and explanations. Authority transmission remains outside this phase.
 
 The first implementation increment publishes the versioned calculation input/outcome
 contracts in `@horizon/contracts` 0.26.0 and adds the pure Fiscal calculation foundation:
@@ -9,30 +9,24 @@ legacy versus IBS/CBS grouping and source-backed explanations. Its fixtures are 
 illustrative; no scenario is enabled until the source and specialist-review gates below
 are satisfied.
 
-### Current execution status after the implementation session
+### Delivered execution status
 
-The code and automated verification increments are complete and committed through
-`2c8deb2` (`test(fiscal): verify unsupported locks and replay`). `make ci-local` passed,
-including the Fiscal build and 14 Fiscal E2E tests. The local Fiscal profile was rebuilt
-from this revision with `make up-fiscal`; the migration job exited successfully and the
-Fiscal container became healthy, applying migrations `0010` through `0017` additively.
+The workspace owner approved the disclosed fiscal mapping on 2026-09-22. The official
+346,174,581-byte archive is retained in a content-addressed local path and bound to the
+imported package by migration `0018`; both carry SHA-256
+`f451c3902621f02f3a63da29cd63d1e8e0f0456cce44425f1e22c89c079cb68e`.
+The approval explicitly accepts the landing-page `V0042` versus embedded database
+`V0057` discrepancy for this narrow simulation fixture.
 
-The following exit work remains and must not be inferred from green automated tests:
-
-1. Run and record the authorized preview/explanation smoke through Kong, plus the
-   expected `409` response for public validate/issue. The command result and SQL counts
-   still need to be captured in a dedicated Phase 41 evidence record.
-2. Add or obtain the exact official IBS/CBS rule artifact and its effective-date mapping
-   in the source register. The current register explicitly marks that package as pending.
-3. Obtain independent fiscal-specialist approval for the scenario matrix, rates,
-   classifications, rounding and source applicability. Existing fixtures remain
-   illustrative and every scenario remains unsupported until this review is recorded.
-4. After items 2–3, import the reviewed package, activate only the approved simulation
-   scenario, compare the approved golden fixtures byte-for-byte, and record the rollback
-   and replay evidence.
-
-Until these items are complete, the implementation is ready for review but Phase 41 is
-not delivered; no IBS/CBS scenario or authority capability is enabled.
+Only `rtc-v0057-model55-normal-sale` is active: model 55, simulation, normal-regime
+intrastate SP sale, NCM `09012100`, issue dates in 2026. Its approved golden fixture is
+versioned under `fiscal/fixtures/`; every other scenario remains unsupported. The local
+rollout imported, reviewed and activated its three rules, locked a document, reproduced
+the canonical result, deactivated all three rules, replayed the historical result while
+inactive, and restored activation. The final Kong smoke returned the frozen explanation
+and proved preview/read/blocked authority calls caused no writes. Exact command output,
+digests and database evidence are in the
+[Phase 41 evidence record](fiscal-phase41-evidence.md).
 
 ## Result and scope
 
