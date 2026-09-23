@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   fiscalArtifactMetadataSchema,
+  fiscalArtifactMetadataV2Schema,
   fiscalCancellationRequestSchema,
   fiscalCapabilityListSchema,
   fiscalCapabilityListV2Schema,
   fiscalDocumentCreateRequestSchema,
   fiscalDocumentSchema,
+  fiscalDocumentV2Schema,
   fiscalManualOriginRequestSchema,
 } from './fiscal-lifecycle'
 
@@ -164,6 +166,20 @@ describe('Fiscal lifecycle HTTP contracts', () => {
       false,
     )
     expect(fiscalDocumentSchema.safeParse({ ...document, simulated: false }).success).toBe(false)
+    const homologation = {
+      ...document,
+      environment: 'homologation',
+      simulated: false,
+      fiscalValue: false,
+    }
+    expect(fiscalDocumentV2Schema.safeParse(homologation).success).toBe(true)
+    expect(fiscalDocumentSchema.safeParse(homologation).success).toBe(false)
+    expect(fiscalDocumentV2Schema.safeParse({ ...homologation, simulated: true }).success).toBe(
+      false,
+    )
+    expect(fiscalDocumentV2Schema.safeParse({ ...homologation, fiscalValue: true }).success).toBe(
+      false,
+    )
     expect(
       fiscalArtifactMetadataSchema.safeParse({
         documentId: document.id,
@@ -176,6 +192,32 @@ describe('Fiscal lifecycle HTTP contracts', () => {
         createdAt: document.createdAt,
       }).success,
     ).toBe(true)
+    expect(
+      fiscalArtifactMetadataV2Schema.safeParse({
+        documentId: document.id,
+        kind: 'homologation_response',
+        digest,
+        byteSize: 1024,
+        mediaType: 'application/xml',
+        sourceSchema: 'PL_010f_v1.04/nfe_v4.00.xsd',
+        environment: 'homologation',
+        simulated: false,
+        fiscalValue: false,
+        createdAt: document.createdAt,
+      }).success,
+    ).toBe(true)
+    expect(
+      fiscalArtifactMetadataSchema.safeParse({
+        documentId: document.id,
+        kind: 'homologation_response',
+        digest,
+        byteSize: 1024,
+        mediaType: 'application/soap+xml',
+        sourceSchema: 'sefaz-nfe400',
+        simulated: true,
+        createdAt: document.createdAt,
+      }).success,
+    ).toBe(false)
   })
 
   it('constrains cancellation reasons to the public authority-sized range', () => {

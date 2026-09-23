@@ -5,7 +5,10 @@ import { eventEnvelopeSchema } from './envelope'
 import { EVENTS } from './events'
 import {
   fiscalArtifactKindSchema,
+  fiscalArtifactKindV2Schema,
+  fiscalArtifactListV2Schema,
   fiscalArtifactMetadataSchema,
+  fiscalArtifactMetadataV2Schema,
   fiscalCalculationInputSchema,
   fiscalCalculationOutcomeSchema,
   fiscalCancellationRequestSchema,
@@ -20,6 +23,7 @@ import {
   fiscalDocumentStatusSchema,
   fiscalDocumentTimelineSchema,
   fiscalDocumentTransitionSchema,
+  fiscalDocumentV2Schema,
   fiscalLifecycleProblemCodeSchema,
   fiscalManualOriginRequestSchema,
   fiscalManualOriginSchema,
@@ -146,6 +150,12 @@ const staticEntries: readonly RegistryEntry[] = [
     schema: fiscalDocumentSchema,
   },
   {
+    id: 'http:fiscal-document-v2',
+    kind: 'http',
+    description: 'Environment-aware Fiscal document with explicit absence of fiscal value.',
+    schema: fiscalDocumentV2Schema,
+  },
+  {
     id: 'http:fiscal-ready-document-v1',
     kind: 'http',
     description: 'A document made ready with frozen calculation and reconciliation digests.',
@@ -198,6 +208,24 @@ const staticEntries: readonly RegistryEntry[] = [
     kind: 'http',
     description: 'Digest-verified metadata for a retained NF-e simulation artifact.',
     schema: fiscalArtifactMetadataSchema,
+  },
+  {
+    id: 'http:fiscal-artifact-kind-v2',
+    kind: 'http',
+    description: 'Simulation or homologation artifact purpose.',
+    schema: fiscalArtifactKindV2Schema,
+  },
+  {
+    id: 'http:fiscal-artifact-metadata-v2',
+    kind: 'http',
+    description: 'Environment-aware retained NF-e artifact without fiscal value.',
+    schema: fiscalArtifactMetadataV2Schema,
+  },
+  {
+    id: 'http:fiscal-artifact-list-v2',
+    kind: 'http',
+    description: 'Tenant-scoped environment-aware retained artifact list.',
+    schema: fiscalArtifactListV2Schema,
   },
   {
     id: 'http:fiscal-lifecycle-problem-code-v1',

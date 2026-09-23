@@ -135,6 +135,24 @@ export const fiscalDocumentSchema = z.strictObject({
   createdAt: instantSchema,
 })
 
+const fiscalDocumentV2Base = fiscalDocumentSchema
+  .omit({
+    environment: true,
+    simulated: true,
+  })
+  .extend({ fiscalValue: z.literal(false) })
+
+export const fiscalDocumentV2Schema = z.discriminatedUnion('environment', [
+  fiscalDocumentV2Base.extend({
+    environment: z.literal('simulation'),
+    simulated: z.literal(true),
+  }),
+  fiscalDocumentV2Base.extend({
+    environment: z.literal('homologation'),
+    simulated: z.literal(false),
+  }),
+])
+
 export const fiscalReadyDocumentSchema = z.strictObject({
   document: fiscalDocumentSchema,
   inputDigest: sha256Schema,
@@ -189,6 +207,11 @@ export const fiscalArtifactKindSchema = z.enum([
   'danfe',
 ])
 
+export const fiscalArtifactKindV2Schema = z.union([
+  fiscalArtifactKindSchema,
+  z.enum(['homologation_request', 'homologation_response', 'homologation_protocol']),
+])
+
 export const fiscalArtifactMetadataSchema = z.strictObject({
   documentId: uuidSchema,
   kind: fiscalArtifactKindSchema,
@@ -198,6 +221,25 @@ export const fiscalArtifactMetadataSchema = z.strictObject({
   sourceSchema: z.string().min(1).max(160),
   simulated: z.literal(true),
   createdAt: instantSchema,
+})
+
+const fiscalArtifactV2Base = fiscalArtifactMetadataSchema
+  .omit({ simulated: true, kind: true })
+  .extend({ kind: fiscalArtifactKindV2Schema, fiscalValue: z.literal(false) })
+
+export const fiscalArtifactMetadataV2Schema = z.discriminatedUnion('environment', [
+  fiscalArtifactV2Base.extend({ environment: z.literal('simulation'), simulated: z.literal(true) }),
+  fiscalArtifactV2Base.extend({
+    environment: z.literal('homologation'),
+    simulated: z.literal(false),
+  }),
+])
+
+export const fiscalArtifactListV2Schema = z.strictObject({
+  documentId: uuidSchema,
+  environment: z.enum(['simulation', 'homologation']),
+  fiscalValue: z.literal(false),
+  artifacts: z.array(fiscalArtifactMetadataV2Schema),
 })
 
 export const fiscalLifecycleProblemCodeSchema = z.enum([
@@ -220,10 +262,13 @@ export type FiscalCapabilityListV2 = z.infer<typeof fiscalCapabilityListV2Schema
 export type FiscalManualOriginRequest = z.infer<typeof fiscalManualOriginRequestSchema>
 export type FiscalDocumentCreateRequest = z.infer<typeof fiscalDocumentCreateRequestSchema>
 export type FiscalDocument = z.infer<typeof fiscalDocumentSchema>
+export type FiscalDocumentV2 = z.infer<typeof fiscalDocumentV2Schema>
 export type FiscalReadyDocument = z.infer<typeof fiscalReadyDocumentSchema>
 export type FiscalCommandAccepted = z.infer<typeof fiscalCommandAcceptedSchema>
 export type FiscalCancellationRequest = z.infer<typeof fiscalCancellationRequestSchema>
 export type FiscalCorrectionRequest = z.infer<typeof fiscalCorrectionRequestSchema>
 export type FiscalDocumentTimeline = z.infer<typeof fiscalDocumentTimelineSchema>
 export type FiscalArtifactMetadata = z.infer<typeof fiscalArtifactMetadataSchema>
+export type FiscalArtifactMetadataV2 = z.infer<typeof fiscalArtifactMetadataV2Schema>
+export type FiscalArtifactListV2 = z.infer<typeof fiscalArtifactListV2Schema>
 export type FiscalLifecycleProblemCode = z.infer<typeof fiscalLifecycleProblemCodeSchema>
