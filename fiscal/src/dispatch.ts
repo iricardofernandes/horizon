@@ -158,6 +158,10 @@ export class FiscalDispatch {
         from fiscal_documents where tenant_id = ${value.tenantId}
           and id = ${value.documentId} for update`
       if (!document) throw new Error('Fiscal document not found')
+      // A concurrent request may have queued the same command while this transaction
+      // waited for the document lock. Read it again before checking the new status.
+      const committed = await findCommand(tx, value.tenantId, value.idempotencyKey)
+      if (committed) return verifyExisting(committed, value, 'issuance')
       if (document.status !== 'ready') throw new Error('Fiscal document is not ready')
       if (document.model !== '55' || document.environment !== 'simulation')
         throw new Error('Unsupported Fiscal issuance tuple')
@@ -241,6 +245,8 @@ export class FiscalDispatch {
       const [document] = await tx`select status from fiscal_documents
         where tenant_id = ${value.tenantId} and id = ${value.documentId} for update`
       if (!document) throw new Error('Fiscal document not found')
+      const committed = await findCommand(tx, value.tenantId, value.idempotencyKey)
+      if (committed) return verifyExisting(committed, value, 'status_query')
       if (document.status !== 'submitted' && document.status !== 'unknown')
         throw new Error('Fiscal document is not consultable')
       const [issuance] = await tx`select id from fiscal_dispatch_commands
@@ -283,6 +289,9 @@ export class FiscalDispatch {
       const [document] = await tx`select status, model, environment from fiscal_documents
         where tenant_id = ${value.tenantId} and id = ${value.documentId} for update`
       if (!document) throw new Error('Fiscal document not found')
+      const committed = await findCommand(tx, value.tenantId, value.idempotencyKey)
+      if (committed)
+        return verifyExisting(committed, { ...value, artifactDigest: undefined }, 'cancellation')
       if (document.status !== 'authorized') throw new Error('Fiscal cancellation is not allowed')
       if (document.model !== '55' || document.environment !== 'simulation')
         throw new Error('Unsupported Fiscal cancellation tuple')
@@ -346,6 +355,8 @@ export class FiscalDispatch {
       const [document] = await tx`select status from fiscal_documents
         where tenant_id = ${value.tenantId} and id = ${value.documentId} for update`
       if (!document) throw new Error('Fiscal document not found')
+      const committed = await findCommand(tx, value.tenantId, value.idempotencyKey)
+      if (committed) return verifyExisting(committed, value, 'cancellation_query')
       if (document.status !== 'cancellation_unknown')
         throw new Error('Fiscal cancellation is not consultable')
       const [original] = await tx`select id from fiscal_dispatch_commands
@@ -393,6 +404,8 @@ export class FiscalDispatch {
         from fiscal_dispatch_jobs job
         join fiscal_dispatch_commands command on command.tenant_id = job.tenant_id
           and command.id = job.command_id
+        join fiscal_documents document on document.tenant_id = command.tenant_id
+          and document.id = command.document_id
         left join lateral (
           select id, request_digest, artifact_digest from fiscal_dispatch_commands original
           where original.tenant_id = command.tenant_id
@@ -407,6 +420,17 @@ export class FiscalDispatch {
         ) cancellation on command.kind = 'cancellation_query'
         where job.tenant_id = ${value.tenantId} and job.next_attempt_at <= now()
           and (job.state = 'pending' or (job.state = 'leased' and job.lease_until <= now()))
+          and (command.kind <> 'issuance' or document.status <> 'queued' or (
+            select event.action from fiscal_document_issuance_bindings binding
+            join lateral (
+              select activation.action from fiscal_capability_activation_events activation
+              where activation.tenant_id = binding.tenant_id
+                and activation.capability_id = binding.capability_id
+              order by activation.created_at desc, activation.id desc limit 1
+            ) event on true
+            where binding.tenant_id = command.tenant_id
+              and binding.document_id = command.document_id
+          ) = 'activate_simulated')
         order by job.next_attempt_at, job.command_id for update of job skip locked limit 1`
       if (!job) return null
       const [leased] = await tx`update fiscal_dispatch_jobs set state = 'leased',

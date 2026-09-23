@@ -25,6 +25,7 @@ export interface OwnerFiscalClient {
   issuerRevision(revision: number): Promise<unknown>
   listClassifications(limit: number, cursor: string | null): Promise<unknown>
   classificationRevision(itemId: string, revision: number): Promise<unknown>
+  catalogItem(itemId: string): Promise<unknown>
 }
 
 /** All requests carry a dedicated, tenant-scoped token. Bodies are never logged. */
@@ -62,6 +63,10 @@ export class HttpOwnerFiscalClient implements OwnerFiscalClient {
 
   classificationRevision(itemId: string, revision: number) {
     return this.get('catalog', `/items/${itemId}/classification/${revision}`)
+  }
+
+  catalogItem(itemId: string) {
+    return this.get('catalog', `/items/${itemId}`)
   }
 
   private async get(owner: keyof HttpOwnerFiscalClient['urls'], path: string): Promise<unknown> {

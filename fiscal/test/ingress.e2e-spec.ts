@@ -629,6 +629,12 @@ it('retains encrypted artifacts after restart and denies another tenant', async 
   try {
     const first = await artifacts.put(input, bytes)
     expect((await artifacts.put(input, bytes)).digest).toBe(first.digest)
+    const signed = await artifacts.put({ ...input, kind: 'signed_xml' }, bytes)
+    expect(await artifacts.list(tenantId, draft.id)).toMatchObject({
+      documentId: draft.id,
+      artifacts: [{ kind: 'signed_xml', digest: signed.digest, simulated: true }],
+    })
+    expect(await artifacts.list(otherTenant, draft.id)).toBeNull()
     const key = `${tenantId}/${draft.id}/xml/${first.digest}`
     const path = join(artifactRoot, key)
     expect((await readFile(path)).includes(bytes)).toBe(false)
@@ -884,6 +890,9 @@ it('resumes owner API backfill and verifies issuer, party and catalog revisions'
         effectiveFrom: '2026-09-01',
         ncm: '09012100',
       }
+    },
+    async catalogItem(requestedId) {
+      return { id: requestedId, kind: 'product', name: 'Café torrado', active: true }
     },
   }
   const appUrl = container.getConnectionUri().replace('postgres:test@', 'horizon_app:test@')

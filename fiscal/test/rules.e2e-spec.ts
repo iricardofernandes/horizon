@@ -9,6 +9,8 @@ import { FiscalCalculations } from '../src/calculations'
 import { FiscalCapabilities } from '../src/capabilities'
 import { FiscalDispatch } from '../src/dispatch'
 import { FiscalDocuments } from '../src/documents'
+import { FiscalManualOrigins } from '../src/manual-origins'
+import { FiscalProjections } from '../src/projections'
 import { FiscalRuleStore } from '../src/rule-store'
 
 let container: StartedPostgreSqlContainer
@@ -171,6 +173,158 @@ it('keeps capability definitions inactive until independent review and activatio
     administrator`update fiscal_capability_definitions set operation = 'changed'
       where id = ${registered.id}`,
   ).rejects.toThrow('append-only')
+})
+
+it('freezes a tenant-owned manual origin and creates one digest-verified draft', async () => {
+  const tenantId = randomUUID()
+  const otherTenantId = randomUUID()
+  const establishmentId = randomUUID()
+  const recipientPartyId = randomUUID()
+  const itemId = randomUUID()
+  const key = randomBytes(32)
+  await administrator`insert into tenants (id) values (${tenantId}), (${otherTenantId})`
+  const definition = await capabilities.register({
+    tenantId,
+    model: '55',
+    environment: 'simulation',
+    establishmentId,
+    jurisdictionKind: 'uf',
+    jurisdictionCode: 'SP',
+    operation: 'normal-sale',
+    adapterVersion: 'nfe55-simulator-v1',
+    sourceManifestDigest: '6'.repeat(64),
+    schemaPackageDigest: 'b'.repeat(64),
+    calculationFixtureId: 'rtc-v0057-model55-normal-sale-sp-2026-01',
+    createdBy: 'importer:manual-test',
+  })
+  await administrator`insert into fiscal_capability_reviews (
+    id, tenant_id, capability_id, approved, reviewed_by, interpretation, reviewed_at
+  ) values (
+    ${randomUUID()}, ${tenantId}, ${definition.id}, true, 'reviewer:test',
+    'Approved only for the isolated manual-origin integration fixture.',
+    '2026-09-22T15:00:00.000Z'
+  )`
+  await administrator`insert into fiscal_capability_activation_events (
+    id, tenant_id, capability_id, action, evidence_digest, actor_id, reason, occurred_at
+  ) values (
+    ${randomUUID()}, ${tenantId}, ${definition.id}, 'activate_simulated',
+    ${'9'.repeat(64)}, 'release:test', 'Activate the isolated manual-origin fixture.',
+    '2026-09-22T15:01:00.000Z'
+  )`
+  const projections = new FiscalProjections(appUrl)
+  const documents = new FiscalDocuments(appUrl, key)
+  const manual = new FiscalManualOrigins(appUrl, key, projections, capabilities, () => ({
+    async catalogItem(requestedId) {
+      return { id: requestedId, kind: 'product', name: 'Café torrado em grãos', active: true }
+    },
+  }))
+  try {
+    await projections.storeIssuer(tenantId, 1, {
+      tenantId,
+      revision: 1,
+      effectiveFrom: '2026-01-01',
+      timezone: 'America/Sao_Paulo',
+      company: {
+        legalName: 'Emissora Exemplo',
+        tradeName: null,
+        taxId: '00000000E08G12',
+        stateRegistration: '123456789',
+        municipalRegistration: null,
+        address: {
+          line: 'Rua Um, 1',
+          city: 'São Paulo',
+          municipalityCode: '3550308',
+          state: 'SP',
+          postalCode: '01001000',
+          country: 'BR',
+        },
+        baseCurrency: 'BRL',
+        fiscalRegime: 'lucro-real',
+      },
+    })
+    await projections.storeParty(tenantId, recipientPartyId, 1, {
+      tenantId,
+      partyId: recipientPartyId,
+      kind: 'organization',
+      legalName: 'Destinatária Exemplo',
+      tradeName: null,
+      taxId: '12345678000195',
+      revision: 1,
+      profile: {
+        effectiveFrom: '2026-01-01',
+        stateRegistration: '987654321',
+        municipalRegistration: null,
+        taxpayerIndicator: 'contributor',
+        finalConsumer: false,
+        address: {
+          street: 'Rua Dois',
+          number: '2',
+          complement: null,
+          district: 'Centro',
+          city: 'São Paulo',
+          municipalityCode: '3550308',
+          state: 'SP',
+          postalCode: '01001000',
+          country: 'BR',
+        },
+      },
+    })
+    await projections.storeClassification(tenantId, itemId, 1, {
+      tenantId,
+      itemId,
+      revision: 1,
+      effectiveFrom: '2026-01-01',
+      ncm: '09012100',
+    })
+    const request = {
+      tenantId,
+      idempotencyKey: '00000000000000000000000000000031',
+      actorId: 'issuer:test',
+      establishmentId,
+      issuerProfileRevision: 1,
+      recipientPartyId,
+      recipientProfileRevision: 1,
+      issueDate: '2026-09-22',
+      operation: 'normal-sale' as const,
+      purpose: 'normal' as const,
+      reason: 'Simulação revisada para o cenário aprovado',
+      lines: [
+        {
+          lineId: randomUUID(),
+          itemId,
+          catalogRevision: 1,
+          quantity: '2',
+          unitPrice: { amount: '5000', currency: 'BRL' },
+        },
+      ],
+    }
+    const origin = await manual.create(request)
+    expect(await manual.create(request)).toEqual(origin)
+    await expect(
+      manual.create({ ...request, reason: 'Outra justificativa para a mesma chave' }),
+    ).rejects.toThrow('Conflicting')
+    const draft = await documents.createManualDraft({
+      tenantId,
+      manualOriginId: origin.id,
+      establishmentId,
+      series: 1,
+      idempotencyKey: '00000000000000000000000000000032',
+      actorId: 'issuer:test',
+    })
+    expect((await documents.get(tenantId, draft.id))?.origin).toEqual({
+      kind: 'manual',
+      manualOriginId: origin.id,
+    })
+    expect(await documents.readSnapshot(tenantId, draft.id)).toMatchObject({
+      originModule: 'fiscal',
+      originId: origin.id,
+      total: { amount: '10000', currency: 'BRL' },
+      lines: [{ description: 'Café torrado em grãos', catalogRevision: 1 }],
+    })
+    await expect(documents.readSnapshot(otherTenantId, draft.id)).rejects.toThrow('not found')
+  } finally {
+    await Promise.all([manual.close(), documents.close(), projections.close()])
+  }
 })
 
 it('requires package approval before activation and keeps activation history immutable', async () => {
@@ -696,7 +850,11 @@ it('resolves an uncertain issuance through an explicit query without a second su
     requestDigest: '3'.repeat(64),
     actorId: 'issuer:test',
   }
-  const query = await dispatch.queueStatusQuery(queryInput)
+  const [query, concurrentQuery] = await Promise.all([
+    dispatch.queueStatusQuery(queryInput),
+    dispatch.queueStatusQuery(queryInput),
+  ])
+  expect(concurrentQuery.commandId).toBe(query.commandId)
   expect(await dispatch.queueStatusQuery(queryInput)).toEqual({ ...query, existing: true })
   const lease = await dispatch.claim({ tenantId, workerId: 'worker:query' })
   expect(lease).toMatchObject({
@@ -773,8 +931,12 @@ it('queues an immutable cancellation and resolves uncertainty through the origin
     artifactDigest: eventDigest,
     actorId: 'issuer:test',
   }
-  const cancellation = await dispatch.queueCancellation(command)
+  const [cancellation, concurrentCancellation] = await Promise.all([
+    dispatch.queueCancellation(command),
+    dispatch.queueCancellation(command),
+  ])
   expect(cancellation).toMatchObject({ kind: 'cancellation', status: 'cancellation_pending' })
+  expect(concurrentCancellation.commandId).toBe(cancellation.commandId)
   expect(await dispatch.queueCancellation(command)).toEqual({ ...cancellation, existing: true })
   const first = await dispatch.claim({ tenantId, workerId: 'worker:cancel' })
   expect(first).toMatchObject({ kind: 'cancellation', artifactDigest: eventDigest })
@@ -794,13 +956,18 @@ it('queues an immutable cancellation and resolves uncertainty through the origin
     'worker:cancel',
     new Date(Date.now() + 60_000),
   )
-  const query = await dispatch.queueCancellationQuery({
+  const queryCommand = {
     tenantId,
     documentId,
     idempotencyKey: 'phase42-cancel-query-0001',
     requestDigest: 'f'.repeat(64),
     actorId: 'issuer:test',
-  })
+  }
+  const [query, concurrentQuery] = await Promise.all([
+    dispatch.queueCancellationQuery(queryCommand),
+    dispatch.queueCancellationQuery(queryCommand),
+  ])
+  expect(concurrentQuery.commandId).toBe(query.commandId)
   const queryLease = await dispatch.claim({ tenantId, workerId: 'worker:query' })
   expect(queryLease).toMatchObject({
     kind: 'cancellation_query',

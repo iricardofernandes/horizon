@@ -6,6 +6,8 @@ import type { FiscalPrincipal } from './auth'
 const tenantId = randomUUID()
 const documentId = randomUUID()
 const otherTenant = randomUUID()
+const establishmentId = randomUUID()
+const manualOriginId = randomUUID()
 const lineId = randomUUID()
 let previewInput: unknown
 let readinessInput: unknown
@@ -14,6 +16,7 @@ let statusQueryInput: unknown
 let cancellationInput: unknown
 let cancellationQueryInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
+let activeCapability = false
 const server = createFiscalServer({
   verifier: {
     async verify(authorization) {
@@ -53,9 +56,26 @@ const server = createFiscalServer({
         existing: false,
       }
     },
+    async createManualSuccessor(input) {
+      correctionInput = input
+      return {
+        id: randomUUID(),
+        status: 'draft',
+        snapshotDigest: 'b'.repeat(64),
+        rootDocumentId: documentId,
+        predecessorDocumentId: documentId,
+        revision: 2,
+        existing: false,
+      }
+    },
     async createDraft(input) {
       if (input.tenantId !== tenantId || !input.actorId) throw new Error('Wrong tenant or actor')
       return { id: documentId, status: 'draft', snapshotDigest: 'a'.repeat(64) }
+    },
+    async createManualDraft(input) {
+      if (input.tenantId !== tenantId || input.manualOriginId !== manualOriginId)
+        throw new Error('Wrong manual origin scope')
+      return { id: documentId, status: 'draft', snapshotDigest: 'b'.repeat(64) }
     },
     async get(requestedTenant, requestedDocument) {
       if (requestedTenant !== tenantId || requestedDocument !== documentId) return null
@@ -106,6 +126,10 @@ const server = createFiscalServer({
     },
   },
   artifacts: {
+    async list(requestedTenant, requestedDocument) {
+      if (requestedTenant !== tenantId || requestedDocument !== documentId) return null
+      return { documentId, artifacts: [] }
+    },
     async get(requestedTenant) {
       if (requestedTenant !== tenantId) throw new Error('Not found')
       return {
@@ -142,7 +166,34 @@ const server = createFiscalServer({
   },
   capabilities: {
     async listActive() {
-      return []
+      return activeCapability
+        ? [
+            {
+              id: randomUUID(),
+              tenantId,
+              model: '55',
+              environment: 'simulation',
+              establishmentId,
+              jurisdictionKind: 'uf',
+              jurisdictionCode: 'SP',
+              operation: 'normal-sale',
+              adapterVersion: 'nfe55-simulator-v1',
+              sourceManifestDigest: 'a'.repeat(64),
+              schemaPackageDigest: 'b'.repeat(64),
+              calculationFixtureId: 'rtc-v0057-model55-normal-sale-sp-2026-01',
+              status: 'simulated',
+              activatedAt: '2026-09-22T00:00:00.000Z',
+              evidenceDigest: 'c'.repeat(64),
+            },
+          ]
+        : []
+    },
+  },
+  manualOrigins: {
+    async create(input) {
+      if (input.tenantId !== tenantId || !input.actorId)
+        throw new Error('Wrong manual origin scope')
+      return { id: manualOriginId, digest: 'd'.repeat(64), createdAt: '2026-09-22T00:00:00.000Z' }
     },
   },
   readiness: {
@@ -229,6 +280,20 @@ it('scopes correction and explicit status consultation to the caller tenant', as
     correctedIntentId,
     idempotencyKey: headers['idempotency-key'],
   })
+  const manualCorrection = await fetch(`${base}/documents/${documentId}/corrections`, {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      reason: 'Correct reviewed manual simulation facts',
+      correctedOrigin: { kind: 'manual', manualOriginId },
+    }),
+  })
+  expect(manualCorrection.status).toBe(201)
+  expect(correctionInput).toMatchObject({
+    tenantId,
+    documentId,
+    correctedManualOriginId: manualOriginId,
+  })
   const query = await fetch(`${base}/documents/${documentId}/status-queries`, {
     method: 'POST',
     headers,
@@ -285,6 +350,14 @@ it('serves typed simulation artifacts with digest selection and sandbox headers'
   expect(response.headers.get('cache-control')).toBe('private, no-store')
   expect(response.headers.get('content-security-policy')).toBe('sandbox')
   expect(await response.text()).toBe('<xml/>')
+})
+
+it('lists tenant-scoped artifact metadata', async () => {
+  const headers = { authorization: 'Bearer test' }
+  const response = await fetch(`${base}/documents/${documentId}/artifacts`, { headers })
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual({ documentId, artifacts: [] })
+  expect((await fetch(`${base}/documents/${otherTenant}/artifacts`, { headers })).status).toBe(404)
 })
 
 it('serves a tenant-scoped document transition timeline', async () => {
@@ -350,10 +423,10 @@ it('creates only simulation drafts with an idempotency key for an issuer', async
   role = 'issuer'
   try {
     const body = JSON.stringify({
-      intentId: randomUUID(),
+      origin: { kind: 'sales', intentId: randomUUID() },
       model: '55',
       environment: 'simulation',
-      establishmentId: randomUUID(),
+      establishmentId,
       series: 1,
     })
     expect(
@@ -365,6 +438,17 @@ it('creates only simulation drafts with an idempotency key for an issuer', async
         })
       ).status,
     ).toBe(400)
+    const unsupported = await fetch(`${base}/documents`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer test',
+        'content-type': 'application/json',
+        'idempotency-key': randomUUID(),
+      },
+      body,
+    })
+    expect(unsupported.status).toBe(409)
+    activeCapability = true
     const result = await fetch(`${base}/documents`, {
       method: 'POST',
       headers: {
@@ -376,6 +460,61 @@ it('creates only simulation drafts with an idempotency key for an issuer', async
     })
     expect(result.status).toBe(201)
     expect(await result.json()).toMatchObject({ id: documentId, status: 'draft' })
+    const manual = await fetch(`${base}/documents`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer test',
+        'content-type': 'application/json',
+        'idempotency-key': randomUUID(),
+      },
+      body: JSON.stringify({
+        origin: { kind: 'manual', manualOriginId },
+        model: '55',
+        environment: 'simulation',
+        establishmentId,
+        series: 1,
+      }),
+    })
+    expect(manual.status).toBe(201)
+  } finally {
+    activeCapability = false
+    role = 'viewer'
+  }
+})
+
+it('accepts an audited manual origin only for an issuer with a scoped idempotency key', async () => {
+  const body = JSON.stringify({
+    establishmentId,
+    issuerProfileRevision: 1,
+    recipientPartyId: randomUUID(),
+    recipientProfileRevision: 1,
+    issueDate: '2026-09-22',
+    operation: 'normal-sale',
+    purpose: 'normal',
+    reason: 'Simulação revisada para o cenário aprovado',
+    lines: [
+      {
+        lineId: randomUUID(),
+        itemId: randomUUID(),
+        catalogRevision: 1,
+        quantity: '1',
+        unitPrice: { amount: '10000', currency: 'BRL' },
+      },
+    ],
+  })
+  const headers = {
+    authorization: 'Bearer test',
+    'content-type': 'application/json',
+    'idempotency-key': '00000000000000000000000000000021',
+  }
+  expect((await fetch(`${base}/manual-origins`, { method: 'POST', headers, body })).status).toBe(
+    403,
+  )
+  role = 'issuer'
+  try {
+    const response = await fetch(`${base}/manual-origins`, { method: 'POST', headers, body })
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({ id: manualOriginId, digest: 'd'.repeat(64) })
   } finally {
     role = 'viewer'
   }

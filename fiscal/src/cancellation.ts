@@ -43,6 +43,15 @@ export class FiscalCancellation {
 
   async request(input: z.input<typeof commandSchema>) {
     const command = commandSchema.parse(input)
+    return this.#db.begin(async (tx) => {
+      await tx`select pg_advisory_xact_lock(hashtextextended('fiscal:cancellation:' || ${command.tenantId} || ':' || ${command.idempotencyKey}, 0))`
+      await tx`select pg_advisory_xact_lock(hashtextextended('fiscal:cancellation:document:' || ${command.tenantId} || ':' || ${command.documentId}, 0))`
+      await tx`select set_config('app.current_tenant', ${command.tenantId}, true)`
+      return this.requestLocked(command, tx)
+    })
+  }
+
+  private async requestLocked(command: z.infer<typeof commandSchema>, tx: postgres.TransactionSql) {
     const requestDigest = canonicalDigest({
       documentId: command.documentId,
       reason: command.reason,
@@ -69,10 +78,14 @@ export class FiscalCancellation {
     if (document.status !== 'authorized') throw new Error('Fiscal cancellation is not allowed')
     if (document.model !== '55' || document.environment !== 'simulation')
       throw new Error('Unsupported Fiscal cancellation tuple')
-    const [evidence] = await this.#db.begin(async (tx) => {
-      await tx`select set_config('app.current_tenant', ${command.tenantId}, true)`
-      return tx`select binding.access_key, artifact.digest as protocol_digest
+    const [evidence] = await tx`select binding.access_key, artifact.digest as protocol_digest
         from fiscal_document_issuance_bindings binding
+        join lateral (
+          select event.action from fiscal_capability_activation_events event
+          where event.tenant_id = binding.tenant_id
+            and event.capability_id = binding.capability_id
+          order by event.created_at desc, event.id desc limit 1
+        ) latest on latest.action = 'activate_simulated'
         join fiscal_artifacts artifact on artifact.tenant_id = binding.tenant_id
           and artifact.document_id = binding.document_id
           and artifact.kind = 'authorization_protocol'
@@ -84,8 +97,8 @@ export class FiscalCancellation {
         where binding.tenant_id = ${command.tenantId}
           and binding.document_id = ${command.documentId}
         order by artifact.created_at, artifact.id limit 1`
-    })
-    if (!evidence) throw new Error('Fiscal authorization protocol is unavailable')
+    if (!evidence)
+      throw new Error('Fiscal cancellation capability is inactive or protocol unavailable')
     const protocol = await this.artifacts.get(
       command.tenantId,
       command.documentId,
@@ -114,7 +127,7 @@ export class FiscalCancellation {
       accessKey: String(evidence.access_key),
       authorizationProtocol: parsedProtocol.protocolNumber,
       reason: command.reason,
-      occurredAt: new Date().toISOString().replace('Z', '+00:00'),
+      occurredAt: `${new Date().toISOString().slice(0, 19)}+00:00`,
       lotId,
     })
     const signed = signCancellationEvent(event, this.credential)

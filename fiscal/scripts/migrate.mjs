@@ -35,6 +35,7 @@ try {
     '0022_phase42_readiness.sql',
     '0023_phase42_artifact_purposes.sql',
     '0024_phase42_outbox_delivery.sql',
+    '0025_phase42_manual_origin_idempotency.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

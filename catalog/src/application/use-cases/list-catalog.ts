@@ -21,6 +21,9 @@ function params(request: ListRequest) {
 
 export class ListCatalogItemsUseCase {
   constructor(private readonly unitOfWork: UnitOfWork) {}
+  async find(tenantId: string, itemId: string): Promise<CatalogItem | null> {
+    return this.unitOfWork.inTenant(tenantId, async (scope) => scope.items.findById(itemId))
+  }
   async execute(request: ListRequest): Promise<Either<never, Page<CatalogItem>>> {
     return this.unitOfWork.inTenant(request.tenantId, async (scope) =>
       right(await scope.items.list(params(request))),

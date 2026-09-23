@@ -10,7 +10,9 @@ import { salesFiscalOriginRecorded } from '@horizon/contracts'
 import postgres from 'postgres'
 import { z } from 'zod'
 import { appendAudit } from './audit'
+import { canonicalDigest } from './canonical-json'
 import { openOrigin } from './origin-crypto'
+import { manualOriginPayloadSchema } from './origin-snapshot'
 
 const draftInputSchema = z.object({
   tenantId: z.uuid(),
@@ -282,6 +284,115 @@ export class FiscalDocuments {
     })
   }
 
+  async createManualDraft(input: {
+    tenantId: string
+    manualOriginId: string
+    establishmentId: string
+    series: number
+    idempotencyKey: string
+    actorId: string
+  }): Promise<Draft> {
+    const value = z
+      .strictObject({
+        tenantId: z.uuid(),
+        manualOriginId: z.uuid(),
+        establishmentId: z.uuid(),
+        series: z.number().int().min(0).max(999),
+        idempotencyKey: z.string().min(16).max(128),
+        actorId: z.string().min(1).max(200),
+      })
+      .parse(input)
+    const requestDigest = canonicalDigest({
+      manualOriginId: value.manualOriginId,
+      establishmentId: value.establishmentId,
+      series: value.series,
+      model: '55',
+      environment: 'simulation',
+    })
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      await tx`select pg_advisory_xact_lock(hashtextextended(${`${value.tenantId}:${value.manualOriginId}`}, 0))`
+      const [origin] = await tx`select establishment_id, payload_ciphertext, payload_digest
+        from fiscal_manual_origins where tenant_id = ${value.tenantId}
+          and id = ${value.manualOriginId}`
+      if (!origin) throw new Error('Fiscal manual origin not found')
+      if (origin.establishment_id !== value.establishmentId)
+        throw new Error('Fiscal manual-origin establishment mismatch')
+      const plaintext = openOrigin(
+        this.masterKey,
+        value.tenantId,
+        value.manualOriginId,
+        Buffer.from(origin.payload_ciphertext),
+      )
+      const digest = createHash('sha256').update(plaintext).digest('hex')
+      if (digest !== origin.payload_digest) throw new Error('Fiscal manual-origin digest mismatch')
+      const payload = manualOriginPayloadSchema.parse(JSON.parse(plaintext))
+      if (payload.originId !== value.manualOriginId)
+        throw new Error('Fiscal manual-origin identity mismatch')
+      const [priorKey] = await tx`select request_digest, document_id from fiscal_idempotency
+        where tenant_id = ${value.tenantId} and key = ${value.idempotencyKey}`
+      if (priorKey) {
+        if (priorKey.request_digest !== requestDigest)
+          throw new Error('Conflicting fiscal idempotency key')
+        return {
+          id: String(priorKey.document_id),
+          status: 'draft' as const,
+          snapshotDigest: digest,
+        }
+      }
+      const [existing] = await tx`select id, model, environment, establishment_id, series,
+          snapshot_digest, status from fiscal_documents
+        where tenant_id = ${value.tenantId} and manual_origin_id = ${value.manualOriginId}
+        order by revision desc limit 1`
+      let documentId: string
+      if (existing) {
+        if (existing.status === 'rejected' || existing.status === 'cancelled')
+          throw new Error('Conflicting fiscal manual origin requires a corrected successor')
+        if (
+          existing.model !== '55' ||
+          existing.environment !== 'simulation' ||
+          existing.establishment_id !== value.establishmentId ||
+          Number(existing.series) !== value.series ||
+          existing.snapshot_digest !== digest
+        )
+          throw new Error('Conflicting fiscal manual-origin draft')
+        documentId = String(existing.id)
+      } else {
+        documentId = randomUUID()
+        const ciphertext = encryptSnapshot(this.masterKey, value.tenantId, documentId, plaintext)
+        await tx`insert into fiscal_documents (
+          id, tenant_id, manual_origin_id, model, environment, establishment_id,
+          series, snapshot_digest, snapshot_ciphertext
+        ) values (
+          ${documentId}, ${value.tenantId}, ${value.manualOriginId}, '55', 'simulation',
+          ${value.establishmentId}, ${value.series}, ${digest}, ${ciphertext}
+        )`
+        for (const [index, line] of payload.lines.entries())
+          await tx`insert into fiscal_document_lines (
+            tenant_id, document_id, line_index, item_id, line_digest
+          ) values (
+            ${value.tenantId}, ${documentId}, ${index}, ${line.itemId}, ${canonicalDigest(line)}
+          )`
+        await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind)
+          values (${randomUUID()}, ${value.tenantId}, ${documentId}, 'draft_created')`
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.actorId,
+          action: 'document.manual-draft-created',
+          resourceId: documentId,
+          detail: { manualOriginId: value.manualOriginId, digest },
+        })
+      }
+      await tx`insert into fiscal_idempotency (
+        tenant_id, key, command, request_digest, document_id
+      ) values (
+        ${value.tenantId}, ${value.idempotencyKey}, 'document.create-manual',
+        ${requestDigest}, ${documentId}
+      )`
+      return { id: documentId, status: 'draft' as const, snapshotDigest: digest }
+    })
+  }
+
   async readSnapshot(tenantId: string, documentId: string): Promise<unknown> {
     z.uuid().parse(tenantId)
     z.uuid().parse(documentId)
@@ -421,6 +532,140 @@ export class FiscalDocuments {
       return {
         id,
         status: 'draft',
+        snapshotDigest,
+        rootDocumentId: String(predecessor.root_document_id),
+        predecessorDocumentId: value.documentId,
+        revision,
+        existing: false,
+      }
+    })
+  }
+
+  async createManualSuccessor(input: {
+    tenantId: string
+    documentId: string
+    correctedManualOriginId: string
+    idempotencyKey: string
+    actorId: string
+    reason: string
+  }): Promise<CorrectedDraft> {
+    const value = z
+      .strictObject({
+        tenantId: z.uuid(),
+        documentId: z.uuid(),
+        correctedManualOriginId: z.uuid(),
+        idempotencyKey: z.string().min(16).max(128),
+        actorId: z.string().min(1).max(200),
+        reason: z.string().trim().min(10).max(1000),
+      })
+      .parse(input)
+    const requestDigest = canonicalDigest({
+      documentId: value.documentId,
+      correctedManualOriginId: value.correctedManualOriginId,
+      reason: value.reason,
+    })
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const [priorKey] = await tx`select request_digest, document_id from fiscal_idempotency
+        where tenant_id = ${value.tenantId} and key = ${value.idempotencyKey}`
+      if (priorKey) {
+        if (priorKey.request_digest !== requestDigest)
+          throw new Error('Conflicting fiscal idempotency key')
+        const [existing] = await tx`select id, root_document_id, predecessor_document_id,
+          revision, snapshot_digest, manual_origin_id from fiscal_documents
+          where tenant_id = ${value.tenantId} and id = ${priorKey.document_id}`
+        if (
+          !existing ||
+          existing.predecessor_document_id !== value.documentId ||
+          existing.manual_origin_id !== value.correctedManualOriginId
+        )
+          throw new Error('Conflicting fiscal correction idempotency key')
+        return correctedDraft(existing, true)
+      }
+      const [predecessor] = await tx`select status, root_document_id, revision, model,
+          environment, establishment_id, series, manual_origin_id
+        from fiscal_documents where tenant_id = ${value.tenantId}
+          and id = ${value.documentId} for update`
+      if (!predecessor) throw new Error('Fiscal document not found')
+      if (predecessor.status !== 'rejected')
+        throw new Error('Only a rejected Fiscal document can be corrected')
+      if (
+        predecessor.model !== '55' ||
+        predecessor.environment !== 'simulation' ||
+        !predecessor.manual_origin_id
+      )
+        throw new Error('Fiscal manual correction requires a simulated manual predecessor')
+      if (predecessor.manual_origin_id === value.correctedManualOriginId)
+        throw new Error('Conflicting fiscal correction must use a new manual origin')
+      const [priorSuccessor] = await tx`select id, root_document_id, predecessor_document_id,
+          revision, snapshot_digest, manual_origin_id from fiscal_documents
+        where tenant_id = ${value.tenantId} and predecessor_document_id = ${value.documentId}`
+      if (priorSuccessor) {
+        if (priorSuccessor.manual_origin_id !== value.correctedManualOriginId)
+          throw new Error('Conflicting fiscal document already has a different successor')
+        await tx`insert into fiscal_idempotency
+          (tenant_id, key, command, request_digest, document_id)
+          values (${value.tenantId}, ${value.idempotencyKey}, 'document.correct-manual',
+            ${requestDigest}, ${priorSuccessor.id})`
+        return correctedDraft(priorSuccessor, true)
+      }
+      const [origin] = await tx`select establishment_id, payload_ciphertext, payload_digest
+        from fiscal_manual_origins where tenant_id = ${value.tenantId}
+          and id = ${value.correctedManualOriginId}`
+      if (!origin) throw new Error('Corrected Fiscal manual origin snapshot unavailable')
+      if (origin.establishment_id !== predecessor.establishment_id)
+        throw new Error('Conflicting fiscal manual-origin establishment')
+      const snapshot = openOrigin(
+        this.masterKey,
+        value.tenantId,
+        value.correctedManualOriginId,
+        Buffer.from(origin.payload_ciphertext),
+      )
+      const snapshotDigest = createHash('sha256').update(snapshot).digest('hex')
+      if (snapshotDigest !== origin.payload_digest)
+        throw new Error('Corrected Fiscal manual origin snapshot digest mismatch')
+      const payload = manualOriginPayloadSchema.parse(JSON.parse(snapshot))
+      if (payload.originId !== value.correctedManualOriginId)
+        throw new Error('Corrected Fiscal manual origin identity mismatch')
+      const id = randomUUID()
+      const revision = Number(predecessor.revision) + 1
+      await tx`insert into fiscal_documents (
+        id, tenant_id, manual_origin_id, model, environment, establishment_id, series,
+        snapshot_digest, snapshot_ciphertext, root_document_id, predecessor_document_id,
+        revision
+      ) values (
+        ${id}, ${value.tenantId}, ${value.correctedManualOriginId}, '55', 'simulation',
+        ${predecessor.establishment_id}, ${predecessor.series}, ${snapshotDigest},
+        ${encryptSnapshot(this.masterKey, value.tenantId, id, snapshot)},
+        ${predecessor.root_document_id}, ${value.documentId}, ${revision}
+      )`
+      for (const [lineIndex, line] of payload.lines.entries())
+        await tx`insert into fiscal_document_lines
+          (tenant_id, document_id, line_index, item_id, line_digest)
+          values (${value.tenantId}, ${id}, ${lineIndex}, ${line.itemId},
+            ${canonicalDigest(line)})`
+      await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind, detail)
+        values (${randomUUID()}, ${value.tenantId}, ${id}, 'draft_created',
+          ${JSON.stringify({ predecessorDocumentId: value.documentId, reasonDigest: createHash('sha256').update(value.reason).digest('hex') })}::jsonb)`
+      await tx`insert into fiscal_idempotency
+        (tenant_id, key, command, request_digest, document_id)
+        values (${value.tenantId}, ${value.idempotencyKey}, 'document.correct-manual',
+          ${requestDigest}, ${id})`
+      await appendAudit(tx, {
+        tenantId: value.tenantId,
+        actorId: value.actorId,
+        action: 'document.manual-successor-created',
+        resourceId: id,
+        detail: {
+          predecessorDocumentId: value.documentId,
+          correctedManualOriginId: value.correctedManualOriginId,
+          revision,
+          requestDigest,
+        },
+      })
+      return {
+        id,
+        status: 'draft' as const,
         snapshotDigest,
         rootDocumentId: String(predecessor.root_document_id),
         predecessorDocumentId: value.documentId,

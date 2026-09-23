@@ -1,13 +1,10 @@
-import {
-  type FiscalCalculationInput,
-  type FiscalCalculationOutcome,
-  salesFiscalOriginRecorded,
-} from '@horizon/contracts'
+import type { FiscalCalculationInput, FiscalCalculationOutcome } from '@horizon/contracts'
 import { z } from 'zod'
 import type { FiscalCalculations } from './calculations'
 import { canonicalDigest } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
 import type { FiscalDocuments } from './documents'
+import { type FiscalOriginSnapshot, parseFiscalOriginSnapshot } from './origin-snapshot'
 import { PHASE41_FIXTURE_ID, PHASE41_SCENARIO_ID } from './phase41-approved-scenario'
 import type { FiscalProjections } from './projections'
 
@@ -44,10 +41,15 @@ export class FiscalReadiness {
     if (document.model !== '55' || document.environment !== 'simulation')
       throw new Error('Fiscal capability is unsupported')
 
-    const snapshot = salesFiscalOriginRecorded.payload.parse(
+    const snapshot = parseFiscalOriginSnapshot(
       await this.documents.readSnapshot(command.tenantId, command.documentId),
     )
-    if (snapshot.purpose !== 'original') throw new Error('Fiscal capability is unsupported')
+    if (
+      (snapshot.originModule === 'sales' && snapshot.purpose !== 'original') ||
+      (snapshot.originModule === 'fiscal' &&
+        (snapshot.purpose !== 'manual' || snapshot.establishmentId !== document.establishmentId))
+    )
+      throw new Error('Fiscal capability is unsupported')
 
     const capabilities = await this.capabilities.listActive(command.tenantId)
     const capability = capabilities.find(
@@ -63,17 +65,30 @@ export class FiscalReadiness {
     if (!capability) throw new Error('Fiscal capability is unsupported')
 
     const utcDate = document.createdAt.slice(0, 10)
-    let issuer = await this.projections.resolveIssuer(command.tenantId, utcDate)
+    let issuer = await this.projections.resolveIssuer(
+      command.tenantId,
+      snapshot.originModule === 'fiscal' ? snapshot.issueDate : utcDate,
+    )
     if (!issuer) throw new Error('Issuer fiscal projection is unavailable')
-    const issueDate = localDate(document.createdAt, issuer.timezone)
-    if (issueDate !== utcDate)
+    const issueDate =
+      snapshot.originModule === 'fiscal'
+        ? snapshot.issueDate
+        : localDate(document.createdAt, issuer.timezone)
+    if (snapshot.originModule === 'sales' && issueDate !== utcDate)
       issuer = (await this.projections.resolveIssuer(command.tenantId, issueDate)) ?? issuer
+    if (snapshot.originModule === 'fiscal' && issuer.revision !== snapshot.issuerProfileRevision)
+      throw new Error('Fiscal manual issuer revision is no longer effective')
     const recipient = await this.projections.resolveParty(
       command.tenantId,
       snapshot.customerId,
       issueDate,
     )
     if (!recipient) throw new Error('Recipient fiscal projection is unavailable')
+    if (
+      snapshot.originModule === 'fiscal' &&
+      recipient.revision !== snapshot.recipientProfileRevision
+    )
+      throw new Error('Fiscal manual recipient revision is no longer effective')
 
     const classifications = new Map<
       string,
@@ -87,6 +102,8 @@ export class FiscalReadiness {
       )
       if (!classification?.ncm)
         return unsupported('MISSING_CLASSIFICATION', `NCM is unavailable for item ${line.itemId}`)
+      if ('catalogRevision' in line && classification.revision !== line.catalogRevision)
+        throw new Error('Fiscal manual classification revision is no longer effective')
       classifications.set(line.itemId, classification)
     }
 
@@ -129,7 +146,7 @@ function deriveCalculationInput(input: {
   issueDate: string
   issuer: NonNullable<Awaited<ReturnType<FiscalProjections['resolveIssuer']>>>
   recipient: NonNullable<Awaited<ReturnType<FiscalProjections['resolveParty']>>>
-  snapshot: ReturnType<typeof salesFiscalOriginRecorded.payload.parse>
+  snapshot: FiscalOriginSnapshot
   classifications: Map<
     string,
     NonNullable<Awaited<ReturnType<FiscalProjections['resolveClassification']>>>
@@ -202,7 +219,7 @@ function deriveCalculationInput(input: {
 }
 
 function reconcileCommercial(
-  snapshot: ReturnType<typeof salesFiscalOriginRecorded.payload.parse>,
+  snapshot: FiscalOriginSnapshot,
   result: Extract<FiscalCalculationOutcome, { supported: true }>,
 ): string {
   const expectedLines = new Map(snapshot.lines.map((line) => [line.lineId, line.lineTotal.amount]))

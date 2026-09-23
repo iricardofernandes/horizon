@@ -97,11 +97,33 @@ describe('Fiscal readiness derivation', () => {
     ).rejects.toThrow('does not reconcile')
     expect(lock).not.toHaveBeenCalled()
   })
+
+  it('uses the frozen manual issue date and exact owner revisions', async () => {
+    let derived: FiscalCalculationInput | undefined
+    const readiness = scenario(
+      {
+        async preview(input) {
+          derived = fiscalCalculationInputSchema.parse(input)
+          return calculationResult(derived)
+        },
+        async validateDocument(input) {
+          return calculationResult(input.calculationInput)
+        },
+      },
+      { ncm: '09012100' },
+      true,
+    )
+    await expect(
+      readiness.validate({ tenantId, documentId, actorId: 'issuer:test' }),
+    ).resolves.toMatchObject({ supported: true })
+    expect(derived).toMatchObject({ issueDate: '2026-09-22', issuerProfileRevision: 3 })
+  })
 })
 
 function scenario(
   calculations: Pick<FiscalCalculations, 'preview' | 'validateDocument'>,
   classification: { ncm: string | null } = { ncm: '09012100' },
+  manual = false,
 ): FiscalReadiness {
   return new FiscalReadiness(
     {
@@ -120,23 +142,20 @@ function scenario(
           rootDocumentId: documentId,
           predecessorDocumentId: null,
           revision: 1,
-          origin: { kind: 'sales', intentId: randomUUID() },
+          origin: manual
+            ? { kind: 'manual', manualOriginId: randomUUID() }
+            : { kind: 'sales', intentId: randomUUID() },
           accessKey: null,
           calculationDigest: null,
           signedXmlDigest: null,
           adapterVersion: null,
           schemaPackageDigest: null,
           statusUrl: `/fiscal/documents/${documentId}`,
-          createdAt: '2026-09-22T15:00:00.000Z',
+          createdAt: manual ? '2026-09-23T15:00:00.000Z' : '2026-09-22T15:00:00.000Z',
         }
       },
       async readSnapshot() {
-        return {
-          orderId: randomUUID(),
-          originModule: 'sales',
-          originDocumentType: 'shipment',
-          originId: randomUUID(),
-          purpose: 'original',
+        const commercial = {
           customerId,
           lines: [
             {
@@ -150,6 +169,28 @@ function scenario(
           ],
           total: money('10000'),
         }
+        return manual
+          ? {
+              ...commercial,
+              originModule: 'fiscal',
+              originDocumentType: 'manual-simulation',
+              originId: randomUUID(),
+              purpose: 'manual',
+              establishmentId,
+              issueDate: '2026-09-22',
+              issuerProfileRevision: 3,
+              recipientProfileRevision: 7,
+              reasonDigest: 'a'.repeat(64),
+              lines: commercial.lines.map((line) => ({ ...line, catalogRevision: 11 })),
+            }
+          : {
+              ...commercial,
+              orderId: randomUUID(),
+              originModule: 'sales',
+              originDocumentType: 'shipment',
+              originId: randomUUID(),
+              purpose: 'original',
+            }
       },
     },
     {

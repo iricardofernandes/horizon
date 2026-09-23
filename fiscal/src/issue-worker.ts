@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { FiscalArtifacts } from './artifacts'
 import type { DispatchLease, FiscalDispatch } from './dispatch'
+import { renderSimulatedDanfe } from './nfe55/danfe'
 import type {
   CancellationSimulatorResult,
   DeterministicNfe55Simulator,
@@ -97,6 +98,29 @@ export class FiscalIssueWorker {
         )
       : null
     const outcome = observation.outcome === 'not_found' ? 'unknown' : observation.outcome
+    if (outcome === 'authorized' && observation.protocol) {
+      const signed = await this.artifacts.get(
+        tenantId,
+        lease.documentId,
+        'signed_xml',
+        lease.artifactDigest,
+      )
+      await this.artifacts.put(
+        {
+          tenantId,
+          documentId: lease.documentId,
+          commandId: lease.commandId,
+          kind: 'danfe',
+          mediaType: 'application/pdf',
+          sourceSchema: 'horizon-danfe-authorized-v1',
+        },
+        await renderSimulatedDanfe({
+          signedXml: signed.bytes,
+          protocol: observation.protocol,
+          state: 'authorized',
+        }),
+      )
+    }
     await this.dispatch.recordObservation({
       tenantId,
       commandId: lease.commandId,

@@ -138,4 +138,13 @@ export class ItemsController {
     if (!result) throw new NotFoundException('Classification revision was not found')
     return result
   }
+
+  @Get(':itemId')
+  @RequirePermission('read', 'Items')
+  @ReadDuringDenylistOutage()
+  async item(@Param('itemId') itemId: string, @Req() request: CatalogHttpRequest) {
+    const item = await this.runtime.listItems.find(tenantOf(request), z.uuid().parse(itemId))
+    if (!item) throw new NotFoundException('Catalog item was not found')
+    return presentItem(item)
+  }
 }

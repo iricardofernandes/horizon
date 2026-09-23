@@ -1,4 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import {
+  fiscalCorrectionRequestSchema,
+  fiscalDocumentCreateRequestSchema,
+  fiscalManualOriginRequestSchema,
+} from '@horizon/contracts'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
 import { type FiscalPermission, type FiscalPrincipal, type FiscalTokenVerifier, may } from './auth'
@@ -9,14 +14,24 @@ import type { FiscalCapabilities } from './capabilities'
 import type { FiscalDispatch } from './dispatch'
 import type { FiscalDocuments } from './documents'
 import type { FiscalIssuance } from './issuance'
+import type { FiscalManualOrigins } from './manual-origins'
 import type { FiscalReadiness } from './readiness'
 import type { FiscalRuleStore } from './rule-store'
 
 export function createFiscalServer(dependencies: {
   verifier: Pick<FiscalTokenVerifier, 'verify'>
-  documents: Pick<FiscalDocuments, 'get' | 'timeline' | 'createDraft' | 'createSuccessor'>
+  documents: Pick<
+    FiscalDocuments,
+    | 'get'
+    | 'timeline'
+    | 'createDraft'
+    | 'createManualDraft'
+    | 'createSuccessor'
+    | 'createManualSuccessor'
+  >
+  manualOrigins: Pick<FiscalManualOrigins, 'create'>
   dispatch?: Pick<FiscalDispatch, 'queueStatusQuery' | 'queueCancellationQuery'>
-  artifacts: Pick<FiscalArtifacts, 'get'>
+  artifacts: Pick<FiscalArtifacts, 'get' | 'list'>
   calculations: Pick<FiscalCalculations, 'preview' | 'get'>
   capabilities: Pick<FiscalCapabilities, 'listActive'>
   readiness: Pick<FiscalReadiness, 'validate'>
@@ -36,9 +51,18 @@ async function handle(
   response: ServerResponse,
   dependencies: {
     verifier: Pick<FiscalTokenVerifier, 'verify'>
-    documents: Pick<FiscalDocuments, 'get' | 'timeline' | 'createDraft' | 'createSuccessor'>
+    documents: Pick<
+      FiscalDocuments,
+      | 'get'
+      | 'timeline'
+      | 'createDraft'
+      | 'createManualDraft'
+      | 'createSuccessor'
+      | 'createManualSuccessor'
+    >
+    manualOrigins: Pick<FiscalManualOrigins, 'create'>
     dispatch?: Pick<FiscalDispatch, 'queueStatusQuery' | 'queueCancellationQuery'>
-    artifacts: Pick<FiscalArtifacts, 'get'>
+    artifacts: Pick<FiscalArtifacts, 'get' | 'list'>
     calculations: Pick<FiscalCalculations, 'preview' | 'get'>
     capabilities: Pick<FiscalCapabilities, 'listActive'>
     readiness: Pick<FiscalReadiness, 'validate'>
@@ -146,6 +170,43 @@ async function handle(
     return
   }
 
+  if (request.method === 'POST' && url.pathname === '/manual-origins') {
+    if (!requirePermission(principal, 'draft:create', response)) return
+    const key = request.headers['idempotency-key']
+    if (typeof key !== 'string' || key.length < 16 || key.length > 128) {
+      problem(response, 400, 'Bad Request', 'Idempotency-Key must have 16 to 128 characters')
+      return
+    }
+    try {
+      const body = fiscalManualOriginRequestSchema.parse(await readJson(request))
+      const created = await dependencies.manualOrigins.create({
+        ...body,
+        tenantId: principal.tenantId,
+        idempotencyKey: key,
+        actorId: principal.subject,
+      })
+      json(response, 201, created)
+    } catch (error) {
+      if (error instanceof z.ZodError || error instanceof SyntaxError)
+        problem(response, 422, 'Unprocessable Content', 'Invalid Fiscal manual-origin request')
+      else if (error instanceof Error && error.message.startsWith('Conflicting'))
+        problem(response, 409, 'Conflict', error.message)
+      else if (error instanceof Error && error.message.includes('capability'))
+        lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
+      else if (error instanceof Error && error.message.includes('unavailable'))
+        problem(response, 404, 'Not Found', error.message)
+      else if (
+        error instanceof Error &&
+        (error.message.includes('unsupported') ||
+          error.message.includes('mismatch') ||
+          error.message.startsWith('Duplicate Fiscal manual'))
+      )
+        problem(response, 422, 'Unprocessable Content', error.message)
+      else throw error
+    }
+    return
+  }
+
   if (request.method === 'POST' && url.pathname === '/documents') {
     if (!requirePermission(principal, 'draft:create', response)) return
     const key = request.headers['idempotency-key']
@@ -153,27 +214,48 @@ async function handle(
       problem(response, 400, 'Bad Request', 'Idempotency-Key must have 16 to 128 characters')
       return
     }
-    const bodySchema = z.object({
-      intentId: z.uuid(),
-      model: z.enum(['55', '65', 'nfse']),
-      environment: z.literal('simulation'),
-      establishmentId: z.uuid(),
-      series: z.int().min(0).max(999),
-    })
     try {
-      const body = bodySchema.parse(await readJson(request))
-      const draft = await dependencies.documents.createDraft({
-        ...body,
-        tenantId: principal.tenantId,
-        idempotencyKey: key,
-        actorId: principal.subject,
-      })
+      const body = fiscalDocumentCreateRequestSchema.parse(await readJson(request))
+      const active = (await dependencies.capabilities.listActive(principal.tenantId)).some(
+        (capability) =>
+          capability.model === '55' &&
+          capability.environment === 'simulation' &&
+          capability.establishmentId === body.establishmentId &&
+          capability.jurisdictionKind === 'uf' &&
+          capability.jurisdictionCode === 'SP' &&
+          capability.operation === 'normal-sale',
+      )
+      if (!active) throw new Error('Fiscal capability is unsupported')
+      const draft =
+        body.origin.kind === 'sales'
+          ? await dependencies.documents.createDraft({
+              tenantId: principal.tenantId,
+              intentId: body.origin.intentId,
+              model: '55',
+              environment: 'simulation',
+              establishmentId: body.establishmentId,
+              series: body.series,
+              idempotencyKey: key,
+              actorId: principal.subject,
+            })
+          : await dependencies.documents.createManualDraft({
+              tenantId: principal.tenantId,
+              manualOriginId: body.origin.manualOriginId,
+              establishmentId: body.establishmentId,
+              series: body.series,
+              idempotencyKey: key,
+              actorId: principal.subject,
+            })
       json(response, 201, draft)
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof SyntaxError)
         problem(response, 400, 'Bad Request', 'Invalid fiscal draft request')
       else if (error instanceof Error && error.message.startsWith('Conflicting fiscal'))
         problem(response, 409, 'Conflict', error.message)
+      else if (error instanceof Error && error.message.includes('capability'))
+        lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
+      else if (error instanceof Error && error.message === 'Fiscal manual origin not found')
+        problem(response, 404, 'Not Found', error.message)
       else if (
         error instanceof Error &&
         error.message.startsWith('Fiscal origin snapshot unavailable')
@@ -183,6 +265,15 @@ async function handle(
         problem(response, 404, 'Not Found', 'Fiscal origin is unavailable')
       else throw error
     }
+    return
+  }
+
+  const artifactList = /^\/documents\/([0-9a-f-]{36})\/artifacts$/.exec(url.pathname)
+  if (request.method === 'GET' && artifactList?.[1]) {
+    const found = await dependencies.artifacts.list(principal.tenantId, artifactList[1])
+    response.setHeader('cache-control', 'private, no-store')
+    if (!found) problem(response, 404, 'Not Found', 'Fiscal document not found')
+    else json(response, 200, found)
     return
   }
 
@@ -205,7 +296,7 @@ async function handle(
         'content-length': found.bytes.length,
         digest: `sha-256=${Buffer.from(found.metadata.digest, 'hex').toString('base64')}`,
         'cache-control': 'private, no-store',
-        'content-disposition': `attachment; filename="${kind}-${digest}"`,
+        'content-disposition': `attachment; filename="simulacao-${kind}-${digest}.${found.metadata.mediaType === 'application/pdf' ? 'pdf' : found.metadata.mediaType === 'application/xml' ? 'xml' : 'json'}"`,
         'x-content-type-options': 'nosniff',
         'content-security-policy': 'sandbox',
       })
@@ -457,20 +548,24 @@ async function handle(
       return
     }
     try {
-      const body = z
-        .strictObject({
-          reason: z.string().trim().min(10).max(1000),
-          correctedOrigin: z.strictObject({ kind: z.literal('sales'), intentId: z.uuid() }),
-        })
-        .parse(await readJson(request))
-      const result = await dependencies.documents.createSuccessor({
+      const body = fiscalCorrectionRequestSchema.parse(await readJson(request))
+      const shared = {
         tenantId: principal.tenantId,
         documentId: correction[1],
-        correctedIntentId: body.correctedOrigin.intentId,
         idempotencyKey: key,
         actorId: principal.subject,
         reason: body.reason,
-      })
+      }
+      const result =
+        body.correctedOrigin.kind === 'sales'
+          ? await dependencies.documents.createSuccessor({
+              ...shared,
+              correctedIntentId: body.correctedOrigin.intentId,
+            })
+          : await dependencies.documents.createManualSuccessor({
+              ...shared,
+              correctedManualOriginId: body.correctedOrigin.manualOriginId,
+            })
       json(response, result.existing ? 200 : 201, result)
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof SyntaxError)
@@ -482,6 +577,8 @@ async function handle(
       else if (error instanceof Error && error.message.startsWith('Conflicting'))
         problem(response, 409, 'Conflict', error.message)
       else if (error instanceof Error && error.message.includes('rejected Fiscal document'))
+        lifecycleProblem(response, 409, 'INVALID_STATE_TRANSITION', error.message)
+      else if (error instanceof Error && error.message.includes('manual correction requires'))
         lifecycleProblem(response, 409, 'INVALID_STATE_TRANSITION', error.message)
       else throw error
     }

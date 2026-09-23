@@ -488,6 +488,10 @@ it('publishes request schemas, permissions and the outage exception in OpenAPI',
     'x-catalog-permission': { action: 'read', subject: 'Items' },
     'x-revocation-store-outage': 'allow-read',
   })
+  expect(document.paths['/items/{itemId}']?.get).toMatchObject({
+    'x-catalog-permission': { action: 'read', subject: 'Items' },
+    'x-revocation-store-outage': 'allow-read',
+  })
   // A write is never in the outage exception, and health carries no permission at all.
   expect(document.paths['/items']?.post).not.toHaveProperty('x-revocation-store-outage')
   expect(document.paths['/health/live']?.get).not.toHaveProperty('x-catalog-permission')
@@ -499,6 +503,7 @@ it('publishes request schemas, permissions and the outage exception in OpenAPI',
     '/health/ready',
     '/items',
     '/items/classifications',
+    '/items/{itemId}',
     '/items/{itemId}/classification',
     '/items/{itemId}/classification/{revision}',
     '/items/{itemId}/composition',

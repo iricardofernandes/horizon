@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import { salesFiscalOriginRecorded } from '@horizon/contracts'
 import postgres from 'postgres'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
@@ -8,10 +7,12 @@ import { canonicalDigest } from './canonical-json'
 import type { FiscalDispatch } from './dispatch'
 import type { FiscalDocuments } from './documents'
 import { buildNfe55AccessKey } from './nfe55/access-key'
+import { renderSimulatedDanfe } from './nfe55/danfe'
 import type { Nfe55Data } from './nfe55/model'
 import { validateNfe55Schema } from './nfe55/schema'
 import { type SimulationCredential, signNfe55, verifyNfe55Signature } from './nfe55/signature'
 import { serializeNfe55 } from './nfe55/xml'
+import { type FiscalOriginSnapshot, parseFiscalOriginSnapshot } from './origin-snapshot'
 import type { FiscalProjections } from './projections'
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/)
@@ -117,7 +118,7 @@ export class FiscalIssuance {
     ])
     if (!issuer || !recipient || !calculation)
       throw new Error('Frozen Fiscal issuance evidence is unavailable')
-    const origin = salesFiscalOriginRecorded.payload.parse(snapshot)
+    const origin = parseFiscalOriginSnapshot(snapshot)
     const xmlData = buildNfe55Data({
       document,
       number,
@@ -155,6 +156,16 @@ export class FiscalIssuance {
       },
       signed,
     )
+    await this.artifacts.put(
+      {
+        tenantId: command.tenantId,
+        documentId: command.documentId,
+        kind: 'danfe',
+        mediaType: 'application/pdf',
+        sourceSchema: 'horizon-danfe-preview-v1',
+      },
+      await renderSimulatedDanfe({ signedXml: signed, state: 'preview' }),
+    )
     await this.bindIssuance({
       ...command,
       capabilityId: evidence.capabilityId,
@@ -184,12 +195,18 @@ export class FiscalIssuance {
   private async readReadiness(tenantId: string, documentId: string) {
     const [row] = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
-      return tx`select capability_id, issuer_profile_revision, recipient_party_id,
+      return tx`select binding.capability_id, binding.issuer_profile_revision, binding.recipient_party_id,
           recipient_profile_revision, reconciliation_digest
-        from fiscal_document_readiness_bindings
-        where tenant_id = ${tenantId} and document_id = ${documentId}`
+        from fiscal_document_readiness_bindings binding
+        join lateral (
+          select event.action from fiscal_capability_activation_events event
+          where event.tenant_id = binding.tenant_id
+            and event.capability_id = binding.capability_id
+          order by event.created_at desc, event.id desc limit 1
+        ) latest on latest.action = 'activate_simulated'
+        where binding.tenant_id = ${tenantId} and binding.document_id = ${documentId}`
     })
-    if (!row) throw new Error('Fiscal document has no readiness evidence')
+    if (!row) throw new Error('Fiscal readiness capability is inactive or unavailable')
     return {
       capabilityId: String(row.capability_id),
       issuerProfileRevision: Number(row.issuer_profile_revision),
@@ -238,7 +255,7 @@ export function buildNfe55Data(input: {
   issuer: NonNullable<Awaited<ReturnType<FiscalProjections['readIssuer']>>>
   recipient: NonNullable<Awaited<ReturnType<FiscalProjections['readParty']>>>
   calculation: NonNullable<Awaited<ReturnType<FiscalCalculations['readFrozen']>>>
-  origin: ReturnType<typeof salesFiscalOriginRecorded.payload.parse>
+  origin: FiscalOriginSnapshot
   profile: Nfe55SimulationProfile
 }): Nfe55Data {
   const issuerAddress = input.issuer.company.address
@@ -314,7 +331,10 @@ export function buildNfe55Data(input: {
   const invoice = BigInt(input.calculation.result.totals.net.amount)
   return {
     accessKey,
-    issuedAt: zonedInstant(input.document.createdAt, input.issuer.timezone),
+    issuedAt:
+      input.origin.originModule === 'fiscal'
+        ? `${input.origin.issueDate}T12:00:00-03:00`
+        : zonedInstant(input.document.createdAt, input.issuer.timezone),
     natureOperation: 'Venda de mercadoria',
     numericCode,
     series: input.document.series,

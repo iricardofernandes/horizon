@@ -383,6 +383,9 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    volumes:
+      - ../fiscal/fixtures/official:/run/fiscal-schemas:ro
+      - ./keys/fiscal:/run/fiscal-keys:ro
     environment:
       <<: *env
       OTEL_SERVICE_NAME: fiscal
@@ -398,6 +401,13 @@ services:
       AWS_ACCESS_KEY_ID: ${HORIZON_MINIO_USER:-horizon-fiscal-local}
       AWS_SECRET_ACCESS_KEY: ${HORIZON_MINIO_PASSWORD:-horizon-fiscal-local-secret}
       FISCAL_ARTIFACT_KEY_HEX: ${HORIZON_FISCAL_ARTIFACT_KEY_HEX:-}
+      FISCAL_SIMULATION_PROFILE_JSON: ${HORIZON_FISCAL_SIMULATION_PROFILE_JSON:-}
+      FISCAL_SIMULATION_PRIVATE_KEY_PATH: ${HORIZON_FISCAL_SIMULATION_PRIVATE_KEY_PATH:-}
+      FISCAL_SIMULATION_CERTIFICATE_PATH: ${HORIZON_FISCAL_SIMULATION_CERTIFICATE_PATH:-}
+      FISCAL_PHASE42_SCHEMA_PATH: ${HORIZON_FISCAL_PHASE42_SCHEMA_PATH:-}
+      FISCAL_PHASE42_EVENT_SCHEMA_PATH: ${HORIZON_FISCAL_PHASE42_EVENT_SCHEMA_PATH:-}
+      FISCAL_SIMULATOR_SCENARIO: ${HORIZON_FISCAL_SIMULATOR_SCENARIO:-}
+      FISCAL_SIMULATOR_RETRY_DELAY_MS: ${HORIZON_FISCAL_SIMULATOR_RETRY_DELAY_MS:-1000}
 
   webhooks-migrate:
     <<: *service

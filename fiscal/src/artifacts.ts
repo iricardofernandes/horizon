@@ -48,6 +48,49 @@ export class FiscalArtifacts {
     await this.#db.end()
   }
 
+  async list(
+    tenantId: string,
+    documentId: string,
+  ): Promise<{
+    documentId: string
+    artifacts: Array<{
+      documentId: string
+      kind: string
+      digest: string
+      byteSize: number
+      mediaType: string
+      sourceSchema: string
+      simulated: true
+      createdAt: string
+    }>
+  } | null> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(documentId)
+    const result = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      const [document] = await tx`select id from fiscal_documents
+        where tenant_id = ${tenantId} and id = ${documentId}`
+      if (!document) return null
+      return tx`select purpose, digest, size_bytes, media_type, source_schema, created_at
+        from fiscal_artifacts where tenant_id = ${tenantId} and document_id = ${documentId}
+          and purpose is not null order by created_at, id`
+    })
+    if (!result) return null
+    return {
+      documentId,
+      artifacts: result.map((row) => ({
+        documentId,
+        kind: String(row.purpose),
+        digest: String(row.digest),
+        byteSize: Number(row.size_bytes),
+        mediaType: String(row.media_type),
+        sourceSchema: String(row.source_schema),
+        simulated: true as const,
+        createdAt: new Date(row.created_at).toISOString(),
+      })),
+    }
+  }
+
   async put(input: z.input<typeof metadataSchema>, bytes: Buffer): Promise<ArtifactMetadata> {
     const value = metadataSchema.parse(input)
     if (bytes.length > 10 * 1024 * 1024) throw new Error('Fiscal artifact exceeds 10 MiB')
@@ -70,7 +113,7 @@ export class FiscalArtifacts {
         ${randomUUID()}, ${value.tenantId}, ${value.documentId}, ${value.kind},
         ${isExplicitPurpose(value.kind) ? value.kind : null}, ${value.commandId ?? null},
         ${objectKey}, ${digest}, ${bytes.length}, ${value.mediaType}, ${value.sourceSchema}
-      ) on conflict on constraint fiscal_artifact_identity_key do nothing returning id`
+      ) on conflict do nothing returning id`
       if (inserted.length > 0)
         await appendAudit(tx, {
           tenantId: value.tenantId,

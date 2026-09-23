@@ -2,7 +2,11 @@
 -- calculation-locked documents, so the rename to `ready` does not weaken an invariant.
 ALTER TABLE fiscal_documents DROP CONSTRAINT fiscal_documents_status_check;
 ALTER TABLE fiscal_documents DISABLE TRIGGER fiscal_documents_status_guard;
+-- The migration owner is subject to FORCE RLS and cannot see existing tenant rows.
+-- Lift RLS only inside this migration transaction while translating legacy states.
+ALTER TABLE fiscal_documents DISABLE ROW LEVEL SECURITY;
 UPDATE fiscal_documents SET status = 'ready' WHERE status = 'validated';
+ALTER TABLE fiscal_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fiscal_documents ENABLE TRIGGER fiscal_documents_status_guard;
 ALTER TABLE fiscal_documents ADD CONSTRAINT fiscal_documents_status_check CHECK (
   status IN ('draft', 'ready', 'queued', 'submitted', 'unknown', 'authorized', 'rejected',
@@ -11,7 +15,9 @@ ALTER TABLE fiscal_documents ADD CONSTRAINT fiscal_documents_status_check CHECK 
 
 ALTER TABLE fiscal_transitions DROP CONSTRAINT fiscal_transitions_kind_check;
 ALTER TABLE fiscal_transitions DISABLE TRIGGER fiscal_transitions_immutable;
+ALTER TABLE fiscal_transitions DISABLE ROW LEVEL SECURITY;
 UPDATE fiscal_transitions SET kind = 'ready' WHERE kind = 'validated';
+ALTER TABLE fiscal_transitions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fiscal_transitions ENABLE TRIGGER fiscal_transitions_immutable;
 ALTER TABLE fiscal_transitions ADD CONSTRAINT fiscal_transitions_kind_check CHECK (
   kind IN ('draft_created', 'number_reserved', 'ready', 'queued', 'submitted', 'unknown',

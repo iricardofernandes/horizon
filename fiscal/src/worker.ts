@@ -16,6 +16,7 @@ import { FiscalDocuments } from './documents'
 import { FiscalIngress } from './ingress'
 import { FiscalIssuance } from './issuance'
 import { FiscalIssueWorker } from './issue-worker'
+import { FiscalManualOrigins } from './manual-origins'
 import { DeterministicNfe55Simulator } from './nfe55/simulator'
 import { FiscalOutboxRelay } from './outbox'
 import { FiscalProjections } from './projections'
@@ -23,6 +24,9 @@ import { FiscalReadiness } from './readiness'
 import { FiscalRuleStore } from './rule-store'
 import { FiscalServiceTokens } from './service-tokens'
 import { stopTelemetry } from './telemetry'
+
+const optionalSetting = (schema: z.ZodString) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema.optional())
 
 const config = z
   .object({
@@ -38,11 +42,24 @@ const config = z
     FISCAL_ARTIFACT_REGION: z.string().min(1),
     FISCAL_ARTIFACT_ENDPOINT: z.url().optional(),
     FISCAL_ARTIFACT_KEY_HEX: z.string().regex(/^[0-9a-f]{64}$/i),
-    FISCAL_SIMULATION_PROFILE_JSON: z.string().min(2).optional(),
-    FISCAL_SIMULATION_PRIVATE_KEY_PATH: z.string().min(1).optional(),
-    FISCAL_SIMULATION_CERTIFICATE_PATH: z.string().min(1).optional(),
-    FISCAL_PHASE42_SCHEMA_PATH: z.string().min(1).optional(),
-    FISCAL_PHASE42_EVENT_SCHEMA_PATH: z.string().min(1).optional(),
+    FISCAL_SIMULATION_PROFILE_JSON: optionalSetting(z.string().min(2)),
+    FISCAL_SIMULATION_PRIVATE_KEY_PATH: optionalSetting(z.string().min(1)),
+    FISCAL_SIMULATION_CERTIFICATE_PATH: optionalSetting(z.string().min(1)),
+    FISCAL_PHASE42_SCHEMA_PATH: optionalSetting(z.string().min(1)),
+    FISCAL_PHASE42_EVENT_SCHEMA_PATH: optionalSetting(z.string().min(1)),
+    FISCAL_SIMULATOR_SCENARIO: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z
+        .enum([
+          'authorized',
+          'rejected',
+          'timeout-before-accept',
+          'timeout-after-accept',
+          'delayed-consultation',
+        ])
+        .optional(),
+    ),
+    FISCAL_SIMULATOR_RETRY_DELAY_MS: z.coerce.number().int().min(0).max(300_000).default(1_000),
   })
   .parse(process.env)
 
@@ -79,6 +96,18 @@ const keys = z
   .record(z.uuid(), z.string().min(20))
   .parse(JSON.parse(config.FISCAL_SERVICE_KEYS_JSON))
 const tokens = new FiscalServiceTokens(config.IDENTITY_URL, keys)
+const urls = {
+  parties: config.PARTIES_URL,
+  identity: config.IDENTITY_URL,
+  catalog: config.CATALOG_URL,
+}
+const manualOrigins = new FiscalManualOrigins(
+  config.DATABASE_URL,
+  Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
+  projections,
+  capabilities,
+  (tenantId) => new HttpOwnerFiscalClient(urls, () => tokens.forTenant(tenantId)),
+)
 const dispatch = new FiscalDispatch(config.DATABASE_URL)
 const issuanceConfiguration = [
   config.FISCAL_SIMULATION_PROFILE_JSON,
@@ -107,6 +136,8 @@ const issuance = issuanceConfiguration.every(Boolean)
   : undefined
 if (config.FISCAL_PHASE42_EVENT_SCHEMA_PATH && !issuance)
   throw new Error('Phase 42 cancellation requires the complete issuance configuration')
+if (config.FISCAL_SIMULATOR_SCENARIO && !issuance)
+  throw new Error('A fixed Fiscal simulator scenario requires the complete issuance configuration')
 const cancellation = config.FISCAL_PHASE42_EVENT_SCHEMA_PATH
   ? new FiscalCancellation(
       config.DATABASE_URL,
@@ -124,6 +155,7 @@ const cancellation = config.FISCAL_PHASE42_EVENT_SCHEMA_PATH
 const server = createFiscalServer({
   verifier,
   documents,
+  manualOrigins,
   dispatch,
   artifacts,
   calculations,
@@ -133,7 +165,15 @@ const server = createFiscalServer({
   ...(cancellation ? { cancellation } : {}),
   rules: ruleStore,
 })
-const issueWorker = new FiscalIssueWorker(dispatch, artifacts, new DeterministicNfe55Simulator())
+const fixedSimulatorScenario = config.FISCAL_SIMULATOR_SCENARIO
+const issueWorker = new FiscalIssueWorker(
+  dispatch,
+  artifacts,
+  new DeterministicNfe55Simulator(
+    fixedSimulatorScenario ? () => fixedSimulatorScenario : undefined,
+  ),
+  config.FISCAL_SIMULATOR_RETRY_DELAY_MS,
+)
 const outbox = new FiscalOutboxRelay(config.DATABASE_URL, config.RABBITMQ_URL)
 let issueWorkerBusy = false
 const issueWorkerTimer = setInterval(() => {
@@ -155,11 +195,6 @@ const issueWorkerTimer = setInterval(() => {
     })
 }, 1_000)
 issueWorkerTimer.unref()
-const urls = {
-  parties: config.PARTIES_URL,
-  identity: config.IDENTITY_URL,
-  catalog: config.CATALOG_URL,
-}
 const consumer = new FiscalConsumer(
   config.RABBITMQ_URL,
   ingress,
@@ -175,6 +210,7 @@ async function stop(): Promise<void> {
     ingress.close(),
     projections.close(),
     documents.close(),
+    manualOrigins.close(),
     artifacts.close(),
     calculations.close(),
     capabilities.close(),
@@ -205,6 +241,7 @@ void consumer
       ingress.close(),
       projections.close(),
       documents.close(),
+      manualOrigins.close(),
       artifacts.close(),
       calculations.close(),
       capabilities.close(),

@@ -7,7 +7,9 @@ import { DeterministicNfe55Simulator } from './nfe55/simulator'
 const tenantId = randomUUID()
 const documentId = randomUUID()
 const commandId = randomUUID()
-const signedXml = Buffer.from('<NFe>signed simulation bytes</NFe>')
+const signedXml = Buffer.from(
+  `<NFe><infNFe Id="NFe${'1'.repeat(44)}"><ide><serie>1</serie><nNF>42</nNF><dhEmi>2026-09-22T12:00:00-03:00</dhEmi></ide><emit><CNPJ>11111111111111</CNPJ><xNome>Emitente</xNome></emit><dest><CNPJ>22222222222222</CNPJ><xNome>Destinatario</xNome></dest><det><prod><cProd>A</cProd><xProd>Cafe</xProd><qCom>1</qCom><vUnCom>10.00</vUnCom><vProd>10.00</vProd></prod></det><total><ICMSTot><vProd>10.00</vProd><vNF>10.00</vNF></ICMSTot></total></infNFe></NFe>`,
+)
 const signedXmlDigest = artifactDigest(signedXml)
 
 describe('durable NF-e issue worker', () => {

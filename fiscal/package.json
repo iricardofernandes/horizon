@@ -9,10 +9,12 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts --format cjs --platform node --out-dir dist --clean",
+    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts --format cjs --platform node --out-dir dist --clean",
     "start": "node dist/worker.js",
     "backfill": "node dist/backfill-cli.js",
     "phase41:rollout": "node dist/phase41-rollout-cli.js",
+    "phase42:capability": "node dist/phase42-capability-cli.js",
+    "phase42:rollout-prep": "node dist/phase42-rollout-prep-cli.js",
     "phase42:verify-sources": "node scripts/verify-phase42-sources.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
@@ -35,6 +37,7 @@
     "fflate": "0.8.3",
     "ioredis": "6.0.0",
     "jose": "6.2.12",
+    "pdf-lib": "1.17.1",
     "postgres": "^3.4.9",
     "xml-crypto": "6.3.1",
     "xmllint-wasm": "5.3.0",
