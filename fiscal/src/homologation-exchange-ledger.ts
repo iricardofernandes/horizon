@@ -233,7 +233,7 @@ export class HomologationExchangeLedger {
     authorization: Extract<SefazExchangeInput, { service: 'authorization' }>,
     adapter: Pick<
       SefazNfe55HomologationAdapter,
-      'prepare' | 'wsdlDigest' | 'certificateFingerprint'
+      'prepare' | 'wsdlDigest' | 'certificateFingerprint' | 'adapterVersion'
     >,
   ): Promise<{ prepared: PreparedSefazExchange; signedXmlDigest: string; requestDigest: string }> {
     const value = prepareSchema.parse(input)
@@ -241,6 +241,8 @@ export class HomologationExchangeLedger {
       throw new Error('SEFAZ authorization cannot have a parent exchange')
     if (adapter.wsdlDigest !== value.wsdlDigest)
       throw new Error('SEFAZ authorization WSDL differs from drill')
+    if (adapter.adapterVersion !== value.adapterVersion)
+      throw new Error('SEFAZ authorization adapter version differs from drill')
     if (adapter.certificateFingerprint !== value.certificateFingerprint)
       throw new Error('SEFAZ signing certificate differs from drill')
     const schemaDigest = digest.parse(authorization.schemaDigest)

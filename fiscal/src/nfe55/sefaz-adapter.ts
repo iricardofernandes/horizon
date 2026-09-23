@@ -21,6 +21,7 @@ const accessKeySchema = z.string().length(44).refine(isValidNfeAccessKey)
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/)
 const protocolSchema = z.string().regex(/^[0-9]{15}$/)
 const nfeNamespace = 'http://www.portalfiscal.inf.br/nfe'
+export const SEFAZ_SP_HOMOLOGATION_ADAPTER_VERSION = 'nfe55-sp-homologation-v1'
 
 export type SefazOperationMap = Record<
   SefazService,
@@ -59,6 +60,7 @@ export type PreparedSefazExchange = {
 
 /** Prepares and parses one exchange; the durable runner owns every network send. */
 export class SefazNfe55HomologationAdapter {
+  readonly adapterVersion: string = SEFAZ_SP_HOMOLOGATION_ADAPTER_VERSION
   readonly wsdlDigest: string
   readonly certificateFingerprint: string | null
 

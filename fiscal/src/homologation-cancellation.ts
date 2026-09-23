@@ -22,7 +22,7 @@ export class HomologationCancellation {
     private readonly capabilities: Pick<FiscalCapabilities, 'getHomologationEventSchemaDigest'>,
     private readonly adapter: Pick<
       SefazNfe55HomologationAdapter,
-      'prepare' | 'wsdlDigest' | 'certificateFingerprint'
+      'prepare' | 'wsdlDigest' | 'certificateFingerprint' | 'adapterVersion'
     >,
     private readonly credential: HomologationCredential,
     private readonly schemaZip: Buffer,
@@ -44,6 +44,7 @@ export class HomologationCancellation {
       throw new Error('Reviewed homologation cancellation schema is unavailable or differs')
     if (
       target.wsdlDigest !== this.adapter.wsdlDigest ||
+      target.adapterVersion !== this.adapter.adapterVersion ||
       target.certificateFingerprint !== this.adapter.certificateFingerprint ||
       target.certificateFingerprint !== this.credential.fingerprint
     )

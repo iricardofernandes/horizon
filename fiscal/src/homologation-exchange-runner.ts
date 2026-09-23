@@ -29,7 +29,10 @@ export class HomologationExchangeRunner {
       certificateFingerprint: string
       send(service: SefazService, envelope: Buffer): Promise<Buffer>
     },
-    private readonly parser: Pick<SefazNfe55HomologationAdapter, 'parseResponse' | 'wsdlDigest'>,
+    private readonly parser: Pick<
+      SefazNfe55HomologationAdapter,
+      'parseResponse' | 'wsdlDigest' | 'adapterVersion'
+    >,
     private readonly responseSchemas: Pick<SefazResponseSchemaValidator, 'validate'>,
   ) {}
 
@@ -47,7 +50,8 @@ export class HomologationExchangeRunner {
     if (
       loaded.input.endpointDigest !== this.transport.endpointSetDigest ||
       loaded.input.certificateFingerprint !== this.transport.certificateFingerprint ||
-      loaded.input.wsdlDigest !== this.parser.wsdlDigest
+      loaded.input.wsdlDigest !== this.parser.wsdlDigest ||
+      loaded.input.adapterVersion !== this.parser.adapterVersion
     )
       throw new Error('SEFAZ runtime binding differs from the approved drill grant')
     if (loaded.stage === 'observed')
@@ -75,7 +79,8 @@ export class HomologationExchangeRunner {
     if (
       input.endpointDigest !== this.transport.endpointSetDigest ||
       input.certificateFingerprint !== this.transport.certificateFingerprint ||
-      input.wsdlDigest !== this.parser.wsdlDigest
+      input.wsdlDigest !== this.parser.wsdlDigest ||
+      input.adapterVersion !== this.parser.adapterVersion
     )
       throw new Error('SEFAZ runtime binding differs from the approved drill grant')
     const { workerId, ...evidence } = input

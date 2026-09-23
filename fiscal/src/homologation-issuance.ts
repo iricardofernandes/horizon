@@ -39,7 +39,7 @@ export class HomologationIssuance {
     private readonly ledger: Pick<HomologationExchangeLedger, 'bindAuthorization' | 'prepare'>,
     private readonly adapter: Pick<
       SefazNfe55HomologationAdapter,
-      'prepare' | 'wsdlDigest' | 'certificateFingerprint'
+      'prepare' | 'wsdlDigest' | 'certificateFingerprint' | 'adapterVersion'
     >,
     private readonly credential: HomologationCredential,
     private readonly schemaZip: Buffer,
@@ -97,6 +97,7 @@ export class HomologationIssuance {
     if (
       evidence.schema_package_digest !== this.schemaDigest ||
       evidence.wsdl_digest !== this.adapter.wsdlDigest ||
+      evidence.adapter_version !== this.adapter.adapterVersion ||
       evidence.certificate_fingerprint !== this.adapter.certificateFingerprint ||
       evidence.certificate_fingerprint !== this.credential.fingerprint
     )

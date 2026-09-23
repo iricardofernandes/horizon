@@ -983,6 +983,17 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     expect(
       (await ledger.loadPrepared(tenantId, exchangeId, operations, 'tester:resume')).stage,
     ).toBe('raw_unparsed')
+    await expect(
+      new HomologationRawRecovery(
+        ledger,
+        {
+          parseResponse: adapter.parseResponse.bind(adapter),
+          wsdlDigest: adapter.wsdlDigest,
+          adapterVersion: 'nfe55-sp-homologation-v2',
+        },
+        responseSchemas,
+      ).reparse(tenantId, exchangeId, 'tester:resume', operations),
+    ).rejects.toThrow('runtime binding differs')
     expect(
       (await rawRecovery.reparse(tenantId, exchangeId, 'tester:resume', operations)).statusCode,
     ).toBe('107')
@@ -1030,9 +1041,40 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     await expect(
       runner.execute({ ...runInput, endpointDigest: 'd'.repeat(64) }, prepared),
     ).rejects.toThrow('runtime binding differs')
+    await expect(
+      runner.execute({ ...runInput, adapterVersion: 'nfe55-sp-homologation-v2' }, prepared),
+    ).rejects.toThrow('runtime binding differs')
     expect(sends).toBe(0)
     const { workerId: _workerId, ...storedRunInput } = runInput
     await ledger.prepare(storedRunInput, prepared)
+    await expect(
+      new HomologationExchangeRunner(
+        ledger,
+        {
+          endpointSetDigest: input.endpointDigest,
+          certificateFingerprint: input.certificateFingerprint,
+          async send() {
+            sends += 1
+            return soap
+          },
+        },
+        {
+          parseResponse: adapter.parseResponse.bind(adapter),
+          wsdlDigest: adapter.wsdlDigest,
+          adapterVersion: 'nfe55-sp-homologation-v2',
+        },
+        responseSchemas,
+      ).resume(
+        {
+          tenantId,
+          exchangeId: runInput.exchangeId,
+          workerId: 'worker-a',
+          actorId: 'tester:resume',
+        },
+        operations,
+      ),
+    ).rejects.toThrow('runtime binding differs')
+    expect(sends).toBe(0)
     expect(
       (
         await runner.resume(
@@ -1130,6 +1172,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       schemaDigest: 'e'.repeat(64),
     }
     const authorizationAdapter = {
+      adapterVersion: adapter.adapterVersion,
       wsdlDigest: operations.wsdlDigest,
       certificateFingerprint: input.certificateFingerprint,
       async prepare() {
@@ -1145,6 +1188,12 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
         certificateFingerprint: 'd'.repeat(64),
       }),
     ).rejects.toThrow('signing certificate differs from drill')
+    await expect(
+      ledger.bindAuthorization({ ...input, exchangeId: authorizationId }, authorizationInput, {
+        ...authorizationAdapter,
+        adapterVersion: 'nfe55-sp-homologation-v2',
+      }),
+    ).rejects.toThrow('adapter version differs from drill')
     const bound = await ledger.bindAuthorization(
       { ...input, exchangeId: authorizationId },
       authorizationInput,
@@ -1457,6 +1506,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       capabilities,
       {
         prepare: signingAdapter.prepare.bind(signingAdapter),
+        adapterVersion: signingAdapter.adapterVersion,
         wsdlDigest: signingAdapter.wsdlDigest,
         certificateFingerprint: input.certificateFingerprint,
       },
@@ -1471,6 +1521,20 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       reason: 'Cancelamento solicitado pelo emitente',
       occurredAt: '2026-09-23T17:00:00-03:00',
     }
+    await expect(
+      new HomologationCancellation(
+        ledger,
+        capabilities,
+        {
+          prepare: signingAdapter.prepare.bind(signingAdapter),
+          adapterVersion: 'nfe55-sp-homologation-v2',
+          wsdlDigest: signingAdapter.wsdlDigest,
+          certificateFingerprint: input.certificateFingerprint,
+        },
+        signingCredential,
+        await readFile(new URL('../fixtures/official/pl-010d-v1.03.zip', import.meta.url)),
+      ).prepare(cancellationCommand),
+    ).rejects.toThrow('runtime differs from authorization')
     const cancellationResult = await cancellation.prepare(cancellationCommand)
     expect(cancellationResult).toMatchObject({
       exchangeId: eventInput.exchangeId,

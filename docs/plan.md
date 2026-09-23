@@ -2215,9 +2215,10 @@ comprehensive Fiscal review remains deferred. No SEFAZ or production credential 
 
 ## Phase 43 — NF-e homologation for one issuer and UF
 
-**Planned.** Implement and test one real SEFAZ adapter in homologation, including
-certificate use, rejection, outage, consultation and cancellation. Production capability
-is limited to the exact issuer/UF/operation tuple whose evidence is recorded.
+**In progress.** The scoped Sales dispatch gate and local Fiscal homologation drill
+components are implemented. The issuer tuple, independent source/WSDL review, real
+SEFAZ round trip and restore evidence remain pending; no homologation capability is
+activated. Production transmission remains disabled.
 [Detailed implementation plan](fiscal-phase43-implementation-plan.md).
 [Detailed work and exit evidence](fiscal-implementation-plan.md#43--one-nf-e-sefaz-homologation-path).
 
