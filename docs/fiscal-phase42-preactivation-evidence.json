@@ -1,0 +1,31 @@
+{
+  "phase": 42,
+  "scope": "local simulation-only activation before Kong lifecycle smoke",
+  "recordedAt": "2026-09-23T02:01:26.019256+00:00",
+  "tenantId": "01a0c5f8-798b-721e-912e-9b505406e614",
+  "capabilityId": "6c6c73d4-1445-4f9b-be69-2dfee757ce79",
+  "sourceManifestSha256": "02aeb665d996fc0eca3203048e43e2cce5f980add9f41a767c8e37e449a3c44e",
+  "selectedDocumentSchemaSha256": "b8589490a58a09a993a80e6ac4d7ed10f20892061ecfc56719337098d4b95998",
+  "selectedEventSchemaSha256": "45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b",
+  "sourceReview": {
+    "reviewedBy": "workspace-owner",
+    "decision": "provisional-approval",
+    "scope": "NF-e model 55 simulation, PL 010f v1.04 document and PL 010d v1.03 generic event envelope with application detEvento checks",
+    "comprehensiveReviewDeferred": true,
+    "reviewedAt": "2026-09-23T01:51:07.000Z"
+  },
+  "sourceVerification": "make verify-phase42-sources passed; six retained artifacts",
+  "codeVerification": "Node 24 make ci-local passed; local code and integration gates",
+  "simulationCertificateSha256": "84ed18ee166f97c16d1cea5c3897d380c77ac2f81ea49f2acd9cd5a433dc195d",
+  "simulationCertificateSubject": "Horizon Phase 42 Simulation Only",
+  "fixture": {
+    "issuerProfileRevision": 2,
+    "recipientProfileRevision": 3,
+    "catalogRevision": 1
+  },
+  "limitations": [
+    "Workspace owner review is provisional; comprehensive Fiscal review deferred until the Fiscal program is complete.",
+    "No production credential or SEFAZ integration.",
+    "Activation evidence precedes the live Kong smoke and restore drill; their results are recorded separately."
+  ]
+}

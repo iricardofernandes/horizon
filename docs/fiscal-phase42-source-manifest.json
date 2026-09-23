@@ -11,9 +11,16 @@
     "adapterVersion": "nfe55-simulator-v1",
     "schemaRelease": "PL_010f_v1.04",
     "layoutVersion": "4.00",
-    "reason": "PL 010f v1.04 is the newest retained complete NF-e 4.00 schema bundle and contains the base, layout and XMLDSig schemas needed by the Phase 42 model-55 simulation. PL 010d is not combined with it.",
-    "fiscalReviewStatus": "pending",
-    "capabilityActivation": "blocked-until-review-and-executable-evidence"
+    "reason": "PL 010f v1.04 supplies the model-55 NF-e document schemas. PL 010d v1.03 supplies the generic cancellation-event envelope; application checks constrain detEvento. The workspace owner authorized this simulation-only interpretation provisionally and deferred the comprehensive Fiscal review until the Fiscal program is complete.",
+    "fiscalReviewStatus": "workspace-owner-provisionally-approved",
+    "capabilityActivation": "simulation-only-allowed-after-local-executable-gates",
+    "review": {
+      "reviewedBy": "workspace-owner",
+      "decision": "provisional-approval",
+      "scope": "NF-e model 55 simulation, PL 010f v1.04 document and PL 010d v1.03 generic event envelope with application detEvento checks",
+      "comprehensiveReviewDeferred": true,
+      "reviewedAt": "2026-09-23T01:51:07.000Z"
+    }
   },
   "artifacts": [
     {
@@ -83,7 +90,7 @@
       "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=%20pBOYTXBtbk%3D",
       "storagePath": ".artifacts/fiscal/nfe/45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b/010d-v1.03.zip",
       "publishedAt": "2026-07-10",
-      "selectionStatus": "pending-cancellation-detail-and-cross-package-review",
+      "selectionStatus": "selected-for-model55-simulation-with-application-detail-checks",
       "byteSize": 67813,
       "sha256": "45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b",
       "entries": [
