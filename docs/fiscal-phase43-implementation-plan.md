@@ -234,7 +234,12 @@ An internal readiness path now derives the homologation calculation from the fro
 origin and historical projections only when the drill is active and the reviewed
 calculation approval exists. It refuses a changed rule result between preview and
 binding; the public readiness route remains simulation scoped. A reviewed live
-rule package and operator command are still needed to use this path on the issuer.
+rule package is still needed to use this path on the issuer.
+Once the reviewed rules and tenant projections are present, run
+`npm run phase43:readiness -- --tenant <uuid> --document <uuid> --grant <uuid> --actor <id>`
+in `fiscal` after building. It requires `DATABASE_URL` and
+`FISCAL_ARTIFACT_KEY_HEX`, returns only decision codes and digests, and exits with
+code 2 for an unsupported calculation. It does not submit to SEFAZ.
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the
