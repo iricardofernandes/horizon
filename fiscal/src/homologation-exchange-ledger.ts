@@ -179,6 +179,37 @@ export class HomologationExchangeLedger {
     })
   }
 
+  async recoveryTarget(
+    tenantId: string,
+    documentId: string,
+  ): Promise<
+    | { service: 'receipt'; parentExchangeId: string; accessKey: string; receipt: string }
+    | { service: 'protocol'; parentExchangeId: string; accessKey: string }
+  > {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(documentId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select exchange.id, exchange.access_key, parsed.receipt,
+          transmission.started_at
+        from fiscal_homologation_exchanges exchange
+        left join fiscal_homologation_transmissions transmission
+          on transmission.tenant_id = exchange.tenant_id
+          and transmission.exchange_id = exchange.id
+        left join fiscal_homologation_parsed_responses parsed
+          on parsed.tenant_id = exchange.tenant_id and parsed.exchange_id = exchange.id
+        where exchange.tenant_id = ${tenantId} and exchange.document_id = ${documentId}
+          and exchange.service = 'authorization'`
+    })
+    if (!row?.started_at || !row.access_key)
+      throw new Error('No started SEFAZ authorization exists for consultation')
+    const parentExchangeId = String(row.id)
+    const accessKey = String(row.access_key)
+    return row.receipt
+      ? { service: 'receipt', parentExchangeId, accessKey, receipt: String(row.receipt) }
+      : { service: 'protocol', parentExchangeId, accessKey }
+  }
+
   async recordRawResponse(
     tenantId: string,
     documentId: string,

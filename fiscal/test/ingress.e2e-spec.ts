@@ -24,8 +24,10 @@ import {
   HomologationExchangeRunner,
   UncertainSefazOutcomeError,
 } from '../src/homologation-exchange-runner'
+import { HomologationRecovery } from '../src/homologation-recovery'
 import { FiscalIngress } from '../src/ingress'
 import { FiscalLifecycle } from '../src/lifecycle'
+import { buildNfe55AccessKey } from '../src/nfe55/access-key'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from '../src/nfe55/sefaz-adapter'
 import { FiscalOutboxRelay } from '../src/outbox'
 import { DeterministicAuthorityGateway } from '../src/ports'
@@ -664,6 +666,147 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       listed?.artifacts.every((artifact) => !artifact.simulated && !artifact.fiscalValue),
     ).toBe(true)
     expect(await artifacts.list(tenantId, documentId)).toBeNull()
+
+    const accessKey = buildNfe55AccessKey({
+      issuerUfCode: '35',
+      issuedOn: '2026-09-23',
+      issuerTaxId: '00000000E08G12',
+      model: '55',
+      series: 1,
+      number: 1,
+      emissionType: 1,
+      numericCode: '12345678',
+    })
+    const authorizationId = randomUUID()
+    const authorization = {
+      service: 'authorization' as const,
+      request: Buffer.from('<prepared-authorization/>'),
+      expectedAccessKey: accessKey,
+    }
+    await ledger.prepare({ ...input, exchangeId: authorizationId }, authorization)
+    await expect(ledger.recoveryTarget(tenantId, documentId)).rejects.toThrow('No started')
+    expect(await ledger.markStarted(tenantId, authorizationId, 'worker-a')).toBe(true)
+    await expect(
+      ledger.prepare({ ...input, exchangeId: randomUUID() }, authorization),
+    ).rejects.toThrow('Conflicting immutable SEFAZ exchange')
+    expect(await ledger.recoveryTarget(tenantId, documentId)).toMatchObject({
+      service: 'protocol',
+      parentExchangeId: authorizationId,
+      accessKey,
+    })
+    const consultationSoap = (service: string, payload: string) =>
+      Buffer.from(
+        `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>` +
+          `<${service}Response xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/${service}">` +
+          `<nfeResultMsg>${payload}</nfeResultMsg></${service}Response></s:Body></s:Envelope>`,
+      )
+    const protocolSoap = consultationSoap(
+      'NFeConsultaProtocolo4',
+      `<retConsSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
+        '<tpAmb>2</tpAmb><cUF>35</cUF><cStat>217</cStat>' +
+        '<xMotivo>Sem protocolo nesta consulta</xMotivo></retConsSitNFe>',
+    )
+    const protocolRunner = new HomologationExchangeRunner(
+      ledger,
+      {
+        async send() {
+          return protocolSoap
+        },
+      },
+      adapter,
+    )
+    const protocolRecovery = new HomologationRecovery(ledger, adapter, protocolRunner)
+    expect(
+      (
+        await protocolRecovery.consult({
+          ...input,
+          exchangeId: randomUUID(),
+          workerId: 'worker-a',
+        })
+      ).service,
+    ).toBe('protocol')
+
+    const receipt = '123456789012345'
+    const authorizationSoap = consultationSoap(
+      'NFeAutorizacao4',
+      `<retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
+        `<tpAmb>2</tpAmb><cUF>35</cUF><cStat>103</cStat><xMotivo>Lote recebido</xMotivo>` +
+        `<nRec>${receipt}</nRec></retEnviNFe>`,
+    )
+    await ledger.recordRawResponse(tenantId, documentId, authorizationId, authorizationSoap)
+    await ledger.recordParsedResponse(
+      tenantId,
+      documentId,
+      authorizationId,
+      adapter.parseResponse(authorization, authorizationSoap),
+    )
+    expect(await ledger.recoveryTarget(tenantId, documentId)).toMatchObject({
+      service: 'receipt',
+      parentExchangeId: authorizationId,
+      accessKey,
+      receipt,
+    })
+    const wrongReceipt = await adapter.prepare({
+      service: 'receipt',
+      accessKey,
+      receipt: '999999999999999',
+    })
+    await expect(
+      ledger.prepare(
+        {
+          ...input,
+          exchangeId: randomUUID(),
+          parentExchangeId: authorizationId,
+        },
+        wrongReceipt,
+      ),
+    ).rejects.toThrow('receipt differs')
+    const otherKey = buildNfe55AccessKey({
+      issuerUfCode: '35',
+      issuedOn: '2026-09-23',
+      issuerTaxId: '00000000E08G12',
+      model: '55',
+      series: 1,
+      number: 1,
+      emissionType: 1,
+      numericCode: '87654321',
+    })
+    const wrongProtocol = await adapter.prepare({ service: 'protocol', accessKey: otherKey })
+    await expect(
+      ledger.prepare(
+        {
+          ...input,
+          exchangeId: randomUUID(),
+          parentExchangeId: authorizationId,
+        },
+        wrongProtocol,
+      ),
+    ).rejects.toThrow('does not match a started authorization')
+    const receiptSoap = consultationSoap(
+      'NFeRetAutorizacao4',
+      `<retConsReciNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
+        `<tpAmb>2</tpAmb><cUF>35</cUF><cStat>105</cStat><xMotivo>Em processamento</xMotivo>` +
+        `<nRec>${receipt}</nRec></retConsReciNFe>`,
+    )
+    const receiptRunner = new HomologationExchangeRunner(
+      ledger,
+      {
+        async send() {
+          return receiptSoap
+        },
+      },
+      adapter,
+    )
+    const receiptRecovery = new HomologationRecovery(ledger, adapter, receiptRunner)
+    expect(
+      (
+        await receiptRecovery.consult({
+          ...input,
+          exchangeId: randomUUID(),
+          workerId: 'worker-a',
+        })
+      ).service,
+    ).toBe('receipt')
   } finally {
     await Promise.all([ledger.close(), artifacts.close(), capabilities.close()])
   }

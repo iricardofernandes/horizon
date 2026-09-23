@@ -168,6 +168,13 @@ The runner records the raw response before parsing and refuses a second send
 after a send marker, including when the first response was lost. This ledger is
 not yet wired to the Fiscal issue worker or a live SEFAZ credential.
 
+The database now permits only one prepared authorization and one cancellation
+event per document. A receipt or protocol consultation must reference the
+started authorization, retain its access key and, for a receipt query, use the
+receipt actually recorded in the parent response. Recovery chooses protocol
+consultation after a lost response and receipt consultation when a receipt was
+recorded; it never starts another authorization for the same document.
+
 `GET /fiscal/documents/:id/v2` and
 `GET /fiscal/documents/:id/artifacts/v2` now carry the environment and
 `fiscalValue: false`. Homologation request, response and protocol artifacts
