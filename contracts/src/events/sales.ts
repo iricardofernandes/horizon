@@ -117,6 +117,28 @@ export const salesFiscalOriginRecorded = defineEvent({
   }),
 })
 
+export const salesFiscalOriginFrozen = defineEvent({
+  type: 'sales.fiscal-origin.recorded',
+  version: 2,
+  description:
+    'One packed shipment has an immutable fiscal origin before dispatch. This event has no stock or receivable effect; only a later exact production authorization can release a configured shipment.',
+  payload: z.strictObject({
+    orderId: uuidSchema,
+    orderVersion: z.number().int().positive(),
+    originModule: z.literal('sales'),
+    originDocumentType: z.literal('shipment'),
+    originId: shipmentId,
+    originRevision: z.literal(1),
+    purpose: z.literal('original'),
+    customerId: uuidSchema,
+    warehouseId: uuidSchema,
+    establishmentId: uuidSchema,
+    lines: z.array(shippedLineSchema).min(1),
+    total: moneySchema,
+    preDispatch: z.literal(true),
+  }),
+})
+
 export const salesQuoteSent = defineEvent({
   type: 'sales.quote.sent',
   version: 1,

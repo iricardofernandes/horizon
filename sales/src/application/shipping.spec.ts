@@ -275,25 +275,30 @@ describe('getting the goods to the customer', () => {
   it('keeps a gated shipment packed until the exact production release exists', async () => {
     const unitOfWork = new InMemorySalesUnitOfWork()
     const fixture = await confirmedOrder(unitOfWork)
+    const order = required(unitOfWork.orders[0])
+    const establishmentId = randomUUID()
+    unitOfWork.fiscalDispatchPolicies.set(
+      `${fixture.tenantId}:${order.fulfillmentWarehouseId}`,
+      establishmentId,
+    )
     const shipmentId = await pickAndPack(unitOfWork, fixture, '4')
     const shipment = required(unitOfWork.shipments[0])
-    const order = required(unitOfWork.orders[0])
-    unitOfWork.fiscalDispatchPolicies.add(`${fixture.tenantId}:${shipment.warehouseId}`)
+    const frozen = unitOfWork.fiscalOriginFreezes.get(`${fixture.tenantId}:${shipmentId}`)
+    expect(frozen).toMatchObject({ establishmentId, warehouseId: shipment.warehouseId })
+    expect(unitOfWork.events.map((event) => [event.eventType, event.eventVersion])).toEqual([
+      ['sales.fiscal-origin.recorded', 2],
+    ])
     const dispatch = new DispatchShipmentUseCase(unitOfWork, clock)
     const attempt = () => dispatch.execute({ context: commandOf(fixture.tenantId), shipmentId })
     expect((await attempt()).isLeft()).toBe(true)
     const orderVersion = order.version
-    const digest = 'a'.repeat(64)
-    unitOfWork.fiscalOriginFreezes.set(`${fixture.tenantId}:${shipmentId}`, {
-      orderId: fixture.orderId,
-      orderVersion,
-      payloadDigest: digest,
-    })
+    const digest = required(frozen).payloadDigest
     unitOfWork.fiscalReleaseObservations.push({
       tenantId: fixture.tenantId,
       shipmentId,
       originDigest: digest,
       orderVersion,
+      establishmentId,
       environment: 'homologation',
       outcome: 'authorized',
       observedAt: '2026-09-16T20:01:00.000Z',
@@ -304,22 +309,27 @@ describe('getting the goods to the customer', () => {
       shipmentId,
       originDigest: 'b'.repeat(64),
       orderVersion,
+      establishmentId,
       environment: 'production',
       outcome: 'authorized',
       observedAt: '2026-09-16T20:02:00.000Z',
     })
     expect((await attempt()).isLeft()).toBe(true)
     expect(shipment.status).toBe('packed')
-    expect(unitOfWork.events).toHaveLength(0)
+    expect(unitOfWork.events).toHaveLength(1)
     unitOfWork.fiscalReleaseObservations.push({
       tenantId: fixture.tenantId,
       shipmentId,
       originDigest: digest,
       orderVersion,
+      establishmentId,
       environment: 'production',
       outcome: 'authorized',
       observedAt: '2026-09-16T20:03:00.000Z',
     })
     expect((await attempt()).isRight()).toBe(true)
+    expect(
+      unitOfWork.events.filter((event) => event.eventType === 'sales.fiscal-origin.recorded'),
+    ).toHaveLength(1)
   })
 })

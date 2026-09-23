@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.29.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.30.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -246,6 +246,13 @@ A recorded settlement was undone — a bounced payment, a wrong installment. The
 
 ## `fiscal`
 
+### `fiscal.document.production-outcome` — v1
+
+Future production authority outcome for one frozen Sales shipment. Phase 43 does not publish this event or enable production transmission; Sales uses the exact origin and document revision to maintain a fail-closed release projection.
+
+**Payload**
+
+_No fields._
 ### `fiscal.document.simulation-authorized` — v1
 
 The deterministic simulator authorized an NF-e model 55. This simulated fact never releases a shipment or creates a stock or money effect.
@@ -785,6 +792,27 @@ One billable shipment or return was recorded under a tenant-unique fiscal origin
 | `customerId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
 | `lines` | array | yes | — |
 | `total` | object | yes | — |
+### `sales.fiscal-origin.recorded` — v2
+
+One packed shipment has an immutable fiscal origin before dispatch. This event has no stock or receivable effect; only a later exact production authorization can release a configured shipment.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `orderId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `orderVersion` | integer | yes | — |
+| `originModule` | string | yes | — |
+| `originDocumentType` | string | yes | — |
+| `originId` | string | yes | Shipment identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `originRevision` | number | yes | — |
+| `purpose` | string | yes | — |
+| `customerId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `warehouseId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `establishmentId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `lines` | array | yes | — |
+| `total` | object | yes | — |
+| `preDispatch` | boolean | yes | — |
 ### `sales.invoicing.requested` — v1
 
 A confirmed order is ready for the future Fiscal module to issue its invoice document.

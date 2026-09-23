@@ -57,3 +57,41 @@ export const fiscalDocumentCancelled = defineEvent({
     cancellationProtocolDigest: sha256Schema,
   }),
 })
+
+const productionDocumentFact = z.strictObject({
+  documentId: uuidSchema,
+  documentRevision: z.number().int().positive(),
+  originModule: z.literal('sales'),
+  originId: uuidSchema,
+  originDigest: sha256Schema,
+  orderVersion: z.number().int().positive(),
+  establishmentId: uuidSchema,
+  model: z.literal('55'),
+  environment: z.literal('production'),
+  responseDigest: sha256Schema,
+  observedAt: instantSchema,
+})
+
+export const fiscalDocumentProductionOutcome = defineEvent({
+  type: 'fiscal.document.production-outcome',
+  version: 1,
+  description:
+    'Future production authority outcome for one frozen Sales shipment. Phase 43 does not publish this event or enable production transmission; Sales uses the exact origin and document revision to maintain a fail-closed release projection.',
+  payload: z.discriminatedUnion('outcome', [
+    productionDocumentFact.extend({
+      outcome: z.literal('authorized'),
+      authorityReference: z.string().min(1).max(256),
+      protocolDigest: sha256Schema,
+    }),
+    productionDocumentFact.extend({
+      outcome: z.literal('rejected'),
+      authorityReference: z.string().min(1).max(256).nullable(),
+      protocolDigest: sha256Schema.nullable(),
+    }),
+    productionDocumentFact.extend({
+      outcome: z.literal('cancelled'),
+      authorityReference: z.string().min(1).max(256),
+      protocolDigest: sha256Schema,
+    }),
+  ]),
+})

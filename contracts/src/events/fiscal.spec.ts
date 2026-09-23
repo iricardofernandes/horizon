@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
-import { fiscalDocumentAuthorized, fiscalDocumentCancelled, fiscalDocumentRejected } from './fiscal'
+import {
+  fiscalDocumentAuthorized,
+  fiscalDocumentCancelled,
+  fiscalDocumentProductionOutcome,
+  fiscalDocumentRejected,
+} from './fiscal'
 
 const base = {
   documentId: randomUUID(),
@@ -65,6 +70,35 @@ describe('Fiscal simulation status events', () => {
     ).toBe(false)
     expect(
       fiscalDocumentAuthorized.payload.safeParse({ ...payload, simulated: false }).success,
+    ).toBe(false)
+  })
+})
+
+describe('future production release event', () => {
+  it('requires an exact production origin and authority evidence', () => {
+    const payload = {
+      documentId: randomUUID(),
+      documentRevision: 1,
+      originModule: 'sales',
+      originId: randomUUID(),
+      originDigest: 'a'.repeat(64),
+      orderVersion: 3,
+      establishmentId: randomUUID(),
+      model: '55',
+      environment: 'production',
+      outcome: 'authorized',
+      authorityReference: 'protocol:123',
+      responseDigest: 'b'.repeat(64),
+      protocolDigest: 'c'.repeat(64),
+      observedAt: '2026-09-23T15:00:00.000Z',
+    }
+    expect(fiscalDocumentProductionOutcome.payload.safeParse(payload).success).toBe(true)
+    expect(
+      fiscalDocumentProductionOutcome.payload.safeParse({ ...payload, environment: 'homologation' })
+        .success,
+    ).toBe(false)
+    expect(
+      fiscalDocumentProductionOutcome.payload.safeParse({ ...payload, originDigest: null }).success,
     ).toBe(false)
   })
 })

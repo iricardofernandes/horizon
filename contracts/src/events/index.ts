@@ -16,7 +16,12 @@ import {
   financialSettlementRecorded,
   financialSettlementReversed,
 } from './financial'
-import { fiscalDocumentAuthorized, fiscalDocumentCancelled, fiscalDocumentRejected } from './fiscal'
+import {
+  fiscalDocumentAuthorized,
+  fiscalDocumentCancelled,
+  fiscalDocumentProductionOutcome,
+  fiscalDocumentRejected,
+} from './fiscal'
 import {
   apiKeyRevoked,
   companyFiscalProfileChanged,
@@ -60,6 +65,7 @@ import {
   procurementRequisitionSubmitted,
 } from './procurement'
 import {
+  salesFiscalOriginFrozen,
   salesFiscalOriginRecorded,
   salesInvoicingRequested,
   salesOrderCancelled,
@@ -124,6 +130,7 @@ export const EVENTS: readonly EventDefinition[] = [
   inventoryStockMoved,
   salesInvoicingRequested,
   salesFiscalOriginRecorded,
+  salesFiscalOriginFrozen,
   partyRegistered,
   partyUpdated,
   partyRoleGranted,
@@ -139,6 +146,7 @@ export const EVENTS: readonly EventDefinition[] = [
   fiscalDocumentAuthorized,
   fiscalDocumentRejected,
   fiscalDocumentCancelled,
+  fiscalDocumentProductionOutcome,
   treasuryAccountOpened,
   treasuryEntryRecorded,
   treasuryTransferPosted,

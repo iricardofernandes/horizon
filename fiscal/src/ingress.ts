@@ -5,9 +5,11 @@ import {
   eventEnvelopeSchema,
   partyErased,
   partyFiscalProfileChanged,
+  salesFiscalOriginFrozen,
   salesFiscalOriginRecorded,
 } from '@horizon/contracts'
 import postgres from 'postgres'
+import { canonicalJson } from './canonical-json'
 import { sealOrigin } from './origin-crypto'
 
 type Sql = ReturnType<typeof postgres>
@@ -43,7 +45,12 @@ export class FiscalIngress {
   async accept(raw: unknown): Promise<IngressResult> {
     const envelope = eventEnvelopeSchema.parse(raw)
     const sourceModule = envelope.eventType.split('.')[0]
-    if (!sourceModule || !isAcceptedType(envelope.eventType) || envelope.eventVersion !== 1)
+    if (
+      !sourceModule ||
+      !isAcceptedType(envelope.eventType) ||
+      (envelope.eventVersion !== 1 &&
+        !(envelope.eventType === 'sales.fiscal-origin.recorded' && envelope.eventVersion === 2))
+    )
       throw new Error(`Unsupported fiscal event: ${envelope.eventType} v${envelope.eventVersion}`)
 
     return this.#db.begin(async (tx) => {
@@ -57,8 +64,11 @@ export class FiscalIngress {
 
       switch (envelope.eventType) {
         case 'sales.fiscal-origin.recorded': {
-          const payload = salesFiscalOriginRecorded.payload.parse(envelope.payload)
-          await recordOrigin(tx, envelope.tenantId, payload, this.masterKey)
+          const payload =
+            envelope.eventVersion === 2
+              ? salesFiscalOriginFrozen.payload.parse(envelope.payload)
+              : salesFiscalOriginRecorded.payload.parse(envelope.payload)
+          await recordOrigin(tx, envelope.tenantId, payload, this.masterKey, envelope.eventVersion)
           break
         }
         case 'parties.party.fiscal-profile-changed': {
@@ -112,10 +122,13 @@ function isAcceptedType(type: string): boolean {
 async function recordOrigin(
   tx: Transaction,
   tenantId: string,
-  payload: ReturnType<typeof salesFiscalOriginRecorded.payload.parse>,
+  payload:
+    | ReturnType<typeof salesFiscalOriginRecorded.payload.parse>
+    | ReturnType<typeof salesFiscalOriginFrozen.payload.parse>,
   masterKey: Buffer,
+  eventVersion: number,
 ): Promise<void> {
-  const plaintext = JSON.stringify(payload)
+  const plaintext = eventVersion === 2 ? canonicalJson(payload) : JSON.stringify(payload)
   const digest = createHash('sha256').update(plaintext).digest('hex')
   await tx`
     insert into fiscal_intents (

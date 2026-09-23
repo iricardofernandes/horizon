@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, createHmac, randomBytes } from 'node:crypto'
+import { salesFiscalOriginFrozen } from '@horizon/contracts'
 import { context, propagation, trace } from '@opentelemetry/api'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
@@ -703,23 +704,13 @@ async function publish(tx: Transaction, tenantId: string, event: DomainEvent): P
   if (event.tenantId !== tenantId) throw new Error('Event tenant does not match transaction')
   const payload = event.payloadOf()
   if (event.eventType === 'sales.fiscal-origin.recorded') {
-    const originId = payload.originId
-    const purpose = payload.purpose
-    if (typeof originId !== 'string' || (purpose !== 'original' && purpose !== 'return'))
-      throw new Error('Invalid Sales fiscal origin event')
-    const [claimed] = await tx
-      .insert(schema.fiscalOrigins)
-      .values({
-        tenantId,
-        originModule: 'sales',
-        documentType: 'shipment',
-        documentId: originId,
-        purpose,
-        recordedAt: event.occurredAt,
-      })
-      .onConflictDoNothing()
-      .returning({ documentId: schema.fiscalOrigins.documentId })
-    if (!claimed) return
+    const duplicate =
+      event.eventVersion === 2
+        ? await publishFrozenOrigin(tx, tenantId, event, payload)
+        : event.eventVersion === 1
+          ? await publishLegacyOrigin(tx, tenantId, event, payload)
+          : unsupportedFiscalOriginVersion()
+    if (duplicate) return
   }
   const id = new UniqueEntityID().toString()
   const carrier: Record<string, string> = {}
@@ -738,6 +729,111 @@ async function publish(tx: Transaction, tenantId: string, event: DomainEvent): P
   })
 }
 
+function unsupportedFiscalOriginVersion(): never {
+  throw new Error('Unsupported Sales fiscal origin version')
+}
+
+async function claimFiscalOrigin(
+  tx: Transaction,
+  tenantId: string,
+  event: DomainEvent,
+  originId: string,
+  purpose: 'original' | 'return',
+): Promise<boolean> {
+  const [claimed] = await tx
+    .insert(schema.fiscalOrigins)
+    .values({
+      tenantId,
+      originModule: 'sales',
+      documentType: 'shipment',
+      documentId: originId,
+      purpose,
+      recordedAt: event.occurredAt,
+    })
+    .onConflictDoNothing()
+    .returning({ documentId: schema.fiscalOrigins.documentId })
+  return Boolean(claimed)
+}
+
+async function publishLegacyOrigin(
+  tx: Transaction,
+  tenantId: string,
+  event: DomainEvent,
+  payload: Readonly<Record<string, unknown>>,
+): Promise<boolean> {
+  const originId = payload.originId
+  const purpose = payload.purpose
+  if (typeof originId !== 'string' || (purpose !== 'original' && purpose !== 'return'))
+    throw new Error('Invalid Sales fiscal origin event')
+  return !(await claimFiscalOrigin(tx, tenantId, event, originId, purpose))
+}
+
+async function publishFrozenOrigin(
+  tx: Transaction,
+  tenantId: string,
+  event: DomainEvent,
+  payload: Readonly<Record<string, unknown>>,
+): Promise<boolean> {
+  const origin = salesFiscalOriginFrozen.payload.parse(payload)
+  const [policy] = await tx
+    .select({ establishmentId: schema.fiscalDispatchPolicies.establishmentId })
+    .from(schema.fiscalDispatchPolicies)
+    .where(
+      and(
+        eq(schema.fiscalDispatchPolicies.tenantId, tenantId),
+        eq(schema.fiscalDispatchPolicies.warehouseId, origin.warehouseId),
+      ),
+    )
+    .limit(1)
+  if (!policy || policy.establishmentId !== origin.establishmentId)
+    throw new Error('Pre-dispatch fiscal origin does not match the Sales policy')
+  const payloadDigest = createHash('sha256').update(canonicalJson(origin)).digest('hex')
+  const claimed = await claimFiscalOrigin(tx, tenantId, event, origin.originId, 'original')
+  const [frozen] = await tx
+    .insert(schema.fiscalOriginFreezes)
+    .values({
+      tenantId,
+      shipmentId: origin.originId,
+      orderId: origin.orderId,
+      orderVersion: origin.orderVersion,
+      establishmentId: origin.establishmentId,
+      warehouseId: origin.warehouseId,
+      payloadDigest,
+    })
+    .onConflictDoNothing()
+    .returning({ shipmentId: schema.fiscalOriginFreezes.shipmentId })
+  if (!claimed && frozen)
+    throw new Error('Existing Sales fiscal origin has no matching frozen event')
+  if (!frozen) await verifyFrozenOrigin(tx, tenantId, origin, payloadDigest)
+  return !claimed
+}
+
+async function verifyFrozenOrigin(
+  tx: Transaction,
+  tenantId: string,
+  origin: ReturnType<typeof salesFiscalOriginFrozen.payload.parse>,
+  payloadDigest: string,
+): Promise<void> {
+  const [existing] = await tx
+    .select()
+    .from(schema.fiscalOriginFreezes)
+    .where(
+      and(
+        eq(schema.fiscalOriginFreezes.tenantId, tenantId),
+        eq(schema.fiscalOriginFreezes.shipmentId, origin.originId),
+      ),
+    )
+  if (
+    !existing ||
+    existing.orderId !== origin.orderId ||
+    existing.orderVersion !== origin.orderVersion ||
+    existing.establishmentId !== origin.establishmentId ||
+    existing.warehouseId !== origin.warehouseId ||
+    existing.payloadDigest !== payloadDigest
+  )
+    throw new Error('Conflicting pre-dispatch fiscal origin')
+}
+
 function makeScope(
   tx: Transaction,
   tenantId: string,
@@ -749,9 +845,22 @@ function makeScope(
   return {
     tenantId,
     fiscalDispatchGate: {
+      policyFor: async (warehouseId) => {
+        const [policy] = await tx
+          .select({ establishmentId: schema.fiscalDispatchPolicies.establishmentId })
+          .from(schema.fiscalDispatchPolicies)
+          .where(
+            and(
+              eq(schema.fiscalDispatchPolicies.tenantId, tenantId),
+              eq(schema.fiscalDispatchPolicies.warehouseId, warehouseId),
+            ),
+          )
+          .limit(1)
+        return policy ?? null
+      },
       canDispatch: async (input) => {
         const [policy] = await tx
-          .select({ warehouseId: schema.fiscalDispatchPolicies.warehouseId })
+          .select({ establishmentId: schema.fiscalDispatchPolicies.establishmentId })
           .from(schema.fiscalDispatchPolicies)
           .where(
             and(
@@ -760,7 +869,7 @@ function makeScope(
             ),
           )
           .limit(1)
-        if (!policy) return true
+        if (!policy) return { allowed: true, gated: false }
         const [origin] = await tx
           .select()
           .from(schema.fiscalOriginFreezes)
@@ -774,9 +883,11 @@ function makeScope(
         if (
           !origin ||
           origin.orderId !== input.orderId ||
-          origin.orderVersion !== input.orderVersion
+          origin.orderVersion !== input.orderVersion ||
+          origin.establishmentId !== policy.establishmentId ||
+          origin.warehouseId !== input.warehouseId
         )
-          return false
+          return { allowed: false, gated: true }
         const [latest] = await tx
           .select()
           .from(schema.fiscalReleaseObservations)
@@ -791,12 +902,15 @@ function makeScope(
             desc(schema.fiscalReleaseObservations.eventId),
           )
           .limit(1)
-        return (
-          latest?.environment === 'production' &&
-          latest.outcome === 'authorized' &&
-          latest.originDigest === origin.payloadDigest &&
-          latest.orderVersion === origin.orderVersion
-        )
+        return {
+          allowed:
+            latest?.environment === 'production' &&
+            latest.outcome === 'authorized' &&
+            latest.originDigest === origin.payloadDigest &&
+            latest.orderVersion === origin.orderVersion &&
+            latest.establishmentId === origin.establishmentId,
+          gated: true,
+        }
       },
     },
     audit: auditTrail(tx, tenantId),

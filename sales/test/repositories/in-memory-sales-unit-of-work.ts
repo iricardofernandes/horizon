@@ -6,6 +6,7 @@ import type {
   SalesScope,
 } from '@/application/ports/unit-of-work'
 import { AuditTrail, SalesUnitOfWork } from '@/application/ports/unit-of-work'
+import { canonicalJson } from '@/core/audit/canonical-json'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DomainEvent } from '@/core/events/domain-event'
@@ -108,11 +109,13 @@ class InMemoryEvents extends SalesEventsRepository {
   constructor(
     private readonly tenantId: string,
     private readonly records: DomainEvent[],
+    private readonly onAppend: (event: DomainEvent) => void,
   ) {
     super()
   }
   append(event: DomainEvent): Promise<void> {
     if (event.tenantId !== this.tenantId) throw new Error('tenant mismatch')
+    this.onAppend(event)
     this.records.push(event)
     return Promise.resolve()
   }
@@ -224,16 +227,23 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
   readonly receipts = new Map<string, { receipt: CommandReceipt; response: unknown }>()
   readonly provisionedTenants = new Set<string>()
   readonly consumedEvents = new Set<string>()
-  readonly fiscalDispatchPolicies = new Set<string>()
+  readonly fiscalDispatchPolicies = new Map<string, string>()
   readonly fiscalOriginFreezes = new Map<
     string,
-    { orderId: string; orderVersion: number; payloadDigest: string }
+    {
+      orderId: string
+      orderVersion: number
+      payloadDigest: string
+      establishmentId: string
+      warehouseId: string
+    }
   >()
   readonly fiscalReleaseObservations: {
     tenantId: string
     shipmentId: string
     originDigest: string
     orderVersion: number
+    establishmentId: string
     environment: 'simulation' | 'homologation' | 'production'
     outcome: 'authorized' | 'rejected' | 'cancelled'
     observedAt: string
@@ -248,24 +258,36 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
     return work({
       tenantId,
       fiscalDispatchGate: {
+        policyFor: async (warehouseId) => {
+          const establishmentId = this.fiscalDispatchPolicies.get(`${tenantId}:${warehouseId}`)
+          return establishmentId ? { establishmentId } : null
+        },
         canDispatch: async (input) => {
-          if (!this.fiscalDispatchPolicies.has(`${tenantId}:${input.warehouseId}`)) return true
+          const establishmentId = this.fiscalDispatchPolicies.get(
+            `${tenantId}:${input.warehouseId}`,
+          )
+          if (!establishmentId) return { allowed: true, gated: false }
           const origin = this.fiscalOriginFreezes.get(`${tenantId}:${input.shipmentId}`)
           if (
             !origin ||
             origin.orderId !== input.orderId ||
-            origin.orderVersion !== input.orderVersion
+            origin.orderVersion !== input.orderVersion ||
+            origin.establishmentId !== establishmentId ||
+            origin.warehouseId !== input.warehouseId
           )
-            return false
+            return { allowed: false, gated: true }
           const latest = this.fiscalReleaseObservations
             .filter((event) => event.tenantId === tenantId && event.shipmentId === input.shipmentId)
             .sort((first, second) => second.observedAt.localeCompare(first.observedAt))[0]
-          return (
-            latest?.environment === 'production' &&
-            latest.outcome === 'authorized' &&
-            latest.originDigest === origin.payloadDigest &&
-            latest.orderVersion === origin.orderVersion
-          )
+          return {
+            allowed:
+              latest?.environment === 'production' &&
+              latest.outcome === 'authorized' &&
+              latest.originDigest === origin.payloadDigest &&
+              latest.orderVersion === origin.orderVersion &&
+              latest.establishmentId === establishmentId,
+            gated: true,
+          }
         },
       },
       orders: new InMemoryOrders(tenantId, this.orders),
@@ -274,7 +296,25 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
         this.catalogItems,
         this.projectedCatalogItems,
       ),
-      events: new InMemoryEvents(tenantId, this.events),
+      events: new InMemoryEvents(tenantId, this.events, (event) => {
+        if (event.eventType !== 'sales.fiscal-origin.recorded' || event.eventVersion !== 2) return
+        const origin = salesFiscalOriginFrozen.payload.parse(event.payloadOf())
+        const establishmentId = this.fiscalDispatchPolicies.get(`${tenantId}:${origin.warehouseId}`)
+        if (establishmentId !== origin.establishmentId)
+          throw new Error('Pre-dispatch fiscal origin does not match the Sales policy')
+        const key = `${tenantId}:${origin.originId}`
+        const payloadDigest = createHash('sha256').update(canonicalJson(origin)).digest('hex')
+        const existing = this.fiscalOriginFreezes.get(key)
+        if (existing && existing.payloadDigest !== payloadDigest)
+          throw new Error('Conflicting pre-dispatch fiscal origin')
+        this.fiscalOriginFreezes.set(key, {
+          orderId: origin.orderId,
+          orderVersion: origin.orderVersion,
+          payloadDigest,
+          establishmentId: origin.establishmentId,
+          warehouseId: origin.warehouseId,
+        })
+      }),
       customers: new InMemoryCustomers(tenantId, this.customers),
       quotes: new InMemoryQuotes(tenantId, this.quotes, this.events),
       shipments: new InMemoryShipments(tenantId, this.shipments),
@@ -317,3 +357,6 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
     return { processed: true, value }
   }
 }
+
+import { createHash } from 'node:crypto'
+import { salesFiscalOriginFrozen } from '@horizon/contracts'

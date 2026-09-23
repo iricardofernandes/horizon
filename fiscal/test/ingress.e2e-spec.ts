@@ -14,6 +14,7 @@ import { EncryptedFiscalArtifactStore, LocalObjectStore } from '../src/artifact-
 import { FiscalArtifacts } from '../src/artifacts'
 import { type AuditRow, verifyAuditRows } from '../src/audit'
 import { FiscalBackfill, HttpOwnerFiscalClient, type OwnerFiscalClient } from '../src/backfill'
+import { canonicalDigest } from '../src/canonical-json'
 import { FiscalConsumer } from '../src/consumer'
 import { FiscalDocuments } from '../src/documents'
 import { FiscalIngress } from '../src/ingress'
@@ -424,6 +425,33 @@ function origin(tenantId: string, originId: string, purpose: 'original' | 'retur
     },
   }
 }
+
+it('ingests one canonical pre-dispatch origin and rejects conflicting versions', async () => {
+  const tenantId = randomUUID()
+  const shipmentId = randomUUID()
+  const legacy = origin(tenantId, shipmentId)
+  const frozen = {
+    ...legacy,
+    eventVersion: 2,
+    payload: {
+      ...legacy.payload,
+      orderVersion: 3,
+      originRevision: 1,
+      warehouseId: randomUUID(),
+      establishmentId: randomUUID(),
+      preDispatch: true,
+    },
+  }
+  expect(await ingress.accept(frozen)).toBe('applied')
+  expect(await ingress.accept(frozen)).toBe('duplicate')
+  expect(await ingress.accept({ ...frozen, eventId: randomUUID() })).toBe('applied')
+  const [stored] = await administrator`select payload_digest from fiscal_intents
+    where tenant_id = ${tenantId} and origin_id = ${shipmentId}`
+  expect(stored?.payload_digest).toBe(canonicalDigest(frozen.payload))
+  await expect(ingress.accept({ ...legacy, eventId: randomUUID() })).rejects.toThrow(
+    'Conflicting fiscal origin payload',
+  )
+})
 
 it('creates one intent for two messages about one delivery and isolates tenants', async () => {
   const tenantId = randomUUID()

@@ -310,6 +310,29 @@ export class SalesOrder extends AggregateRoot<SalesOrderProps> {
     return right(undefined)
   }
 
+  /** Freeze the billable facts for a packed shipment without shipping it. */
+  previewFiscalOrigin(lines: readonly ShippedLine[]): Either<
+    ConflictError,
+    {
+      customerId: string
+      orderVersion: number
+      lines: readonly ConfirmedOrderLine[]
+      total: Money
+    }
+  > {
+    if (this.props.status !== 'confirmed')
+      return left(new ConflictError('only a confirmed order can freeze a fiscal origin'))
+    if (!subtract(this.props.allocated, lines))
+      return left(new ConflictError('fiscal origin lines are not held for this shipment'))
+    const plan = this.planOf(lines, this.props.issuedOn)
+    return right({
+      customerId: this.props.customerId,
+      orderVersion: this.props.version,
+      lines: plan.lines,
+      total: plan.value,
+    })
+  }
+
   /**
    * The goods leave for the customer.
    *
@@ -382,6 +405,7 @@ export class SalesOrder extends AggregateRoot<SalesOrderProps> {
     },
     plan: ShipmentPlan,
     now: Date,
+    recordFiscalOrigin = true,
   ): void {
     const facts = {
       orderVersion: this.props.version,
@@ -416,15 +440,16 @@ export class SalesOrder extends AggregateRoot<SalesOrderProps> {
         installments: plan.installments,
       }),
     )
-    this.addDomainEvent(
-      new SalesFiscalOriginRecordedEvent(this.id, this.props.tenantId, now, {
-        shipmentId: shipment.shipmentId,
-        purpose: 'original',
-        customerId: this.props.customerId,
-        lines: plan.lines,
-        total: plan.value,
-      }),
-    )
+    if (recordFiscalOrigin)
+      this.addDomainEvent(
+        new SalesFiscalOriginRecordedEvent(this.id, this.props.tenantId, now, {
+          shipmentId: shipment.shipmentId,
+          purpose: 'original',
+          customerId: this.props.customerId,
+          lines: plan.lines,
+          total: plan.value,
+        }),
+      )
   }
 
   returnEvent(

@@ -135,8 +135,14 @@ states that homologation NF-e has no legal validity.
 
 ## Sales sequencing and operational ownership
 
-The current Sales flow dispatches first and creates the fiscal origin in that same
+The legacy Sales flow dispatches first and creates the fiscal origin in that same
 transition. Refactor the eligible path to:
+
+Implementation note: the scoped Sales policy now emits `sales.fiscal-origin.recorded`
+version 2 at packing and stores its canonical payload digest with the shipment,
+order version, warehouse and establishment. Fiscal ingests that version separately
+from the legacy dispatch-time version 1. The release projection consumer and live
+homologation path remain pending; configured shipments stay blocked meanwhile.
 
 1. pack shipment and freeze the commercial lines, recipient, issuer, quantities,
    prices and revision into an idempotent `sales.fiscal-origin.recorded` event;

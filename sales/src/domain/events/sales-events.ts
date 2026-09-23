@@ -4,7 +4,7 @@ import type { BusinessDate, LineDescription, Money, Quantity } from '../value-ob
 
 abstract class SalesEvent implements DomainEvent {
   abstract readonly eventType: string
-  readonly eventVersion = 1
+  readonly eventVersion: number = 1
   constructor(
     readonly aggregateId: UniqueEntityID,
     readonly tenantId: string,
@@ -182,6 +182,45 @@ export class SalesFiscalOriginRecordedEvent extends SalesEvent {
       customerId: this.origin.customerId,
       lines: this.origin.lines.map(confirmedLinePayload),
       total: moneyPayload(this.origin.total),
+    }
+  }
+}
+
+/** Frozen before dispatch for a warehouse under the Fiscal release policy. */
+export class SalesFiscalOriginFrozenEvent extends SalesEvent {
+  readonly eventType = 'sales.fiscal-origin.recorded'
+  override readonly eventVersion = 2
+  constructor(
+    orderId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly origin: {
+      shipmentId: string
+      orderVersion: number
+      customerId: string
+      warehouseId: string
+      establishmentId: string
+      lines: readonly ConfirmedOrderLine[]
+      total: Money
+    },
+  ) {
+    super(orderId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      orderId: this.aggregateId.toString(),
+      orderVersion: this.origin.orderVersion,
+      originModule: 'sales',
+      originDocumentType: 'shipment',
+      originId: this.origin.shipmentId,
+      originRevision: 1,
+      purpose: 'original',
+      customerId: this.origin.customerId,
+      warehouseId: this.origin.warehouseId,
+      establishmentId: this.origin.establishmentId,
+      lines: this.origin.lines.map(confirmedLinePayload),
+      total: moneyPayload(this.origin.total),
+      preDispatch: true,
     }
   }
 }

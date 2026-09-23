@@ -25,12 +25,13 @@ export abstract class AuditTrail {
 }
 
 export abstract class FiscalDispatchGate {
+  abstract policyFor(warehouseId: string): Promise<{ establishmentId: string } | null>
   abstract canDispatch(input: {
     shipmentId: string
     warehouseId: string
     orderId: string
     orderVersion: number
-  }): Promise<boolean>
+  }): Promise<{ allowed: boolean; gated: boolean }>
 }
 
 export interface CommandReceipt {

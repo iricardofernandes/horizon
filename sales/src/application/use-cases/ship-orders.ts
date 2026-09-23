@@ -3,6 +3,7 @@ import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import type { SalesOrder } from '@/domain/entities/sales-order'
 import { Shipment } from '@/domain/entities/shipment'
+import { SalesFiscalOriginFrozenEvent } from '@/domain/events/sales-events'
 import type { ShippedLine } from '@/domain/services/fulfilment'
 import {
   BusinessDate,
@@ -103,12 +104,15 @@ export class PackShipmentUseCase {
     return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
       const shipment = await scope.shipments.findById(request.shipmentId)
       if (!shipment) return left(new ResourceNotFoundError('shipment was not found'))
+      const now = this.clock.now()
+      const fiscalOrigin = await packedFiscalOrigin(scope, shipment, context.tenantId, now)
+      if (fiscalOrigin.isLeft()) return left(fiscalOrigin.value)
       const consignment = consignmentOf(request.consignment)
       if (consignment.isLeft()) return left(consignment.value)
-      const now = this.clock.now()
       const packed = shipment.pack(context.actor, consignment.value, now)
       if (packed.isLeft()) return left(packed.value)
       await scope.shipments.save(shipment)
+      if (fiscalOrigin.value) await scope.events.append(fiscalOrigin.value)
       await audit(scope, context, {
         action: 'shipment.packed',
         subjectType: 'shipment',
@@ -150,14 +154,13 @@ export class DispatchShipmentUseCase {
       const now = this.clock.now()
       const dispatchedOn = dateOf(request.dispatchedOn, '/dispatchedOn', now)
       if (dispatchedOn.isLeft()) return left(dispatchedOn.value)
-      if (
-        !(await scope.fiscalDispatchGate.canDispatch({
-          shipmentId: shipment.id.toString(),
-          warehouseId: shipment.warehouseId,
-          orderId: order.id.toString(),
-          orderVersion: order.version,
-        }))
-      )
+      const fiscalGate = await scope.fiscalDispatchGate.canDispatch({
+        shipmentId: shipment.id.toString(),
+        warehouseId: shipment.warehouseId,
+        orderId: order.id.toString(),
+        orderVersion: order.version,
+      })
+      if (!fiscalGate.allowed)
         return left(
           new ConflictError('this shipment has no matching production fiscal authorization'),
         )
@@ -184,6 +187,7 @@ export class DispatchShipmentUseCase {
         },
         plan.value,
         now,
+        !fiscalGate.gated,
       )
       await scope.shipments.save(shipment)
       await scope.orders.save(order)
@@ -330,6 +334,31 @@ function linesOf(inputs: readonly ShipmentLineInput[]): Either<Failure, readonly
 
 function shippedLinesOf(lines: readonly { lineId: string; quantity: Quantity }[]): ShippedLine[] {
   return lines.map((line) => ({ lineId: line.lineId, quantity: line.quantity }))
+}
+
+async function packedFiscalOrigin(
+  scope: SalesScope,
+  shipment: Shipment,
+  tenantId: string,
+  now: Date,
+): Promise<Either<Failure, SalesFiscalOriginFrozenEvent | null>> {
+  const policy = await scope.fiscalDispatchGate.policyFor(shipment.warehouseId)
+  if (!policy) return right(null)
+  const order = await scope.orders.findById(shipment.orderId)
+  if (!order) return left(new ResourceNotFoundError('sales order was not found'))
+  const origin = order.previewFiscalOrigin(shippedLinesOf(shipment.lines()))
+  if (origin.isLeft()) return left(origin.value)
+  return right(
+    new SalesFiscalOriginFrozenEvent(order.id, tenantId, now, {
+      shipmentId: shipment.id.toString(),
+      orderVersion: origin.value.orderVersion,
+      customerId: origin.value.customerId,
+      warehouseId: shipment.warehouseId,
+      establishmentId: policy.establishmentId,
+      lines: origin.value.lines,
+      total: origin.value.total,
+    }),
+  )
 }
 
 /** A delivery and the order it belongs to, which every command on one needs. */
