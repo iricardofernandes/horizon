@@ -161,8 +161,13 @@ prepared bytes before marking transmission started; after an ambiguous send it
 must consult the authority instead of resubmitting that envelope.
 The response parser now also binds the SOAP wrapper to the prepared operation,
 requires one result payload and the expected service version, and rejects duplicate
-status fields. Inbound payload XSD validation and independent review of the current
-response schema package remain open before live use.
+status fields. The durable exchange runner now validates the extracted payload
+against byte-pinned official return XSDs after retaining the raw SOAP bytes and
+before recording parsed authority facts. The candidate set uses PL 009p v1.03 for
+authorization/status and PL 010d v1.03 for receipt/protocol/event; its exact
+combination and effective dates still need independent Fiscal review before live use.
+The SOAP adapter only prepares and parses; network transmission is available through
+the guarded exchange runner, which requires the response validator.
 
 An internal exchange ledger now persists the request artifact, one send marker,
 the raw response artifact and its parsed `cStat`/receipt/protocol facts. A

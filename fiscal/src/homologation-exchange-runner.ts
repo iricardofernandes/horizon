@@ -1,5 +1,6 @@
 import type { HomologationExchangeLedger } from './homologation-exchange-ledger'
 import type { PreparedSefazExchange, SefazNfe55HomologationAdapter } from './nfe55/sefaz-adapter'
+import type { SefazResponseSchemaValidator } from './nfe55/sefaz-response-schema'
 import type { SefazResponse } from './nfe55/sefaz-soap'
 import type { SefazService } from './nfe55/sefaz-transport'
 
@@ -25,6 +26,7 @@ export class HomologationExchangeRunner {
       send(service: SefazService, envelope: Buffer): Promise<Buffer>
     },
     private readonly parser: Pick<SefazNfe55HomologationAdapter, 'parseResponse' | 'wsdlDigest'>,
+    private readonly responseSchemas: Pick<SefazResponseSchemaValidator, 'validate'>,
   ) {}
 
   async execute(
@@ -49,6 +51,7 @@ export class HomologationExchangeRunner {
     }
     await this.ledger.recordRawResponse(input.tenantId, input.documentId, input.exchangeId, bytes)
     const parsed = this.parser.parseResponse(prepared, bytes)
+    await this.responseSchemas.validate(prepared.service, parsed.payload)
     await this.ledger.recordParsedResponse(
       input.tenantId,
       input.documentId,

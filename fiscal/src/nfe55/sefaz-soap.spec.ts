@@ -53,7 +53,7 @@ it('extracts only the correlated SP homologation protocol', () => {
   const payload =
     `<retEnviNFe xmlns="${namespace}" versao="4.00"><tpAmb>2</tpAmb>` +
     '<cUF>35</cUF><cStat>104</cStat><xMotivo>Lote processado</xMotivo>' +
-    `<protNFe versao="4.00"><infProt><chNFe>${key}</chNFe><nProt>123456789012345</nProt>` +
+    `<protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>${key}</chNFe><nProt>123456789012345</nProt>` +
     '<cStat>100</cStat><xMotivo>Autorizado</xMotivo></infProt></protNFe></retEnviNFe>'
   const result = parseSefazSoapResponse({
     service: 'authorization',
@@ -120,7 +120,7 @@ it('retains receipts and rejects wrong environments or hostile XML', () => {
   const receipt = soap(
     `<retEnviNFe xmlns="${namespace}" versao="4.00"><tpAmb>2</tpAmb><cUF>35</cUF>` +
       '<cStat>103</cStat><xMotivo>Lote recebido</xMotivo>' +
-      '<nRec>123456789012345</nRec></retEnviNFe>',
+      '<infRec><nRec>123456789012345</nRec><tMed>1</tMed></infRec></retEnviNFe>',
   )
   expect(parseSefazSoapResponse({ service: 'authorization', soap: receipt }).receipt).toBe(
     '123456789012345',
@@ -143,7 +143,7 @@ it('rejects duplicate status fields, mismatched versions and extra SOAP payloads
   const payload =
     `<retEnviNFe xmlns="${namespace}" versao="4.00"><tpAmb>2</tpAmb><cUF>35</cUF>` +
     '<cStat>103</cStat><xMotivo>Lote recebido</xMotivo>' +
-    '<nRec>123456789012345</nRec></retEnviNFe>'
+    '<infRec><nRec>123456789012345</nRec><tMed>1</tMed></infRec></retEnviNFe>'
   expect(() =>
     parseSefazSoapResponse({
       service: 'authorization',
@@ -167,4 +167,21 @@ it('rejects duplicate status fields, mismatched versions and extra SOAP payloads
       ),
     }),
   ).toThrow('unique response')
+})
+
+it('correlates protocol consultations even when no protocol was returned', () => {
+  const payload =
+    `<retConsSitNFe xmlns="${namespace}" versao="4.00"><tpAmb>2</tpAmb><cUF>35</cUF>` +
+    `<cStat>217</cStat><xMotivo>Sem protocolo</xMotivo><chNFe>${key}</chNFe>` +
+    '</retConsSitNFe>'
+  expect(
+    parseSefazSoapResponse({ service: 'protocol', soap: soap(payload), expectedAccessKey: key }),
+  ).toMatchObject({ statusCode: '217', accessKey: key })
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'protocol',
+      soap: soap(payload.replace(key, '0'.repeat(44))),
+      expectedAccessKey: key,
+    }),
+  ).toThrow('access key differs')
 })

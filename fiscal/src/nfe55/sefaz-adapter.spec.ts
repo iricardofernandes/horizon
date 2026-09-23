@@ -23,7 +23,7 @@ const key = buildNfe55AccessKey({
   numericCode: '12345678',
 })
 
-it('exchanges a status request and retains the exact request and response bytes', async () => {
+it('prepares a status request and parses the exact response bytes', async () => {
   const response = Buffer.from(
     `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>` +
       `<nfeStatusServicoNFResponse xmlns="${operationNamespace}"><nfeResultMsg>` +
@@ -31,43 +31,22 @@ it('exchanges a status request and retains the exact request and response bytes'
       '<cStat>107</cStat><xMotivo>Servico em operacao</xMotivo></retConsStatServ>' +
       '</nfeResultMsg></nfeStatusServicoNFResponse></s:Body></s:Envelope>',
   )
-  let sent: Buffer | null = null
-  let calls = 0
   const adapter = new SefazNfe55HomologationAdapter(
-    {
-      async send(service, request) {
-        calls += 1
-        expect(service).toBe('status')
-        sent = request
-        return response
-      },
-    },
     { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
     operations,
   )
   const prepared = await adapter.prepare({ service: 'status' })
-  expect(calls).toBe(0)
   expect(prepared.request.toString()).toContain('<cUF>35</cUF><xServ>STATUS</xServ>')
-  expect(adapter.parseResponse(prepared, response)).toMatchObject({
+  const parsed = adapter.parseResponse(prepared, response)
+  expect(parsed).toMatchObject({
     statusCode: '107',
     service: 'status',
   })
-  const exchange = await adapter.exchange({ service: 'status' })
-  expect(calls).toBe(1)
-  expect(exchange.request).toEqual(prepared.request)
-  expect(exchange.request).toEqual(sent)
-  expect(exchange.request.toString()).toContain('<cUF>35</cUF><xServ>STATUS</xServ>')
-  expect(exchange.response).toMatchObject({ statusCode: '107', service: 'status' })
-  expect(exchange.response.response).toEqual(response)
+  expect(parsed.response).toEqual(response)
 })
 
 it('rejects a response bound to a different prepared service', async () => {
   const adapter = new SefazNfe55HomologationAdapter(
-    {
-      async send() {
-        throw new Error('unexpected transport call')
-      },
-    },
     { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
     operations,
   )
@@ -89,20 +68,13 @@ it('rejects a response bound to a different prepared service', async () => {
   expect(() => adapter.parseResponse(prepared, wrongOperation)).toThrow('operation does not match')
 })
 
-it('refuses an unsigned authorization before sending to the authority', async () => {
-  let calls = 0
+it('refuses an unsigned authorization before preparing an envelope', async () => {
   const adapter = new SefazNfe55HomologationAdapter(
-    {
-      async send() {
-        calls += 1
-        return Buffer.alloc(0)
-      },
-    },
     { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
     operations,
   )
   await expect(
-    adapter.exchange({
+    adapter.prepare({
       service: 'authorization',
       lotId: '1',
       accessKey: key,
@@ -111,16 +83,10 @@ it('refuses an unsigned authorization before sending to the authority', async ()
       schemaDigest: 'b'.repeat(64),
     }),
   ).rejects.toThrow('signature')
-  expect(calls).toBe(0)
 })
 
 it('refuses a request for an issuer other than the certificate holder', async () => {
   const adapter = new SefazNfe55HomologationAdapter(
-    {
-      async send() {
-        throw new Error('unexpected transport call')
-      },
-    },
     { certificate: Buffer.alloc(0), issuerTaxId: '12345678000195' },
     operations,
   )

@@ -29,6 +29,7 @@ import { FiscalIngress } from '../src/ingress'
 import { FiscalLifecycle } from '../src/lifecycle'
 import { buildNfe55AccessKey } from '../src/nfe55/access-key'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from '../src/nfe55/sefaz-adapter'
+import { SefazResponseSchemaValidator } from '../src/nfe55/sefaz-response-schema'
 import { FiscalOutboxRelay } from '../src/outbox'
 import { DeterministicAuthorityGateway } from '../src/ports'
 import { FiscalProjections } from '../src/projections'
@@ -504,6 +505,16 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
   const ledger = new HomologationExchangeLedger(appUrl, artifacts)
   const capabilities = new FiscalCapabilities(appUrl)
   try {
+    const responseSchemas = new SefazResponseSchemaValidator(
+      {
+        archive: await readFile(new URL('../fixtures/official/pl-009p-v1.03.zip', import.meta.url)),
+        digest: '2e925939a228aaf785be9fe7d6315f2da94d3a10036d54ffb7c1273aa7502b05',
+      },
+      {
+        archive: await readFile(new URL('../fixtures/official/pl-010d-v1.03.zip', import.meta.url)),
+        digest: '45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b',
+      },
+    )
     const operationNamespace = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4'
     const operations: SefazOperationMap = {
       wsdlDigest: 'a'.repeat(64),
@@ -523,11 +534,6 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       event: { operation: 'nfeRecepcaoEvento', operationNamespace },
     }
     const adapter = new SefazNfe55HomologationAdapter(
-      {
-        async send() {
-          throw new Error('No network send in ledger test')
-        },
-      },
       { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
       operations,
     )
@@ -607,8 +613,9 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>` +
         `<nfeStatusServicoNFResponse xmlns="${operationNamespace}"><nfeResultMsg>` +
         `<retConsStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
-        '<tpAmb>2</tpAmb><cUF>35</cUF><cStat>107</cStat>' +
-        '<xMotivo>Servico em operacao</xMotivo></retConsStatServ>' +
+        '<tpAmb>2</tpAmb><verAplic>SP-v1</verAplic><cStat>107</cStat>' +
+        '<xMotivo>Servico em operacao</xMotivo><cUF>35</cUF>' +
+        '<dhRecbto>2026-09-23T12:00:00-03:00</dhRecbto></retConsStatServ>' +
         '</nfeResultMsg></nfeStatusServicoNFResponse></s:Body></s:Envelope>',
     )
     const rawDigest = await ledger.recordRawResponse(tenantId, documentId, exchangeId, soap)
@@ -644,6 +651,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
         },
       },
       adapter,
+      responseSchemas,
     )
     const runInput = { ...input, exchangeId: randomUUID(), workerId: 'worker-a' }
     await expect(
@@ -665,6 +673,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
         },
       },
       adapter,
+      responseSchemas,
     )
     const malformedInput = { ...input, exchangeId: randomUUID(), workerId: 'worker-a' }
     await expect(malformedRunner.execute(malformedInput, prepared)).rejects.toThrow()
@@ -674,6 +683,28 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       where raw.tenant_id = ${tenantId} and raw.exchange_id = ${malformedInput.exchangeId}`
     expect(rawOnly?.response_digest).toMatch(/^[0-9a-f]{64}$/)
     expect(rawOnly?.cstat).toBeNull()
+    const schemaFailure = { ...input, exchangeId: randomUUID(), workerId: 'worker-a' }
+    const schemaFailureRunner = new HomologationExchangeRunner(
+      ledger,
+      {
+        endpointSetDigest: input.endpointDigest,
+        certificateFingerprint: input.certificateFingerprint,
+        async send() {
+          return Buffer.from(soap.toString().replace('<verAplic>SP-v1</verAplic>', ''))
+        },
+      },
+      adapter,
+      responseSchemas,
+    )
+    await expect(schemaFailureRunner.execute(schemaFailure, prepared)).rejects.toThrow(
+      'schema validation failed',
+    )
+    const [schemaRaw] = await administrator`select raw.response_digest, parsed.cstat
+      from fiscal_homologation_raw_responses raw
+      left join fiscal_homologation_parsed_responses parsed using (tenant_id, exchange_id)
+      where raw.tenant_id = ${tenantId} and raw.exchange_id = ${schemaFailure.exchangeId}`
+    expect(schemaRaw?.response_digest).toMatch(/^[0-9a-f]{64}$/)
+    expect(schemaRaw?.cstat).toBeNull()
     const listed = await artifacts.listV2(tenantId, documentId)
     expect(fiscalArtifactListV2Schema.safeParse(listed).success).toBe(true)
     expect(listed).toMatchObject({ environment: 'homologation', fiscalValue: false })
@@ -723,8 +754,10 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       'nfeConsultaNF',
       'NFeConsultaProtocolo4',
       `<retConsSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
-        '<tpAmb>2</tpAmb><cUF>35</cUF><cStat>217</cStat>' +
-        '<xMotivo>Sem protocolo nesta consulta</xMotivo></retConsSitNFe>',
+        '<tpAmb>2</tpAmb><verAplic>SP-v1</verAplic><cStat>217</cStat>' +
+        '<xMotivo>Sem protocolo nesta consulta</xMotivo><cUF>35</cUF>' +
+        `<dhRecbto>2026-09-23T12:00:00-03:00</dhRecbto><chNFe>${accessKey}</chNFe>` +
+        '</retConsSitNFe>',
     )
     const protocolRunner = new HomologationExchangeRunner(
       ledger,
@@ -736,6 +769,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
         },
       },
       adapter,
+      responseSchemas,
     )
     const protocolRecovery = new HomologationRecovery(ledger, adapter, protocolRunner)
     expect(
@@ -753,8 +787,10 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       'nfeAutorizacaoLote',
       'NFeAutorizacao4',
       `<retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
-        `<tpAmb>2</tpAmb><cUF>35</cUF><cStat>103</cStat><xMotivo>Lote recebido</xMotivo>` +
-        `<nRec>${receipt}</nRec></retEnviNFe>`,
+        `<tpAmb>2</tpAmb><verAplic>SP-v1</verAplic><cStat>103</cStat>` +
+        `<xMotivo>Lote recebido</xMotivo><cUF>35</cUF>` +
+        '<dhRecbto>2026-09-23T12:00:00-03:00</dhRecbto>' +
+        `<infRec><nRec>${receipt}</nRec><tMed>1</tMed></infRec></retEnviNFe>`,
     )
     await ledger.recordRawResponse(tenantId, documentId, authorizationId, authorizationSoap)
     await ledger.recordParsedResponse(
@@ -809,8 +845,9 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       'nfeRetAutorizacaoLote',
       'NFeRetAutorizacao4',
       `<retConsReciNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
-        `<tpAmb>2</tpAmb><cUF>35</cUF><cStat>105</cStat><xMotivo>Em processamento</xMotivo>` +
-        `<nRec>${receipt}</nRec></retConsReciNFe>`,
+        `<tpAmb>2</tpAmb><verAplic>SP-v1</verAplic><nRec>${receipt}</nRec>` +
+        '<cStat>105</cStat><xMotivo>Em processamento</xMotivo><cUF>35</cUF>' +
+        '<dhRecbto>2026-09-23T12:00:00-03:00</dhRecbto></retConsReciNFe>',
     )
     const receiptRunner = new HomologationExchangeRunner(
       ledger,
@@ -822,6 +859,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
         },
       },
       adapter,
+      responseSchemas,
     )
     const receiptRecovery = new HomologationRecovery(ledger, adapter, receiptRunner)
     expect(

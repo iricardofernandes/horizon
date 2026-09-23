@@ -24,6 +24,7 @@ export type SefazResponse = {
   documentStatusCode: string | null
   eventStatusCode: string | null
   response: Buffer
+  payload: Buffer
   protocol: Buffer | null
 }
 
@@ -235,16 +236,28 @@ export function parseSefazSoapResponse(input: {
   const statusCode = required(payload, 'cStat')
   if (!/^\d{3}$/.test(statusCode)) throw new Error('SEFAZ response has an invalid status code')
   const reason = required(payload, 'xMotivo')
-  const receipt = value(payload, 'nRec')
+  const receiptInfo = child(payload, 'infRec')
+  const receipt =
+    input.service === 'authorization'
+      ? receiptInfo
+        ? value(receiptInfo, 'nRec')
+        : null
+      : value(payload, 'nRec')
   if (receipt && !receiptSchema.safeParse(receipt).success)
     throw new Error('SEFAZ response has an invalid receipt')
-  if (input.expectedReceipt && receipt && receipt !== input.expectedReceipt)
+  if (statusCode === '103' && input.service === 'authorization' && !receipt)
+    throw new Error('SEFAZ received batch response is missing its receipt')
+  if (input.expectedReceipt && receipt !== input.expectedReceipt)
     throw new Error('SEFAZ response receipt differs from the request')
   const protocol = child(payload, 'protNFe')
   const protocolInfo = protocol ? child(protocol, 'infProt') : null
   if (protocol && (protocol.getAttribute('versao') !== '4.00' || !protocolInfo))
     throw new Error('SEFAZ response protocol has an invalid version or structure')
+  if (protocolInfo && required(protocolInfo, 'tpAmb') !== '2')
+    throw new Error('SEFAZ response protocol has the wrong environment')
   const documentStatusCode = protocolInfo ? value(protocolInfo, 'cStat') : null
+  if (documentStatusCode && !/^\d{3}$/.test(documentStatusCode))
+    throw new Error('SEFAZ response protocol has an invalid status code')
   const event = child(payload, 'retEvento')
   const eventInfo = event ? child(event, 'infEvento') : null
   if (event && (event.getAttribute('versao') !== '1.00' || !eventInfo))
@@ -259,18 +272,18 @@ export function parseSefazSoapResponse(input: {
       throw new Error('SEFAZ cancellation event does not match the supported tuple')
   }
   const eventStatusCode = eventInfo ? value(eventInfo, 'cStat') : null
+  if (eventStatusCode && !/^\d{3}$/.test(eventStatusCode))
+    throw new Error('SEFAZ event response has an invalid status code')
   const accessKey =
     (protocolInfo && value(protocolInfo, 'chNFe')) ||
     (eventInfo && value(eventInfo, 'chNFe')) ||
     value(payload, 'chNFe')
   if (accessKey && !accessKeySchema.safeParse(accessKey).success)
     throw new Error('SEFAZ response has an invalid access key')
-  if (
-    input.expectedAccessKey &&
-    accessKey !== input.expectedAccessKey &&
-    (protocolInfo || eventInfo)
-  )
+  if (input.expectedAccessKey && accessKey && accessKey !== input.expectedAccessKey)
     throw new Error('SEFAZ response access key differs from the request')
+  if (input.service === 'protocol' && accessKey !== input.expectedAccessKey)
+    throw new Error('SEFAZ protocol consultation access key is missing or differs')
   return {
     service: input.service,
     statusCode,
@@ -285,6 +298,7 @@ export function parseSefazSoapResponse(input: {
     documentStatusCode,
     eventStatusCode,
     response: Buffer.from(input.soap),
+    payload: Buffer.from(new XMLSerializer().serializeToString(payload)),
     protocol: protocol
       ? Buffer.from(new XMLSerializer().serializeToString(protocol))
       : event

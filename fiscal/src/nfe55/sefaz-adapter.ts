@@ -45,7 +45,6 @@ export type SefazExchangeInput =
   | { service: 'protocol'; accessKey: string }
   | { service: 'status' }
 
-export type SefazExchange = { request: Buffer; response: SefazResponse }
 export type PreparedSefazExchange = {
   service: SefazService
   request: Buffer
@@ -55,14 +54,11 @@ export type PreparedSefazExchange = {
   expectedReceipt?: string
 }
 
-/** Performs one exchange. It never retries an ambiguous authorization or event submission. */
+/** Prepares and parses one exchange; the durable runner owns every network send. */
 export class SefazNfe55HomologationAdapter {
   readonly wsdlDigest: string
 
   constructor(
-    private readonly transport: {
-      send(service: SefazService, soapEnvelope: Buffer): Promise<Buffer>
-    },
     private readonly credential: Pick<HomologationCredential, 'certificate' | 'issuerTaxId'>,
     private readonly operations: SefazOperationMap,
   ) {
@@ -120,12 +116,6 @@ export class SefazNfe55HomologationAdapter {
       expectedOperation: prepared.operation,
       expectedOperationNamespace: prepared.operationNamespace,
     })
-  }
-
-  async exchange(input: SefazExchangeInput): Promise<SefazExchange> {
-    const prepared = await this.prepare(input)
-    const soap = await this.transport.send(prepared.service, prepared.request)
-    return { request: prepared.request, response: this.parseResponse(prepared, soap) }
   }
 }
 
