@@ -195,6 +195,19 @@ and unreviewed codes remain unknown. Event cancellation requires `128` and neste
 decision. These observations do not change the fiscal document lifecycle or
 release a shipment. The status combinations follow the
 [official MOC 7.0 annex](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=J+I+v4eN00E%3D).
+The `homologated` activation gate now also requires the reviewer evidence to name
+one started authorization, its authorized receipt/protocol consultation, and the
+cancelled event for the same document, access key, protocol, grant and capability.
+An arbitrary evidence digest or an unlinked exchange cannot activate the tuple.
+This structural check does not replace the independent comparison with the
+official portal and the live evidence record.
+After the live review is complete, register its evidence with
+`npm run phase43:activation -- --action evidence --file <json>` in `fiscal`.
+The JSON includes the capability and source/endpoint/certificate digests,
+`roundTripDigest`, the three exchange IDs, `reviewedBy` and `reviewedAt`.
+Use `--action activate` with a separate file containing `tenantId`, `capabilityId`,
+`evidenceDigest` equal to the reviewed round-trip digest, `actorId`, `reason` and
+`occurredAt`. The same command supports `--action deactivate` during rollback.
 An operator can inspect the tenant-scoped exchange history with
 `npm run phase43:observations -- --tenant <uuid> --document <uuid>` in `fiscal`
 after building the package. It shows prepared, send-started, raw-unparsed and

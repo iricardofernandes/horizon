@@ -175,7 +175,7 @@ it('keeps capability definitions inactive until independent review and activatio
   ).rejects.toThrow('append-only')
 })
 
-it('activates a homologation tuple only after matching reviewed round-trip evidence', async () => {
+it('refuses homologation activation without linked authority exchanges', async () => {
   const tenantId = randomUUID()
   const otherTenantId = randomUUID()
   await administrator`insert into tenants (id) values (${tenantId}), (${otherTenantId})`
@@ -219,6 +219,9 @@ it('activates a homologation tuple only after matching reviewed round-trip evide
     endpointSetDigest: 'd'.repeat(64),
     certificateFingerprint: 'e'.repeat(64),
     roundTripDigest: 'c'.repeat(64),
+    authorizationExchangeId: randomUUID(),
+    consultationExchangeId: randomUUID(),
+    cancellationExchangeId: randomUUID(),
     reviewedBy: 'reviewer:phase43',
     reviewedAt: '2026-09-23T14:30:00.000Z',
   }
@@ -228,36 +231,15 @@ it('activates a homologation tuple only after matching reviewed round-trip evide
       sourceManifestDigest: 'f'.repeat(64),
     }),
   ).rejects.toMatchObject({ code: '23514' })
-  const recorded = await capabilities.recordHomologationEvidence(evidence)
-  expect(await capabilities.recordHomologationEvidence(evidence)).toEqual({
-    ...recorded,
-    existing: true,
+  await expect(capabilities.recordHomologationEvidence(evidence)).rejects.toMatchObject({
+    code: '23514',
   })
   await expect(
     capabilities.change({ ...activation, evidenceDigest: 'f'.repeat(64) }),
   ).rejects.toMatchObject({ code: '23514' })
-  await capabilities.change(activation)
-  expect(await capabilities.listActive(tenantId)).toEqual([
-    expect.objectContaining({
-      id: definition.id,
-      environment: 'homologation',
-      status: 'homologated',
-      evidenceDigest: evidence.roundTripDigest,
-    }),
-  ])
-  expect(await capabilities.listActive(otherTenantId)).toEqual([])
-  await expect(
-    administrator`update fiscal_capability_homologation_evidence
-      set round_trip_digest = ${'f'.repeat(64)} where capability_id = ${definition.id}`,
-  ).rejects.toThrow('append-only')
-  await capabilities.change({
-    ...activation,
-    action: 'deactivate',
-    evidenceDigest: 'f'.repeat(64),
-    reason: 'Deactivate the scoped homologation capability',
-    occurredAt: '2026-09-23T16:00:00.000Z',
-  })
+  await expect(capabilities.change(activation)).rejects.toMatchObject({ code: '23514' })
   expect(await capabilities.listActive(tenantId)).toEqual([])
+  expect(await capabilities.listActive(otherTenantId)).toEqual([])
 })
 
 it('freezes a tenant-owned manual origin and creates one digest-verified draft', async () => {

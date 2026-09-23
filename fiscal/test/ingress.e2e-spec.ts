@@ -538,7 +538,10 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
         operationNamespace: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4',
       },
       status: { operation: 'nfeStatusServicoNF', operationNamespace },
-      event: { operation: 'nfeRecepcaoEvento', operationNamespace },
+      event: {
+        operation: 'nfeRecepcaoEvento',
+        operationNamespace: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4',
+      },
     }
     const adapter = new SefazNfe55HomologationAdapter(
       { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
@@ -1535,6 +1538,71 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       await restoreVerifier.close()
     }
     expect(await observations.list(randomUUID(), documentId)).toEqual([])
+    const loadedCancellation = await ledger.loadPrepared(
+      tenantId,
+      eventInput.exchangeId,
+      operations,
+      'tester:phase43',
+    )
+    const eventSoap = consultationSoap(
+      'nfeRecepcaoEvento',
+      'NFeRecepcaoEvento4',
+      `<retEnvEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">` +
+        '<idLote>1</idLote><tpAmb>2</tpAmb><verAplic>SP-v1</verAplic>' +
+        '<cOrgao>35</cOrgao><cStat>128</cStat><xMotivo>Lote processado</xMotivo>' +
+        '<retEvento versao="1.00"><infEvento><tpAmb>2</tpAmb><verAplic>SP-v1</verAplic>' +
+        '<cOrgao>35</cOrgao><cStat>135</cStat>' +
+        `<xMotivo>Evento registrado</xMotivo><chNFe>${accessKey}</chNFe>` +
+        '<tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento>' +
+        '<dhRegEvento>2026-09-23T17:00:00-03:00</dhRegEvento>' +
+        `<nProt>${cancellationProtocol}</nProt></infEvento></retEvento></retEnvEvento>`,
+    )
+    const parsedEvent = adapter.parseResponse(loadedCancellation.prepared, eventSoap)
+    await responseSchemas.validate('event', parsedEvent.payload)
+    expect(await ledger.markStarted(tenantId, eventInput.exchangeId, 'worker-a')).toBe(true)
+    await ledger.recordRawResponse(tenantId, documentId, eventInput.exchangeId, eventSoap)
+    await ledger.recordParsedResponse(tenantId, documentId, eventInput.exchangeId, parsedEvent)
+    const liveShapeEvidence = {
+      tenantId,
+      capabilityId: capability.id,
+      sourceManifestDigest: 'd'.repeat(64),
+      endpointSetDigest: input.endpointDigest,
+      certificateFingerprint: input.certificateFingerprint,
+      roundTripDigest: canonicalDigest({
+        authorizationId,
+        consultationId: authorizedConsultation.exchangeId,
+        cancellationId: eventInput.exchangeId,
+      }),
+      authorizationExchangeId: authorizationId,
+      consultationExchangeId: authorizedConsultation.exchangeId,
+      cancellationExchangeId: eventInput.exchangeId,
+      reviewedBy: 'reviewer:phase43',
+      reviewedAt: new Date().toISOString(),
+    }
+    await expect(
+      capabilities.recordHomologationEvidence({
+        ...liveShapeEvidence,
+        consultationExchangeId: randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: '23514' })
+    expect(await capabilities.recordHomologationEvidence(liveShapeEvidence)).toMatchObject({
+      existing: false,
+    })
+    expect(await capabilities.recordHomologationEvidence(liveShapeEvidence)).toMatchObject({
+      existing: true,
+    })
+    await capabilities.change({
+      tenantId,
+      capabilityId: capability.id,
+      action: 'activate_homologated',
+      evidenceDigest: liveShapeEvidence.roundTripDigest,
+      actorId: 'release:phase43',
+      reason: 'Offline structural activation fixture only',
+      occurredAt: new Date().toISOString(),
+    })
+    expect(await capabilities.listActive(tenantId)).toEqual([
+      expect.objectContaining({ id: capability.id, status: 'homologated' }),
+    ])
     const [documentAfterObservation] = await administrator`select status, environment
       from fiscal_documents where tenant_id = ${tenantId} and id = ${documentId}`
     expect(documentAfterObservation).toMatchObject({ status: 'ready', environment: 'homologation' })

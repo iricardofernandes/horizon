@@ -17,6 +17,7 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
 | WSDL, operações e URLs de homologação revisados | Pendente |
 | Impressão digital do certificado e raiz TLS | Pendente |
 | Capability, reviewer e grant temporário | Pendente |
+| IDs vinculados de autorização, consulta autorizada e cancelamento | Pendente |
 
 ## Ensaios no autorizador oficial
 

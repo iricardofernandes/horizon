@@ -47,6 +47,9 @@ const homologationEvidenceSchema = z.object({
   endpointSetDigest: digest,
   certificateFingerprint: digest,
   roundTripDigest: digest,
+  authorizationExchangeId: z.uuid(),
+  consultationExchangeId: z.uuid(),
+  cancellationExchangeId: z.uuid(),
   reviewedBy: z.string().min(1).max(200),
   reviewedAt: z.iso.datetime({ offset: true }),
 })
@@ -471,15 +474,19 @@ export class FiscalCapabilities {
       const id = randomUUID()
       const inserted = await tx`insert into fiscal_capability_homologation_evidence (
           id, tenant_id, capability_id, source_manifest_digest, endpoint_set_digest,
-          certificate_fingerprint, round_trip_digest, reviewed_by, reviewed_at
+          certificate_fingerprint, round_trip_digest, authorization_exchange_id,
+          consultation_exchange_id, cancellation_exchange_id, reviewed_by, reviewed_at
         ) values (
           ${id}, ${value.tenantId}, ${value.capabilityId}, ${value.sourceManifestDigest},
           ${value.endpointSetDigest}, ${value.certificateFingerprint},
-          ${value.roundTripDigest}, ${value.reviewedBy}, ${value.reviewedAt}
+          ${value.roundTripDigest}, ${value.authorizationExchangeId},
+          ${value.consultationExchangeId}, ${value.cancellationExchangeId},
+          ${value.reviewedBy}, ${value.reviewedAt}
         ) on conflict on constraint fiscal_homologation_evidence_once do nothing returning id`
       if (inserted.length > 0) return { id, existing: false }
       const [existing] = await tx`select id, source_manifest_digest, endpoint_set_digest,
-          certificate_fingerprint, round_trip_digest, reviewed_by, reviewed_at
+        certificate_fingerprint, round_trip_digest, authorization_exchange_id,
+        consultation_exchange_id, cancellation_exchange_id, reviewed_by, reviewed_at
         from fiscal_capability_homologation_evidence
         where tenant_id = ${value.tenantId} and capability_id = ${value.capabilityId}`
       if (
@@ -488,6 +495,9 @@ export class FiscalCapabilities {
         existing.endpoint_set_digest !== value.endpointSetDigest ||
         existing.certificate_fingerprint !== value.certificateFingerprint ||
         existing.round_trip_digest !== value.roundTripDigest ||
+        existing.authorization_exchange_id !== value.authorizationExchangeId ||
+        existing.consultation_exchange_id !== value.consultationExchangeId ||
+        existing.cancellation_exchange_id !== value.cancellationExchangeId ||
         existing.reviewed_by !== value.reviewedBy ||
         new Date(existing.reviewed_at).toISOString() !== value.reviewedAt
       )
