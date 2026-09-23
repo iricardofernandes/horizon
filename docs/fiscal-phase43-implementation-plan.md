@@ -267,6 +267,14 @@ marker exists. A stored raw response is parsed without another send. A started
 exchange without a raw response remains uncertain and requires consultation;
 repeating this command cannot submit it again. The endpoint file must contain the
 five reviewed SP homologation URLs, and its digest must match the drill grant.
+For an authorization whose send marker exists but whose outcome is unresolved,
+`npm run phase43:consult -- --tenant <uuid> --document <uuid>
+--exchange <new-uuid> --actor <id> --worker <id>` accepts the same certificate,
+trust anchor, operations, endpoints and response-schema flags as `exchange-resume`.
+It selects receipt or protocol consultation from the stored authorization evidence,
+persists the new request under the supplied exchange ID, and obeys the ten-attempt
+consultation budget. A pending result remains pending; the command never retries
+the original authorization.
 An internal readiness path now derives the homologation calculation from the frozen
 origin and historical projections only when the drill is active and the reviewed
 calculation approval exists. It refuses a changed rule result between preview and

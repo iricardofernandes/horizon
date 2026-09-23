@@ -22,6 +22,7 @@
     "phase43:readiness": "node dist/phase43-readiness-cli.js",
     "phase43:issuance-prep": "node dist/phase43-issuance-prep-cli.js",
     "phase43:exchange-resume": "node dist/phase43-exchange-resume-cli.js",
+    "phase43:consult": "node dist/phase43-exchange-resume-cli.js --action consult",
     "phase42:verify-sources": "node scripts/verify-phase42-sources.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",

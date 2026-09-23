@@ -6,9 +6,11 @@ import { EncryptedFiscalArtifactStore, S3ObjectStore } from './artifact-store'
 import { FiscalArtifacts } from './artifacts'
 import { HomologationExchangeLedger } from './homologation-exchange-ledger'
 import { HomologationExchangeRunner } from './homologation-exchange-runner'
+import { HomologationRecovery } from './homologation-recovery'
 import { loadHomologationCredential } from './nfe55/homologation-credential'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from './nfe55/sefaz-adapter'
 import { SefazResponseSchemaValidator } from './nfe55/sefaz-response-schema'
+import type { SefazResponse } from './nfe55/sefaz-soap'
 import { SefazHomologationTransport } from './nfe55/sefaz-transport'
 import { loadSefazTrustAnchor } from './nfe55/sefaz-trust-anchor'
 import { digestSchema, endpointsSchema, operationsSchema } from './phase43-runtime-input'
@@ -38,6 +40,11 @@ async function main(): Promise<void> {
   const exchangeId = z.uuid().parse(flag('exchange'))
   const actorId = z.string().min(1).max(200).parse(flag('actor'))
   const workerId = z.string().min(1).max(200).parse(flag('worker'))
+  const actionIndex = process.argv.indexOf('--action')
+  const action = actionIndex < 0 ? 'resume' : process.argv[actionIndex + 1]
+  if (action !== 'resume' && action !== 'consult')
+    throw new Error('--action must be resume or consult')
+  const documentId = action === 'consult' ? z.uuid().parse(flag('document')) : null
   const [credential, trustAnchor, operations, endpoints, documentSchemas, consultationSchemas] =
     await Promise.all([
       loadHomologationCredential({
@@ -72,11 +79,33 @@ async function main(): Promise<void> {
   const responseSchemas = new SefazResponseSchemaValidator(documentSchemas, consultationSchemas)
   const runner = new HomologationExchangeRunner(ledger, transport, adapter, responseSchemas)
   try {
-    const response = await runner.resume({ tenantId, exchangeId, actorId, workerId }, operations)
+    let response: SefazResponse
+    if (documentId) {
+      const target = await ledger.recoveryTarget(tenantId, documentId)
+      const parent = await ledger.loadPrepared(
+        tenantId,
+        target.parentExchangeId,
+        operations,
+        actorId,
+      )
+      if (parent.input.documentId !== documentId || parent.prepared.service !== 'authorization')
+        throw new Error('SEFAZ recovery parent differs from authorization')
+      const recovery = new HomologationRecovery(ledger, adapter, runner)
+      response = await recovery.consult({
+        ...parent.input,
+        documentId,
+        exchangeId,
+        actorId,
+        workerId,
+      })
+    } else {
+      response = await runner.resume({ tenantId, exchangeId, actorId, workerId }, operations)
+    }
     process.stdout.write(
       `${JSON.stringify(
         {
           exchangeId,
+          action,
           service: response.service,
           statusCode: response.statusCode,
           documentStatusCode: response.documentStatusCode,
