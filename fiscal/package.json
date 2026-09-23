@@ -18,6 +18,7 @@
     "phase43:observations": "node dist/phase43-observations-cli.js",
     "phase43:number-range": "node dist/phase43-number-range-cli.js",
     "phase43:calculation-approval": "node dist/phase43-number-range-cli.js --action calculation",
+    "phase43:issuance-profile": "node dist/phase43-number-range-cli.js --action issuance-profile",
     "phase43:readiness": "node dist/phase43-readiness-cli.js",
     "phase42:verify-sources": "node scripts/verify-phase42-sources.mjs",
     "db:migrate": "node scripts/migrate.mjs",

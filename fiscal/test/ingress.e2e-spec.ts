@@ -31,6 +31,7 @@ import { FiscalLifecycle } from '../src/lifecycle'
 import { buildNfe55AccessKey } from '../src/nfe55/access-key'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from '../src/nfe55/sefaz-adapter'
 import { SefazResponseSchemaValidator } from '../src/nfe55/sefaz-response-schema'
+import { parseFiscalOriginSnapshot } from '../src/origin-snapshot'
 import { FiscalOutboxRelay } from '../src/outbox'
 import { DeterministicAuthorityGateway } from '../src/ports'
 import { FiscalProjections } from '../src/projections'
@@ -564,6 +565,55 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       interpretation: 'Scoped offline exchange drill.',
       reviewedAt: new Date().toISOString(),
     })
+    const frozenOrigin = parseFiscalOriginSnapshot(
+      await documents.readSnapshot(tenantId, documentId),
+    )
+    const firstItemId = frozenOrigin.lines[0]?.itemId
+    if (!firstItemId) throw new Error('Offline homologation fixture has no item')
+    const issuanceProfile = {
+      capabilityId: capability.id,
+      issuerAddress: {
+        street: 'Rua Fiscal',
+        number: '42',
+        complement: null,
+        district: 'Centro',
+      },
+      lineFacts: {
+        [firstItemId]: {
+          productCode: 'CAFE-001',
+          cfop: '5102',
+          unit: 'UN',
+          ibsCbsCst: '000',
+          ibsCbsClassification: '000001',
+        },
+      },
+    }
+    const profileReview = {
+      tenantId,
+      capabilityId: capability.id,
+      sourceManifestDigest: 'd'.repeat(64),
+      profile: issuanceProfile,
+      reviewedBy: 'reviewer:phase43',
+    }
+    await expect(
+      capabilities.registerHomologationIssuanceProfile({
+        ...profileReview,
+        reviewedBy: 'author:phase43',
+      }),
+    ).rejects.toThrow('differs from reviewed capability')
+    expect(await capabilities.registerHomologationIssuanceProfile(profileReview)).toMatchObject({
+      existing: false,
+      profileDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
+    })
+    expect(await capabilities.registerHomologationIssuanceProfile(profileReview)).toMatchObject({
+      existing: true,
+    })
+    expect(await capabilities.getHomologationIssuanceProfile(tenantId, capability.id)).toEqual(
+      issuanceProfile,
+    )
+    expect(
+      await capabilities.getHomologationIssuanceProfile(randomUUID(), capability.id),
+    ).toBeNull()
     const packageId = randomUUID()
     const packageBytes = Buffer.from('{"fixture":"reviewed-sp-v1"}')
     const packageDigest = createHash('sha256').update(packageBytes).digest('hex')

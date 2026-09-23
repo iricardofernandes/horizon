@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { z } from 'zod'
 import { appendAudit } from './audit'
+import { canonicalDigest } from './canonical-json'
+import { type Nfe55IssuanceProfile, nfe55IssuanceProfileSchema } from './nfe55/issuance-profile'
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/)
 const definitionSchema = z.object({
@@ -69,6 +71,14 @@ const homologationCalculationApprovalSchema = z.strictObject({
   reviewedBy: z.string().min(1).max(200),
 })
 
+const homologationIssuanceProfileInputSchema = z.strictObject({
+  tenantId: z.uuid(),
+  capabilityId: z.uuid(),
+  sourceManifestDigest: digest,
+  profile: nfe55IssuanceProfileSchema,
+  reviewedBy: z.string().min(1).max(200),
+})
+
 export type FiscalCapabilityDefinition = z.infer<typeof definitionSchema>
 export type ActiveFiscalCapability = Omit<FiscalCapabilityDefinition, 'createdBy'> & {
   id: string
@@ -92,6 +102,63 @@ export class FiscalCapabilities {
 
   async close(): Promise<void> {
     await this.#db.end()
+  }
+
+  async registerHomologationIssuanceProfile(
+    input: z.input<typeof homologationIssuanceProfileInputSchema>,
+  ): Promise<{ profileDigest: string; existing: boolean }> {
+    const value = homologationIssuanceProfileInputSchema.parse(input)
+    if (value.profile.capabilityId !== value.capabilityId)
+      throw new Error('Homologation issuance profile capability differs from input')
+    const profileDigest = canonicalDigest(value.profile)
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const inserted = await tx`insert into fiscal_homologation_issuance_profiles (
+        tenant_id, capability_id, source_manifest_digest, profile_digest,
+        profile, reviewed_by
+      ) values (
+        ${value.tenantId}, ${value.capabilityId}, ${value.sourceManifestDigest},
+        ${profileDigest}, ${tx.json(value.profile)}, ${value.reviewedBy}
+      ) on conflict do nothing returning capability_id`
+      const [stored] = await tx`select source_manifest_digest, profile_digest, profile,
+          reviewed_by from fiscal_homologation_issuance_profiles
+        where tenant_id = ${value.tenantId} and capability_id = ${value.capabilityId}`
+      if (
+        !stored ||
+        stored.source_manifest_digest !== value.sourceManifestDigest ||
+        stored.profile_digest !== profileDigest ||
+        canonicalDigest(nfe55IssuanceProfileSchema.parse(stored.profile)) !== profileDigest ||
+        stored.reviewed_by !== value.reviewedBy
+      )
+        throw new Error('Conflicting immutable homologation issuance profile')
+      if (inserted.length > 0)
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.reviewedBy,
+          action: 'homologation.issuance-profile-reviewed',
+          resourceId: value.capabilityId,
+          detail: { sourceManifestDigest: value.sourceManifestDigest, profileDigest },
+        })
+      return { profileDigest, existing: inserted.length === 0 }
+    })
+  }
+
+  async getHomologationIssuanceProfile(
+    tenantId: string,
+    capabilityId: string,
+  ): Promise<Nfe55IssuanceProfile | null> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(capabilityId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select profile, profile_digest from fiscal_homologation_issuance_profiles
+        where tenant_id = ${tenantId} and capability_id = ${capabilityId}`
+    })
+    if (!row) return null
+    const profile = nfe55IssuanceProfileSchema.parse(row.profile)
+    if (profile.capabilityId !== capabilityId || canonicalDigest(profile) !== row.profile_digest)
+      throw new Error('Homologation issuance profile digest mismatch')
+    return profile
   }
 
   async getHomologationDrill(

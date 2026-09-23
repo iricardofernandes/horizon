@@ -8,6 +8,7 @@ import type { FiscalDispatch } from './dispatch'
 import type { FiscalDocuments } from './documents'
 import { buildNfe55AccessKey } from './nfe55/access-key'
 import { renderSimulatedDanfe } from './nfe55/danfe'
+import { type Nfe55IssuanceProfile, nfe55IssuanceProfileSchema } from './nfe55/issuance-profile'
 import type { Nfe55Data } from './nfe55/model'
 import { validateNfe55Schema } from './nfe55/schema'
 import { type SimulationCredential, signNfe55, verifyNfe55Signature } from './nfe55/signature'
@@ -22,27 +23,7 @@ const commandSchema = z.strictObject({
   idempotencyKey: z.string().min(16).max(128),
   actorId: z.string().min(1).max(200),
 })
-const profileSchema = z.strictObject({
-  capabilityId: z.uuid(),
-  issuerAddress: z.strictObject({
-    street: z.string().min(2).max(60),
-    number: z.string().min(1).max(60),
-    complement: z.string().min(1).max(60).nullable(),
-    district: z.string().min(2).max(60),
-  }),
-  lineFacts: z.record(
-    z.uuid(),
-    z.strictObject({
-      productCode: z.string().min(1).max(60),
-      cfop: z.string().regex(/^5\d{3}$/),
-      unit: z.string().min(1).max(6),
-      ibsCbsCst: z.string().regex(/^\d{3}$/),
-      ibsCbsClassification: z.string().regex(/^\d{6}$/),
-    }),
-  ),
-})
-
-export type Nfe55SimulationProfile = z.infer<typeof profileSchema>
+export type Nfe55SimulationProfile = Nfe55IssuanceProfile
 
 /** Prepares exact signed bytes and only then crosses the durable dispatch boundary. */
 export class FiscalIssuance {
@@ -62,7 +43,7 @@ export class FiscalIssuance {
     private readonly schemaDigest: string,
   ) {
     this.#db = postgres(databaseUrl, { max: 5, connection: { statement_timeout: 10_000 } })
-    this.#profile = profileSchema.parse(profile)
+    this.#profile = nfe55IssuanceProfileSchema.parse(profile)
     digest.parse(schemaDigest)
   }
 
@@ -331,6 +312,8 @@ export function buildNfe55Data(input: {
   const invoice = BigInt(input.calculation.result.totals.net.amount)
   return {
     accessKey,
+    processVersion:
+      input.document.environment === 'homologation' ? 'horizon-phase43' : 'horizon-phase42',
     issuedAt:
       input.origin.originModule === 'fiscal'
         ? `${input.origin.issueDate}T12:00:00-03:00`

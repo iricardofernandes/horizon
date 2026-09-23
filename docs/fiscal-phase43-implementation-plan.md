@@ -230,6 +230,15 @@ The reviewer registers that exact package set with
 `npm run phase43:calculation-approval -- --file <json>` in `fiscal` after building.
 The JSON requires `tenantId`, `capabilityId`, `sourceManifestDigest`,
 `calculationFixtureId`, sorted `packageDigests`, and `reviewedBy`.
+The issuer address and each commercial line's NF-e product mapping now have a
+separate immutable homologation profile, bound to the same reviewed capability
+and source manifest. Register it with
+`npm run phase43:issuance-profile -- --file <json>` in `fiscal` after building.
+The JSON requires `tenantId`, `capabilityId`, `sourceManifestDigest`, `reviewedBy`,
+and `profile`. The profile contains `capabilityId`, `issuerAddress` and `lineFacts`
+as defined by the NF-e issuance profile schema. The reviewer must match the
+approved capability review and differ from its creator. No simulation profile is
+used to supply homologation CFOP, product codes or issuer address.
 An internal readiness path now derives the homologation calculation from the frozen
 origin and historical projections only when the drill is active and the reviewed
 calculation approval exists. It refuses a changed rule result between preview and

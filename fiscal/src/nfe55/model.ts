@@ -60,6 +60,7 @@ export const nfe55DataSchema = z
     issuedAt: z.iso.datetime({ offset: true }),
     natureOperation: text(1, 60),
     numericCode: z.string().regex(/^\d{8}$/),
+    processVersion: text(1, 20).optional(),
     series: z.number().int().min(0).max(999),
     number: z.number().int().min(1).max(999_999_999),
     issuer: partySchema,

@@ -30,7 +30,7 @@ export function serializeNfe55(candidate: unknown): Buffer {
     tag('indFinal', '0'),
     tag('indPres', '1'),
     tag('procEmi', '0'),
-    tag('verProc', 'horizon-phase42'),
+    tag('verProc', value.processVersion ?? 'horizon-phase42'),
     '</ide>',
     '<emit>',
     tag('CNPJ', value.issuer.taxId),

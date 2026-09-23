@@ -10,15 +10,17 @@ async function main(): Promise<void> {
   const input = JSON.parse(await readFile(file, 'utf8'))
   const actionIndex = process.argv.indexOf('--action')
   const action = actionIndex < 0 ? 'number-range' : process.argv[actionIndex + 1]
-  if (action !== 'number-range' && action !== 'calculation')
-    throw new Error('--action must be number-range or calculation')
+  if (action !== 'number-range' && action !== 'calculation' && action !== 'issuance-profile')
+    throw new Error('--action must be number-range, calculation, or issuance-profile')
   const capabilities = new FiscalCapabilities(databaseUrl)
   try {
     process.stdout.write(
       `${JSON.stringify(
         action === 'calculation'
           ? await capabilities.approveHomologationCalculation(input)
-          : await capabilities.registerHomologationNumberRange(input),
+          : action === 'issuance-profile'
+            ? await capabilities.registerHomologationIssuanceProfile(input)
+            : await capabilities.registerHomologationNumberRange(input),
         null,
         2,
       )}\n`,

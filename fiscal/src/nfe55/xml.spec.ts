@@ -105,6 +105,11 @@ describe('NF-e 4.00 XML and simulation signature', () => {
       }),
     ).toThrow('does not reconcile with frozen lines')
   })
+
+  it('marks the separately prepared homologation process version', () => {
+    const xml = serializeNfe55({ ...fixture(), processVersion: 'horizon-phase43' })
+    expect(xml.toString()).toContain('<verProc>horizon-phase43</verProc>')
+  })
 })
 
 function fixture(): Nfe55Data {
