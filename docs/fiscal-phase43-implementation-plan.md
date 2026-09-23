@@ -177,6 +177,11 @@ An internal exchange ledger now persists the request artifact, one send marker,
 the raw response artifact and its parsed `cStat`/receipt/protocol facts. A
 time-limited drill grant requires an independently reviewed SP homologation
 capability and binds document, endpoint, WSDL, certificate and adapter digests.
+Create it with `npm run phase43:grant -- --file <json>` in `fiscal` after building.
+The JSON requires `tenantId`, `documentId`, `grantId`, `capabilityId`,
+`endpointDigest`, `wsdlDigest`, `certificateFingerprint`, `issuedBy` and
+`expiresAt`. It uses the database and artifact-store environment variables and
+rejects grants longer than two hours. Use a separate grant for each document.
 The runner records the raw response before parsing and refuses a second send
 after a send marker, including when the first response was lost. This ledger is
 not yet wired to the Fiscal issue worker or a live SEFAZ credential.
