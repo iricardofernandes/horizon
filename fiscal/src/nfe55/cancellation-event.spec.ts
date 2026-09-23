@@ -10,6 +10,7 @@ import {
   validateCancellationEventSchema,
   verifyCancellationEventSignature,
 } from './cancellation-event'
+import { SefazNfe55HomologationAdapter, type SefazOperationMap } from './sefaz-adapter'
 import type { SimulationCredential } from './signature'
 
 const schemaPath = new URL('../../fixtures/official/pl-010d-v1.03.zip', import.meta.url)
@@ -65,6 +66,32 @@ it('signs an alphanumeric-key cancellation and validates the pinned event envelo
     xml: signed,
     schemaZip: await readFile(schemaPath),
     expectedZipDigest: schemaDigest,
+  })
+  const namespace = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4'
+  const operations: SefazOperationMap = {
+    wsdlDigest: 'a'.repeat(64),
+    authorization: { operation: 'nfeAutorizacaoLote', operationNamespace: namespace },
+    receipt: { operation: 'nfeRetAutorizacaoLote', operationNamespace: namespace },
+    protocol: { operation: 'nfeConsultaNF', operationNamespace: namespace },
+    status: { operation: 'nfeStatusServicoNF', operationNamespace: namespace },
+    event: { operation: 'nfeRecepcaoEvento', operationNamespace: namespace },
+  }
+  const adapter = new SefazNfe55HomologationAdapter(
+    { certificate: credential.certificate, issuerTaxId: '00000000E08G12' },
+    operations,
+  )
+  expect(
+    await adapter.prepare({
+      service: 'event',
+      accessKey: event.accessKey,
+      signedEvent: signed,
+      schemaZip: await readFile(schemaPath),
+      schemaDigest,
+    }),
+  ).toMatchObject({
+    service: 'event',
+    expectedAuthorizationProtocol: event.authorizationProtocol,
+    expectedAccessKey: event.accessKey,
   })
   expect(() =>
     verifyCancellationEventSignature(

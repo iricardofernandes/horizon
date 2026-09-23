@@ -18,6 +18,7 @@ import { verifyNfe55Signature } from './signature'
 
 const accessKeySchema = z.string().length(44).refine(isValidNfeAccessKey)
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/)
+const protocolSchema = z.string().regex(/^[0-9]{15}$/)
 const nfeNamespace = 'http://www.portalfiscal.inf.br/nfe'
 
 export type SefazOperationMap = Record<
@@ -52,6 +53,7 @@ export type PreparedSefazExchange = {
   operationNamespace: string
   expectedAccessKey?: string
   expectedReceipt?: string
+  expectedAuthorizationProtocol?: string
 }
 
 /** Prepares and parses one exchange; the durable runner owns every network send. */
@@ -104,6 +106,13 @@ export class SefazNfe55HomologationAdapter {
       operationNamespace: operation.operationNamespace,
       ...('accessKey' in input ? { expectedAccessKey: input.accessKey } : {}),
       ...(input.service === 'receipt' ? { expectedReceipt: input.receipt } : {}),
+      ...(input.service === 'event'
+        ? {
+            expectedAuthorizationProtocol: protocolSchema.parse(
+              onlyElement(input.signedEvent, 'nProt').textContent?.trim(),
+            ),
+          }
+        : {}),
     }
   }
 

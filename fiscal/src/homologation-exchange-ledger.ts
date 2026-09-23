@@ -120,17 +120,17 @@ export class HomologationExchangeLedger {
       const inserted = await tx`insert into fiscal_homologation_exchanges (
         id, tenant_id, document_id, drill_grant_id, parent_exchange_id, service, request_digest,
         endpoint_digest, wsdl_digest, certificate_fingerprint, adapter_version,
-        access_key, receipt
+        access_key, receipt, authorization_protocol
       ) values (
         ${value.exchangeId}, ${value.tenantId}, ${value.documentId}, ${value.drillGrantId},
         ${value.parentExchangeId}, ${exchange.service}, ${request.digest},
         ${value.endpointDigest}, ${value.wsdlDigest}, ${value.certificateFingerprint},
         ${value.adapterVersion}, ${exchange.expectedAccessKey ?? null},
-        ${exchange.expectedReceipt ?? null}
+        ${exchange.expectedReceipt ?? null}, ${exchange.expectedAuthorizationProtocol ?? null}
       ) on conflict do nothing returning id`
       const [stored] = await tx`select document_id, drill_grant_id, parent_exchange_id, service,
           request_digest, endpoint_digest, wsdl_digest, certificate_fingerprint,
-          adapter_version, access_key, receipt
+          adapter_version, access_key, receipt, authorization_protocol
         from fiscal_homologation_exchanges
         where tenant_id = ${value.tenantId} and id = ${value.exchangeId}`
       if (
@@ -145,7 +145,8 @@ export class HomologationExchangeLedger {
         stored.certificate_fingerprint !== value.certificateFingerprint ||
         stored.adapter_version !== value.adapterVersion ||
         stored.access_key !== (exchange.expectedAccessKey ?? null) ||
-        stored.receipt !== (exchange.expectedReceipt ?? null)
+        stored.receipt !== (exchange.expectedReceipt ?? null) ||
+        stored.authorization_protocol !== (exchange.expectedAuthorizationProtocol ?? null)
       )
         throw new Error('Conflicting immutable SEFAZ exchange')
       if (inserted.length > 0)

@@ -183,6 +183,10 @@ started authorization, retain its access key and, for a receipt query, use the
 receipt actually recorded in the parent response. Recovery chooses protocol
 consultation after a lost response and receipt consultation when a receipt was
 recorded; it never starts another authorization for the same document.
+Cancellation preparation now extracts the authorization `nProt` from the signed
+event, and the database requires an observed `cStat=100` authorization with that
+exact protocol before accepting the event exchange. A merely started authorization
+or a different protocol cannot permit cancellation.
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the

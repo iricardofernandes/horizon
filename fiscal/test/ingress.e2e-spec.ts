@@ -871,6 +871,71 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
         })
       ).service,
     ).toBe('receipt')
+    const cancellationProtocol = '123456789012345'
+    const cancellationEvent = {
+      service: 'event' as const,
+      request: Buffer.from('<prepared-cancellation/>'),
+      operation: 'nfeRecepcaoEvento',
+      operationNamespace: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4',
+      expectedAccessKey: accessKey,
+      expectedAuthorizationProtocol: cancellationProtocol,
+    }
+    const eventInput = {
+      ...input,
+      exchangeId: randomUUID(),
+      parentExchangeId: authorizationId,
+    }
+    await expect(ledger.prepare(eventInput, cancellationEvent)).rejects.toThrow(
+      'requires the exact authorized protocol',
+    )
+    const authorizedSoap = consultationSoap(
+      'nfeConsultaNF',
+      'NFeConsultaProtocolo4',
+      `<retConsSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
+        '<tpAmb>2</tpAmb><verAplic>SP-v1</verAplic><cStat>100</cStat>' +
+        '<xMotivo>Autorizado</xMotivo><cUF>35</cUF>' +
+        '<dhRecbto>2026-09-23T12:00:00-03:00</dhRecbto>' +
+        `<chNFe>${accessKey}</chNFe><protNFe versao="4.00"><infProt>` +
+        `<tpAmb>2</tpAmb><verAplic>SP-v1</verAplic><chNFe>${accessKey}</chNFe>` +
+        '<dhRecbto>2026-09-23T12:00:00-03:00</dhRecbto>' +
+        `<nProt>${cancellationProtocol}</nProt><cStat>100</cStat>` +
+        '<xMotivo>Autorizado</xMotivo></infProt></protNFe></retConsSitNFe>',
+    )
+    const authorizedRunner = new HomologationExchangeRunner(
+      ledger,
+      {
+        endpointSetDigest: input.endpointDigest,
+        certificateFingerprint: input.certificateFingerprint,
+        async send() {
+          return authorizedSoap
+        },
+      },
+      adapter,
+      responseSchemas,
+    )
+    const authorizedPrepared = await adapter.prepare({ service: 'protocol', accessKey })
+    expect(
+      (
+        await authorizedRunner.execute(
+          {
+            ...input,
+            exchangeId: randomUUID(),
+            parentExchangeId: authorizationId,
+            workerId: 'worker-a',
+          },
+          authorizedPrepared,
+        )
+      ).documentStatusCode,
+    ).toBe('100')
+    await expect(
+      ledger.prepare(
+        { ...eventInput, exchangeId: randomUUID() },
+        { ...cancellationEvent, expectedAuthorizationProtocol: '999999999999999' },
+      ),
+    ).rejects.toThrow('requires the exact authorized protocol')
+    expect(await ledger.prepare(eventInput, cancellationEvent)).toMatchObject({
+      exchangeId: eventInput.exchangeId,
+    })
   } finally {
     await Promise.all([ledger.close(), artifacts.close(), capabilities.close()])
   }
