@@ -27,6 +27,7 @@ import {
 } from '../src/homologation-exchange-runner'
 import { HomologationIssuance } from '../src/homologation-issuance'
 import { HomologationObservations } from '../src/homologation-observations'
+import { HomologationRawRecovery } from '../src/homologation-raw-recovery'
 import { HomologationRecovery } from '../src/homologation-recovery'
 import { HomologationRestoreVerifier } from '../src/homologation-restore-verifier'
 import { FiscalIngress } from '../src/ingress'
@@ -975,29 +976,16 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     )
     const rawDigest = await ledger.recordRawResponse(tenantId, documentId, exchangeId, soap)
     expect(await ledger.recordRawResponse(tenantId, documentId, exchangeId, soap)).toBe(rawDigest)
-    const replayRunner = new HomologationExchangeRunner(
-      ledger,
-      {
-        endpointSetDigest: input.endpointDigest,
-        certificateFingerprint: input.certificateFingerprint,
-        async send() {
-          throw new Error('Stored response must not be sent again')
-        },
-      },
-      adapter,
-      responseSchemas,
-    )
+    const rawRecovery = new HomologationRawRecovery(ledger, adapter, responseSchemas)
     expect(
       (await ledger.loadPrepared(tenantId, exchangeId, operations, 'tester:resume')).stage,
     ).toBe('raw_unparsed')
     expect(
-      (
-        await replayRunner.resume(
-          { tenantId, exchangeId, workerId: 'worker-b', actorId: 'tester:resume' },
-          operations,
-        )
-      ).statusCode,
+      (await rawRecovery.reparse(tenantId, exchangeId, 'tester:resume', operations)).statusCode,
     ).toBe('107')
+    await expect(
+      rawRecovery.reparse(tenantId, exchangeId, 'tester:resume', operations),
+    ).rejects.toThrow('no unparsed stored response')
     expect(
       (await ledger.loadPrepared(tenantId, exchangeId, operations, 'tester:resume')).stage,
     ).toBe('observed')

@@ -219,13 +219,14 @@ Authorization preparation now requires one immutable binding among the signed
 NF-e bytes, exact SOAP envelope, access key, reserved number, schema package and
 drill grant. The adapter validates the signed document before the ledger binds it;
 the database rejects a different envelope or an access key with another series or
-number. This does not yet provide a production worker or live issuance command.
+number. The internal preparation command described below is available; the
+production worker remains outside this phase's activation.
 For homologation, a separate approval now binds the capability's source manifest
 and fixture to the exact reviewed calculation package digests. Each package must
 have retained bytes and an independent review by the same Fiscal reviewer. The
 database refuses a draft-to-ready transition if the calculation used another
-package set. The homologation readiness command and a real reviewed rule package
-are still required before this gate can be exercised for issuance.
+package set. The internal readiness command is available, but a real reviewed
+rule package is still required before this gate can be exercised for issuance.
 The reviewer registers that exact package set with
 `npm run phase43:calculation-approval -- --file <json>` in `fiscal` after building.
 The JSON requires `tenantId`, `capabilityId`, `sourceManifestDigest`,
@@ -274,6 +275,13 @@ SEFAZ observations, checks the reviewed event archive, signs and stores the even
 and reports `sent: false`. Use `phase43:exchange-resume` with the same exchange ID
 to transmit it. Repeating preparation with the same ID and timestamp is idempotent;
 a different cancellation event for the document is rejected.
+If a process saved the raw SOAP response but stopped before parsing it, run
+`npm run phase43:reparse -- --tenant <uuid> --exchange <uuid> --actor <id>
+--operations <json> --document-response-schema <zip>
+--consultation-response-schema <zip>`. It requires the database and artifact-store
+environment variables, but no signing certificate or SEFAZ network access.
+It only accepts an exchange in the `raw_unparsed` state, validates the stored
+response against the pinned operation and schema, and records the parsed facts.
 The prepared exchange can then be resumed with
 `npm run phase43:exchange-resume -- --tenant <uuid> --exchange <uuid> --actor <id>
 --worker <id> --certificate <pem> --private-key <pem>
