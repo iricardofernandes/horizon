@@ -57,6 +57,13 @@
       "when": 1791100003000,
       "tag": "0007_fiscal_origin_tuple",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791100004000,
+      "tag": "0008_fiscal_dispatch_db_fence",
+      "breakpoints": true
     }
   ]
 }

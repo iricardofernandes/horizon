@@ -621,6 +621,17 @@ it('blocks a scoped dispatch in PostgreSQL until its exact production release', 
       dispatchedOn: today(),
     })
   expect((await dispatch()).isLeft()).toBe(true)
+  await expect(administrator`update shipments
+    set status = 'dispatched', dispatched_by = 'direct-sql', dispatched_on = ${today()}
+    where tenant_id = ${fixture.tenantId} and id = ${shipmentId}`).rejects.toThrow(
+    'lacks production fiscal authorization',
+  )
+  await expect(administrator`update shipments
+    set status = 'returned', dispatched_by = 'direct-sql', dispatched_on = ${today()},
+      returned_by = 'direct-sql', returned_on = ${today()}, closure_reason = 'direct-sql'
+    where tenant_id = ${fixture.tenantId} and id = ${shipmentId}`).rejects.toThrow(
+    'Scoped shipment must dispatch from its frozen packed state',
+  )
   const digest = String(frozen?.payload_digest)
   await expect(
     administrator`insert into sales_fiscal_release_observations
@@ -670,6 +681,24 @@ it('blocks a scoped dispatch in PostgreSQL until its exact production release', 
   const [projection] = await administrator`select count(*)::int as count
     from sales_fiscal_release_observations where tenant_id = ${fixture.tenantId}`
   expect(projection?.count).toBe(2)
+  await administrator`insert into sales_fiscal_release_observations
+    (tenant_id, event_id, shipment_id, origin_digest, order_version, establishment_id,
+     document_id, document_revision, environment, outcome, observed_at)
+    values (${fixture.tenantId}, ${randomUUID()}, ${shipmentId}, ${digest},
+      ${orderVersion}, ${establishmentId}, ${event.payload.documentId}, 1,
+      'production', 'rejected', now())`
+  expect((await dispatch()).isLeft()).toBe(true)
+  await expect(administrator`update shipments
+    set status = 'dispatched', dispatched_by = 'direct-sql', dispatched_on = ${today()}
+    where tenant_id = ${fixture.tenantId} and id = ${shipmentId}`).rejects.toThrow(
+    'lacks production fiscal authorization',
+  )
+  await administrator`insert into sales_fiscal_release_observations
+    (tenant_id, event_id, shipment_id, origin_digest, order_version, establishment_id,
+     document_id, document_revision, environment, outcome, observed_at)
+    values (${fixture.tenantId}, ${randomUUID()}, ${shipmentId}, ${digest},
+      ${orderVersion}, ${establishmentId}, ${randomUUID()}, 2,
+      'production', 'authorized', now())`
   expect((await dispatch()).isRight()).toBe(true)
   const [dispatched] = await administrator`select status from shipments where id = ${shipmentId}`
   expect(dispatched?.status).toBe('dispatched')
