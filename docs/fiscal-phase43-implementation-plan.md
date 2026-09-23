@@ -254,6 +254,19 @@ Run `npm run phase43:issuance-prep -- --tenant <uuid> --document <uuid>
 file supplies the five reviewed SOAP operation names/namespaces and WSDL digest.
 The command checks these against the active drill, stores only encrypted request
 artifacts, and reports `sent: false`. Reuse the same exchange ID for a retry.
+The prepared exchange can then be resumed with
+`npm run phase43:exchange-resume -- --tenant <uuid> --exchange <uuid> --actor <id>
+--worker <id> --certificate <pem> --private-key <pem>
+--certificate-fingerprint <sha256> --issuer-tax-id <cnpj>
+--trust-anchor <pem> --trust-anchor-fingerprint <sha256>
+--operations <json> --endpoints <json>
+--document-response-schema <zip> --consultation-response-schema <zip>`.
+It uses the same database and artifact-store environment variables as preparation.
+The command loads the exact stored SOAP request and sends it only if no transmission
+marker exists. A stored raw response is parsed without another send. A started
+exchange without a raw response remains uncertain and requires consultation;
+repeating this command cannot submit it again. The endpoint file must contain the
+five reviewed SP homologation URLs, and its digest must match the drill grant.
 An internal readiness path now derives the homologation calculation from the frozen
 origin and historical projections only when the drill is active and the reviewed
 calculation approval exists. It refuses a changed rule result between preview and

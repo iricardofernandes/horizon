@@ -1,5 +1,9 @@
 import type { HomologationExchangeLedger } from './homologation-exchange-ledger'
-import type { PreparedSefazExchange, SefazNfe55HomologationAdapter } from './nfe55/sefaz-adapter'
+import type {
+  PreparedSefazExchange,
+  SefazNfe55HomologationAdapter,
+  SefazOperationMap,
+} from './nfe55/sefaz-adapter'
 import type { SefazResponseSchemaValidator } from './nfe55/sefaz-response-schema'
 import type { SefazResponse } from './nfe55/sefaz-soap'
 import type { SefazService } from './nfe55/sefaz-transport'
@@ -18,7 +22,7 @@ export class HomologationExchangeRunner {
   constructor(
     private readonly ledger: Pick<
       HomologationExchangeLedger,
-      'prepare' | 'markStarted' | 'recordRawResponse' | 'recordParsedResponse'
+      'prepare' | 'markStarted' | 'recordRawResponse' | 'recordParsedResponse' | 'loadPrepared'
     >,
     private readonly transport: {
       endpointSetDigest: string
@@ -28,6 +32,41 @@ export class HomologationExchangeRunner {
     private readonly parser: Pick<SefazNfe55HomologationAdapter, 'parseResponse' | 'wsdlDigest'>,
     private readonly responseSchemas: Pick<SefazResponseSchemaValidator, 'validate'>,
   ) {}
+
+  /** Starts only a prepared exchange or parses already stored response bytes. */
+  async resume(
+    input: { tenantId: string; exchangeId: string; workerId: string; actorId: string },
+    operations: SefazOperationMap,
+  ): Promise<SefazResponse> {
+    const loaded = await this.ledger.loadPrepared(
+      input.tenantId,
+      input.exchangeId,
+      operations,
+      input.actorId,
+    )
+    if (
+      loaded.input.endpointDigest !== this.transport.endpointSetDigest ||
+      loaded.input.certificateFingerprint !== this.transport.certificateFingerprint ||
+      loaded.input.wsdlDigest !== this.parser.wsdlDigest
+    )
+      throw new Error('SEFAZ runtime binding differs from the approved drill grant')
+    if (loaded.stage === 'observed')
+      throw new Error('SEFAZ exchange already has an observed response')
+    if (loaded.stage === 'send_started') throw new UncertainSefazOutcomeError()
+    if (loaded.stage === 'raw_unparsed') {
+      if (!loaded.rawResponse) throw new Error('Stored SEFAZ raw response is unavailable')
+      const parsed = this.parser.parseResponse(loaded.prepared, loaded.rawResponse)
+      await this.responseSchemas.validate(loaded.prepared.service, parsed.payload)
+      await this.ledger.recordParsedResponse(
+        loaded.input.tenantId,
+        loaded.input.documentId,
+        loaded.input.exchangeId,
+        parsed,
+      )
+      return parsed
+    }
+    return this.execute({ ...loaded.input, workerId: input.workerId }, loaded.prepared)
+  }
 
   async execute(
     input: PreparedInput & { workerId: string },

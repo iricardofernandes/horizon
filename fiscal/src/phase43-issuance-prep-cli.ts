@@ -11,6 +11,7 @@ import { HomologationExchangeLedger } from './homologation-exchange-ledger'
 import { HomologationIssuance } from './homologation-issuance'
 import { loadHomologationCredential } from './nfe55/homologation-credential'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from './nfe55/sefaz-adapter'
+import { digestSchema, operationsSchema } from './phase43-runtime-input'
 import { FiscalProjections } from './projections'
 import { FiscalRuleStore } from './rule-store'
 
@@ -21,23 +22,12 @@ function flag(name: string): string {
   return value
 }
 
-const digest = z.string().regex(/^[0-9a-f]{64}$/)
-const operation = z.strictObject({
-  operation: z.string().min(1),
-  operationNamespace: z.url(),
-})
-const operationsSchema = z.strictObject({
-  wsdlDigest: digest,
-  authorization: operation,
-  receipt: operation,
-  protocol: operation,
-  status: operation,
-  event: operation,
-})
-
 async function main(): Promise<void> {
   const databaseUrl = z.url().parse(process.env.DATABASE_URL)
-  const key = Buffer.from(digest.parse(process.env.FISCAL_ARTIFACT_KEY_HEX?.toLowerCase()), 'hex')
+  const key = Buffer.from(
+    digestSchema.parse(process.env.FISCAL_ARTIFACT_KEY_HEX?.toLowerCase()),
+    'hex',
+  )
   const bucket = z.string().min(3).parse(process.env.FISCAL_ARTIFACT_BUCKET)
   const region = z.string().min(1).parse(process.env.FISCAL_ARTIFACT_REGION)
   const endpoint = process.env.FISCAL_ARTIFACT_ENDPOINT || undefined

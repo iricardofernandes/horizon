@@ -7,6 +7,7 @@ import type {
   PreparedSefazExchange,
   SefazExchangeInput,
   SefazNfe55HomologationAdapter,
+  SefazOperationMap,
 } from './nfe55/sefaz-adapter'
 import { classifySefazResponse, SEFAZ_DECISION_VERSION } from './nfe55/sefaz-decision'
 import type { SefazResponse } from './nfe55/sefaz-soap'
@@ -49,6 +50,99 @@ export class HomologationExchangeLedger {
 
   async close(): Promise<void> {
     await this.#db.end()
+  }
+
+  /** Reopens exact stored request bytes; a started exchange must never be sent again. */
+  async loadPrepared(
+    tenantId: string,
+    exchangeId: string,
+    operations: SefazOperationMap,
+    actorId: string,
+  ): Promise<{
+    input: z.infer<typeof prepareSchema>
+    prepared: PreparedSefazExchange
+    stage: 'prepared' | 'send_started' | 'raw_unparsed' | 'observed'
+    rawResponse: Buffer | null
+  }> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(exchangeId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select exchange.document_id, exchange.drill_grant_id,
+          exchange.parent_exchange_id, exchange.service, exchange.request_digest,
+          exchange.endpoint_digest, exchange.wsdl_digest,
+          exchange.certificate_fingerprint, exchange.adapter_version,
+          exchange.access_key, exchange.receipt, exchange.authorization_protocol,
+          transmission.started_at, raw.response_digest, parsed.parsed_at
+        from fiscal_homologation_exchanges exchange
+        left join fiscal_homologation_transmissions transmission
+          on transmission.tenant_id = exchange.tenant_id and transmission.exchange_id = exchange.id
+        left join fiscal_homologation_raw_responses raw
+          on raw.tenant_id = exchange.tenant_id and raw.exchange_id = exchange.id
+        left join fiscal_homologation_parsed_responses parsed
+          on parsed.tenant_id = exchange.tenant_id and parsed.exchange_id = exchange.id
+        where exchange.tenant_id = ${tenantId} and exchange.id = ${exchangeId}`
+    })
+    if (!row) throw new Error('SEFAZ exchange not found')
+    if (row.wsdl_digest !== operations.wsdlDigest)
+      throw new Error('Stored SEFAZ exchange WSDL differs from reviewed operations')
+    const service = z
+      .enum(['authorization', 'receipt', 'protocol', 'status', 'event'])
+      .parse(row.service)
+    const operation = operations[service]
+    if (!operation) throw new Error('Reviewed SEFAZ operation is unavailable')
+    const documentId = String(row.document_id)
+    const request = await this.artifacts.get(
+      tenantId,
+      documentId,
+      'homologation_request',
+      String(row.request_digest),
+    )
+    if (request.metadata.sourceSchema !== 'sefaz-nfe400-soap12-request')
+      throw new Error('Stored SEFAZ request has another schema purpose')
+    const rawResponse = row.response_digest
+      ? (
+          await this.artifacts.get(
+            tenantId,
+            documentId,
+            'homologation_response',
+            String(row.response_digest),
+          )
+        ).bytes
+      : null
+    return {
+      input: prepareSchema.parse({
+        tenantId,
+        documentId,
+        exchangeId,
+        drillGrantId: row.drill_grant_id,
+        parentExchangeId: row.parent_exchange_id,
+        endpointDigest: row.endpoint_digest,
+        wsdlDigest: row.wsdl_digest,
+        certificateFingerprint: row.certificate_fingerprint,
+        adapterVersion: row.adapter_version,
+        actorId,
+      }),
+      prepared: {
+        service,
+        request: request.bytes,
+        operation: operation.operation,
+        operationNamespace: operation.operationNamespace,
+        ...(row.access_key ? { expectedAccessKey: String(row.access_key) } : {}),
+        ...(row.receipt ? { expectedReceipt: String(row.receipt) } : {}),
+        ...(row.authorization_protocol
+          ? { expectedAuthorizationProtocol: String(row.authorization_protocol) }
+          : {}),
+      },
+      stage: row.parsed_at
+        ? 'observed'
+        : rawResponse
+          ? 'raw_unparsed'
+          : row.started_at
+            ? 'send_started'
+            : 'prepared',
+      rawResponse,
+    }
   }
 
   async grantDrill(input: z.input<typeof grantSchema>): Promise<void> {

@@ -870,11 +870,29 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     ).rejects.toThrow()
     const first = await ledger.prepare(input, prepared)
     expect(await ledger.prepare(input, prepared)).toEqual(first)
+    const reopened = await ledger.loadPrepared(tenantId, exchangeId, operations, 'tester:resume')
+    expect(reopened.stage).toBe('prepared')
+    expect(reopened.prepared.request).toEqual(prepared.request)
+    expect(reopened.input).toMatchObject({ ...input, actorId: 'tester:resume' })
+    await expect(
+      ledger.loadPrepared(randomUUID(), exchangeId, operations, 'tester:resume'),
+    ).rejects.toThrow('SEFAZ exchange not found')
+    await expect(
+      ledger.loadPrepared(
+        tenantId,
+        exchangeId,
+        { ...operations, wsdlDigest: 'f'.repeat(64) },
+        'tester:resume',
+      ),
+    ).rejects.toThrow('WSDL differs')
     await expect(
       ledger.prepare({ ...input, endpointDigest: 'd'.repeat(64) }, prepared),
     ).rejects.toThrow('SEFAZ exchange differs from approved drill grant')
     expect(await ledger.markStarted(tenantId, exchangeId, 'worker-a')).toBe(true)
     expect(await ledger.markStarted(tenantId, exchangeId, 'worker-b')).toBe(false)
+    expect(
+      (await ledger.loadPrepared(tenantId, exchangeId, operations, 'tester:resume')).stage,
+    ).toBe('send_started')
     const soap = Buffer.from(
       `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>` +
         `<nfeStatusServicoNFResponse xmlns="${operationNamespace}"><nfeResultMsg>` +
@@ -886,12 +904,32 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     )
     const rawDigest = await ledger.recordRawResponse(tenantId, documentId, exchangeId, soap)
     expect(await ledger.recordRawResponse(tenantId, documentId, exchangeId, soap)).toBe(rawDigest)
-    await ledger.recordParsedResponse(
-      tenantId,
-      documentId,
-      exchangeId,
-      adapter.parseResponse(prepared, soap),
+    const replayRunner = new HomologationExchangeRunner(
+      ledger,
+      {
+        endpointSetDigest: input.endpointDigest,
+        certificateFingerprint: input.certificateFingerprint,
+        async send() {
+          throw new Error('Stored response must not be sent again')
+        },
+      },
+      adapter,
+      responseSchemas,
     )
+    expect(
+      (await ledger.loadPrepared(tenantId, exchangeId, operations, 'tester:resume')).stage,
+    ).toBe('raw_unparsed')
+    expect(
+      (
+        await replayRunner.resume(
+          { tenantId, exchangeId, workerId: 'worker-b', actorId: 'tester:resume' },
+          operations,
+        )
+      ).statusCode,
+    ).toBe('107')
+    expect(
+      (await ledger.loadPrepared(tenantId, exchangeId, operations, 'tester:resume')).stage,
+    ).toBe('observed')
     const [row] = await administrator`select raw.response_digest, parsed.cstat,
         parsed.response_digest as parsed_digest, parsed.decision, parsed.decision_version
       from fiscal_homologation_raw_responses raw
@@ -931,7 +969,21 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       runner.execute({ ...runInput, endpointDigest: 'd'.repeat(64) }, prepared),
     ).rejects.toThrow('runtime binding differs')
     expect(sends).toBe(0)
-    expect((await runner.execute(runInput, prepared)).statusCode).toBe('107')
+    const { workerId: _workerId, ...storedRunInput } = runInput
+    await ledger.prepare(storedRunInput, prepared)
+    expect(
+      (
+        await runner.resume(
+          {
+            tenantId,
+            exchangeId: runInput.exchangeId,
+            workerId: 'worker-a',
+            actorId: 'tester:resume',
+          },
+          operations,
+        )
+      ).statusCode,
+    ).toBe('107')
     await expect(runner.execute(runInput, prepared)).rejects.toBeInstanceOf(
       UncertainSefazOutcomeError,
     )
