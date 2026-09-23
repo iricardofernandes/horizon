@@ -781,15 +781,8 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       responseSchemas,
     )
     const protocolRecovery = new HomologationRecovery(ledger, adapter, protocolRunner)
-    expect(
-      (
-        await protocolRecovery.consult({
-          ...input,
-          exchangeId: randomUUID(),
-          workerId: 'worker-a',
-        })
-      ).service,
-    ).toBe('protocol')
+    const protocolConsultation = { ...input, exchangeId: randomUUID(), workerId: 'worker-a' }
+    expect((await protocolRecovery.consult(protocolConsultation)).service).toBe('protocol')
 
     const receipt = '123456789012345'
     const authorizationSoap = consultationSoap(
@@ -885,6 +878,20 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       from fiscal_homologation_parsed_responses
       where tenant_id = ${tenantId} and exchange_id = ${receiptConsultation.exchangeId}`
     expect(receiptDecision?.decision).toBe('pending')
+    await expect(
+      administrator.begin(async (tx) => {
+        for (let attempt = 0; attempt < 9; attempt += 1)
+          await tx`insert into fiscal_homologation_exchanges (
+            id, tenant_id, document_id, drill_grant_id, parent_exchange_id, service,
+            request_digest, endpoint_digest, wsdl_digest, certificate_fingerprint,
+            adapter_version, access_key, receipt
+          ) select ${randomUUID()}, tenant_id, document_id, drill_grant_id,
+            parent_exchange_id, service, request_digest, endpoint_digest, wsdl_digest,
+            certificate_fingerprint, adapter_version, access_key, receipt
+          from fiscal_homologation_exchanges
+          where tenant_id = ${tenantId} and id = ${protocolConsultation.exchangeId}`
+      }),
+    ).rejects.toThrow('consultation budget exhausted')
     const cancellationProtocol = '123456789012345'
     const cancellationEvent = {
       service: 'event' as const,
@@ -948,6 +955,12 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     await expect(ledger.recoveryTarget(tenantId, documentId)).rejects.toThrow(
       'terminal homologation decision',
     )
+    await expect(
+      ledger.prepare(
+        { ...input, exchangeId: randomUUID(), parentExchangeId: authorizationId },
+        authorizedPrepared,
+      ),
+    ).rejects.toThrow('terminal homologation decision')
     await expect(
       ledger.prepare(
         { ...eventInput, exchangeId: randomUUID() },

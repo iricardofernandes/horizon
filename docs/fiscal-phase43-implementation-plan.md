@@ -201,6 +201,9 @@ after building the package. It shows prepared, send-started, raw-unparsed and
 observed stages with digests and decisions, without decrypting XML or credentials.
 Recovery consultation now stops once the ledger contains an authorized, rejected
 or cancelled decision for the document.
+The database also caps receipt and protocol consultations at ten prepared exchanges
+per document, including attempts that never reached the network. Exhaustion requires
+manual reconciliation; it cannot cause a new authorization send.
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the
