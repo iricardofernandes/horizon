@@ -614,6 +614,24 @@ it('blocks a scoped dispatch in PostgreSQL until its exact production release', 
   const [originEvent] = await administrator`select event_version from outbox
     where tenant_id = ${fixture.tenantId} and event_type = 'sales.fiscal-origin.recorded'`
   expect(originEvent?.event_version).toBe(2)
+  await expect(administrator`update shipments set warehouse_id = ${randomUUID()}
+    where tenant_id = ${fixture.tenantId} and id = ${shipmentId}`).rejects.toThrow(
+    'fiscal origin is frozen',
+  )
+  await expect(administrator`update shipments
+    set warehouse_id = ${randomUUID()}, status = 'dispatched',
+      dispatched_by = 'direct-sql', dispatched_on = ${today()}
+    where tenant_id = ${fixture.tenantId} and id = ${shipmentId}`).rejects.toThrow(
+    'fiscal origin is frozen',
+  )
+  await expect(administrator`update shipments set value = value + 1
+    where tenant_id = ${fixture.tenantId} and id = ${shipmentId}`).rejects.toThrow(
+    'fiscal origin is frozen',
+  )
+  await expect(administrator`delete from shipment_lines
+    where tenant_id = ${fixture.tenantId} and shipment_id = ${shipmentId}`).rejects.toThrow(
+    'lines are frozen for fiscal origin',
+  )
   const dispatch = () =>
     new DispatchShipmentUseCase(database, clock).execute({
       context: commandOf(fixture.tenantId),

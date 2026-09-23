@@ -71,6 +71,13 @@
       "when": 1791100005000,
       "tag": "0009_fiscal_dispatch_insert_fence",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791100006000,
+      "tag": "0010_fiscal_origin_freeze_fence",
+      "breakpoints": true
     }
   ]
 }

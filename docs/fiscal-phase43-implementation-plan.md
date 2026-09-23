@@ -155,6 +155,10 @@ transition out of `packed`. Direct SQL cannot insert it as dispatched or returne
 or mark an existing shipment dispatched or returned
 without the frozen origin and an exact production authorization; a rejection or
 cancellation at the same or newer document revision blocks that transition.
+The database also rejects changes to the scoped shipment's warehouse, order,
+tenant, currency and lines after its fiscal origin is frozen. Its value may change
+only during the authorized dispatch to the exact sum of its frozen lines. Direct SQL
+cannot move a packed shipment outside its policy or alter the recorded goods.
 
 Fiscal can now read a version 2 pre-dispatch origin and create one internal
 homologation draft from it, bound to the origin's establishment and encrypted
