@@ -19,6 +19,7 @@ import { canonicalDigest } from '../src/canonical-json'
 import { FiscalCapabilities } from '../src/capabilities'
 import { FiscalConsumer } from '../src/consumer'
 import { FiscalDocuments } from '../src/documents'
+import { HomologationCancellation } from '../src/homologation-cancellation'
 import { HomologationExchangeLedger } from '../src/homologation-exchange-ledger'
 import {
   HomologationExchangeRunner,
@@ -619,7 +620,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       tenantId,
       capabilityId: capability.id,
       sourceManifestDigest: 'd'.repeat(64),
-      schemaDigest: '4'.repeat(64),
+      schemaDigest: '45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b',
       reviewedBy: 'reviewer:phase43',
     }
     await expect(
@@ -1152,6 +1153,9 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       ),
     ).rejects.toThrow('does not contain the signed NF-e bytes')
     await ledger.prepare({ ...input, exchangeId: authorizationId }, authorization)
+    await expect(ledger.cancellationTarget(tenantId, documentId, randomUUID())).rejects.toThrow(
+      'Unique authorized homologation protocol is unavailable',
+    )
     await expect(ledger.recoveryTarget(tenantId, documentId)).rejects.toThrow('No started')
     expect(await ledger.markStarted(tenantId, authorizationId, 'worker-a')).toBe(true)
     await expect(
@@ -1366,6 +1370,14 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       decision: 'authorized',
       protocol_number: cancellationProtocol,
     })
+    expect(
+      await ledger.cancellationTarget(tenantId, documentId, eventInput.exchangeId),
+    ).toMatchObject({
+      parentExchangeId: authorizationId,
+      accessKey,
+      protocolNumber: cancellationProtocol,
+      capabilityId: capability.id,
+    })
     await expect(ledger.recoveryTarget(tenantId, documentId)).rejects.toThrow(
       'terminal homologation decision',
     )
@@ -1384,9 +1396,64 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
         { ...cancellationEvent, expectedAuthorizationProtocol: '999999999999999' },
       ),
     ).rejects.toThrow('requires the exact authorized protocol')
-    expect(await ledger.prepare(eventInput, cancellationEvent)).toMatchObject({
+    const certificatePath = join(artifactRoot, `${eventInput.exchangeId}.cert.pem`)
+    const privateKeyPath = join(artifactRoot, `${eventInput.exchangeId}.key.pem`)
+    await promisify(execFile)('openssl', [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-days',
+      '1',
+      '-subj',
+      '/CN=Horizon Phase 43 Cancellation Test Only',
+      '-keyout',
+      privateKeyPath,
+      '-out',
+      certificatePath,
+    ])
+    const signingCredential = {
+      certificate: await readFile(certificatePath),
+      privateKey: await readFile(privateKeyPath),
+      fingerprint: input.certificateFingerprint,
+      issuerTaxId: '00000000E08G12',
+      validUntil: Date.now() + 86_400_000,
+      minimumRemainingMilliseconds: 0,
+    }
+    const signingAdapter = new SefazNfe55HomologationAdapter(signingCredential, operations)
+    const cancellation = new HomologationCancellation(
+      ledger,
+      capabilities,
+      {
+        prepare: signingAdapter.prepare.bind(signingAdapter),
+        wsdlDigest: signingAdapter.wsdlDigest,
+        certificateFingerprint: input.certificateFingerprint,
+      },
+      signingCredential,
+      await readFile(new URL('../fixtures/official/pl-010d-v1.03.zip', import.meta.url)),
+    )
+    const cancellationCommand = {
+      tenantId,
+      documentId,
       exchangeId: eventInput.exchangeId,
+      actorId: 'tester:phase43',
+      reason: 'Cancelamento solicitado pelo emitente',
+      occurredAt: '2026-09-23T17:00:00-03:00',
+    }
+    const cancellationResult = await cancellation.prepare(cancellationCommand)
+    expect(cancellationResult).toMatchObject({
+      exchangeId: eventInput.exchangeId,
+      accessKey,
+      authorizationProtocol: cancellationProtocol,
     })
+    expect(await cancellation.prepare(cancellationCommand)).toEqual(cancellationResult)
+    expect(
+      await ledger.cancellationTarget(tenantId, documentId, eventInput.exchangeId),
+    ).toMatchObject({ protocolNumber: cancellationProtocol })
+    await expect(ledger.cancellationTarget(tenantId, documentId, randomUUID())).rejects.toThrow(
+      'Unique authorized homologation protocol is unavailable',
+    )
     const history = await observations.list(tenantId, documentId)
     expect(history.find((row) => row.exchangeId === exchangeId)).toMatchObject({
       service: 'status',

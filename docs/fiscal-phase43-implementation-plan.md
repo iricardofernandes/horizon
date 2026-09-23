@@ -260,6 +260,18 @@ the JSON requires `tenantId`, `capabilityId`, `sourceManifestDigest`,
 `schemaDigest`, and `reviewedBy`. Approval must refer to the same capability
 reviewer and source manifest, and the schema bytes supplied at cancellation must
 match this digest.
+Once an authorized protocol is observed, prepare a signed cancellation with
+`npm run phase43:cancellation-prep -- --tenant <uuid> --document <uuid>
+--exchange <uuid> --actor <id> --reason <15-255 chars>
+--occurred-at <local ISO timestamp> --certificate <pem> --private-key <pem>
+--certificate-fingerprint <sha256> --issuer-tax-id <cnpj>
+--event-schema <zip> --operations <json>`.
+It uses the same database and artifact-store environment variables as issuance
+preparation. The command selects the exact authorized protocol from immutable
+SEFAZ observations, checks the reviewed event archive, signs and stores the event,
+and reports `sent: false`. Use `phase43:exchange-resume` with the same exchange ID
+to transmit it. Repeating preparation with the same ID and timestamp is idempotent;
+a different cancellation event for the document is rejected.
 The prepared exchange can then be resumed with
 `npm run phase43:exchange-resume -- --tenant <uuid> --exchange <uuid> --actor <id>
 --worker <id> --certificate <pem> --private-key <pem>

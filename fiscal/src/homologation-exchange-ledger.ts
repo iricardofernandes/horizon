@@ -418,6 +418,76 @@ export class HomologationExchangeLedger {
       : { service: 'protocol', parentExchangeId, accessKey }
   }
 
+  /** A cancellation may use only the one protocol actually observed as authorized. */
+  async cancellationTarget(
+    tenantId: string,
+    documentId: string,
+    exchangeId: string,
+  ): Promise<{
+    parentExchangeId: string
+    drillGrantId: string
+    capabilityId: string
+    accessKey: string
+    protocolNumber: string
+    endpointDigest: string
+    wsdlDigest: string
+    certificateFingerprint: string
+    adapterVersion: string
+  }> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(documentId)
+    z.uuid().parse(exchangeId)
+    const rows = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select parent.id, parent.drill_grant_id, grant_row.capability_id,
+          parent.access_key, parsed.protocol_number, parent.endpoint_digest,
+          parent.wsdl_digest, parent.certificate_fingerprint, parent.adapter_version
+        from fiscal_homologation_exchanges parent
+        join fiscal_homologation_drill_grants grant_row
+          on grant_row.tenant_id = parent.tenant_id
+          and grant_row.id = parent.drill_grant_id
+        join fiscal_homologation_exchanges observed
+          on observed.tenant_id = parent.tenant_id
+          and (observed.id = parent.id or observed.parent_exchange_id = parent.id)
+        join fiscal_homologation_parsed_responses parsed
+          on parsed.tenant_id = observed.tenant_id and parsed.exchange_id = observed.id
+        where parent.tenant_id = ${tenantId} and parent.document_id = ${documentId}
+          and parent.service = 'authorization'
+          and observed.service in ('authorization', 'receipt', 'protocol')
+          and parsed.decision = 'authorized'
+          and parsed.protocol_number is not null
+          and grant_row.expires_at > now()
+          and not exists (
+            select 1 from fiscal_homologation_exchanges event
+            where event.tenant_id = parent.tenant_id
+              and event.document_id = parent.document_id and event.service = 'event'
+              and event.id <> ${exchangeId}
+          )
+          and not exists (
+            select 1 from fiscal_homologation_exchanges event
+            join fiscal_homologation_parsed_responses outcome
+              on outcome.tenant_id = event.tenant_id and outcome.exchange_id = event.id
+            where event.tenant_id = parent.tenant_id
+              and event.document_id = parent.document_id and outcome.decision = 'cancelled'
+          )`
+    })
+    const protocols = [...new Set(rows.map((row) => String(row.protocol_number)))]
+    if (protocols.length !== 1 || !rows[0])
+      throw new Error('Unique authorized homologation protocol is unavailable for cancellation')
+    const row = rows[0]
+    return {
+      parentExchangeId: String(row.id),
+      drillGrantId: String(row.drill_grant_id),
+      capabilityId: String(row.capability_id),
+      accessKey: String(row.access_key),
+      protocolNumber: protocols[0] as string,
+      endpointDigest: String(row.endpoint_digest),
+      wsdlDigest: String(row.wsdl_digest),
+      certificateFingerprint: String(row.certificate_fingerprint),
+      adapterVersion: String(row.adapter_version),
+    }
+  }
+
   async recordRawResponse(
     tenantId: string,
     documentId: string,
