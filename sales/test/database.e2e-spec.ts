@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { salesFiscalOriginRecorded } from '@horizon/contracts'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
+import { SalesModuleEventHandlers } from '@/application/consume-module-events'
 import { ApplyStockReservedUseCase } from '@/application/use-cases/apply-reservation-outcome'
 import { ConvertQuoteUseCase } from '@/application/use-cases/convert-quote'
 import {
@@ -635,11 +636,40 @@ it('blocks a scoped dispatch in PostgreSQL until its exact production release', 
     values (${fixture.tenantId}, ${randomUUID()}, ${shipmentId}, ${'b'.repeat(64)},
       ${orderVersion}, ${establishmentId}, ${randomUUID()}, 1, 'production', 'authorized', now())`
   expect((await dispatch()).isLeft()).toBe(true)
-  await administrator`insert into sales_fiscal_release_observations
-    (tenant_id, event_id, shipment_id, origin_digest, order_version, establishment_id, document_id,
-     document_revision, environment, outcome, observed_at)
-    values (${fixture.tenantId}, ${randomUUID()}, ${shipmentId}, ${digest},
-      ${orderVersion}, ${establishmentId}, ${randomUUID()}, 1, 'production', 'authorized', now() + interval '1 second')`
+  const handlers = new SalesModuleEventHandlers(database, clock, {
+    enableProductionReleaseEvents: true,
+  })
+  const release = handlers.handlers['fiscal.document.production-outcome']
+  if (!release) throw new Error('missing release handler')
+  const event = {
+    eventId: randomUUID(),
+    eventType: 'fiscal.document.production-outcome',
+    eventVersion: 1,
+    occurredAt: clock.now().toISOString(),
+    tenantId: fixture.tenantId,
+    traceId: randomBytes(16).toString('hex'),
+    payload: {
+      documentId: randomUUID(),
+      documentRevision: 1,
+      originModule: 'sales',
+      originId: shipmentId,
+      originDigest: digest,
+      orderVersion,
+      establishmentId,
+      model: '55',
+      environment: 'production',
+      responseDigest: 'a'.repeat(64),
+      observedAt: new Date(Date.now() + 1000).toISOString(),
+      outcome: 'authorized',
+      authorityReference: '135260000000001',
+      protocolDigest: 'b'.repeat(64),
+    },
+  }
+  await release(event)
+  await release(event)
+  const [projection] = await administrator`select count(*)::int as count
+    from sales_fiscal_release_observations where tenant_id = ${fixture.tenantId}`
+  expect(projection?.count).toBe(2)
   expect((await dispatch()).isRight()).toBe(true)
   const [dispatched] = await administrator`select status from shipments where id = ${shipmentId}`
   expect(dispatched?.status).toBe('dispatched')

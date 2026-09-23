@@ -240,10 +240,13 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
   >()
   readonly fiscalReleaseObservations: {
     tenantId: string
+    eventId?: string
     shipmentId: string
     originDigest: string
     orderVersion: number
     establishmentId: string
+    documentId?: string
+    documentRevision?: number
     environment: 'simulation' | 'homologation' | 'production'
     outcome: 'authorized' | 'rejected' | 'cancelled'
     observedAt: string
@@ -262,6 +265,33 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
           const establishmentId = this.fiscalDispatchPolicies.get(`${tenantId}:${warehouseId}`)
           return establishmentId ? { establishmentId } : null
         },
+        recordOutcome: async (input) => {
+          const shipment = this.shipments.find(
+            (item) => item.belongsTo(tenantId) && item.id.toString() === input.shipmentId,
+          )
+          const origin = this.fiscalOriginFreezes.get(`${tenantId}:${input.shipmentId}`)
+          const establishmentId = shipment
+            ? this.fiscalDispatchPolicies.get(`${tenantId}:${shipment.warehouseId}`)
+            : undefined
+          if (
+            shipment?.status !== 'packed' ||
+            !origin ||
+            origin.orderId !== shipment.orderId ||
+            origin.warehouseId !== shipment.warehouseId ||
+            origin.payloadDigest !== input.originDigest ||
+            origin.orderVersion !== input.orderVersion ||
+            origin.establishmentId !== input.establishmentId ||
+            establishmentId !== input.establishmentId ||
+            input.environment !== 'production' ||
+            input.documentRevision < 1
+          )
+            throw new Error('Production fiscal outcome does not match a packed frozen origin')
+          this.fiscalReleaseObservations.push({
+            tenantId,
+            ...input,
+            observedAt: input.observedAt.toISOString(),
+          })
+        },
         canDispatch: async (input) => {
           const establishmentId = this.fiscalDispatchPolicies.get(
             `${tenantId}:${input.warehouseId}`,
@@ -278,11 +308,25 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
             return { allowed: false, gated: true }
           const latest = this.fiscalReleaseObservations
             .filter((event) => event.tenantId === tenantId && event.shipmentId === input.shipmentId)
-            .sort((first, second) => second.observedAt.localeCompare(first.observedAt))[0]
+            .sort(
+              (first, second) =>
+                (second.documentRevision ?? 1) - (first.documentRevision ?? 1) ||
+                second.observedAt.localeCompare(first.observedAt),
+            )[0]
+          const blocking =
+            latest?.outcome === 'authorized' &&
+            this.fiscalReleaseObservations.some(
+              (event) =>
+                event.tenantId === tenantId &&
+                event.shipmentId === input.shipmentId &&
+                (event.documentRevision ?? 1) >= (latest.documentRevision ?? 1) &&
+                (event.outcome === 'rejected' || event.outcome === 'cancelled'),
+            )
           return {
             allowed:
               latest?.environment === 'production' &&
               latest.outcome === 'authorized' &&
+              !blocking &&
               latest.originDigest === origin.payloadDigest &&
               latest.orderVersion === origin.orderVersion &&
               latest.establishmentId === establishmentId,

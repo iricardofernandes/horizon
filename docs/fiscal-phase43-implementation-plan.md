@@ -141,8 +141,13 @@ transition. Refactor the eligible path to:
 Implementation note: the scoped Sales policy now emits `sales.fiscal-origin.recorded`
 version 2 at packing and stores its canonical payload digest with the shipment,
 order version, warehouse and establishment. Fiscal ingests that version separately
-from the legacy dispatch-time version 1. The release projection consumer and live
-homologation path remain pending; configured shipments stay blocked meanwhile.
+from the legacy dispatch-time version 1. Sales now has an idempotent production
+outcome consumer that checks the packed shipment, tenant policy and exact frozen
+origin before inserting an append-only observation in the inbox transaction.
+Dispatch gives newer document revisions priority and refuses a revision with a
+rejection or cancellation. The production outcome subscription stays disabled in
+the Sales runtime for phase 43; there is no Fiscal production publisher. The live
+homologation path remains pending, and configured shipments stay blocked.
 
 1. pack shipment and freeze the commercial lines, recipient, issuer, quantities,
    prices and revision into an idempotent `sales.fiscal-origin.recorded` event;

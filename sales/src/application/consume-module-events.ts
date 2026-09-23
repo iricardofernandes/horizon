@@ -3,6 +3,7 @@ import {
   catalogItemDeactivated,
   catalogPriceChanged,
   type EventEnvelope,
+  fiscalDocumentProductionOutcome,
   inventoryStockReservationRejected,
   inventoryStockReserved,
   partyErased,
@@ -33,6 +34,7 @@ export class SalesModuleEventHandlers {
   constructor(
     private readonly unitOfWork: SalesUnitOfWork,
     clock: Clock,
+    options: { enableProductionReleaseEvents?: boolean } = {},
   ) {
     this.reserved = new ApplyStockReservedUseCase(unitOfWork, clock)
     this.rejected = new ApplyStockReservationRejectedUseCase(unitOfWork, clock)
@@ -47,6 +49,12 @@ export class SalesModuleEventHandlers {
       'parties.party.registered': (event) => this.partyRegistered(event),
       'parties.party.updated': (event) => this.partyUpdated(event),
       'parties.party.erased': (event) => this.partyErased(event),
+      ...(options.enableProductionReleaseEvents
+        ? {
+            'fiscal.document.production-outcome': (event: EventEnvelope) =>
+              this.productionOutcome(event),
+          }
+        : {}),
     }
   }
 
@@ -111,6 +119,24 @@ export class SalesModuleEventHandlers {
     )
     if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
   }
+  private async productionOutcome(event: EventEnvelope): Promise<void> {
+    const parsed = fiscalDocumentProductionOutcome.envelope.parse(event)
+    await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'fiscal'), (scope) =>
+      scope.fiscalDispatchGate.recordOutcome({
+        eventId: parsed.eventId,
+        shipmentId: parsed.payload.originId,
+        originDigest: parsed.payload.originDigest,
+        orderVersion: parsed.payload.orderVersion,
+        establishmentId: parsed.payload.establishmentId,
+        documentId: parsed.payload.documentId,
+        documentRevision: parsed.payload.documentRevision,
+        environment: parsed.payload.environment,
+        outcome: parsed.payload.outcome,
+        observedAt: new Date(parsed.payload.observedAt),
+      }),
+    )
+  }
+
   private async partyRegistered(event: EventEnvelope): Promise<void> {
     const parsed = partyRegistered.envelope.parse(event)
     await this.project(parsed, { ...parsed.payload, active: true })
@@ -145,6 +171,9 @@ export class SalesModuleEventHandlers {
   }
 }
 
-function received(event: EventEnvelope, sourceModule: 'catalog' | 'inventory' | 'parties') {
+function received(
+  event: EventEnvelope,
+  sourceModule: 'catalog' | 'inventory' | 'parties' | 'fiscal',
+) {
   return { sourceModule, eventId: event.eventId, eventType: event.eventType }
 }

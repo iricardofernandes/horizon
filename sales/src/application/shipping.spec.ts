@@ -1,7 +1,9 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
+import type { EventEnvelope } from '@horizon/contracts'
 import { InMemorySalesUnitOfWork } from 'test/repositories/in-memory-sales-unit-of-work'
 import { snapshotOf } from 'test/support/snapshot-of'
 import { Currency, LineDescription, Money } from '@/domain/value-objects/sales-values'
+import { SalesModuleEventHandlers } from './consume-module-events'
 import { ApplyStockReservedUseCase } from './use-cases/apply-reservation-outcome'
 import type { IdempotentContext } from './use-cases/commands'
 import { PlaceOrderUseCase } from './use-cases/place-order'
@@ -331,5 +333,80 @@ describe('getting the goods to the customer', () => {
     expect(
       unitOfWork.events.filter((event) => event.eventType === 'sales.fiscal-origin.recorded'),
     ).toHaveLength(1)
+  })
+
+  it('projects only a matching production outcome and keeps cancellation closed', async () => {
+    const unitOfWork = new InMemorySalesUnitOfWork()
+    const fixture = await confirmedOrder(unitOfWork)
+    const order = required(unitOfWork.orders[0])
+    const establishmentId = randomUUID()
+    unitOfWork.fiscalDispatchPolicies.set(
+      `${fixture.tenantId}:${order.fulfillmentWarehouseId}`,
+      establishmentId,
+    )
+    const shipmentId = await pickAndPack(unitOfWork, fixture, '4')
+    const frozen = required(unitOfWork.fiscalOriginFreezes.get(`${fixture.tenantId}:${shipmentId}`))
+    const documentId = randomUUID()
+    const handlers = new SalesModuleEventHandlers(unitOfWork, clock, {
+      enableProductionReleaseEvents: true,
+    })
+    const handle = required(handlers.handlers['fiscal.document.production-outcome'])
+    const payload = {
+      documentId,
+      documentRevision: 1,
+      originModule: 'sales',
+      originId: shipmentId,
+      originDigest: frozen.payloadDigest,
+      orderVersion: frozen.orderVersion,
+      establishmentId,
+      model: '55',
+      environment: 'production',
+      responseDigest: 'a'.repeat(64),
+      observedAt: now.toISOString(),
+      outcome: 'authorized',
+      authorityReference: '135260000000001',
+      protocolDigest: 'b'.repeat(64),
+    }
+    const envelope = (fact: object): EventEnvelope => ({
+      eventId: randomUUID(),
+      eventType: 'fiscal.document.production-outcome',
+      eventVersion: 1,
+      occurredAt: now.toISOString(),
+      tenantId: fixture.tenantId,
+      traceId: randomBytes(16).toString('hex'),
+      payload: fact,
+    })
+    expect(handlers.handlers['fiscal.document.production-outcome']).toBeDefined()
+    expect(
+      new SalesModuleEventHandlers(unitOfWork, clock).handlers[
+        'fiscal.document.production-outcome'
+      ],
+    ).toBeUndefined()
+    await expect(handle(envelope({ ...payload, originDigest: 'c'.repeat(64) }))).rejects.toThrow()
+    expect(unitOfWork.fiscalReleaseObservations).toHaveLength(0)
+    const authorized = envelope(payload)
+    await handle(authorized)
+    await handle(authorized)
+    expect(unitOfWork.fiscalReleaseObservations).toHaveLength(1)
+    const gate = () =>
+      unitOfWork.inTenant(fixture.tenantId, (scope) =>
+        scope.fiscalDispatchGate.canDispatch({
+          shipmentId,
+          warehouseId: order.fulfillmentWarehouseId,
+          orderId: fixture.orderId,
+          orderVersion: frozen.orderVersion,
+        }),
+      )
+    expect((await gate()).allowed).toBe(true)
+    await handle(
+      envelope({
+        ...payload,
+        outcome: 'cancelled',
+        observedAt: new Date(now.getTime() + 1000).toISOString(),
+      }),
+    )
+    expect((await gate()).allowed).toBe(false)
+    await handle(envelope({ ...payload, observedAt: new Date(now.getTime() + 2000).toISOString() }))
+    expect((await gate()).allowed).toBe(false)
   })
 })

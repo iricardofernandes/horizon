@@ -858,6 +858,69 @@ function makeScope(
           .limit(1)
         return policy ?? null
       },
+      recordOutcome: async (input) => {
+        // Serialize with dispatch, which locks the shipment before checking the gate.
+        const [shipment] = await tx
+          .select({
+            orderId: schema.shipments.orderId,
+            warehouseId: schema.shipments.warehouseId,
+            status: schema.shipments.status,
+          })
+          .from(schema.shipments)
+          .where(
+            and(eq(schema.shipments.tenantId, tenantId), eq(schema.shipments.id, input.shipmentId)),
+          )
+          .limit(1)
+          .for('update')
+        if (shipment?.status !== 'packed')
+          throw new Error('Production fiscal outcome requires a packed shipment')
+        const [policy] = await tx
+          .select({ establishmentId: schema.fiscalDispatchPolicies.establishmentId })
+          .from(schema.fiscalDispatchPolicies)
+          .where(
+            and(
+              eq(schema.fiscalDispatchPolicies.tenantId, tenantId),
+              eq(schema.fiscalDispatchPolicies.warehouseId, shipment.warehouseId),
+            ),
+          )
+          .limit(1)
+        const [origin] = await tx
+          .select()
+          .from(schema.fiscalOriginFreezes)
+          .where(
+            and(
+              eq(schema.fiscalOriginFreezes.tenantId, tenantId),
+              eq(schema.fiscalOriginFreezes.shipmentId, input.shipmentId),
+            ),
+          )
+          .limit(1)
+        if (
+          !policy ||
+          !origin ||
+          origin.orderId !== shipment.orderId ||
+          origin.warehouseId !== shipment.warehouseId ||
+          origin.payloadDigest !== input.originDigest ||
+          origin.orderVersion !== input.orderVersion ||
+          origin.establishmentId !== input.establishmentId ||
+          policy.establishmentId !== input.establishmentId ||
+          input.environment !== 'production' ||
+          input.documentRevision < 1
+        )
+          throw new Error('Production fiscal outcome does not match the frozen origin')
+        await tx.insert(schema.fiscalReleaseObservations).values({
+          tenantId,
+          eventId: input.eventId,
+          shipmentId: input.shipmentId,
+          originDigest: input.originDigest,
+          orderVersion: input.orderVersion,
+          establishmentId: input.establishmentId,
+          documentId: input.documentId,
+          documentRevision: input.documentRevision,
+          environment: input.environment,
+          outcome: input.outcome,
+          observedAt: input.observedAt,
+        })
+      },
       canDispatch: async (input) => {
         const [policy] = await tx
           .select({ establishmentId: schema.fiscalDispatchPolicies.establishmentId })
@@ -898,14 +961,31 @@ function makeScope(
             ),
           )
           .orderBy(
+            desc(schema.fiscalReleaseObservations.documentRevision),
             desc(schema.fiscalReleaseObservations.observedAt),
             desc(schema.fiscalReleaseObservations.eventId),
           )
           .limit(1)
+        const [blocking] =
+          latest?.outcome === 'authorized'
+            ? await tx
+                .select({ eventId: schema.fiscalReleaseObservations.eventId })
+                .from(schema.fiscalReleaseObservations)
+                .where(
+                  and(
+                    eq(schema.fiscalReleaseObservations.tenantId, tenantId),
+                    eq(schema.fiscalReleaseObservations.shipmentId, input.shipmentId),
+                    sql`${schema.fiscalReleaseObservations.documentRevision} >= ${latest.documentRevision}`,
+                    sql`${schema.fiscalReleaseObservations.outcome} IN ('rejected', 'cancelled')`,
+                  ),
+                )
+                .limit(1)
+            : []
         return {
           allowed:
             latest?.environment === 'production' &&
             latest.outcome === 'authorized' &&
+            !blocking &&
             latest.originDigest === origin.payloadDigest &&
             latest.orderVersion === origin.orderVersion &&
             latest.establishmentId === origin.establishmentId,

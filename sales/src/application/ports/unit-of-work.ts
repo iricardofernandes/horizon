@@ -26,6 +26,18 @@ export abstract class AuditTrail {
 
 export abstract class FiscalDispatchGate {
   abstract policyFor(warehouseId: string): Promise<{ establishmentId: string } | null>
+  abstract recordOutcome(input: {
+    eventId: string
+    shipmentId: string
+    originDigest: string
+    orderVersion: number
+    establishmentId: string
+    documentId: string
+    documentRevision: number
+    environment: 'production'
+    outcome: 'authorized' | 'rejected' | 'cancelled'
+    observedAt: Date
+  }): Promise<void>
   abstract canDispatch(input: {
     shipmentId: string
     warehouseId: string
