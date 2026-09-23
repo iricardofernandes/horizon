@@ -945,6 +945,9 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       decision: 'authorized',
       protocol_number: cancellationProtocol,
     })
+    await expect(ledger.recoveryTarget(tenantId, documentId)).rejects.toThrow(
+      'terminal homologation decision',
+    )
     await expect(
       ledger.prepare(
         { ...eventInput, exchangeId: randomUUID() },

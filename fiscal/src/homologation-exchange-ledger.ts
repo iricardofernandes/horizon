@@ -192,6 +192,14 @@ export class HomologationExchangeLedger {
     z.uuid().parse(documentId)
     const [row] = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      const [terminal] = await tx`select parsed.decision
+        from fiscal_homologation_exchanges exchange
+        join fiscal_homologation_parsed_responses parsed
+          on parsed.tenant_id = exchange.tenant_id and parsed.exchange_id = exchange.id
+        where exchange.tenant_id = ${tenantId} and exchange.document_id = ${documentId}
+          and parsed.decision in ('authorized', 'rejected', 'cancelled')
+        limit 1`
+      if (terminal) throw new Error('SEFAZ document already has a terminal homologation decision')
       return tx`select exchange.id, exchange.access_key, parsed.receipt,
           transmission.started_at
         from fiscal_homologation_exchanges exchange
