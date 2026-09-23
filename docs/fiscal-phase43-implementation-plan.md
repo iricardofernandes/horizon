@@ -6,6 +6,8 @@ endpoints before implementation. This is the
 execution plan for [Phase 43](fiscal-implementation-plan.md#43--one-nf-e-sefaz-homologation-path).
 The [candidate source manifest](fiscal-phase43-source-manifest.json) records exact
 retained hashes and the decisions still pending independent review.
+The [phase 43 runbook](fiscal-phase43-runbook.md) records the command order,
+uncertain-outcome recovery, rollback and restore procedure.
 `GET /fiscal/capabilities/v2` exposes activated simulation and homologation rows with
 `fiscalValue: false`; the version 1 route and schema remain simulation-only. Neither
 read route grants document creation or transmission.
