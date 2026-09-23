@@ -32,9 +32,11 @@ it('exchanges a status request and retains the exact request and response bytes'
       '</nfeResultMsg></nfeStatusServicoNFResponse></s:Body></s:Envelope>',
   )
   let sent: Buffer | null = null
+  let calls = 0
   const adapter = new SefazNfe55HomologationAdapter(
     {
       async send(service, request) {
+        calls += 1
         expect(service).toBe('status')
         sent = request
         return response
@@ -43,11 +45,40 @@ it('exchanges a status request and retains the exact request and response bytes'
     { certificate: Buffer.alloc(0) },
     operations,
   )
+  const prepared = await adapter.prepare({ service: 'status' })
+  expect(calls).toBe(0)
+  expect(prepared.request.toString()).toContain('<cUF>35</cUF><xServ>STATUS</xServ>')
+  expect(adapter.parseResponse(prepared, response)).toMatchObject({
+    statusCode: '107',
+    service: 'status',
+  })
   const exchange = await adapter.exchange({ service: 'status' })
+  expect(calls).toBe(1)
+  expect(exchange.request).toEqual(prepared.request)
   expect(exchange.request).toEqual(sent)
   expect(exchange.request.toString()).toContain('<cUF>35</cUF><xServ>STATUS</xServ>')
   expect(exchange.response).toMatchObject({ statusCode: '107', service: 'status' })
   expect(exchange.response.response).toEqual(response)
+})
+
+it('rejects a response bound to a different prepared service', async () => {
+  const adapter = new SefazNfe55HomologationAdapter(
+    {
+      async send() {
+        throw new Error('unexpected transport call')
+      },
+    },
+    { certificate: Buffer.alloc(0) },
+    operations,
+  )
+  const prepared = await adapter.prepare({ service: 'status' })
+  const wrong = Buffer.from(
+    `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>` +
+      `<retConsSitNFe xmlns="${namespace}" versao="4.00"><tpAmb>2</tpAmb>` +
+      '<cStat>100</cStat><xMotivo>Autorizado</xMotivo></retConsSitNFe>' +
+      '</s:Body></s:Envelope>',
+  )
+  expect(() => adapter.parseResponse(prepared, wrong)).toThrow()
 })
 
 it('refuses an unsigned authorization before sending to the authority', async () => {

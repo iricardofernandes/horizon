@@ -155,6 +155,11 @@ snapshot. The public create route and readiness/issuance paths still require
 simulation; this draft cannot be transmitted through them. The reviewed issuer
 tuple, capability evidence and live authority orchestration are still required.
 
+The homologation SOAP adapter now exposes a prepared, validated envelope and a
+separate correlated response parser. The durable worker must persist the exact
+prepared bytes before marking transmission started; after an ambiguous send it
+must consult the authority instead of resubmitting that envelope.
+
 1. pack shipment and freeze the commercial lines, recipient, issuer, quantities,
    prices and revision into an idempotent `sales.fiscal-origin.recorded` event;
 2. have Fiscal ingest that origin, validate and issue the exact document;

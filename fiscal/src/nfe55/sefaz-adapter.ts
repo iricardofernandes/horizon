@@ -46,6 +46,12 @@ export type SefazExchangeInput =
   | { service: 'status' }
 
 export type SefazExchange = { request: Buffer; response: SefazResponse }
+export type PreparedSefazExchange = {
+  service: SefazService
+  request: Buffer
+  expectedAccessKey?: string
+  expectedReceipt?: string
+}
 
 /** Performs one exchange. It never retries an ambiguous authorization or event submission. */
 export class SefazNfe55HomologationAdapter {
@@ -59,7 +65,7 @@ export class SefazNfe55HomologationAdapter {
     digestSchema.parse(operations.wsdlDigest)
   }
 
-  async exchange(input: SefazExchangeInput): Promise<SefazExchange> {
+  async prepare(input: SefazExchangeInput): Promise<PreparedSefazExchange> {
     if (input.service !== 'status') {
       accessKeySchema.parse(input.accessKey)
       if (input.accessKey.slice(0, 2) !== '35')
@@ -89,16 +95,27 @@ export class SefazNfe55HomologationAdapter {
     const operation = this.operations[input.service]
     if (!operation) throw new Error('SEFAZ SOAP operation is not configured')
     const request = wrapSefazSoap12({ ...operation, request: requestPayload })
-    const response = await this.transport.send(input.service, request)
     return {
+      service: input.service,
       request,
-      response: parseSefazSoapResponse({
-        service: input.service,
-        soap: response,
-        ...('accessKey' in input ? { expectedAccessKey: input.accessKey } : {}),
-        ...(input.service === 'receipt' ? { expectedReceipt: input.receipt } : {}),
-      }),
+      ...('accessKey' in input ? { expectedAccessKey: input.accessKey } : {}),
+      ...(input.service === 'receipt' ? { expectedReceipt: input.receipt } : {}),
     }
+  }
+
+  parseResponse(prepared: PreparedSefazExchange, soap: Buffer): SefazResponse {
+    return parseSefazSoapResponse({
+      service: prepared.service,
+      soap,
+      ...(prepared.expectedAccessKey ? { expectedAccessKey: prepared.expectedAccessKey } : {}),
+      ...(prepared.expectedReceipt ? { expectedReceipt: prepared.expectedReceipt } : {}),
+    })
+  }
+
+  async exchange(input: SefazExchangeInput): Promise<SefazExchange> {
+    const prepared = await this.prepare(input)
+    const soap = await this.transport.send(prepared.service, prepared.request)
+    return { request: prepared.request, response: this.parseResponse(prepared, soap) }
   }
 }
 
