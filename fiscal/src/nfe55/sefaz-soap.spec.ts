@@ -89,6 +89,33 @@ it('reports a SOAP fault without turning it into a fiscal outcome', () => {
   )
 })
 
+it('correlates a cancellation event to its key, environment and event type', () => {
+  const payload =
+    `<retEnvEvento xmlns="${namespace}"><tpAmb>2</tpAmb><cOrgao>35</cOrgao>` +
+    '<cStat>128</cStat><xMotivo>Lote processado</xMotivo><retEvento><infEvento>' +
+    `<tpAmb>2</tpAmb><cOrgao>35</cOrgao><chNFe>${key}</chNFe>` +
+    '<tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento>' +
+    '<cStat>135</cStat><xMotivo>Evento registrado</xMotivo>' +
+    '<nProt>123456789012345</nProt></infEvento></retEvento></retEnvEvento>'
+  expect(
+    parseSefazSoapResponse({ service: 'event', soap: soap(payload), expectedAccessKey: key }),
+  ).toMatchObject({ statusCode: '128', eventStatusCode: '135', accessKey: key })
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'event',
+      soap: soap(payload.replace('<tpEvento>110111', '<tpEvento>110110')),
+      expectedAccessKey: key,
+    }),
+  ).toThrow('does not match')
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'event',
+      soap: soap(payload),
+      expectedAccessKey: '0'.repeat(44),
+    }),
+  ).toThrow('access key differs')
+})
+
 it('retains receipts and rejects wrong environments or hostile XML', () => {
   const receipt = soap(
     `<retEnviNFe xmlns="${namespace}"><tpAmb>2</tpAmb><cUF>35</cUF>` +

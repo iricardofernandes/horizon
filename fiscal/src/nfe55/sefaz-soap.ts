@@ -185,7 +185,10 @@ export function parseSefazSoapResponse(input: {
     throw new Error('SEFAZ response service does not match the request')
   if (required(payload, 'tpAmb') !== '2')
     throw new Error('SEFAZ response has the wrong environment')
-  if (input.service !== 'event' && required(payload, 'cUF') !== '35')
+  if (
+    (input.service === 'event' && required(payload, 'cOrgao') !== '35') ||
+    (input.service !== 'event' && required(payload, 'cUF') !== '35')
+  )
     throw new Error('SEFAZ response has the wrong jurisdiction')
   const statusCode = required(payload, 'cStat')
   if (!/^\d{3}$/.test(statusCode)) throw new Error('SEFAZ response has an invalid status code')
@@ -200,6 +203,15 @@ export function parseSefazSoapResponse(input: {
   const documentStatusCode = protocolInfo ? value(protocolInfo, 'cStat') : null
   const event = child(payload, 'retEvento')
   const eventInfo = event ? child(event, 'infEvento') : null
+  if (eventInfo && input.service === 'event') {
+    if (
+      required(eventInfo, 'tpAmb') !== '2' ||
+      required(eventInfo, 'cOrgao') !== '35' ||
+      required(eventInfo, 'tpEvento') !== '110111' ||
+      required(eventInfo, 'nSeqEvento') !== '1'
+    )
+      throw new Error('SEFAZ cancellation event does not match the supported tuple')
+  }
   const eventStatusCode = eventInfo ? value(eventInfo, 'cStat') : null
   const accessKey =
     (protocolInfo && value(protocolInfo, 'chNFe')) ||
@@ -207,7 +219,11 @@ export function parseSefazSoapResponse(input: {
     value(payload, 'chNFe')
   if (accessKey && !accessKeySchema.safeParse(accessKey).success)
     throw new Error('SEFAZ response has an invalid access key')
-  if (input.expectedAccessKey && accessKey !== input.expectedAccessKey && protocolInfo)
+  if (
+    input.expectedAccessKey &&
+    accessKey !== input.expectedAccessKey &&
+    (protocolInfo || eventInfo)
+  )
     throw new Error('SEFAZ response access key differs from the request')
   return {
     service: input.service,
