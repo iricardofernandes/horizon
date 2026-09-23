@@ -232,7 +232,7 @@ export class FiscalIssuance {
         ) values (
           ${input.tenantId}, ${input.documentId}, ${input.capabilityId}, 'simulation',
           ${input.accessKey}, ${input.reconciliationDigest}, ${input.signedXmlDigest}
-        ) on conflict (tenant_id, document_id) do nothing returning document_id`
+        ) on conflict do nothing returning document_id`
       if (inserted.length > 0) return
       const [existing] = await tx`select capability_id, access_key, reconciliation_digest,
           signed_xml_digest from fiscal_document_issuance_bindings
