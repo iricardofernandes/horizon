@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
 import { appendAudit } from './audit'
 import type { PreparedSefazExchange } from './nfe55/sefaz-adapter'
+import { classifySefazResponse, SEFAZ_DECISION_VERSION } from './nfe55/sefaz-decision'
 import type { SefazResponse } from './nfe55/sefaz-soap'
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/)
@@ -276,6 +277,7 @@ export class HomologationExchangeLedger {
           response.protocol,
         )
       : null
+    const decision = classifySefazResponse(response)
     await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
       const [exchange] = await tx`select document_id, service from fiscal_homologation_exchanges
@@ -284,14 +286,14 @@ export class HomologationExchangeLedger {
         throw new Error('Parsed SEFAZ response differs from exchange')
       await tx`insert into fiscal_homologation_parsed_responses (
         tenant_id, exchange_id, response_digest, protocol_digest, cstat,
-        document_cstat, event_cstat, receipt, protocol_number
+        document_cstat, event_cstat, receipt, protocol_number, decision, decision_version
       ) values (
         ${tenantId}, ${exchangeId}, ${raw.metadata.digest}, ${protocol?.digest ?? null},
         ${response.statusCode}, ${response.documentStatusCode}, ${response.eventStatusCode},
-        ${response.receipt}, ${response.protocolNumber}
+        ${response.receipt}, ${response.protocolNumber}, ${decision}, ${SEFAZ_DECISION_VERSION}
       ) on conflict do nothing`
       const [stored] = await tx`select response_digest, protocol_digest, cstat,
-          document_cstat, event_cstat, receipt, protocol_number
+          document_cstat, event_cstat, receipt, protocol_number, decision, decision_version
         from fiscal_homologation_parsed_responses
         where tenant_id = ${tenantId} and exchange_id = ${exchangeId}`
       if (
@@ -302,7 +304,9 @@ export class HomologationExchangeLedger {
         stored.document_cstat !== response.documentStatusCode ||
         stored.event_cstat !== response.eventStatusCode ||
         stored.receipt !== response.receipt ||
-        stored.protocol_number !== response.protocolNumber
+        stored.protocol_number !== response.protocolNumber ||
+        stored.decision !== decision ||
+        stored.decision_version !== SEFAZ_DECISION_VERSION
       )
         throw new Error('Conflicting parsed SEFAZ response')
     })

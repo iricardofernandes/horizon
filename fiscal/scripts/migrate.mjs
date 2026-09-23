@@ -41,6 +41,7 @@ try {
     '0028_phase43_homologation_artifact_purposes.sql',
     '0029_phase43_homologation_recovery.sql',
     '0030_phase43_cancellation_authorization_gate.sql',
+    '0031_phase43_homologation_decisions.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

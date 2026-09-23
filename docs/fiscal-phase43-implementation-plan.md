@@ -187,6 +187,14 @@ Cancellation preparation now extracts the authorization `nProt` from the signed
 event, and the database requires an observed `cStat=100` authorization with that
 exact protocol before accepting the event exchange. A merely started authorization
 or a different protocol cannot permit cancellation.
+Parsed responses now retain a versioned, immutable homologation decision alongside
+their SEFAZ codes. Only a complete `100` authorization protocol is classified as
+authorized; `103` with receipt and `105` remain pending, while duplicate, missing
+and unreviewed codes remain unknown. Event cancellation requires `128` and nested
+`135` with a protocol. The database checks the evidence for every non-unknown
+decision. These observations do not change the fiscal document lifecycle or
+release a shipment. The status combinations follow the
+[official MOC 7.0 annex](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=J+I+v4eN00E%3D).
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the

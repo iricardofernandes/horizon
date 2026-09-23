@@ -627,7 +627,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       adapter.parseResponse(prepared, soap),
     )
     const [row] = await administrator`select raw.response_digest, parsed.cstat,
-        parsed.response_digest as parsed_digest
+        parsed.response_digest as parsed_digest, parsed.decision, parsed.decision_version
       from fiscal_homologation_raw_responses raw
       join fiscal_homologation_parsed_responses parsed using (tenant_id, exchange_id)
       where raw.tenant_id = ${tenantId} and raw.exchange_id = ${exchangeId}`
@@ -635,7 +635,14 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       response_digest: rawDigest,
       parsed_digest: rawDigest,
       cstat: '107',
+      decision: 'available',
+      decision_version: 'nfe55-sp-homologation-decision-v1',
     })
+    await expect(administrator`insert into fiscal_homologation_parsed_responses (
+      tenant_id, exchange_id, response_digest, cstat, decision
+    ) values (${tenantId}, ${exchangeId}, ${rawDigest}, '107', 'authorized')`).rejects.toThrow(
+      'Authorized decision lacks SEFAZ protocol evidence',
+    )
     await expect(
       ledger.recordRawResponse(tenantId, documentId, exchangeId, Buffer.from('another response')),
     ).rejects.toThrow('Conflicting immutable SEFAZ response')
@@ -799,6 +806,10 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       authorizationId,
       adapter.parseResponse(authorization, authorizationSoap),
     )
+    const [authorizationDecision] = await administrator`select decision
+      from fiscal_homologation_parsed_responses
+      where tenant_id = ${tenantId} and exchange_id = ${authorizationId}`
+    expect(authorizationDecision?.decision).toBe('pending')
     expect(await ledger.recoveryTarget(tenantId, documentId)).toMatchObject({
       service: 'receipt',
       parentExchangeId: authorizationId,
@@ -862,15 +873,16 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       responseSchemas,
     )
     const receiptRecovery = new HomologationRecovery(ledger, adapter, receiptRunner)
-    expect(
-      (
-        await receiptRecovery.consult({
-          ...input,
-          exchangeId: randomUUID(),
-          workerId: 'worker-a',
-        })
-      ).service,
-    ).toBe('receipt')
+    const receiptConsultation = {
+      ...input,
+      exchangeId: randomUUID(),
+      workerId: 'worker-a',
+    }
+    expect((await receiptRecovery.consult(receiptConsultation)).service).toBe('receipt')
+    const [receiptDecision] = await administrator`select decision
+      from fiscal_homologation_parsed_responses
+      where tenant_id = ${tenantId} and exchange_id = ${receiptConsultation.exchangeId}`
+    expect(receiptDecision?.decision).toBe('pending')
     const cancellationProtocol = '123456789012345'
     const cancellationEvent = {
       service: 'event' as const,
@@ -914,19 +926,23 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       responseSchemas,
     )
     const authorizedPrepared = await adapter.prepare({ service: 'protocol', accessKey })
+    const authorizedConsultation = {
+      ...input,
+      exchangeId: randomUUID(),
+      parentExchangeId: authorizationId,
+      workerId: 'worker-a',
+    }
     expect(
-      (
-        await authorizedRunner.execute(
-          {
-            ...input,
-            exchangeId: randomUUID(),
-            parentExchangeId: authorizationId,
-            workerId: 'worker-a',
-          },
-          authorizedPrepared,
-        )
-      ).documentStatusCode,
+      (await authorizedRunner.execute(authorizedConsultation, authorizedPrepared))
+        .documentStatusCode,
     ).toBe('100')
+    const [authorizedDecision] = await administrator`select decision, protocol_number
+      from fiscal_homologation_parsed_responses
+      where tenant_id = ${tenantId} and exchange_id = ${authorizedConsultation.exchangeId}`
+    expect(authorizedDecision).toMatchObject({
+      decision: 'authorized',
+      protocol_number: cancellationProtocol,
+    })
     await expect(
       ledger.prepare(
         { ...eventInput, exchangeId: randomUUID() },
