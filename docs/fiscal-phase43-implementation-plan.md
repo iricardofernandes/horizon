@@ -204,6 +204,8 @@ or cancelled decision for the document.
 The database also caps receipt and protocol consultations at ten prepared exchanges
 per document, including attempts that never reached the network. Exhaustion requires
 manual reconciliation; it cannot cause a new authorization send.
+The terminal decision and consultation send marker share a document-scoped database
+lock, so a prepared consultation cannot start after a final result was recorded.
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the

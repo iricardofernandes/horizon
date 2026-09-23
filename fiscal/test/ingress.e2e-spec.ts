@@ -935,6 +935,11 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       responseSchemas,
     )
     const authorizedPrepared = await adapter.prepare({ service: 'protocol', accessKey })
+    const staleConsultationId = randomUUID()
+    await ledger.prepare(
+      { ...input, exchangeId: staleConsultationId, parentExchangeId: authorizationId },
+      authorizedPrepared,
+    )
     const authorizedConsultation = {
       ...input,
       exchangeId: randomUUID(),
@@ -953,6 +958,9 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       protocol_number: cancellationProtocol,
     })
     await expect(ledger.recoveryTarget(tenantId, documentId)).rejects.toThrow(
+      'terminal homologation decision',
+    )
+    await expect(ledger.markStarted(tenantId, staleConsultationId, 'worker-b')).rejects.toThrow(
       'terminal homologation decision',
     )
     await expect(
