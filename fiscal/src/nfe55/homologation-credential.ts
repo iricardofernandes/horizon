@@ -8,6 +8,8 @@ export type HomologationCredential = {
   certificate: Buffer
   privateKey: Buffer
   fingerprint: string
+  validUntil: number
+  minimumRemainingMilliseconds: number
 }
 
 /** Reads a secret-mounted PEM pair; only its public fingerprint may be persisted. */
@@ -27,7 +29,8 @@ export async function loadHomologationCredential(input: {
   if (actual !== expected) throw new Error('Homologation certificate fingerprint mismatch')
   const minimum = input.minimumRemainingMilliseconds ?? 24 * 60 * 60 * 1_000
   const now = Date.now()
-  if (Date.parse(parsed.validFrom) > now || Date.parse(parsed.validTo) <= now + minimum)
+  const validUntil = Date.parse(parsed.validTo)
+  if (Date.parse(parsed.validFrom) > now || validUntil <= now + minimum)
     throw new Error('Homologation certificate is not currently valid')
   const derivedPublicKey = createPublicKey(createPrivateKey(privateKey)).export({
     type: 'spki',
@@ -36,5 +39,11 @@ export async function loadHomologationCredential(input: {
   const certificatePublicKey = parsed.publicKey.export({ type: 'spki', format: 'der' })
   if (!Buffer.from(derivedPublicKey).equals(Buffer.from(certificatePublicKey)))
     throw new Error('Homologation certificate and private key do not match')
-  return { certificate, privateKey, fingerprint: actual }
+  return {
+    certificate,
+    privateKey,
+    fingerprint: actual,
+    validUntil,
+    minimumRemainingMilliseconds: minimum,
+  }
 }

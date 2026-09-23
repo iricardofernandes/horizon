@@ -46,6 +46,7 @@ it('loads only a matching, currently valid certificate and key', async () => {
   const input = await credential()
   const loaded = await loadHomologationCredential(input)
   expect(loaded.fingerprint).toBe(input.expectedFingerprint)
+  expect(loaded.validUntil).toBeGreaterThan(Date.now() + loaded.minimumRemainingMilliseconds)
   await expect(
     loadHomologationCredential({ ...input, expectedFingerprint: '0'.repeat(64) }),
   ).rejects.toThrow('fingerprint mismatch')
@@ -70,6 +71,12 @@ it('permits only the pinned SP homologation service paths', async () => {
     event: `${root}nferecepcaoevento4.asmx`,
   }
   expect(() => new SefazHomologationTransport(endpoints, loaded)).not.toThrow()
+  await expect(
+    new SefazHomologationTransport(endpoints, {
+      ...loaded,
+      validUntil: Date.now(),
+    }).send('authorization', Buffer.from('<request/>')),
+  ).rejects.toThrow('no longer valid')
   expect(
     () =>
       new SefazHomologationTransport(

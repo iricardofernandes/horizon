@@ -57,6 +57,8 @@ export class SefazHomologationTransport {
   }
 
   async send(service: SefazService, soapEnvelope: Buffer): Promise<Buffer> {
+    if (Date.now() + this.credential.minimumRemainingMilliseconds >= this.credential.validUntil)
+      throw new Error('Homologation certificate is no longer valid for transmission')
     if (soapEnvelope.length === 0 || soapEnvelope.length > 2_000_000)
       throw new Error('SEFAZ request size is outside the supported bound')
     const endpoint = this.#endpoints[service]
