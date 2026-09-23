@@ -752,6 +752,76 @@ export class FiscalDocuments {
       return number
     })
   }
+
+  /** Reserves inside a separately reviewed SP homologation range and active drill. */
+  async reserveHomologationNumber(
+    tenantId: string,
+    documentId: string,
+    drillGrantId: string,
+  ): Promise<number> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(documentId)
+    z.uuid().parse(drillGrantId)
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      await tx`select pg_advisory_xact_lock(hashtextextended(${tenantId} || ':' || ${documentId}, 0))`
+      const [document] = await tx`select status, model, environment, establishment_id, series
+        from fiscal_documents where tenant_id = ${tenantId} and id = ${documentId}`
+      if (!document) throw new Error('Fiscal document not found')
+      if (document.environment !== 'homologation' || document.model !== '55')
+        throw new Error('Fiscal document is not an NF-e homologation draft')
+      const [existing] = await tx`select number, homologation_grant_id
+        from fiscal_number_reservations
+        where tenant_id = ${tenantId} and document_id = ${documentId}`
+      if (existing) {
+        if (existing.homologation_grant_id !== drillGrantId)
+          throw new Error('Homologation number reservation belongs to another drill')
+        return Number(existing.number)
+      }
+      if (document.status !== 'draft' && document.status !== 'ready')
+        throw new Error('Fiscal document cannot receive a new homologation number')
+      const [approved] = await tx`select range_row.first_number, range_row.last_number,
+          grant_row.issued_by
+        from fiscal_homologation_drill_grants grant_row
+        join fiscal_homologation_number_ranges range_row
+          on range_row.tenant_id = grant_row.tenant_id
+          and range_row.capability_id = grant_row.capability_id
+          and range_row.establishment_id = ${document.establishment_id}
+          and range_row.series = ${document.series}
+        where grant_row.tenant_id = ${tenantId} and grant_row.id = ${drillGrantId}
+          and grant_row.document_id = ${documentId} and grant_row.expires_at > now()`
+      if (!approved) throw new Error('Reviewed homologation number range or drill is unavailable')
+      const [counter] = await tx`insert into fiscal_number_counters (
+          tenant_id, establishment_id, environment, model, series, last_number
+        ) values (
+          ${tenantId}, ${document.establishment_id}, 'homologation', '55',
+          ${document.series}, ${approved.first_number}
+        ) on conflict (tenant_id, establishment_id, environment, model, series)
+          do update set last_number = fiscal_number_counters.last_number + 1
+          where fiscal_number_counters.last_number < ${approved.last_number}
+        returning last_number`
+      if (!counter) throw new Error('Reviewed homologation number range is exhausted')
+      const number = Number(counter.last_number)
+      await tx`insert into fiscal_number_reservations (
+          tenant_id, document_id, establishment_id, environment, model, series,
+          number, homologation_grant_id
+        ) values (
+          ${tenantId}, ${documentId}, ${document.establishment_id}, 'homologation',
+          '55', ${document.series}, ${number}, ${drillGrantId}
+        )`
+      await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind, detail)
+        values (${randomUUID()}, ${tenantId}, ${documentId}, 'number_reserved',
+          ${JSON.stringify({ number, environment: 'homologation' })}::jsonb)`
+      await appendAudit(tx, {
+        tenantId,
+        actorId: String(approved.issued_by),
+        action: 'homologation.number-reserved',
+        resourceId: documentId,
+        detail: { number, drillGrantId },
+      })
+      return number
+    })
+  }
 }
 
 function correctedDraft(row: Record<string, unknown>, existing: boolean): CorrectedDraft {

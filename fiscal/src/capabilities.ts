@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { z } from 'zod'
+import { appendAudit } from './audit'
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/)
 const definitionSchema = z.object({
@@ -48,6 +49,17 @@ const homologationEvidenceSchema = z.object({
   reviewedAt: z.iso.datetime({ offset: true }),
 })
 
+const homologationNumberRangeSchema = z.strictObject({
+  tenantId: z.uuid(),
+  capabilityId: z.uuid(),
+  establishmentId: z.uuid(),
+  series: z.number().int().min(0).max(999),
+  firstNumber: z.number().int().min(1).max(999_999_999),
+  lastNumber: z.number().int().min(1).max(999_999_999),
+  evidenceDigest: digest,
+  reviewedBy: z.string().min(1).max(200),
+})
+
 export type FiscalCapabilityDefinition = z.infer<typeof definitionSchema>
 export type ActiveFiscalCapability = Omit<FiscalCapabilityDefinition, 'createdBy'> & {
   id: string
@@ -65,6 +77,55 @@ export class FiscalCapabilities {
 
   async close(): Promise<void> {
     await this.#db.end()
+  }
+
+  async registerHomologationNumberRange(
+    input: z.input<typeof homologationNumberRangeSchema>,
+  ): Promise<{ id: string; existing: boolean }> {
+    const value = homologationNumberRangeSchema.parse(input)
+    if (value.firstNumber > value.lastNumber)
+      throw new Error('Homologation number range is inverted')
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const id = randomUUID()
+      const inserted = await tx`insert into fiscal_homologation_number_ranges (
+        id, tenant_id, capability_id, establishment_id, series,
+        first_number, last_number, evidence_digest, reviewed_by
+      ) values (
+        ${id}, ${value.tenantId}, ${value.capabilityId}, ${value.establishmentId},
+        ${value.series}, ${value.firstNumber}, ${value.lastNumber},
+        ${value.evidenceDigest}, ${value.reviewedBy}
+      ) on conflict on constraint fiscal_homologation_number_range_tuple
+        do nothing returning id`
+      const [stored] = await tx`select id, capability_id, first_number, last_number,
+          evidence_digest, reviewed_by from fiscal_homologation_number_ranges
+        where tenant_id = ${value.tenantId} and establishment_id = ${value.establishmentId}
+          and series = ${value.series}`
+      if (
+        !stored ||
+        stored.capability_id !== value.capabilityId ||
+        Number(stored.first_number) !== value.firstNumber ||
+        Number(stored.last_number) !== value.lastNumber ||
+        stored.evidence_digest !== value.evidenceDigest ||
+        stored.reviewed_by !== value.reviewedBy
+      )
+        throw new Error('Conflicting immutable homologation number range')
+      if (inserted.length > 0)
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.reviewedBy,
+          action: 'homologation.number-range-reviewed',
+          resourceId: value.capabilityId,
+          detail: {
+            establishmentId: value.establishmentId,
+            series: value.series,
+            firstNumber: value.firstNumber,
+            lastNumber: value.lastNumber,
+            evidenceDigest: value.evidenceDigest,
+          },
+        })
+      return { id: String(stored.id), existing: inserted.length === 0 }
+    })
   }
 
   async register(input: FiscalCapabilityDefinition): Promise<{ id: string; existing: boolean }> {

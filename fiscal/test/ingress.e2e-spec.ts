@@ -578,6 +578,69 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     }
     await ledger.grantDrill(grantInput)
     await ledger.grantDrill(grantInput)
+    const rangeInput = {
+      tenantId,
+      capabilityId: capability.id,
+      establishmentId: String(document?.establishment_id),
+      series: 1,
+      firstNumber: 710_000_001,
+      lastNumber: 710_000_010,
+      evidenceDigest: 'f'.repeat(64),
+      reviewedBy: 'reviewer:phase43',
+    }
+    await expect(
+      capabilities.registerHomologationNumberRange({
+        ...rangeInput,
+        reviewedBy: 'author:phase43',
+      }),
+    ).rejects.toThrow('independent capability reviewer')
+    expect(await capabilities.registerHomologationNumberRange(rangeInput)).toMatchObject({
+      existing: false,
+    })
+    expect(await capabilities.registerHomologationNumberRange(rangeInput)).toMatchObject({
+      existing: true,
+    })
+    await expect(
+      capabilities.registerHomologationNumberRange({ ...rangeInput, firstNumber: 1 }),
+    ).rejects.toThrow('Conflicting immutable homologation number range')
+    await expect(documents.reserveNumber(tenantId, documentId)).rejects.toThrow(
+      'only in simulation',
+    )
+    const [reservedNumber, retriedNumber] = await Promise.all([
+      documents.reserveHomologationNumber(tenantId, documentId, grantId),
+      documents.reserveHomologationNumber(tenantId, documentId, grantId),
+    ])
+    expect(reservedNumber).toBe(rangeInput.firstNumber)
+    expect(retriedNumber).toBe(reservedNumber)
+    expect(await capabilities.registerHomologationNumberRange(rangeInput)).toMatchObject({
+      existing: true,
+    })
+    await expect(administrator`update fiscal_number_counters
+      set last_number = ${reservedNumber + 2}
+      where tenant_id = ${tenantId} and establishment_id = ${rangeInput.establishmentId}
+        and environment = 'homologation' and model = '55' and series = 1`).rejects.toThrow(
+      'advance one number at a time',
+    )
+    await expect(administrator`insert into fiscal_number_reservations (
+      tenant_id, document_id, establishment_id, environment, model, series,
+      number, homologation_grant_id
+    ) values (
+      ${tenantId}, ${documentId}, ${rangeInput.establishmentId}, 'homologation',
+      '55', 1, ${reservedNumber + 1}, ${grantId}
+    )`).rejects.toThrow('lacks a valid reviewed range')
+    await expect(administrator`insert into fiscal_number_reservations (
+      tenant_id, document_id, establishment_id, environment, model, series,
+      number, homologation_grant_id
+    ) values (
+      ${tenantId}, ${documentId}, ${rangeInput.establishmentId}, 'homologation',
+      '55', 1, 999999999, ${grantId}
+    )`).rejects.toThrow('lacks a valid reviewed range')
+    await expect(
+      documents.reserveHomologationNumber(tenantId, documentId, randomUUID()),
+    ).rejects.toThrow('belongs to another drill')
+    await expect(
+      documents.reserveHomologationNumber(randomUUID(), documentId, grantId),
+    ).rejects.toThrow('not found')
     await expect(
       ledger.grantDrill({ ...grantInput, grantId: randomUUID(), issuedBy: 'reviewer:phase43' }),
     ).rejects.toThrow('independent approved reviewer')
@@ -730,7 +793,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       issuerTaxId: '00000000E08G12',
       model: '55',
       series: 1,
-      number: 1,
+      number: reservedNumber,
       emissionType: 1,
       numericCode: '12345678',
     })
@@ -832,7 +895,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       issuerTaxId: '00000000E08G12',
       model: '55',
       series: 1,
-      number: 1,
+      number: reservedNumber,
       emissionType: 1,
       numericCode: '87654321',
     })

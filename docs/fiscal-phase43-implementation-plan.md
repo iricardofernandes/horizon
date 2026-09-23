@@ -206,6 +206,15 @@ per document, including attempts that never reached the network. Exhaustion requ
 manual reconciliation; it cannot cause a new authorization send.
 The terminal decision and consultation send marker share a document-scoped database
 lock, so a prepared consultation cannot start after a final result was recorded.
+Homologation number reservations now require an immutable, independently reviewed
+range for the exact SP establishment and series, plus a live drill grant. The
+first number comes from that range; the counter and reservation remain separate
+from simulation. Register a reviewed range with
+`npm run phase43:number-range -- --file <json>` in `fiscal` after building it.
+The JSON requires `tenantId`, `capabilityId`, `establishmentId`, `series`,
+`firstNumber`, `lastNumber`, `evidenceDigest`, and `reviewedBy`. The evidence must
+establish the issuer's available homologation numbering before live issuance;
+no default number is assumed.
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the
