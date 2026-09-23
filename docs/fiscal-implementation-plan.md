@@ -248,6 +248,8 @@ is at most one active fiscal document. The UI and API label the result `simulate
 
 ### 43 — One NF-e SEFAZ homologation path
 
+[Detailed Phase 43 execution plan](fiscal-phase43-implementation-plan.md).
+
 **Work**
 
 1. Select one issuer/UF and one supported operation from the capability matrix. Pin

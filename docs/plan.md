@@ -2218,6 +2218,7 @@ comprehensive Fiscal review remains deferred. No SEFAZ or production credential 
 **Planned.** Implement and test one real SEFAZ adapter in homologation, including
 certificate use, rejection, outage, consultation and cancellation. Production capability
 is limited to the exact issuer/UF/operation tuple whose evidence is recorded.
+[Detailed implementation plan](fiscal-phase43-implementation-plan.md).
 [Detailed work and exit evidence](fiscal-implementation-plan.md#43--one-nf-e-sefaz-homologation-path).
 
 ## Phase 44 — Inbound XML and purchase reconciliation

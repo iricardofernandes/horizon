@@ -8,6 +8,7 @@ and release approval. An issuer, UF or municipality never inherits another's sta
 
 | Model | Environment | Issuer | Jurisdiction | Operation | Adapter | State | Evidence |
 |---|---|---|---|---|---|---|---|
+| NF-e 55 | simulation | one locally configured establishment | SP | normal-sale | `nfe55-simulator-v1` | simulated locally | [Phase 42 evidence](fiscal-phase42-evidence.md) |
 | NF-e 55 | homologation | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
 | NF-e 55 | production | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
 | NFC-e 65 | homologation | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
@@ -16,6 +17,7 @@ and release approval. An issuer, UF or municipality never inherits another's sta
 | National NFS-e | production | none configured | no municipality configured | issue/query/cancel | none | unsupported | none |
 
 This matrix is configuration and release evidence, not a guess from a service URL.
-The Phase 40 read API returns `unsupported` by default and no supported rows. Its
-transmission and cancellation routes reject every tuple. Source
-artifacts and checksums are tracked in [fiscal-source-register.md](fiscal-source-register.md).
+The Fiscal read API returns `unsupported` by default and exposes only the locally
+activated Phase 42 simulation tuple. Homologation and production routes remain
+disabled. Source artifacts and checksums are tracked in
+[fiscal-source-register.md](fiscal-source-register.md).
