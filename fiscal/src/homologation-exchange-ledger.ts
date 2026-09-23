@@ -3,7 +3,11 @@ import postgres from 'postgres'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
 import { appendAudit } from './audit'
-import type { PreparedSefazExchange } from './nfe55/sefaz-adapter'
+import type {
+  PreparedSefazExchange,
+  SefazExchangeInput,
+  SefazNfe55HomologationAdapter,
+} from './nfe55/sefaz-adapter'
 import { classifySefazResponse, SEFAZ_DECISION_VERSION } from './nfe55/sefaz-decision'
 import type { SefazResponse } from './nfe55/sefaz-soap'
 
@@ -89,6 +93,106 @@ export class HomologationExchangeLedger {
           },
         })
     })
+  }
+
+  /** Validates through the adapter, then freezes the exact signed NF-e and SOAP envelope. */
+  async bindAuthorization(
+    input: z.input<typeof prepareSchema>,
+    authorization: Extract<SefazExchangeInput, { service: 'authorization' }>,
+    adapter: Pick<
+      SefazNfe55HomologationAdapter,
+      'prepare' | 'wsdlDigest' | 'certificateFingerprint'
+    >,
+  ): Promise<{ prepared: PreparedSefazExchange; signedXmlDigest: string; requestDigest: string }> {
+    const value = prepareSchema.parse(input)
+    if (value.parentExchangeId !== null)
+      throw new Error('SEFAZ authorization cannot have a parent exchange')
+    if (adapter.wsdlDigest !== value.wsdlDigest)
+      throw new Error('SEFAZ authorization WSDL differs from drill')
+    if (adapter.certificateFingerprint !== value.certificateFingerprint)
+      throw new Error('SEFAZ signing certificate differs from drill')
+    const schemaDigest = digest.parse(authorization.schemaDigest)
+    const prepared = await adapter.prepare(authorization)
+    if (
+      prepared.service !== 'authorization' ||
+      prepared.expectedAccessKey !== authorization.accessKey
+    )
+      throw new Error('SEFAZ adapter did not prepare the expected authorization')
+    const signedText = authorization.signedXml
+      .toString('utf8')
+      .replace(/^\s*<\?xml\s+[^?]*\?>\s*/i, '')
+    if (!signedText || !prepared.request.includes(signedText))
+      throw new Error('SEFAZ envelope does not contain the signed NF-e bytes')
+    const signed = await this.artifacts.put(
+      {
+        tenantId: value.tenantId,
+        documentId: value.documentId,
+        kind: 'homologation_request',
+        mediaType: 'application/xml',
+        sourceSchema: `sefaz-nfe400-signed-document:${schemaDigest}`,
+      },
+      authorization.signedXml,
+    )
+    const request = await this.artifacts.put(
+      {
+        tenantId: value.tenantId,
+        documentId: value.documentId,
+        kind: 'homologation_request',
+        mediaType: 'application/soap+xml',
+        sourceSchema: 'sefaz-nfe400-soap12-request',
+      },
+      prepared.request,
+    )
+    await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const [reservation] = await tx`select number from fiscal_number_reservations
+        where tenant_id = ${value.tenantId} and document_id = ${value.documentId}`
+      if (!reservation) throw new Error('Homologation number reservation is unavailable')
+      const [existing] = await tx`select drill_grant_id, access_key, number,
+          signed_xml_digest, request_digest, schema_digest
+        from fiscal_homologation_authorization_bindings
+        where tenant_id = ${value.tenantId} and document_id = ${value.documentId}`
+      const inserted = existing
+        ? []
+        : await tx`insert into fiscal_homologation_authorization_bindings (
+          tenant_id, document_id, drill_grant_id, access_key, number,
+          signed_xml_digest, request_digest, schema_digest
+        ) values (
+          ${value.tenantId}, ${value.documentId}, ${value.drillGrantId},
+          ${authorization.accessKey}, ${reservation.number}, ${signed.digest},
+          ${request.digest}, ${schemaDigest}
+        ) on conflict do nothing returning document_id`
+      const [stored] = existing
+        ? [existing]
+        : await tx`select drill_grant_id, access_key, number, signed_xml_digest,
+            request_digest, schema_digest
+          from fiscal_homologation_authorization_bindings
+          where tenant_id = ${value.tenantId} and document_id = ${value.documentId}`
+      if (
+        !stored ||
+        stored.drill_grant_id !== value.drillGrantId ||
+        stored.access_key !== authorization.accessKey ||
+        Number(stored.number) !== Number(reservation.number) ||
+        stored.signed_xml_digest !== signed.digest ||
+        stored.request_digest !== request.digest ||
+        stored.schema_digest !== schemaDigest
+      )
+        throw new Error('Conflicting immutable homologation authorization binding')
+      if (inserted.length > 0)
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.actorId,
+          action: 'homologation.authorization-bound',
+          resourceId: value.documentId,
+          detail: {
+            drillGrantId: value.drillGrantId,
+            accessKey: authorization.accessKey,
+            signedXmlDigest: signed.digest,
+            requestDigest: request.digest,
+          },
+        })
+    })
+    return { prepared, signedXmlDigest: signed.digest, requestDigest: request.digest }
   }
 
   async prepare(

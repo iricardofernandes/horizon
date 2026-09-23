@@ -215,6 +215,11 @@ The JSON requires `tenantId`, `capabilityId`, `establishmentId`, `series`,
 `firstNumber`, `lastNumber`, `evidenceDigest`, and `reviewedBy`. The evidence must
 establish the issuer's available homologation numbering before live issuance;
 no default number is assumed.
+Authorization preparation now requires one immutable binding among the signed
+NF-e bytes, exact SOAP envelope, access key, reserved number, schema package and
+drill grant. The adapter validates the signed document before the ledger binds it;
+the database rejects a different envelope or an access key with another series or
+number. This does not yet provide a production worker or live issuance command.
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the

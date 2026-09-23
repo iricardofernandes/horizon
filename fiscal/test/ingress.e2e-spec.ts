@@ -798,13 +798,75 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       numericCode: '12345678',
     })
     const authorizationId = randomUUID()
+    const signedXml = Buffer.from('<NFe>offline-signed-fixture</NFe>')
     const authorization = {
       service: 'authorization' as const,
-      request: Buffer.from('<prepared-authorization/>'),
+      request: Buffer.from(`<prepared-authorization>${signedXml}</prepared-authorization>`),
       operation: 'nfeAutorizacaoLote',
       operationNamespace: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4',
       expectedAccessKey: accessKey,
     }
+    const authorizationInput = {
+      service: 'authorization' as const,
+      lotId: '1',
+      accessKey,
+      signedXml,
+      schemaZip: Buffer.alloc(0),
+      schemaDigest: 'e'.repeat(64),
+    }
+    const authorizationAdapter = {
+      wsdlDigest: operations.wsdlDigest,
+      certificateFingerprint: input.certificateFingerprint,
+      async prepare() {
+        return authorization
+      },
+    }
+    await expect(
+      ledger.prepare({ ...input, exchangeId: authorizationId }, authorization),
+    ).rejects.toThrow('requires the bound signed document and envelope')
+    await expect(
+      ledger.bindAuthorization({ ...input, exchangeId: authorizationId }, authorizationInput, {
+        ...authorizationAdapter,
+        certificateFingerprint: 'd'.repeat(64),
+      }),
+    ).rejects.toThrow('signing certificate differs from drill')
+    const bound = await ledger.bindAuthorization(
+      { ...input, exchangeId: authorizationId },
+      authorizationInput,
+      authorizationAdapter,
+    )
+    expect(bound).toMatchObject({ prepared: authorization })
+    expect(
+      await ledger.bindAuthorization(
+        { ...input, exchangeId: authorizationId },
+        authorizationInput,
+        authorizationAdapter,
+      ),
+    ).toEqual(bound)
+    const wrongNumberKey = buildNfe55AccessKey({
+      issuerUfCode: '35',
+      issuedOn: '2026-09-23',
+      issuerTaxId: '00000000E08G12',
+      model: '55',
+      series: 1,
+      number: reservedNumber + 1,
+      emissionType: 1,
+      numericCode: '12345678',
+    })
+    await expect(administrator`insert into fiscal_homologation_authorization_bindings (
+      tenant_id, document_id, drill_grant_id, access_key, number,
+      signed_xml_digest, request_digest, schema_digest
+    ) values (
+      ${tenantId}, ${documentId}, ${grantId}, ${wrongNumberKey}, ${reservedNumber},
+      ${bound.signedXmlDigest}, ${bound.requestDigest}, ${authorizationInput.schemaDigest}
+    )`).rejects.toThrow('differs from document, drill or number')
+    await expect(
+      ledger.bindAuthorization(
+        { ...input, exchangeId: authorizationId },
+        { ...authorizationInput, signedXml: Buffer.from('<NFe>different</NFe>') },
+        authorizationAdapter,
+      ),
+    ).rejects.toThrow('does not contain the signed NF-e bytes')
     await ledger.prepare({ ...input, exchangeId: authorizationId }, authorization)
     await expect(ledger.recoveryTarget(tenantId, documentId)).rejects.toThrow('No started')
     expect(await ledger.markStarted(tenantId, authorizationId, 'worker-a')).toBe(true)

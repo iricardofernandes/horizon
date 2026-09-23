@@ -1,3 +1,4 @@
+import { createHash, X509Certificate } from 'node:crypto'
 import { DOMParser, type Element as XmlElement } from '@xmldom/xmldom'
 import { z } from 'zod'
 import { isValidNfeAccessKey } from './access-key'
@@ -59,12 +60,16 @@ export type PreparedSefazExchange = {
 /** Prepares and parses one exchange; the durable runner owns every network send. */
 export class SefazNfe55HomologationAdapter {
   readonly wsdlDigest: string
+  readonly certificateFingerprint: string | null
 
   constructor(
     private readonly credential: Pick<HomologationCredential, 'certificate' | 'issuerTaxId'>,
     private readonly operations: SefazOperationMap,
   ) {
     this.wsdlDigest = digestSchema.parse(operations.wsdlDigest)
+    this.certificateFingerprint = credential.certificate.length
+      ? createHash('sha256').update(new X509Certificate(credential.certificate).raw).digest('hex')
+      : null
   }
 
   async prepare(input: SefazExchangeInput): Promise<PreparedSefazExchange> {
