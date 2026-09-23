@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import type {
@@ -748,6 +748,57 @@ function makeScope(
   }
   return {
     tenantId,
+    fiscalDispatchGate: {
+      canDispatch: async (input) => {
+        const [policy] = await tx
+          .select({ warehouseId: schema.fiscalDispatchPolicies.warehouseId })
+          .from(schema.fiscalDispatchPolicies)
+          .where(
+            and(
+              eq(schema.fiscalDispatchPolicies.tenantId, tenantId),
+              eq(schema.fiscalDispatchPolicies.warehouseId, input.warehouseId),
+            ),
+          )
+          .limit(1)
+        if (!policy) return true
+        const [origin] = await tx
+          .select()
+          .from(schema.fiscalOriginFreezes)
+          .where(
+            and(
+              eq(schema.fiscalOriginFreezes.tenantId, tenantId),
+              eq(schema.fiscalOriginFreezes.shipmentId, input.shipmentId),
+            ),
+          )
+          .limit(1)
+        if (
+          !origin ||
+          origin.orderId !== input.orderId ||
+          origin.orderVersion !== input.orderVersion
+        )
+          return false
+        const [latest] = await tx
+          .select()
+          .from(schema.fiscalReleaseObservations)
+          .where(
+            and(
+              eq(schema.fiscalReleaseObservations.tenantId, tenantId),
+              eq(schema.fiscalReleaseObservations.shipmentId, input.shipmentId),
+            ),
+          )
+          .orderBy(
+            desc(schema.fiscalReleaseObservations.observedAt),
+            desc(schema.fiscalReleaseObservations.eventId),
+          )
+          .limit(1)
+        return (
+          latest?.environment === 'production' &&
+          latest.outcome === 'authorized' &&
+          latest.originDigest === origin.payloadDigest &&
+          latest.orderVersion === origin.orderVersion
+        )
+      },
+    },
     audit: auditTrail(tx, tenantId),
     customers: {
       findById: async (id) => {

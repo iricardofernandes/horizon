@@ -43,6 +43,13 @@
       "when": 1791100001000,
       "tag": "0005_fiscal_origins",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791100002000,
+      "tag": "0006_fiscal_dispatch_gate",
+      "breakpoints": true
     }
   ]
 }

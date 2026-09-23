@@ -569,3 +569,73 @@ it('delivers an order in parts, and takes one delivery back', async () => {
     ]),
   )
 })
+
+it('blocks a scoped dispatch in PostgreSQL until its exact production release', async () => {
+  const fixture = await seedCatalogItem()
+  const orderId = await placeOrder(fixture)
+  const confirmed = await new ApplyStockReservedUseCase(database, clock).execute({
+    tenantId: fixture.tenantId,
+    orderId,
+    orderVersion: 1,
+    reservationId: randomUUID(),
+  })
+  expect(confirmed.isRight()).toBe(true)
+  const [line] =
+    await administrator`select line_id from sales_order_lines where order_id = ${orderId}`
+  if (!line) throw new Error('missing order line')
+  const picked = await new PickShipmentUseCase(database, clock).execute({
+    context: commandOf(fixture.tenantId),
+    orderId,
+    lines: [{ lineId: String(line.line_id), quantity: '1' }],
+  })
+  if (picked.isLeft()) throw picked.value
+  const shipmentId = picked.value.shipmentId
+  const packed = await new PackShipmentUseCase(database, clock).execute({
+    context: commandOf(fixture.tenantId),
+    shipmentId,
+  })
+  if (packed.isLeft()) throw packed.value
+  const [shipment] =
+    await administrator`select warehouse_id from shipments where id = ${shipmentId}`
+  const [order] = await administrator`select version from sales_orders where id = ${orderId}`
+  if (!shipment || !order) throw new Error('missing dispatch fixture')
+  const warehouseId = String(shipment.warehouse_id)
+  const orderVersion = Number(order.version)
+  await administrator`insert into sales_fiscal_dispatch_policies
+    (tenant_id, warehouse_id, establishment_id, reason, created_by)
+    values (${fixture.tenantId}, ${warehouseId}, ${randomUUID()},
+      'Phase 43 isolated fiscal dispatch gate', 'phase43-e2e')`
+  const dispatch = () =>
+    new DispatchShipmentUseCase(database, clock).execute({
+      context: commandOf(fixture.tenantId),
+      shipmentId,
+      dispatchedOn: today(),
+    })
+  expect((await dispatch()).isLeft()).toBe(true)
+  const digest = 'a'.repeat(64)
+  await administrator`insert into sales_fiscal_origin_freezes
+    (tenant_id, shipment_id, order_id, order_version, payload_digest)
+    values (${fixture.tenantId}, ${shipmentId}, ${orderId}, ${orderVersion}, ${digest})`
+  await expect(
+    administrator`insert into sales_fiscal_release_observations
+      (tenant_id, event_id, shipment_id, origin_digest, order_version, document_id,
+       document_revision, environment, outcome, observed_at)
+      values (${fixture.tenantId}, ${randomUUID()}, ${shipmentId}, ${digest},
+        ${orderVersion}, ${randomUUID()}, 1, 'homologation', 'authorized', now())`,
+  ).rejects.toThrow()
+  expect((await dispatch()).isLeft()).toBe(true)
+  await administrator`insert into sales_fiscal_release_observations
+    (tenant_id, event_id, shipment_id, origin_digest, order_version, document_id,
+     document_revision, environment, outcome, observed_at)
+    values (${fixture.tenantId}, ${randomUUID()}, ${shipmentId}, ${'b'.repeat(64)},
+      ${orderVersion}, ${randomUUID()}, 1, 'production', 'authorized', now())`
+  expect((await dispatch()).isLeft()).toBe(true)
+  await administrator`insert into sales_fiscal_release_observations
+    (tenant_id, event_id, shipment_id, origin_digest, order_version, document_id,
+     document_revision, environment, outcome, observed_at)
+    values (${fixture.tenantId}, ${randomUUID()}, ${shipmentId}, ${digest},
+      ${orderVersion}, ${randomUUID()}, 1, 'production', 'authorized', now() + interval '1 second')`
+  expect((await dispatch()).isRight()).toBe(true)
+  const [dispatched] = await administrator`select status from shipments where id = ${shipmentId}`
+  expect(dispatched?.status).toBe('dispatched')
+})

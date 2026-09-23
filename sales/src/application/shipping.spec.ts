@@ -271,4 +271,55 @@ describe('getting the goods to the customer', () => {
     })
     expect(dispatched.isLeft()).toBe(true)
   })
+
+  it('keeps a gated shipment packed until the exact production release exists', async () => {
+    const unitOfWork = new InMemorySalesUnitOfWork()
+    const fixture = await confirmedOrder(unitOfWork)
+    const shipmentId = await pickAndPack(unitOfWork, fixture, '4')
+    const shipment = required(unitOfWork.shipments[0])
+    const order = required(unitOfWork.orders[0])
+    unitOfWork.fiscalDispatchPolicies.add(`${fixture.tenantId}:${shipment.warehouseId}`)
+    const dispatch = new DispatchShipmentUseCase(unitOfWork, clock)
+    const attempt = () => dispatch.execute({ context: commandOf(fixture.tenantId), shipmentId })
+    expect((await attempt()).isLeft()).toBe(true)
+    const orderVersion = order.version
+    const digest = 'a'.repeat(64)
+    unitOfWork.fiscalOriginFreezes.set(`${fixture.tenantId}:${shipmentId}`, {
+      orderId: fixture.orderId,
+      orderVersion,
+      payloadDigest: digest,
+    })
+    unitOfWork.fiscalReleaseObservations.push({
+      tenantId: fixture.tenantId,
+      shipmentId,
+      originDigest: digest,
+      orderVersion,
+      environment: 'homologation',
+      outcome: 'authorized',
+      observedAt: '2026-09-16T20:01:00.000Z',
+    })
+    expect((await attempt()).isLeft()).toBe(true)
+    unitOfWork.fiscalReleaseObservations.push({
+      tenantId: fixture.tenantId,
+      shipmentId,
+      originDigest: 'b'.repeat(64),
+      orderVersion,
+      environment: 'production',
+      outcome: 'authorized',
+      observedAt: '2026-09-16T20:02:00.000Z',
+    })
+    expect((await attempt()).isLeft()).toBe(true)
+    expect(shipment.status).toBe('packed')
+    expect(unitOfWork.events).toHaveLength(0)
+    unitOfWork.fiscalReleaseObservations.push({
+      tenantId: fixture.tenantId,
+      shipmentId,
+      originDigest: digest,
+      orderVersion,
+      environment: 'production',
+      outcome: 'authorized',
+      observedAt: '2026-09-16T20:03:00.000Z',
+    })
+    expect((await attempt()).isRight()).toBe(true)
+  })
 })

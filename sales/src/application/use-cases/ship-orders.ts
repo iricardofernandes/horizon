@@ -150,6 +150,17 @@ export class DispatchShipmentUseCase {
       const now = this.clock.now()
       const dispatchedOn = dateOf(request.dispatchedOn, '/dispatchedOn', now)
       if (dispatchedOn.isLeft()) return left(dispatchedOn.value)
+      if (
+        !(await scope.fiscalDispatchGate.canDispatch({
+          shipmentId: shipment.id.toString(),
+          warehouseId: shipment.warehouseId,
+          orderId: order.id.toString(),
+          orderVersion: order.version,
+        }))
+      )
+        return left(
+          new ConflictError('this shipment has no matching production fiscal authorization'),
+        )
       const plan = order.dispatch(
         { lines: shippedLinesOf(shipment.lines()), dispatchedOn: dispatchedOn.value },
         now,

@@ -44,6 +44,64 @@ export const fiscalOrigins = pgTable(
   ],
 )
 
+/** Operator-scoped warehouses require an exact production authorization before dispatch. */
+export const fiscalDispatchPolicies = pgTable(
+  'sales_fiscal_dispatch_policies',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    warehouseId: uuid('warehouse_id').notNull(),
+    establishmentId: uuid('establishment_id').notNull(),
+    requiredEnvironment: text('required_environment').notNull().default('production'),
+    reason: text('reason').notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.warehouseId] })],
+)
+
+export const fiscalOriginFreezes = pgTable(
+  'sales_fiscal_origin_freezes',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    shipmentId: uuid('shipment_id').notNull(),
+    orderId: uuid('order_id').notNull(),
+    orderVersion: integer('order_version').notNull(),
+    payloadDigest: text('payload_digest').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.shipmentId] })],
+)
+
+export const fiscalReleaseObservations = pgTable(
+  'sales_fiscal_release_observations',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    shipmentId: uuid('shipment_id').notNull(),
+    originDigest: text('origin_digest').notNull(),
+    orderVersion: integer('order_version').notNull(),
+    documentId: uuid('document_id').notNull(),
+    documentRevision: integer('document_revision').notNull(),
+    environment: text('environment').notNull(),
+    outcome: text('outcome').notNull(),
+    observedAt: timestamp('observed_at', { withTimezone: true, mode: 'date' }).notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.eventId] }),
+    index('sales_fiscal_release_latest').on(
+      table.tenantId,
+      table.shipmentId,
+      table.observedAt.desc(),
+      table.eventId.desc(),
+    ),
+  ],
+)
+
 export const catalogItems = pgTable(
   'catalog_items',
   {

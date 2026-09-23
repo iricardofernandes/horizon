@@ -224,6 +224,20 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
   readonly receipts = new Map<string, { receipt: CommandReceipt; response: unknown }>()
   readonly provisionedTenants = new Set<string>()
   readonly consumedEvents = new Set<string>()
+  readonly fiscalDispatchPolicies = new Set<string>()
+  readonly fiscalOriginFreezes = new Map<
+    string,
+    { orderId: string; orderVersion: number; payloadDigest: string }
+  >()
+  readonly fiscalReleaseObservations: {
+    tenantId: string
+    shipmentId: string
+    originDigest: string
+    orderVersion: number
+    environment: 'simulation' | 'homologation' | 'production'
+    outcome: 'authorized' | 'rejected' | 'cancelled'
+    observedAt: string
+  }[] = []
 
   provisionTenant(tenantId: string): Promise<void> {
     this.provisionedTenants.add(tenantId)
@@ -233,6 +247,27 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
   inTenant<T>(tenantId: string, work: (scope: SalesScope) => Promise<T>): Promise<T> {
     return work({
       tenantId,
+      fiscalDispatchGate: {
+        canDispatch: async (input) => {
+          if (!this.fiscalDispatchPolicies.has(`${tenantId}:${input.warehouseId}`)) return true
+          const origin = this.fiscalOriginFreezes.get(`${tenantId}:${input.shipmentId}`)
+          if (
+            !origin ||
+            origin.orderId !== input.orderId ||
+            origin.orderVersion !== input.orderVersion
+          )
+            return false
+          const latest = this.fiscalReleaseObservations
+            .filter((event) => event.tenantId === tenantId && event.shipmentId === input.shipmentId)
+            .sort((first, second) => second.observedAt.localeCompare(first.observedAt))[0]
+          return (
+            latest?.environment === 'production' &&
+            latest.outcome === 'authorized' &&
+            latest.originDigest === origin.payloadDigest &&
+            latest.orderVersion === origin.orderVersion
+          )
+        },
+      },
       orders: new InMemoryOrders(tenantId, this.orders),
       catalogItems: new InMemoryCatalogItems(
         tenantId,

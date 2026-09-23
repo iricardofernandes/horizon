@@ -173,6 +173,10 @@ export class SalesOrder extends AggregateRoot<SalesOrderProps> {
     return this.props.fulfillmentWarehouseId
   }
 
+  get version(): number {
+    return this.props.version
+  }
+
   get quoteId(): string | null {
     return this.props.quoteId
   }

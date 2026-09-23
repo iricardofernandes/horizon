@@ -24,6 +24,15 @@ export abstract class AuditTrail {
   abstract append(record: AuditRecord): Promise<void>
 }
 
+export abstract class FiscalDispatchGate {
+  abstract canDispatch(input: {
+    shipmentId: string
+    warehouseId: string
+    orderId: string
+    orderVersion: number
+  }): Promise<boolean>
+}
+
 export interface CommandReceipt {
   readonly idempotencyKey: string
   readonly command: string
@@ -38,6 +47,7 @@ export interface SalesScope {
   readonly customers: CustomersRepository
   readonly quotes: QuotesRepository
   readonly shipments: ShipmentsRepository
+  readonly fiscalDispatchGate: FiscalDispatchGate
   readonly audit: AuditTrail
 }
 
