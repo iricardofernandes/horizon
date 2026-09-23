@@ -179,6 +179,13 @@ receipt actually recorded in the parent response. Recovery chooses protocol
 consultation after a lost response and receipt consultation when a receipt was
 recorded; it never starts another authorization for the same document.
 
+The secret-mounted certificate loader now requires the issuer's exact CNPJ in
+the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the
+[ITI OID assignment](https://www.gov.br/iti/pt-br/assuntos/legislacao/documentos-principais/copy_of_IN152020DOC04.01comanexo.pdf).
+The adapter also checks the access key's issuer against that certificate identity
+before preparing authorization, consultation or cancellation. Certificate chain,
+revocation and SEFAZ credentialing evidence still require review for the real issuer.
+
 `GET /fiscal/documents/:id/v2` and
 `GET /fiscal/documents/:id/artifacts/v2` now carry the environment and
 `fiscalValue: false`. Homologation request, response and protocol artifacts

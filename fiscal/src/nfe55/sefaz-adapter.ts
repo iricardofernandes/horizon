@@ -61,7 +61,7 @@ export class SefazNfe55HomologationAdapter {
     private readonly transport: {
       send(service: SefazService, soapEnvelope: Buffer): Promise<Buffer>
     },
-    private readonly credential: Pick<HomologationCredential, 'certificate'>,
+    private readonly credential: Pick<HomologationCredential, 'certificate' | 'issuerTaxId'>,
     private readonly operations: SefazOperationMap,
   ) {
     digestSchema.parse(operations.wsdlDigest)
@@ -72,6 +72,8 @@ export class SefazNfe55HomologationAdapter {
       accessKeySchema.parse(input.accessKey)
       if (input.accessKey.slice(0, 2) !== '35')
         throw new Error('SEFAZ adapter requires an SP access key')
+      if (input.accessKey.slice(6, 20) !== this.credential.issuerTaxId)
+        throw new Error('SEFAZ access key issuer differs from the certificate')
     }
     if (input.service === 'authorization') {
       const signedReference = verifyNfe55Signature(input.signedXml, this.credential.certificate)

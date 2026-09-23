@@ -1,13 +1,16 @@
 import { createHash, createPrivateKey, createPublicKey, X509Certificate } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
+import { certificateLegalEntityCnpj } from './icp-brasil-cnpj'
 
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/)
+const issuerTaxId = z.string().regex(/^[0-9A-Z]{14}$/)
 
 export type HomologationCredential = {
   certificate: Buffer
   privateKey: Buffer
   fingerprint: string
+  issuerTaxId: string
   validUntil: number
   minimumRemainingMilliseconds: number
 }
@@ -17,9 +20,11 @@ export async function loadHomologationCredential(input: {
   certificatePath: string
   privateKeyPath: string
   expectedFingerprint: string
+  expectedIssuerTaxId: string
   minimumRemainingMilliseconds?: number
 }): Promise<HomologationCredential> {
   const expected = fingerprint.parse(input.expectedFingerprint)
+  const expectedIssuer = issuerTaxId.parse(input.expectedIssuerTaxId)
   const [certificate, privateKey] = await Promise.all([
     readFile(input.certificatePath),
     readFile(input.privateKeyPath),
@@ -27,6 +32,8 @@ export async function loadHomologationCredential(input: {
   const parsed = new X509Certificate(certificate)
   const actual = createHash('sha256').update(parsed.raw).digest('hex')
   if (actual !== expected) throw new Error('Homologation certificate fingerprint mismatch')
+  if (certificateLegalEntityCnpj(parsed) !== expectedIssuer)
+    throw new Error('Homologation certificate issuer CNPJ mismatch')
   const minimum = input.minimumRemainingMilliseconds ?? 24 * 60 * 60 * 1_000
   const now = Date.now()
   const validUntil = Date.parse(parsed.validTo)
@@ -43,6 +50,7 @@ export async function loadHomologationCredential(input: {
     certificate,
     privateKey,
     fingerprint: actual,
+    issuerTaxId: expectedIssuer,
     validUntil,
     minimumRemainingMilliseconds: minimum,
   }

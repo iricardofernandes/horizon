@@ -42,7 +42,7 @@ it('exchanges a status request and retains the exact request and response bytes'
         return response
       },
     },
-    { certificate: Buffer.alloc(0) },
+    { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
     operations,
   )
   const prepared = await adapter.prepare({ service: 'status' })
@@ -68,7 +68,7 @@ it('rejects a response bound to a different prepared service', async () => {
         throw new Error('unexpected transport call')
       },
     },
-    { certificate: Buffer.alloc(0) },
+    { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
     operations,
   )
   const prepared = await adapter.prepare({ service: 'status' })
@@ -98,7 +98,7 @@ it('refuses an unsigned authorization before sending to the authority', async ()
         return Buffer.alloc(0)
       },
     },
-    { certificate: Buffer.alloc(0) },
+    { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
     operations,
   )
   await expect(
@@ -112,4 +112,19 @@ it('refuses an unsigned authorization before sending to the authority', async ()
     }),
   ).rejects.toThrow('signature')
   expect(calls).toBe(0)
+})
+
+it('refuses a request for an issuer other than the certificate holder', async () => {
+  const adapter = new SefazNfe55HomologationAdapter(
+    {
+      async send() {
+        throw new Error('unexpected transport call')
+      },
+    },
+    { certificate: Buffer.alloc(0), issuerTaxId: '12345678000195' },
+    operations,
+  )
+  await expect(adapter.prepare({ service: 'protocol', accessKey: key })).rejects.toThrow(
+    'issuer differs from the certificate',
+  )
 })

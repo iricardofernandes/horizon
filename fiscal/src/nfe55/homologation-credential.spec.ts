@@ -14,7 +14,7 @@ afterAll(async () => {
   await Promise.all(directories.map((directory) => rm(directory, { recursive: true, force: true })))
 })
 
-async function credential() {
+async function credential(issuerTaxId = '12345678000195', includeIssuer = true, duplicate = false) {
   const directory = await mkdtemp(join(tmpdir(), 'horizon-sefaz-credential-'))
   directories.push(directory)
   const certificatePath = join(directory, 'certificate.pem')
@@ -29,6 +29,13 @@ async function credential() {
     '2',
     '-subj',
     '/CN=Horizon Homologation Transport Test Only',
+    ...(includeIssuer
+      ? [
+          '-addext',
+          `subjectAltName=otherName:2.16.76.1.3.3;PRINTABLE:${issuerTaxId}` +
+            (duplicate ? `,otherName:2.16.76.1.3.3;PRINTABLE:${issuerTaxId}` : ''),
+        ]
+      : []),
     '-keyout',
     privateKeyPath,
     '-out',
@@ -39,6 +46,7 @@ async function credential() {
     certificatePath,
     privateKeyPath,
     expectedFingerprint: createHash('sha256').update(parsed.raw).digest('hex'),
+    expectedIssuerTaxId: issuerTaxId,
   }
 }
 
@@ -46,6 +54,7 @@ it('loads only a matching, currently valid certificate and key', async () => {
   const input = await credential()
   const loaded = await loadHomologationCredential(input)
   expect(loaded.fingerprint).toBe(input.expectedFingerprint)
+  expect(loaded.issuerTaxId).toBe(input.expectedIssuerTaxId)
   expect(loaded.validUntil).toBeGreaterThan(Date.now() + loaded.minimumRemainingMilliseconds)
   await expect(
     loadHomologationCredential({ ...input, expectedFingerprint: '0'.repeat(64) }),
@@ -57,6 +66,15 @@ it('loads only a matching, currently valid certificate and key', async () => {
   await expect(
     loadHomologationCredential({ ...input, privateKeyPath: other.privateKeyPath }),
   ).rejects.toThrow('do not match')
+  await expect(
+    loadHomologationCredential({ ...input, expectedIssuerTaxId: '00000000000000' }),
+  ).rejects.toThrow('issuer CNPJ mismatch')
+  await expect(
+    loadHomologationCredential(await credential('12345678000195', false)),
+  ).rejects.toThrow('subject alternative name is missing')
+  await expect(
+    loadHomologationCredential(await credential('12345678000195', true, true)),
+  ).rejects.toThrow('legal-entity CNPJ is missing or duplicate')
 })
 
 it('permits only the pinned SP homologation service paths', async () => {

@@ -528,7 +528,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
           throw new Error('No network send in ledger test')
         },
       },
-      { certificate: Buffer.alloc(0) },
+      { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
       operations,
     )
     const prepared = await adapter.prepare({ service: 'status' })
