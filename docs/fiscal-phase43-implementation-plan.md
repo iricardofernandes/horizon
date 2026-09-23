@@ -193,6 +193,13 @@ revocation and SEFAZ credentialing evidence still require review for the real is
 The exchange runner now compares each grant's endpoint, certificate and WSDL
 digests with its actual transport and adapter before persisting or sending a request;
 the transport computes its endpoint digest from the five validated SP URLs.
+The transport now requires a separate, fingerprint-pinned ICP-Brasil TLS root
+certificate from a mounted path and keeps peer and hostname verification enabled.
+The [ITI root repository](https://www.gov.br/iti/pt-br/assuntos/repositorio/repositorio-ac-raiz)
+lists the v10 SSL root; the exact root bytes and current SEFAZ server chain need
+independent review. On 2026-09-23, direct WSDL retrieval without a configured root
+failed chain validation, and an untrusted diagnostic request received HTTP 403.
+No WSDL has been approved or pinned from that attempt.
 
 `GET /fiscal/documents/:id/v2` and
 `GET /fiscal/documents/:id/artifacts/v2` now carry the environment and

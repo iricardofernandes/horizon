@@ -61,6 +61,8 @@
     "sourceUrl": "https://hom.nfe.fazenda.gov.br/portal/webServices.aspx?tipoConteudo=VjrjMInPXGA%3D",
     "jurisdiction": "SP",
     "wsdlReviewed": false,
+    "wsdlRetrieval": "2026-09-23: TLS chain validation failed without a reviewed ICP-Brasil root; an untrusted diagnostic GET returned HTTP 403. No WSDL bytes retained or approved.",
+    "tlsTrustAnchorFingerprint": null,
     "endpointSetDigest": null
   },
   "openDecisions": [

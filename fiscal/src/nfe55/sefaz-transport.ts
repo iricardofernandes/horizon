@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { request } from 'node:https'
 import { z } from 'zod'
 import type { HomologationCredential } from './homologation-credential'
+import type { SefazTrustAnchor } from './sefaz-trust-anchor'
 
 export type SefazService = 'authorization' | 'receipt' | 'protocol' | 'status' | 'event'
 
@@ -31,12 +32,14 @@ export class SefazTransportError extends Error {
 export class SefazHomologationTransport {
   readonly endpointSetDigest: string
   readonly certificateFingerprint: string
+  readonly trustAnchorFingerprint: string
   readonly #endpoints: Record<SefazService, URL>
   readonly #settings: z.infer<typeof settingsSchema>
 
   constructor(
     endpoints: SefazEndpoints,
     private readonly credential: HomologationCredential,
+    private readonly trustAnchor: SefazTrustAnchor,
     settings: z.input<typeof settingsSchema> = {},
   ) {
     this.#settings = settingsSchema.parse(settings)
@@ -66,6 +69,7 @@ export class SefazHomologationTransport {
       )
       .digest('hex')
     this.certificateFingerprint = credential.fingerprint
+    this.trustAnchorFingerprint = trustAnchor.fingerprint
   }
 
   async send(service: SefazService, soapEnvelope: Buffer): Promise<Buffer> {
@@ -82,6 +86,7 @@ export class SefazHomologationTransport {
           method: 'POST',
           cert: this.credential.certificate,
           key: this.credential.privateKey,
+          ca: this.trustAnchor.certificate,
           rejectUnauthorized: true,
           timeout: this.#settings.timeoutMilliseconds,
           headers: {

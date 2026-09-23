@@ -1,12 +1,15 @@
 import { execFile } from 'node:child_process'
 import { createHash, X509Certificate } from 'node:crypto'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { once } from 'node:events'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { connect, createServer } from 'node:tls'
 import { promisify } from 'node:util'
 import { afterAll, expect, it } from 'vitest'
 import { loadHomologationCredential } from './homologation-credential'
 import { type SefazEndpoints, SefazHomologationTransport } from './sefaz-transport'
+import { loadSefazTrustAnchor } from './sefaz-trust-anchor'
 
 const directories: string[] = []
 
@@ -32,7 +35,7 @@ async function credential(issuerTaxId = '12345678000195', includeIssuer = true, 
     ...(includeIssuer
       ? [
           '-addext',
-          `subjectAltName=otherName:2.16.76.1.3.3;PRINTABLE:${issuerTaxId}` +
+          `subjectAltName=DNS:localhost,otherName:2.16.76.1.3.3;PRINTABLE:${issuerTaxId}` +
             (duplicate ? `,otherName:2.16.76.1.3.3;PRINTABLE:${issuerTaxId}` : ''),
         ]
       : []),
@@ -53,8 +56,27 @@ async function credential(issuerTaxId = '12345678000195', includeIssuer = true, 
 it('loads only a matching, currently valid certificate and key', async () => {
   const input = await credential()
   const loaded = await loadHomologationCredential(input)
+  const trust = await loadSefazTrustAnchor(input)
   expect(loaded.fingerprint).toBe(input.expectedFingerprint)
   expect(loaded.issuerTaxId).toBe(input.expectedIssuerTaxId)
+  expect(trust.fingerprint).toBe(input.expectedFingerprint)
+  const otherAnchor = await credential()
+  const combinedPath = join(dirname(input.certificatePath), 'combined.pem')
+  await writeFile(
+    combinedPath,
+    Buffer.concat([
+      await readFile(input.certificatePath),
+      await readFile(otherAnchor.certificatePath),
+    ]),
+  )
+  const combined = await loadSefazTrustAnchor({
+    certificatePath: combinedPath,
+    expectedFingerprint: input.expectedFingerprint,
+  })
+  expect(combined.certificate.toString().match(/BEGIN CERTIFICATE/g)).toHaveLength(1)
+  await expect(
+    loadSefazTrustAnchor({ ...input, expectedFingerprint: '0'.repeat(64) }),
+  ).rejects.toThrow('fingerprint mismatch')
   expect(loaded.validUntil).toBeGreaterThan(Date.now() + loaded.minimumRemainingMilliseconds)
   await expect(
     loadHomologationCredential({ ...input, expectedFingerprint: '0'.repeat(64) }),
@@ -80,6 +102,7 @@ it('loads only a matching, currently valid certificate and key', async () => {
 it('permits only the pinned SP homologation service paths', async () => {
   const input = await credential()
   const loaded = await loadHomologationCredential(input)
+  const trust = await loadSefazTrustAnchor(input)
   const root = 'https://homologacao.nfe.fazenda.sp.gov.br/ws/'
   const endpoints: SefazEndpoints = {
     authorization: `${root}nfeautorizacao4.asmx`,
@@ -88,23 +111,29 @@ it('permits only the pinned SP homologation service paths', async () => {
     status: `${root}nfestatusservico4.asmx`,
     event: `${root}nferecepcaoevento4.asmx`,
   }
-  const transport = new SefazHomologationTransport(endpoints, loaded)
+  const transport = new SefazHomologationTransport(endpoints, loaded, trust)
   expect(transport.endpointSetDigest).toMatch(/^[0-9a-f]{64}$/)
   expect(transport.endpointSetDigest).toBe(
-    new SefazHomologationTransport(endpoints, loaded).endpointSetDigest,
+    new SefazHomologationTransport(endpoints, loaded, trust).endpointSetDigest,
   )
   expect(transport.certificateFingerprint).toBe(loaded.fingerprint)
+  expect(transport.trustAnchorFingerprint).toBe(trust.fingerprint)
   await expect(
-    new SefazHomologationTransport(endpoints, {
-      ...loaded,
-      validUntil: Date.now(),
-    }).send('authorization', Buffer.from('<request/>')),
+    new SefazHomologationTransport(
+      endpoints,
+      {
+        ...loaded,
+        validUntil: Date.now(),
+      },
+      trust,
+    ).send('authorization', Buffer.from('<request/>')),
   ).rejects.toThrow('no longer valid')
   expect(
     () =>
       new SefazHomologationTransport(
         { ...endpoints, authorization: endpoints.authorization.replace('homologacao.', '') },
         loaded,
+        trust,
       ),
   ).toThrow('Unapproved')
   expect(
@@ -112,6 +141,60 @@ it('permits only the pinned SP homologation service paths', async () => {
       new SefazHomologationTransport(
         { ...endpoints, event: endpoints.event.replace('https:', 'http:') },
         loaded,
+        trust,
       ),
   ).toThrow('Unapproved')
+})
+
+it('authenticates both peers with the mounted trust root and client certificate', async () => {
+  const input = await credential()
+  const loaded = await loadHomologationCredential(input)
+  const trust = await loadSefazTrustAnchor(input)
+  let clientAuthenticated = false
+  const server = createServer(
+    {
+      cert: loaded.certificate,
+      key: loaded.privateKey,
+      ca: trust.certificate,
+      requestCert: true,
+      rejectUnauthorized: true,
+    },
+    (socket) => {
+      clientAuthenticated = socket.authorized
+      socket.end()
+    },
+  )
+  try {
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('Local TLS port unavailable')
+    const client = connect({
+      host: '127.0.0.1',
+      port: address.port,
+      servername: 'localhost',
+      cert: loaded.certificate,
+      key: loaded.privateKey,
+      ca: trust.certificate,
+      rejectUnauthorized: true,
+    })
+    await once(client, 'secureConnect')
+    expect(client.authorized).toBe(true)
+    await once(client, 'close')
+    expect(clientAuthenticated).toBe(true)
+    const untrusted = await loadSefazTrustAnchor(await credential())
+    const rejected = connect({
+      host: '127.0.0.1',
+      port: address.port,
+      servername: 'localhost',
+      cert: loaded.certificate,
+      key: loaded.privateKey,
+      ca: untrusted.certificate,
+      rejectUnauthorized: true,
+    })
+    await expect(once(rejected, 'secureConnect')).rejects.toThrow()
+    rejected.destroy()
+  } finally {
+    server.close()
+  }
 })
