@@ -32,25 +32,27 @@ de produção nem libera estoque ou financeiro.
 
 ## Sequência por documento
 
-1. Congelar a origem com Sales em `packed`, criar o draft interno e validar readiness
-   com `phase43:readiness`. Conferir no resultado capability, pacote de regras e
-   digest de reconciliação. Um cálculo não suportado encerra o ensaio desse documento.
+1. Congelar a origem com Sales em `packed` e criar o draft interno. Conferir o
+   tenant, estabelecimento, documento, série e capability aprovada antes de prosseguir.
 2. Criar um grant com `phase43:grant -- --file <json>`. O arquivo contém tenant,
    documento, capability, digests de endpoint/WSDL/certificado, operador e expiração
    em até duas horas. Registrar o grant ID na evidência, sem armazenar credenciais.
-3. Opcionalmente executar `phase43:status` com um novo exchange ID. Confirmar
+3. Validar readiness com `phase43:readiness` usando esse grant. Conferir no
+   resultado capability, pacote de regras e digest de reconciliação. Um cálculo
+   não suportado encerra o ensaio desse documento.
+4. Opcionalmente executar `phase43:status` com um novo exchange ID. Confirmar
    `cStat` e digest da resposta em `phase43:observations`.
-4. Executar `phase43:issuance-prep` com um exchange ID estável. Conferir chave de
+5. Executar `phase43:issuance-prep` com um exchange ID estável. Conferir chave de
    acesso, número, digest do XML assinado e `sent: false`. Não trocar o exchange ID
    ao repetir a preparação. Conferir o número reservado antes de qualquer envio.
-5. Executar `phase43:exchange-resume` para esse exchange ID. Esta ação pode chamar
+6. Executar `phase43:exchange-resume` para esse exchange ID. Esta ação pode chamar
    a SEFAZ uma vez. Conferir o estado por `phase43:observations` e comparar os
    códigos, recibo e protocolo com o portal oficial antes de classificar o caso.
-6. Para `pending` ou envio iniciado sem resposta, executar `phase43:consult` com
+7. Para `pending` ou envio iniciado sem resposta, executar `phase43:consult` com
    **novo** exchange ID e o documento original. A consulta seleciona recibo ou
    protocolo a partir da evidência persistida. Repetir apenas dentro do orçamento
    de dez consultas. Nunca preparar uma segunda autorização para o documento.
-7. Após protocolo autorizado observado, executar `phase43:cancellation-prep` com
+8. Após protocolo autorizado observado, executar `phase43:cancellation-prep` com
    justificativa e horário explícitos. Conferir `sent: false`, então executar
    `phase43:exchange-resume` para o exchange ID do evento. Comparar o `128/135`
    observado e o protocolo com o portal. Registrar digests, não XML protegido.

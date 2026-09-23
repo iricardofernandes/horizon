@@ -621,6 +621,15 @@ it('blocks a scoped dispatch in PostgreSQL until its exact production release', 
       dispatchedOn: today(),
     })
   expect((await dispatch()).isLeft()).toBe(true)
+  await expect(administrator`insert into shipments (
+    id, tenant_id, order_id, warehouse_id, status, value, currency,
+    picked_by, packed_by, dispatched_by, dispatched_on, created_at, updated_at
+  ) select ${randomUUID()}, tenant_id, order_id, warehouse_id, 'dispatched',
+      value, currency, picked_by, packed_by, 'direct-sql', ${today()},
+      created_at, updated_at
+    from shipments where tenant_id = ${fixture.tenantId} and id = ${shipmentId}`).rejects.toThrow(
+    'cannot be inserted as dispatched',
+  )
   await expect(administrator`update shipments
     set status = 'dispatched', dispatched_by = 'direct-sql', dispatched_on = ${today()}
     where tenant_id = ${fixture.tenantId} and id = ${shipmentId}`).rejects.toThrow(

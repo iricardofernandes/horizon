@@ -151,7 +151,8 @@ rejection or cancellation. The production outcome subscription stays disabled in
 the Sales runtime for phase 43; there is no Fiscal production publisher. The live
 homologation path remains pending, and configured shipments stay blocked.
 The Sales database now checks the same release predicate on a scoped shipment's
-transition out of `packed`. Direct SQL cannot mark it dispatched or returned
+transition out of `packed`. Direct SQL cannot insert it as dispatched or returned
+or mark an existing shipment dispatched or returned
 without the frozen origin and an exact production authorization; a rejection or
 cancellation at the same or newer document revision blocks that transition.
 
