@@ -15,6 +15,7 @@ const claimsSchema = z.object({
 
 export type FiscalPermission =
   | 'read'
+  | 'evidence:read'
   | 'draft:create'
   | 'rules:manage'
   | 'transmission:submit'
@@ -30,14 +31,15 @@ export type FiscalPrincipal = {
 const permissions: Record<FiscalPrincipal['role'], readonly FiscalPermission[]> = {
   admin: [
     'read',
+    'evidence:read',
     'draft:create',
     'rules:manage',
     'transmission:submit',
     'cancellation:request',
     'import:review',
   ],
-  issuer: ['read', 'draft:create', 'transmission:submit', 'cancellation:request'],
-  reviewer: ['read', 'import:review'],
+  issuer: ['read', 'evidence:read', 'draft:create', 'transmission:submit', 'cancellation:request'],
+  reviewer: ['read', 'evidence:read', 'import:review'],
   viewer: ['read'],
 }
 

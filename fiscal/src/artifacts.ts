@@ -21,6 +21,9 @@ const metadataSchema = z.object({
     'cancellation_response',
     'cancellation_protocol',
     'danfe',
+    'homologation_request',
+    'homologation_response',
+    'homologation_protocol',
   ]),
   commandId: z.uuid().optional(),
   mediaType: z.string().min(3).max(100),
@@ -64,28 +67,69 @@ export class FiscalArtifacts {
       createdAt: string
     }>
   } | null> {
+    const view = await this.listV2(tenantId, documentId)
+    if (view?.environment !== 'simulation') return null
+    return {
+      documentId,
+      artifacts: view.artifacts.map(
+        ({ environment: _environment, fiscalValue: _fiscalValue, ...artifact }) => ({
+          ...artifact,
+          simulated: true as const,
+        }),
+      ),
+    }
+  }
+
+  async listV2(
+    tenantId: string,
+    documentId: string,
+  ): Promise<{
+    documentId: string
+    environment: 'simulation' | 'homologation'
+    fiscalValue: false
+    artifacts: Array<{
+      documentId: string
+      kind: string
+      digest: string
+      byteSize: number
+      mediaType: string
+      sourceSchema: string
+      environment: 'simulation' | 'homologation'
+      simulated: boolean
+      fiscalValue: false
+      createdAt: string
+    }>
+  } | null> {
     z.uuid().parse(tenantId)
     z.uuid().parse(documentId)
     const result = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
-      const [document] = await tx`select id from fiscal_documents
+      const [document] = await tx`select id, environment from fiscal_documents
         where tenant_id = ${tenantId} and id = ${documentId}`
       if (!document) return null
-      return tx`select purpose, digest, size_bytes, media_type, source_schema, created_at
+      const rows =
+        await tx`select purpose, digest, size_bytes, media_type, source_schema, created_at
         from fiscal_artifacts where tenant_id = ${tenantId} and document_id = ${documentId}
           and purpose is not null order by created_at, id`
+      return { environment: document.environment, rows }
     })
     if (!result) return null
+    if (result.environment !== 'simulation' && result.environment !== 'homologation')
+      throw new Error('Unsupported Fiscal artifact environment')
     return {
       documentId,
-      artifacts: result.map((row) => ({
+      environment: result.environment,
+      fiscalValue: false,
+      artifacts: result.rows.map((row) => ({
         documentId,
         kind: String(row.purpose),
         digest: String(row.digest),
         byteSize: Number(row.size_bytes),
         mediaType: String(row.media_type),
         sourceSchema: String(row.source_schema),
-        simulated: true as const,
+        environment: result.environment,
+        simulated: result.environment === 'simulation',
+        fiscalValue: false as const,
         createdAt: new Date(row.created_at).toISOString(),
       })),
     }
@@ -146,8 +190,19 @@ export class FiscalArtifacts {
     documentId: string,
     kind: ArtifactMetadata['kind'],
     digest: string,
+  ): Promise<{ metadata: ArtifactMetadata; bytes: Buffer }> {
+    const { metadata, bytes } = await this.getV2(tenantId, documentId, kind, digest)
+    const { environment: _environment, ...legacy } = metadata
+    return { metadata: legacy, bytes }
+  }
+
+  async getV2(
+    tenantId: string,
+    documentId: string,
+    kind: ArtifactMetadata['kind'],
+    digest: string,
   ): Promise<{
-    metadata: ArtifactMetadata
+    metadata: ArtifactMetadata & { environment: 'simulation' | 'homologation' }
     bytes: Buffer
   }> {
     z.uuid().parse(tenantId)
@@ -158,11 +213,16 @@ export class FiscalArtifacts {
       .parse(digest)
     const [row] = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
-      return tx`select object_key, size_bytes, media_type, source_schema, created_at
-        from fiscal_artifacts where tenant_id = ${tenantId} and document_id = ${documentId}
-          and kind = ${kind} and digest = ${digest}`
+      return tx`select artifact.object_key, artifact.size_bytes, artifact.media_type,
+          artifact.source_schema, artifact.created_at, document.environment
+        from fiscal_artifacts artifact join fiscal_documents document
+          on document.tenant_id = artifact.tenant_id and document.id = artifact.document_id
+        where artifact.tenant_id = ${tenantId} and artifact.document_id = ${documentId}
+          and artifact.kind = ${kind} and artifact.digest = ${digest}`
     })
     if (!row) throw new Error('Fiscal artifact not found')
+    if (row.environment !== 'simulation' && row.environment !== 'homologation')
+      throw new Error('Unsupported Fiscal artifact environment')
     const bytes = await this.store.get(String(row.object_key))
     const actual = createHash('sha256').update(bytes).digest('hex')
     if (actual !== digest || bytes.length !== Number(row.size_bytes))
@@ -177,6 +237,7 @@ export class FiscalArtifacts {
         mediaType: String(row.media_type),
         sourceSchema: String(row.source_schema),
         createdAt: new Date(row.created_at).toISOString(),
+        environment: row.environment,
       },
       bytes,
     }

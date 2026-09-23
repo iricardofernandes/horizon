@@ -111,7 +111,7 @@ export class EncryptedFiscalArtifactStore implements FiscalArtifactStore {
 
 function assertObjectKey(key: string): void {
   if (
-    !/^[0-9a-f-]{36}\/[0-9a-f-]{36}\/(xml|response|protocol|pdf|unsigned_xml|signed_xml|issuance_request|issuance_response|authorization_protocol|cancellation_request|cancellation_response|cancellation_protocol|danfe)\/[0-9a-f]{64}$/.test(
+    !/^[0-9a-f-]{36}\/[0-9a-f-]{36}\/(xml|response|protocol|pdf|unsigned_xml|signed_xml|issuance_request|issuance_response|authorization_protocol|cancellation_request|cancellation_response|cancellation_protocol|danfe|homologation_request|homologation_response|homologation_protocol)\/[0-9a-f]{64}$/.test(
       key,
     )
   )

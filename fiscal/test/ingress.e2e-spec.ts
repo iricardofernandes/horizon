@@ -5,6 +5,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { fiscalArtifactListV2Schema } from '@horizon/contracts'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { RabbitMQContainer, type StartedRabbitMQContainer } from '@testcontainers/rabbitmq'
 import { connect } from 'amqplib'
@@ -654,6 +655,15 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       where raw.tenant_id = ${tenantId} and raw.exchange_id = ${malformedInput.exchangeId}`
     expect(rawOnly?.response_digest).toMatch(/^[0-9a-f]{64}$/)
     expect(rawOnly?.cstat).toBeNull()
+    const listed = await artifacts.listV2(tenantId, documentId)
+    expect(fiscalArtifactListV2Schema.safeParse(listed).success).toBe(true)
+    expect(listed).toMatchObject({ environment: 'homologation', fiscalValue: false })
+    expect(listed?.artifacts.map((artifact) => artifact.kind)).toContain('homologation_request')
+    expect(listed?.artifacts.map((artifact) => artifact.kind)).toContain('homologation_response')
+    expect(
+      listed?.artifacts.every((artifact) => !artifact.simulated && !artifact.fiscalValue),
+    ).toBe(true)
+    expect(await artifacts.list(tenantId, documentId)).toBeNull()
   } finally {
     await Promise.all([ledger.close(), artifacts.close(), capabilities.close()])
   }

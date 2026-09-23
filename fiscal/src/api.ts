@@ -1,8 +1,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import {
+  fiscalArtifactListV2Schema,
   fiscalCapabilityListV2Schema,
   fiscalCorrectionRequestSchema,
   fiscalDocumentCreateRequestSchema,
+  fiscalDocumentV2Schema,
   fiscalManualOriginRequestSchema,
 } from '@horizon/contracts'
 import { z } from 'zod'
@@ -32,7 +34,7 @@ export function createFiscalServer(dependencies: {
   >
   manualOrigins: Pick<FiscalManualOrigins, 'create'>
   dispatch?: Pick<FiscalDispatch, 'queueStatusQuery' | 'queueCancellationQuery'>
-  artifacts: Pick<FiscalArtifacts, 'get' | 'list'>
+  artifacts: Pick<FiscalArtifacts, 'get' | 'getV2' | 'list' | 'listV2'>
   calculations: Pick<FiscalCalculations, 'preview' | 'get'>
   capabilities: Pick<FiscalCapabilities, 'listActive'>
   readiness: Pick<FiscalReadiness, 'validate'>
@@ -63,7 +65,7 @@ async function handle(
     >
     manualOrigins: Pick<FiscalManualOrigins, 'create'>
     dispatch?: Pick<FiscalDispatch, 'queueStatusQuery' | 'queueCancellationQuery'>
-    artifacts: Pick<FiscalArtifacts, 'get' | 'list'>
+    artifacts: Pick<FiscalArtifacts, 'get' | 'getV2' | 'list' | 'listV2'>
     calculations: Pick<FiscalCalculations, 'preview' | 'get'>
     capabilities: Pick<FiscalCapabilities, 'listActive'>
     readiness: Pick<FiscalReadiness, 'validate'>
@@ -303,6 +305,15 @@ async function handle(
     return
   }
 
+  const artifactListV2 = /^\/documents\/([0-9a-f-]{36})\/artifacts\/v2$/.exec(url.pathname)
+  if (request.method === 'GET' && artifactListV2?.[1]) {
+    const found = await dependencies.artifacts.listV2(principal.tenantId, artifactListV2[1])
+    response.setHeader('cache-control', 'private, no-store')
+    if (!found) problem(response, 404, 'Not Found', 'Fiscal document not found')
+    else json(response, 200, fiscalArtifactListV2Schema.parse(found))
+    return
+  }
+
   const artifactList = /^\/documents\/([0-9a-f-]{36})\/artifacts$/.exec(url.pathname)
   if (request.method === 'GET' && artifactList?.[1]) {
     const found = await dependencies.artifacts.list(principal.tenantId, artifactList[1])
@@ -313,25 +324,31 @@ async function handle(
   }
 
   const artifact =
-    /^\/documents\/([0-9a-f-]{36})\/artifacts\/(xml|response|protocol|pdf|unsigned_xml|signed_xml|issuance_request|issuance_response|authorization_protocol|cancellation_request|cancellation_response|cancellation_protocol|danfe)$/.exec(
+    /^\/documents\/([0-9a-f-]{36})\/artifacts\/(v2\/)?(xml|response|protocol|pdf|unsigned_xml|signed_xml|issuance_request|issuance_response|authorization_protocol|cancellation_request|cancellation_response|cancellation_protocol|danfe|homologation_request|homologation_response|homologation_protocol)$/.exec(
       url.pathname,
     )
   if (request.method === 'GET' && artifact) {
     const documentId = artifact[1]
-    const kind = artifact[2] as Parameters<FiscalArtifacts['get']>[2]
+    const v2 = Boolean(artifact[2])
+    if (v2 && !requirePermission(principal, 'evidence:read', response)) return
+    const kind = artifact[3] as Parameters<FiscalArtifacts['getV2']>[2]
     const digest = url.searchParams.get('digest')
     if (!documentId || !digest) {
       problem(response, 400, 'Bad Request', 'A document and digest are required')
       return
     }
     try {
-      const found = await dependencies.artifacts.get(principal.tenantId, documentId, kind, digest)
+      const found = await dependencies.artifacts.getV2(principal.tenantId, documentId, kind, digest)
+      if (!v2 && found.metadata.environment !== 'simulation') {
+        problem(response, 404, 'Not Found', 'Fiscal artifact not found')
+        return
+      }
       response.writeHead(200, {
         'content-type': found.metadata.mediaType,
         'content-length': found.bytes.length,
         digest: `sha-256=${Buffer.from(found.metadata.digest, 'hex').toString('base64')}`,
         'cache-control': 'private, no-store',
-        'content-disposition': `attachment; filename="simulacao-${kind}-${digest}.${found.metadata.mediaType === 'application/pdf' ? 'pdf' : found.metadata.mediaType === 'application/xml' ? 'xml' : 'json'}"`,
+        'content-disposition': `attachment; filename="${found.metadata.environment === 'simulation' ? 'simulacao' : 'homologacao-sem-valor-fiscal'}-${kind}-${digest}.${found.metadata.mediaType === 'application/pdf' ? 'pdf' : found.metadata.mediaType.includes('xml') ? 'xml' : 'json'}"`,
         'x-content-type-options': 'nosniff',
         'content-security-policy': 'sandbox',
       })
@@ -342,10 +359,28 @@ async function handle(
     return
   }
 
+  const documentV2 = /^\/documents\/([0-9a-f-]{36})\/v2$/.exec(url.pathname)
+  if (request.method === 'GET' && documentV2?.[1]) {
+    const found = await dependencies.documents.get(principal.tenantId, documentV2[1])
+    if (!found) problem(response, 404, 'Not Found', 'Fiscal document not found')
+    else
+      json(
+        response,
+        200,
+        fiscalDocumentV2Schema.parse({
+          ...found,
+          fiscalValue: false,
+          statusUrl: `/fiscal/documents/${found.id}/v2`,
+        }),
+      )
+    return
+  }
+
   const document = /^\/documents\/([0-9a-f-]{36})$/.exec(url.pathname)
   if (request.method === 'GET' && document?.[1]) {
     const found = await dependencies.documents.get(principal.tenantId, document[1])
-    if (!found) problem(response, 404, 'Not Found', 'Fiscal document not found')
+    if (found?.environment !== 'simulation')
+      problem(response, 404, 'Not Found', 'Fiscal document not found')
     else json(response, 200, found)
     return
   }

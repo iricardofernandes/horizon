@@ -99,7 +99,7 @@ export class HomologationExchangeLedger {
       {
         tenantId: value.tenantId,
         documentId: value.documentId,
-        kind: 'xml',
+        kind: 'homologation_request',
         mediaType: 'application/soap+xml',
         sourceSchema: 'sefaz-nfe400-soap12-request',
       },
@@ -192,7 +192,7 @@ export class HomologationExchangeLedger {
       {
         tenantId,
         documentId,
-        kind: 'response',
+        kind: 'homologation_response',
         mediaType: 'application/soap+xml',
         sourceSchema: 'sefaz-nfe400-soap12-response',
       },
@@ -227,7 +227,7 @@ export class HomologationExchangeLedger {
     const raw = await this.artifacts.get(
       tenantId,
       documentId,
-      'response',
+      'homologation_response',
       await this.rawDigest(tenantId, exchangeId),
     )
     if (!raw.bytes.equals(response.response))
@@ -237,7 +237,7 @@ export class HomologationExchangeLedger {
           {
             tenantId,
             documentId,
-            kind: 'protocol',
+            kind: 'homologation_protocol',
             mediaType: 'application/xml',
             sourceSchema: 'sefaz-nfe400-protocol',
           },

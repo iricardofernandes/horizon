@@ -18,6 +18,7 @@ let cancellationQueryInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
 let activeCapability = false
 let activeHomologationCapability = false
+let documentEnvironment: 'simulation' | 'homologation' = 'simulation'
 const server = createFiscalServer({
   verifier: {
     async verify(authorization) {
@@ -83,10 +84,10 @@ const server = createFiscalServer({
       return {
         id: documentId,
         status: 'draft',
-        simulated: true,
+        simulated: documentEnvironment === 'simulation',
         snapshotDigest: 'a'.repeat(64),
         model: '55',
-        environment: 'simulation',
+        environment: documentEnvironment,
         establishmentId: randomUUID(),
         series: 1,
         number: null,
@@ -128,8 +129,17 @@ const server = createFiscalServer({
   },
   artifacts: {
     async list(requestedTenant, requestedDocument) {
-      if (requestedTenant !== tenantId || requestedDocument !== documentId) return null
+      if (
+        requestedTenant !== tenantId ||
+        requestedDocument !== documentId ||
+        documentEnvironment !== 'simulation'
+      )
+        return null
       return { documentId, artifacts: [] }
+    },
+    async listV2(requestedTenant, requestedDocument) {
+      if (requestedTenant !== tenantId || requestedDocument !== documentId) return null
+      return { documentId, environment: documentEnvironment, fiscalValue: false, artifacts: [] }
     },
     async get(requestedTenant) {
       if (requestedTenant !== tenantId) throw new Error('Not found')
@@ -144,6 +154,23 @@ const server = createFiscalServer({
           mediaType: 'application/xml',
           sourceSchema: 'test',
           createdAt: '2026-09-21T00:00:00.000Z',
+        },
+      }
+    },
+    async getV2(requestedTenant) {
+      if (requestedTenant !== tenantId) throw new Error('Not found')
+      return {
+        bytes: Buffer.from('<xml/>'),
+        metadata: {
+          tenantId,
+          documentId,
+          kind: 'xml' as const,
+          digest: 'a'.repeat(64),
+          size: 6,
+          mediaType: 'application/xml',
+          sourceSchema: 'test',
+          createdAt: '2026-09-21T00:00:00.000Z',
+          environment: documentEnvironment,
         },
       }
     },
@@ -371,6 +398,53 @@ it('serves typed simulation artifacts with digest selection and sandbox headers'
   expect(response.headers.get('cache-control')).toBe('private, no-store')
   expect(response.headers.get('content-security-policy')).toBe('sandbox')
   expect(await response.text()).toBe('<xml/>')
+})
+
+it('labels homologation reads in v2 and hides them from simulation-only routes', async () => {
+  documentEnvironment = 'homologation'
+  try {
+    const headers = { authorization: 'Bearer test' }
+    const legacyDocument = await fetch(`${base}/documents/${documentId}`, { headers })
+    expect(legacyDocument.status).toBe(404)
+    const v2Document = await fetch(`${base}/documents/${documentId}/v2`, { headers })
+    expect(v2Document.status).toBe(200)
+    expect(await v2Document.json()).toMatchObject({
+      id: documentId,
+      environment: 'homologation',
+      simulated: false,
+      fiscalValue: false,
+    })
+    expect((await fetch(`${base}/documents/${documentId}/artifacts`, { headers })).status).toBe(404)
+    const v2List = await fetch(`${base}/documents/${documentId}/artifacts/v2`, { headers })
+    expect(await v2List.json()).toEqual({
+      documentId,
+      environment: 'homologation',
+      fiscalValue: false,
+      artifacts: [],
+    })
+    const legacyArtifact = await fetch(
+      `${base}/documents/${documentId}/artifacts/xml?digest=${'a'.repeat(64)}`,
+      { headers },
+    )
+    expect(legacyArtifact.status).toBe(404)
+    const v2Artifact = await fetch(
+      `${base}/documents/${documentId}/artifacts/v2/xml?digest=${'a'.repeat(64)}`,
+      { headers },
+    )
+    expect(v2Artifact.status).toBe(403)
+    role = 'reviewer'
+    const reviewedArtifact = await fetch(
+      `${base}/documents/${documentId}/artifacts/v2/xml?digest=${'a'.repeat(64)}`,
+      { headers },
+    )
+    expect(reviewedArtifact.status).toBe(200)
+    expect(reviewedArtifact.headers.get('content-disposition')).toContain(
+      'homologacao-sem-valor-fiscal',
+    )
+  } finally {
+    role = 'viewer'
+    documentEnvironment = 'simulation'
+  }
 })
 
 it('lists tenant-scoped artifact metadata', async () => {

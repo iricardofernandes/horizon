@@ -168,6 +168,14 @@ The runner records the raw response before parsing and refuses a second send
 after a send marker, including when the first response was lost. This ledger is
 not yet wired to the Fiscal issue worker or a live SEFAZ credential.
 
+`GET /fiscal/documents/:id/v2` and
+`GET /fiscal/documents/:id/artifacts/v2` now carry the environment and
+`fiscalValue: false`. Homologation request, response and protocol artifacts
+have explicit purposes; their v2 downloads require an issuer, reviewer or admin
+role and use a `homologacao-sem-valor-fiscal` filename. The version 1 document
+and artifact routes remain simulation-only. These additions are pinned in
+`@horizon/contracts@0.31.0`.
+
 1. pack shipment and freeze the commercial lines, recipient, issuer, quantities,
    prices and revision into an idempotent `sales.fiscal-origin.recorded` event;
 2. have Fiscal ingest that origin, validate and issue the exact document;
