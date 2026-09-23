@@ -445,9 +445,41 @@ it('ingests one canonical pre-dispatch origin and rejects conflicting versions',
   expect(await ingress.accept(frozen)).toBe('applied')
   expect(await ingress.accept(frozen)).toBe('duplicate')
   expect(await ingress.accept({ ...frozen, eventId: randomUUID() })).toBe('applied')
-  const [stored] = await administrator`select payload_digest from fiscal_intents
+  const [stored] = await administrator`select id, payload_digest from fiscal_intents
     where tenant_id = ${tenantId} and origin_id = ${shipmentId}`
   expect(stored?.payload_digest).toBe(canonicalDigest(frozen.payload))
+  const draftInput = {
+    tenantId,
+    intentId: String(stored?.id),
+    model: '55' as const,
+    environment: 'homologation' as const,
+    establishmentId: frozen.payload.establishmentId,
+    series: 1,
+  }
+  const [draft, retried] = await Promise.all([
+    documents.createHomologationDraft(draftInput),
+    documents.createHomologationDraft(draftInput),
+  ])
+  expect(retried.id).toBe(draft.id)
+  expect(await documents.readSnapshot(tenantId, draft.id)).toEqual(frozen.payload)
+  expect(await documents.get(tenantId, draft.id)).toMatchObject({
+    environment: 'homologation',
+    simulated: false,
+    status: 'draft',
+    establishmentId: frozen.payload.establishmentId,
+  })
+  await expect(
+    documents.createHomologationDraft({
+      ...draftInput,
+      establishmentId: randomUUID(),
+    }),
+  ).rejects.toThrow('establishment mismatch')
+  await expect(
+    documents.createDraft({
+      ...draftInput,
+      environment: 'simulation',
+    }),
+  ).rejects.toThrow()
   await expect(ingress.accept({ ...legacy, eventId: randomUUID() })).rejects.toThrow(
     'Conflicting fiscal origin payload',
   )

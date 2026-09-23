@@ -6,7 +6,7 @@ import {
   randomBytes,
   randomUUID,
 } from 'node:crypto'
-import { salesFiscalOriginRecorded } from '@horizon/contracts'
+import { salesFiscalOriginFrozen, salesFiscalOriginRecorded } from '@horizon/contracts'
 import postgres from 'postgres'
 import { z } from 'zod'
 import { appendAudit } from './audit'
@@ -24,8 +24,13 @@ const draftInputSchema = z.object({
   idempotencyKey: z.string().min(16).max(128).optional(),
   actorId: z.string().min(1).max(200).optional(),
 })
+const homologationDraftInputSchema = draftInputSchema.extend({
+  model: z.literal('55'),
+  environment: z.literal('homologation'),
+})
 
 export type DraftInput = z.infer<typeof draftInputSchema>
+export type HomologationDraftInput = z.infer<typeof homologationDraftInputSchema>
 export type Draft = { id: string; status: 'draft'; snapshotDigest: string }
 export type CorrectedDraft = Draft & {
   rootDocumentId: string
@@ -45,9 +50,9 @@ export type DocumentView = Omit<Draft, 'status'> & {
     | 'cancellation_pending'
     | 'cancellation_unknown'
     | 'cancelled'
-  simulated: true
+  simulated: boolean
   model: '55' | '65' | 'nfse'
-  environment: 'simulation'
+  environment: 'simulation' | 'homologation'
   establishmentId: string
   series: number
   number: number | null
@@ -117,13 +122,15 @@ export class FiscalDocuments {
         where d.tenant_id = ${tenantId} and d.id = ${documentId}`
     })
     if (!row) return null
+    if (row.environment !== 'simulation' && row.environment !== 'homologation')
+      throw new Error('Unsupported Fiscal document environment')
     return {
       id: String(row.id),
       status: row.status as DocumentView['status'],
-      simulated: true,
+      simulated: row.environment === 'simulation',
       snapshotDigest: String(row.snapshot_digest),
       model: row.model as DocumentView['model'],
-      environment: 'simulation',
+      environment: row.environment,
       establishmentId: String(row.establishment_id),
       series: Number(row.series),
       number: row.number === null ? null : Number(row.number),
@@ -195,10 +202,20 @@ export class FiscalDocuments {
 
   async createDraft(input: DraftInput): Promise<Draft> {
     const value = draftInputSchema.parse(input)
+    return this.createSalesDraft(value)
+  }
+
+  /** Internal homologation drill only; public document creation remains simulation scoped. */
+  async createHomologationDraft(input: HomologationDraftInput): Promise<Draft> {
+    const value = homologationDraftInputSchema.parse(input)
+    return this.createSalesDraft(value)
+  }
+
+  private async createSalesDraft(value: DraftInput | HomologationDraftInput): Promise<Draft> {
     return this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
       const [origin] = await tx`select p.payload_ciphertext, p.payload_digest,
-        i.payload_digest as intent_digest
+        i.payload_digest as intent_digest, i.origin_id, i.origin_document_type, i.purpose
         from fiscal_intents i join fiscal_origin_payloads p
           on p.tenant_id = i.tenant_id and p.intent_id = i.id
         where i.tenant_id = ${value.tenantId} and i.id = ${value.intentId}`
@@ -212,7 +229,18 @@ export class FiscalDocuments {
       const digest = createHash('sha256').update(snapshot).digest('hex')
       if (digest !== origin.payload_digest || digest !== origin.intent_digest)
         throw new Error('Fiscal origin snapshot digest mismatch')
-      const payload = salesFiscalOriginRecorded.payload.parse(JSON.parse(snapshot))
+      const decoded: unknown = JSON.parse(snapshot)
+      const frozenPayload =
+        value.environment === 'homologation' ? salesFiscalOriginFrozen.payload.parse(decoded) : null
+      const payload = frozenPayload ?? salesFiscalOriginRecorded.payload.parse(decoded)
+      if (
+        payload.originId !== origin.origin_id ||
+        payload.originDocumentType !== origin.origin_document_type ||
+        payload.purpose !== origin.purpose
+      )
+        throw new Error('Fiscal origin identity differs from the frozen intent')
+      if (frozenPayload && frozenPayload.establishmentId !== value.establishmentId)
+        throw new Error('Fiscal homologation origin establishment mismatch')
       const lines = payload.lines
       const requestDigest = createHash('sha256')
         .update(JSON.stringify({ ...value, idempotencyKey: undefined, originDigest: digest }))

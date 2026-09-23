@@ -1,4 +1,9 @@
-import { moneySchema, quantitySchema, salesFiscalOriginRecorded } from '@horizon/contracts'
+import {
+  moneySchema,
+  quantitySchema,
+  salesFiscalOriginFrozen,
+  salesFiscalOriginRecorded,
+} from '@horizon/contracts'
 import { z } from 'zod'
 
 export const manualOriginPayloadSchema = z.strictObject({
@@ -32,6 +37,7 @@ export const manualOriginPayloadSchema = z.strictObject({
 export type ManualOriginPayload = z.infer<typeof manualOriginPayloadSchema>
 export type FiscalOriginSnapshot =
   | ReturnType<typeof salesFiscalOriginRecorded.payload.parse>
+  | ReturnType<typeof salesFiscalOriginFrozen.payload.parse>
   | ManualOriginPayload
 
 export function parseFiscalOriginSnapshot(input: unknown): FiscalOriginSnapshot {
@@ -42,5 +48,7 @@ export function parseFiscalOriginSnapshot(input: unknown): FiscalOriginSnapshot 
     input.originModule === 'fiscal'
   )
     return manualOriginPayloadSchema.parse(input)
+  if (input && typeof input === 'object' && 'preDispatch' in input)
+    return salesFiscalOriginFrozen.payload.parse(input)
   return salesFiscalOriginRecorded.payload.parse(input)
 }

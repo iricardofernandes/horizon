@@ -149,6 +149,12 @@ rejection or cancellation. The production outcome subscription stays disabled in
 the Sales runtime for phase 43; there is no Fiscal production publisher. The live
 homologation path remains pending, and configured shipments stay blocked.
 
+Fiscal can now read a version 2 pre-dispatch origin and create one internal
+homologation draft from it, bound to the origin's establishment and encrypted
+snapshot. The public create route and readiness/issuance paths still require
+simulation; this draft cannot be transmitted through them. The reviewed issuer
+tuple, capability evidence and live authority orchestration are still required.
+
 1. pack shipment and freeze the commercial lines, recipient, issuer, quantities,
    prices and revision into an idempotent `sales.fiscal-origin.recorded` event;
 2. have Fiscal ingest that origin, validate and issue the exact document;
