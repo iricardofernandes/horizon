@@ -615,6 +615,37 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     expect(
       await capabilities.getHomologationIssuanceProfile(randomUUID(), capability.id),
     ).toBeNull()
+    const eventSchemaApproval = {
+      tenantId,
+      capabilityId: capability.id,
+      sourceManifestDigest: 'd'.repeat(64),
+      schemaDigest: '4'.repeat(64),
+      reviewedBy: 'reviewer:phase43',
+    }
+    await expect(
+      capabilities.approveHomologationEventSchema({
+        ...eventSchemaApproval,
+        reviewedBy: 'author:phase43',
+      }),
+    ).rejects.toThrow('differs from reviewed capability')
+    expect(await capabilities.approveHomologationEventSchema(eventSchemaApproval)).toEqual({
+      existing: false,
+    })
+    expect(await capabilities.approveHomologationEventSchema(eventSchemaApproval)).toEqual({
+      existing: true,
+    })
+    await expect(
+      capabilities.approveHomologationEventSchema({
+        ...eventSchemaApproval,
+        schemaDigest: '5'.repeat(64),
+      }),
+    ).rejects.toThrow('Conflicting immutable homologation event schema approval')
+    expect(await capabilities.getHomologationEventSchemaDigest(tenantId, capability.id)).toBe(
+      eventSchemaApproval.schemaDigest,
+    )
+    expect(
+      await capabilities.getHomologationEventSchemaDigest(randomUUID(), capability.id),
+    ).toBeNull()
     const packageId = randomUUID()
     const packageBytes = Buffer.from('{"fixture":"reviewed-sp-v1"}')
     const packageDigest = createHash('sha256').update(packageBytes).digest('hex')

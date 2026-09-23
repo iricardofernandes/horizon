@@ -254,6 +254,12 @@ Run `npm run phase43:issuance-prep -- --tenant <uuid> --document <uuid>
 file supplies the five reviewed SOAP operation names/namespaces and WSDL digest.
 The command checks these against the active drill, stores only encrypted request
 artifacts, and reports `sent: false`. Reuse the same exchange ID for a retry.
+The cancellation event XSD archive has a separate immutable reviewer approval.
+Register its digest with `npm run phase43:event-schema-approval -- --file <json>`;
+the JSON requires `tenantId`, `capabilityId`, `sourceManifestDigest`,
+`schemaDigest`, and `reviewedBy`. Approval must refer to the same capability
+reviewer and source manifest, and the schema bytes supplied at cancellation must
+match this digest.
 The prepared exchange can then be resumed with
 `npm run phase43:exchange-resume -- --tenant <uuid> --exchange <uuid> --actor <id>
 --worker <id> --certificate <pem> --private-key <pem>

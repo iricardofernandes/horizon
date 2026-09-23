@@ -48,6 +48,7 @@ try {
     '0035_phase43_authorization_binding.sql',
     '0036_phase43_calculation_approval.sql',
     '0037_phase43_issuance_profile.sql',
+    '0038_phase43_event_schema_approval.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

@@ -79,6 +79,14 @@ const homologationIssuanceProfileInputSchema = z.strictObject({
   reviewedBy: z.string().min(1).max(200),
 })
 
+const homologationEventSchemaApprovalInputSchema = z.strictObject({
+  tenantId: z.uuid(),
+  capabilityId: z.uuid(),
+  sourceManifestDigest: digest,
+  schemaDigest: digest,
+  reviewedBy: z.string().min(1).max(200),
+})
+
 export type FiscalCapabilityDefinition = z.infer<typeof definitionSchema>
 export type ActiveFiscalCapability = Omit<FiscalCapabilityDefinition, 'createdBy'> & {
   id: string
@@ -102,6 +110,57 @@ export class FiscalCapabilities {
 
   async close(): Promise<void> {
     await this.#db.end()
+  }
+
+  async approveHomologationEventSchema(
+    input: z.input<typeof homologationEventSchemaApprovalInputSchema>,
+  ): Promise<{ existing: boolean }> {
+    const value = homologationEventSchemaApprovalInputSchema.parse(input)
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const inserted = await tx`insert into fiscal_homologation_event_schema_approvals (
+        tenant_id, capability_id, source_manifest_digest, schema_digest, reviewed_by
+      ) values (
+        ${value.tenantId}, ${value.capabilityId}, ${value.sourceManifestDigest},
+        ${value.schemaDigest}, ${value.reviewedBy}
+      ) on conflict do nothing returning capability_id`
+      const [stored] = await tx`select source_manifest_digest, schema_digest, reviewed_by
+        from fiscal_homologation_event_schema_approvals
+        where tenant_id = ${value.tenantId} and capability_id = ${value.capabilityId}`
+      if (
+        !stored ||
+        stored.source_manifest_digest !== value.sourceManifestDigest ||
+        stored.schema_digest !== value.schemaDigest ||
+        stored.reviewed_by !== value.reviewedBy
+      )
+        throw new Error('Conflicting immutable homologation event schema approval')
+      if (inserted.length > 0)
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.reviewedBy,
+          action: 'homologation.event-schema-reviewed',
+          resourceId: value.capabilityId,
+          detail: {
+            sourceManifestDigest: value.sourceManifestDigest,
+            schemaDigest: value.schemaDigest,
+          },
+        })
+      return { existing: inserted.length === 0 }
+    })
+  }
+
+  async getHomologationEventSchemaDigest(
+    tenantId: string,
+    capabilityId: string,
+  ): Promise<string | null> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(capabilityId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select schema_digest from fiscal_homologation_event_schema_approvals
+        where tenant_id = ${tenantId} and capability_id = ${capabilityId}`
+    })
+    return row ? digest.parse(row.schema_digest) : null
   }
 
   async registerHomologationIssuanceProfile(
