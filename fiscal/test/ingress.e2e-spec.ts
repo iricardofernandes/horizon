@@ -624,6 +624,34 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       schemaDigest: '45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b',
       reviewedBy: 'reviewer:phase43',
     }
+    await expect(capabilities.approveHomologationEventSchema(eventSchemaApproval)).rejects.toThrow(
+      'retained bytes do not match digest',
+    )
+    const eventSchemaBytes = await readFile(
+      new URL('../fixtures/official/pl-010d-v1.03.zip', import.meta.url),
+    )
+    const eventSchemaPackageId = randomUUID()
+    await administrator`insert into fiscal_source_packages (
+      id, tenant_id, authority, source_uri, package_digest, published_at, effective_from
+    ) values (
+      ${eventSchemaPackageId}, ${tenantId}, 'offline-event-schema-fixture',
+      'https://example.invalid/phase43-event-schema',
+      ${eventSchemaApproval.schemaDigest}, '2026-09-23', '2026-09-23'
+    )`
+    await administrator`insert into fiscal_source_payloads (
+      tenant_id, package_id, source_bytes, byte_size, imported_by
+    ) values (
+      ${tenantId}, ${eventSchemaPackageId}, ${eventSchemaBytes},
+      ${eventSchemaBytes.length}, 'author:phase43'
+    )`
+    await administrator`insert into fiscal_package_reviews (
+      id, tenant_id, package_id, approved, reviewed_by, reviewed_at,
+      interpretation, fixture_ids
+    ) values (
+      ${randomUUID()}, ${tenantId}, ${eventSchemaPackageId}, true,
+      'reviewer:phase43', now(), 'Offline event package review fixture',
+      ${['reviewed-sp-v1']}
+    )`
     await expect(
       capabilities.approveHomologationEventSchema({
         ...eventSchemaApproval,

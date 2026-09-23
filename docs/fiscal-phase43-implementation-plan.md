@@ -259,7 +259,9 @@ Register its digest with `npm run phase43:event-schema-approval -- --file <json>
 the JSON requires `tenantId`, `capabilityId`, `sourceManifestDigest`,
 `schemaDigest`, and `reviewedBy`. Approval must refer to the same capability
 reviewer and source manifest, and the schema bytes supplied at cancellation must
-match this digest.
+match this digest. The exact archive must first be retained as a Fiscal source
+payload and independently reviewed as a source package; approval recomputes its
+SHA-256 from those retained bytes.
 Once an authorized protocol is observed, prepare a signed cancellation with
 `npm run phase43:cancellation-prep -- --tenant <uuid> --document <uuid>
 --exchange <uuid> --actor <id> --reason <15-255 chars>

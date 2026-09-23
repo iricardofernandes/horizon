@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { z } from 'zod'
 import { appendAudit } from './audit'
@@ -118,6 +118,30 @@ export class FiscalCapabilities {
     const value = homologationEventSchemaApprovalInputSchema.parse(input)
     return this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const [existing] = await tx`select source_manifest_digest, schema_digest, reviewed_by
+        from fiscal_homologation_event_schema_approvals
+        where tenant_id = ${value.tenantId} and capability_id = ${value.capabilityId}`
+      if (existing) {
+        if (
+          existing.source_manifest_digest !== value.sourceManifestDigest ||
+          existing.schema_digest !== value.schemaDigest ||
+          existing.reviewed_by !== value.reviewedBy
+        )
+          throw new Error('Conflicting immutable homologation event schema approval')
+        return { existing: true }
+      }
+      const [source] = await tx`select payload.source_bytes
+        from fiscal_source_packages package
+        join fiscal_source_payloads payload
+          on payload.tenant_id = package.tenant_id and payload.package_id = package.id
+        where package.tenant_id = ${value.tenantId}
+          and package.package_digest = ${value.schemaDigest}`
+      if (
+        !source ||
+        createHash('sha256').update(Buffer.from(source.source_bytes)).digest('hex') !==
+          value.schemaDigest
+      )
+        throw new Error('Homologation event schema retained bytes do not match digest')
       const inserted = await tx`insert into fiscal_homologation_event_schema_approvals (
         tenant_id, capability_id, source_manifest_digest, schema_digest, reviewed_by
       ) values (
