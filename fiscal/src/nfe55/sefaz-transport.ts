@@ -93,45 +93,62 @@ export class SefazHomologationTransport {
   }
 
   private sendOnce(endpoint: URL, soapEnvelope: Buffer): Promise<Buffer> {
-    return new Promise<Buffer>((resolve, reject) => {
-      const call = request(
-        endpoint,
-        {
-          method: 'POST',
-          cert: this.credential.certificate,
-          key: this.credential.privateKey,
-          ca: this.trustAnchor.certificate,
-          rejectUnauthorized: true,
-          timeout: this.#settings.timeoutMilliseconds,
-          headers: {
-            'content-type': 'application/soap+xml; charset=utf-8',
-            'content-length': soapEnvelope.length,
-            accept: 'application/soap+xml',
-          },
+    return sendSefazHttpsRequest(
+      endpoint,
+      soapEnvelope,
+      this.credential,
+      this.trustAnchor,
+      this.#settings,
+    )
+  }
+}
+
+/** The network boundary is separate so local TLS tests exercise the exact send path. */
+export function sendSefazHttpsRequest(
+  endpoint: URL,
+  soapEnvelope: Buffer,
+  credential: Pick<HomologationCredential, 'certificate' | 'privateKey'>,
+  trustAnchor: Pick<SefazTrustAnchor, 'certificate'>,
+  settings: Pick<z.infer<typeof settingsSchema>, 'timeoutMilliseconds' | 'maximumResponseBytes'>,
+): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    const call = request(
+      endpoint,
+      {
+        method: 'POST',
+        cert: credential.certificate,
+        key: credential.privateKey,
+        ca: trustAnchor.certificate,
+        rejectUnauthorized: true,
+        timeout: settings.timeoutMilliseconds,
+        headers: {
+          'content-type': 'application/soap+xml; charset=utf-8',
+          'content-length': soapEnvelope.length,
+          accept: 'application/soap+xml',
         },
-        (response) => {
-          if (response.statusCode !== 200) {
-            response.resume()
-            reject(new SefazTransportError(`SEFAZ returned HTTP ${response.statusCode ?? 0}`))
+      },
+      (response) => {
+        if (response.statusCode !== 200) {
+          response.resume()
+          reject(new SefazTransportError(`SEFAZ returned HTTP ${response.statusCode ?? 0}`))
+          return
+        }
+        const parts: Buffer[] = []
+        let size = 0
+        response.on('data', (chunk: Buffer) => {
+          size += chunk.length
+          if (size > settings.maximumResponseBytes) {
+            response.destroy(new SefazTransportError('SEFAZ response exceeded the byte limit'))
             return
           }
-          const parts: Buffer[] = []
-          let size = 0
-          response.on('data', (chunk: Buffer) => {
-            size += chunk.length
-            if (size > this.#settings.maximumResponseBytes) {
-              response.destroy(new SefazTransportError('SEFAZ response exceeded the byte limit'))
-              return
-            }
-            parts.push(chunk)
-          })
-          response.on('end', () => resolve(Buffer.concat(parts)))
-          response.on('error', (error: Error) => reject(new SefazTransportError(error.message)))
-        },
-      )
-      call.on('timeout', () => call.destroy(new SefazTransportError('SEFAZ request timed out')))
-      call.on('error', (error: Error) => reject(new SefazTransportError(error.message)))
-      call.end(soapEnvelope)
-    })
-  }
+          parts.push(chunk)
+        })
+        response.on('end', () => resolve(Buffer.concat(parts)))
+        response.on('error', (error: Error) => reject(new SefazTransportError(error.message)))
+      },
+    )
+    call.on('timeout', () => call.destroy(new SefazTransportError('SEFAZ request timed out')))
+    call.on('error', (error: Error) => reject(new SefazTransportError(error.message)))
+    call.end(soapEnvelope)
+  })
 }

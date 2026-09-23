@@ -2,13 +2,18 @@ import { execFile } from 'node:child_process'
 import { createHash, X509Certificate } from 'node:crypto'
 import { once } from 'node:events'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { connect, createServer } from 'node:tls'
+import { connect, createServer, type TLSSocket } from 'node:tls'
 import { promisify } from 'node:util'
 import { afterAll, expect, it } from 'vitest'
 import { loadHomologationCredential } from './homologation-credential'
-import { type SefazEndpoints, SefazHomologationTransport } from './sefaz-transport'
+import {
+  type SefazEndpoints,
+  SefazHomologationTransport,
+  sendSefazHttpsRequest,
+} from './sefaz-transport'
 import { loadSefazTrustAnchor } from './sefaz-trust-anchor'
 
 const directories: string[] = []
@@ -195,6 +200,91 @@ it('authenticates both peers with the mounted trust root and client certificate'
     await expect(once(rejected, 'secureConnect')).rejects.toThrow()
     rejected.destroy()
   } finally {
+    server.close()
+  }
+})
+
+it('sends SOAP over mutual TLS and rejects redirects, oversized replies and untrusted peers', async () => {
+  const input = await credential()
+  const loaded = await loadHomologationCredential(input)
+  const trust = await loadSefazTrustAnchor(input)
+  const otherTrust = await loadSefazTrustAnchor(await credential())
+  const requestBytes = Buffer.from('<soap:Envelope>request</soap:Envelope>')
+  let mode: 'success' | 'redirect' | 'oversized' | 'unavailable' | 'timeout' | 'reset' = 'success'
+  let authenticatedRequests = 0
+  const server = createHttpsServer(
+    {
+      cert: loaded.certificate,
+      key: loaded.privateKey,
+      ca: trust.certificate,
+      requestCert: true,
+      rejectUnauthorized: true,
+    },
+    async (request, response) => {
+      if ((request.socket as TLSSocket).authorized) authenticatedRequests += 1
+      const chunks: Buffer[] = []
+      for await (const chunk of request) chunks.push(Buffer.from(chunk))
+      if (!Buffer.concat(chunks).equals(requestBytes) || request.method !== 'POST') {
+        response.writeHead(400).end()
+        return
+      }
+      if (mode === 'reset') {
+        request.socket.destroy()
+      } else if (mode === 'timeout') {
+        return
+      } else if (mode === 'unavailable') {
+        response.writeHead(503).end()
+      } else if (mode === 'redirect') {
+        response.writeHead(302, { location: 'https://example.org/' }).end()
+      } else if (mode === 'oversized') {
+        response.writeHead(200, { 'content-type': 'application/soap+xml' })
+        response.end(Buffer.alloc(1_025, 65))
+      } else {
+        response.writeHead(200, { 'content-type': 'application/soap+xml' })
+        response.end('<soap:Envelope>response</soap:Envelope>')
+      }
+    },
+  )
+  try {
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('Local HTTPS port unavailable')
+    const endpoint = new URL(`https://localhost:${address.port}/ws/nfeautorizacao4.asmx`)
+    const settings = { timeoutMilliseconds: 1_000, maximumResponseBytes: 1_024 }
+    await expect(
+      sendSefazHttpsRequest(endpoint, requestBytes, loaded, trust, settings),
+    ).resolves.toEqual(Buffer.from('<soap:Envelope>response</soap:Envelope>'))
+    expect(authenticatedRequests).toBe(1)
+    mode = 'redirect'
+    await expect(
+      sendSefazHttpsRequest(endpoint, requestBytes, loaded, trust, settings),
+    ).rejects.toThrow('HTTP 302')
+    mode = 'oversized'
+    await expect(
+      sendSefazHttpsRequest(endpoint, requestBytes, loaded, trust, settings),
+    ).rejects.toThrow('byte limit')
+    mode = 'unavailable'
+    await expect(
+      sendSefazHttpsRequest(endpoint, requestBytes, loaded, trust, settings),
+    ).rejects.toThrow('HTTP 503')
+    mode = 'reset'
+    await expect(
+      sendSefazHttpsRequest(endpoint, requestBytes, loaded, trust, settings),
+    ).rejects.toThrow()
+    mode = 'timeout'
+    await expect(
+      sendSefazHttpsRequest(endpoint, requestBytes, loaded, trust, {
+        ...settings,
+        timeoutMilliseconds: 100,
+      }),
+    ).rejects.toThrow('timed out')
+    await expect(
+      sendSefazHttpsRequest(endpoint, requestBytes, loaded, otherTrust, settings),
+    ).rejects.toThrow()
+    expect(authenticatedRequests).toBe(6)
+  } finally {
+    server.closeAllConnections()
     server.close()
   }
 })

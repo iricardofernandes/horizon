@@ -371,6 +371,9 @@ The transport now requires a separate, fingerprint-pinned ICP-Brasil TLS root
 certificate from a mounted path and keeps peer and hostname verification enabled.
 It now bounds concurrent sends per service and opens a short local circuit after
 repeated transport failures; neither case retries a submission automatically.
+The exact HTTP send path now has a local mutual-TLS test for a successful SOAP
+exchange, untrusted server, redirect, oversized response, HTTP 503, connection
+reset and timeout. Live SEFAZ server-chain and credential evidence is still required.
 The [ITI root repository](https://www.gov.br/iti/pt-br/assuntos/repositorio/repositorio-ac-raiz)
 lists the v10 SSL root; the exact root bytes and current SEFAZ server chain need
 independent review. On 2026-09-23, direct WSDL retrieval without a configured root
