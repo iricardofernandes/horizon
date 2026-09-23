@@ -299,6 +299,15 @@ An operator can check service availability with
 credential, trust anchor, operations, endpoints and response-schema flags as
 `exchange-resume`. This creates an auditable status exchange under the active
 drill, validates its response, and never changes the document's authority status.
+After restoring the database and encrypted object store into an isolated
+environment, run `npm run phase43:restore-verify -- --tenant <uuid>
+--document <uuid>` for each drill document. It requires the same database and
+artifact-store environment variables as issuance preparation. The verifier reads
+every stored SOAP request, raw response, protocol and signed NF-e referenced by
+the ledger, checks each artifact's digest and purpose, and fails if any bytes are
+missing or altered. It does not transmit to SEFAZ. A successful verifier run is
+only one part of the restore gate; the actual restored deployment must also prove
+its pending-exchange recovery and capability deactivation.
 An internal readiness path now derives the homologation calculation from the frozen
 origin and historical projections only when the drill is active and the reviewed
 calculation approval exists. It refuses a changed rule result between preview and

@@ -28,6 +28,7 @@ import {
 import { HomologationIssuance } from '../src/homologation-issuance'
 import { HomologationObservations } from '../src/homologation-observations'
 import { HomologationRecovery } from '../src/homologation-recovery'
+import { HomologationRestoreVerifier } from '../src/homologation-restore-verifier'
 import { FiscalIngress } from '../src/ingress'
 import { FiscalLifecycle } from '../src/lifecycle'
 import { buildNfe55AccessKey } from '../src/nfe55/access-key'
@@ -1491,6 +1492,32 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       stage: 'prepared',
       decision: 'unknown',
     })
+    const restoreVerifier = new HomologationRestoreVerifier(appUrl, artifacts, observations)
+    try {
+      const verified = await restoreVerifier.verify(tenantId, documentId)
+      expect(verified.exchanges).toBe(history.length)
+      expect(verified.artifacts).toBeGreaterThan(history.length)
+      const [storedArtifact] = await administrator`select object_key from fiscal_artifacts
+        where tenant_id = ${tenantId} and document_id = ${documentId}
+          and kind = 'homologation_request' and digest = ${bound.signedXmlDigest}`
+      if (!storedArtifact) throw new Error('Offline restore fixture lacks signed XML')
+      const objectPath = join(artifactRoot, String(storedArtifact.object_key))
+      const encryptedBytes = await readFile(objectPath)
+      await rm(objectPath)
+      try {
+        await expect(restoreVerifier.verify(tenantId, documentId)).rejects.toThrow()
+      } finally {
+        await writeFile(objectPath, encryptedBytes)
+      }
+      expect((await restoreVerifier.verify(tenantId, documentId)).artifacts).toBe(
+        verified.artifacts,
+      )
+      await expect(restoreVerifier.verify(randomUUID(), documentId)).rejects.toThrow(
+        'Homologation restore document is unavailable',
+      )
+    } finally {
+      await restoreVerifier.close()
+    }
     expect(await observations.list(randomUUID(), documentId)).toEqual([])
     const [documentAfterObservation] = await administrator`select status, environment
       from fiscal_documents where tenant_id = ${tenantId} and id = ${documentId}`
