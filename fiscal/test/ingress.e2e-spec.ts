@@ -24,6 +24,7 @@ import {
   HomologationExchangeRunner,
   UncertainSefazOutcomeError,
 } from '../src/homologation-exchange-runner'
+import { HomologationObservations } from '../src/homologation-observations'
 import { HomologationRecovery } from '../src/homologation-recovery'
 import { FiscalIngress } from '../src/ingress'
 import { FiscalLifecycle } from '../src/lifecycle'
@@ -503,6 +504,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     new EncryptedFiscalArtifactStore(new LocalObjectStore(artifactRoot), artifactKey),
   )
   const ledger = new HomologationExchangeLedger(appUrl, artifacts)
+  const observations = new HomologationObservations(appUrl)
   const capabilities = new FiscalCapabilities(appUrl)
   try {
     const responseSchemas = new SefazResponseSchemaValidator(
@@ -952,8 +954,44 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     expect(await ledger.prepare(eventInput, cancellationEvent)).toMatchObject({
       exchangeId: eventInput.exchangeId,
     })
+    const history = await observations.list(tenantId, documentId)
+    expect(history.find((row) => row.exchangeId === exchangeId)).toMatchObject({
+      service: 'status',
+      stage: 'observed',
+      decision: 'available',
+      responseDigest: rawDigest,
+    })
+    expect(history.find((row) => row.exchangeId === malformedInput.exchangeId)).toMatchObject({
+      stage: 'raw_unparsed',
+      decision: 'unknown',
+    })
+    expect(history.find((row) => row.exchangeId === authorizationId)).toMatchObject({
+      stage: 'observed',
+      decision: 'pending',
+      receipt,
+    })
+    expect(
+      history.find((row) => row.exchangeId === authorizedConsultation.exchangeId),
+    ).toMatchObject({
+      stage: 'observed',
+      decision: 'authorized',
+      protocolNumber: cancellationProtocol,
+    })
+    expect(history.find((row) => row.exchangeId === eventInput.exchangeId)).toMatchObject({
+      stage: 'prepared',
+      decision: 'unknown',
+    })
+    expect(await observations.list(randomUUID(), documentId)).toEqual([])
+    const [documentAfterObservation] = await administrator`select status, environment
+      from fiscal_documents where tenant_id = ${tenantId} and id = ${documentId}`
+    expect(documentAfterObservation).toMatchObject({ status: 'draft', environment: 'homologation' })
   } finally {
-    await Promise.all([ledger.close(), artifacts.close(), capabilities.close()])
+    await Promise.all([
+      ledger.close(),
+      artifacts.close(),
+      capabilities.close(),
+      observations.close(),
+    ])
   }
 }
 

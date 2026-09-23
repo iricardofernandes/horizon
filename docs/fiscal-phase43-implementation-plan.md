@@ -195,6 +195,10 @@ and unreviewed codes remain unknown. Event cancellation requires `128` and neste
 decision. These observations do not change the fiscal document lifecycle or
 release a shipment. The status combinations follow the
 [official MOC 7.0 annex](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=J+I+v4eN00E%3D).
+An operator can inspect the tenant-scoped exchange history with
+`npm run phase43:observations -- --tenant <uuid> --document <uuid>` in `fiscal`
+after building the package. It shows prepared, send-started, raw-unparsed and
+observed stages with digests and decisions, without decrypting XML or credentials.
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the
