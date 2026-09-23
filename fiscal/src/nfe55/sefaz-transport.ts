@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { request } from 'node:https'
 import { z } from 'zod'
 import type { HomologationCredential } from './homologation-credential'
+import { SefazServiceGate } from './sefaz-service-gate'
 import type { SefazTrustAnchor } from './sefaz-trust-anchor'
 
 export type SefazService = 'authorization' | 'receipt' | 'protocol' | 'status' | 'event'
@@ -19,6 +20,9 @@ export type SefazEndpoints = Record<SefazService, string>
 const settingsSchema = z.strictObject({
   timeoutMilliseconds: z.number().int().min(1_000).max(60_000).default(15_000),
   maximumResponseBytes: z.number().int().min(1_024).max(10_000_000).default(2_000_000),
+  maximumConcurrentPerService: z.number().int().min(1).max(20).default(2),
+  failureThreshold: z.number().int().min(1).max(20).default(3),
+  cooldownMilliseconds: z.number().int().min(1_000).max(300_000).default(30_000),
 })
 
 /** A transport error leaves the authority outcome unknown, even if no bytes were received. */
@@ -35,6 +39,7 @@ export class SefazHomologationTransport {
   readonly trustAnchorFingerprint: string
   readonly #endpoints: Record<SefazService, URL>
   readonly #settings: z.infer<typeof settingsSchema>
+  readonly #gate: SefazServiceGate
 
   constructor(
     endpoints: SefazEndpoints,
@@ -43,6 +48,11 @@ export class SefazHomologationTransport {
     settings: z.input<typeof settingsSchema> = {},
   ) {
     this.#settings = settingsSchema.parse(settings)
+    this.#gate = new SefazServiceGate({
+      maximumConcurrent: this.#settings.maximumConcurrentPerService,
+      failureThreshold: this.#settings.failureThreshold,
+      cooldownMilliseconds: this.#settings.cooldownMilliseconds,
+    })
     this.#endpoints = Object.fromEntries(
       (Object.keys(endpointNames) as SefazService[]).map((service) => {
         const endpoint = new URL(endpoints[service])
@@ -79,6 +89,10 @@ export class SefazHomologationTransport {
       throw new Error('SEFAZ request size is outside the supported bound')
     const endpoint = this.#endpoints[service]
     if (!endpoint) throw new Error('SEFAZ service is not configured')
+    return this.#gate.run(service, () => this.sendOnce(endpoint, soapEnvelope))
+  }
+
+  private sendOnce(endpoint: URL, soapEnvelope: Buffer): Promise<Buffer> {
     return new Promise<Buffer>((resolve, reject) => {
       const call = request(
         endpoint,
