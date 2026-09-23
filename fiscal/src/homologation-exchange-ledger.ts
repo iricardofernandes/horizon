@@ -189,6 +189,44 @@ export class HomologationExchangeLedger {
     })
   }
 
+  async drillContext(
+    tenantId: string,
+    documentId: string,
+    grantId: string,
+  ): Promise<{
+    drillGrantId: string
+    endpointDigest: string
+    wsdlDigest: string
+    certificateFingerprint: string
+    adapterVersion: string
+  }> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(documentId)
+    z.uuid().parse(grantId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select grant_row.endpoint_digest, grant_row.wsdl_digest,
+          grant_row.certificate_fingerprint, definition.adapter_version
+        from fiscal_homologation_drill_grants grant_row
+        join fiscal_capability_definitions definition
+          on definition.tenant_id = grant_row.tenant_id
+          and definition.id = grant_row.capability_id
+        where grant_row.tenant_id = ${tenantId} and grant_row.id = ${grantId}
+          and grant_row.document_id = ${documentId} and grant_row.expires_at > now()
+          and definition.environment = 'homologation' and definition.model = '55'
+          and definition.jurisdiction_kind = 'uf' and definition.jurisdiction_code = 'SP'
+          and definition.operation = 'normal-sale'`
+    })
+    if (!row) throw new Error('Approved SP homologation drill is unavailable')
+    return {
+      drillGrantId: grantId,
+      endpointDigest: String(row.endpoint_digest),
+      wsdlDigest: String(row.wsdl_digest),
+      certificateFingerprint: String(row.certificate_fingerprint),
+      adapterVersion: String(row.adapter_version),
+    }
+  }
+
   /** Validates through the adapter, then freezes the exact signed NF-e and SOAP envelope. */
   async bindAuthorization(
     input: z.input<typeof prepareSchema>,

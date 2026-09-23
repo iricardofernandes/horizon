@@ -42,9 +42,11 @@ async function main(): Promise<void> {
   const workerId = z.string().min(1).max(200).parse(flag('worker'))
   const actionIndex = process.argv.indexOf('--action')
   const action = actionIndex < 0 ? 'resume' : process.argv[actionIndex + 1]
-  if (action !== 'resume' && action !== 'consult')
-    throw new Error('--action must be resume or consult')
-  const documentId = action === 'consult' ? z.uuid().parse(flag('document')) : null
+  if (action !== 'resume' && action !== 'consult' && action !== 'status')
+    throw new Error('--action must be resume, consult, or status')
+  const documentId =
+    action === 'consult' || action === 'status' ? z.uuid().parse(flag('document')) : null
+  const drillGrantId = action === 'status' ? z.uuid().parse(flag('grant')) : null
   const [credential, trustAnchor, operations, endpoints, documentSchemas, consultationSchemas] =
     await Promise.all([
       loadHomologationCredential({
@@ -80,7 +82,22 @@ async function main(): Promise<void> {
   const runner = new HomologationExchangeRunner(ledger, transport, adapter, responseSchemas)
   try {
     let response: SefazResponse
-    if (documentId) {
+    if (documentId && drillGrantId) {
+      const context = await ledger.drillContext(tenantId, documentId, drillGrantId)
+      const prepared = await adapter.prepare({ service: 'status' })
+      response = await runner.execute(
+        {
+          tenantId,
+          documentId,
+          exchangeId,
+          parentExchangeId: null,
+          actorId,
+          workerId,
+          ...context,
+        },
+        prepared,
+      )
+    } else if (documentId) {
       const target = await ledger.recoveryTarget(tenantId, documentId)
       const parent = await ledger.loadPrepared(
         tenantId,

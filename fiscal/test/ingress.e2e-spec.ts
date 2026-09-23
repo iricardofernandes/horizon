@@ -766,6 +766,16 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     }
     await ledger.grantDrill(grantInput)
     await ledger.grantDrill(grantInput)
+    expect(await ledger.drillContext(tenantId, documentId, grantId)).toMatchObject({
+      drillGrantId: grantId,
+      endpointDigest: grantInput.endpointDigest,
+      wsdlDigest: grantInput.wsdlDigest,
+      certificateFingerprint: grantInput.certificateFingerprint,
+      adapterVersion: 'nfe55-sp-homologation-v1',
+    })
+    await expect(ledger.drillContext(randomUUID(), documentId, grantId)).rejects.toThrow(
+      'Approved SP homologation drill is unavailable',
+    )
     expect(await capabilities.getHomologationDrill(tenantId, documentId, grantId)).toMatchObject({
       id: capability.id,
       establishmentId: String(document?.establishment_id),

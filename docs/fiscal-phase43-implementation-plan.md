@@ -293,6 +293,12 @@ It selects receipt or protocol consultation from the stored authorization eviden
 persists the new request under the supplied exchange ID, and obeys the ten-attempt
 consultation budget. A pending result remains pending; the command never retries
 the original authorization.
+An operator can check service availability with
+`npm run phase43:status -- --tenant <uuid> --document <uuid>
+--grant <uuid> --exchange <uuid> --actor <id> --worker <id>` and the same
+credential, trust anchor, operations, endpoints and response-schema flags as
+`exchange-resume`. This creates an auditable status exchange under the active
+drill, validates its response, and never changes the document's authority status.
 An internal readiness path now derives the homologation calculation from the frozen
 origin and historical projections only when the drill is active and the reviewed
 calculation approval exists. It refuses a changed rule result between preview and

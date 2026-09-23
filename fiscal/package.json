@@ -24,6 +24,7 @@
     "phase43:issuance-prep": "node dist/phase43-issuance-prep-cli.js",
     "phase43:exchange-resume": "node dist/phase43-exchange-resume-cli.js",
     "phase43:consult": "node dist/phase43-exchange-resume-cli.js --action consult",
+    "phase43:status": "node dist/phase43-exchange-resume-cli.js --action status",
     "phase43:cancellation-prep": "node dist/phase43-cancellation-prep-cli.js",
     "phase42:verify-sources": "node scripts/verify-phase42-sources.mjs",
     "db:migrate": "node scripts/migrate.mjs",
