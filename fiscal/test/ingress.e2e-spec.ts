@@ -24,6 +24,7 @@ import {
   HomologationExchangeRunner,
   UncertainSefazOutcomeError,
 } from '../src/homologation-exchange-runner'
+import { HomologationIssuance } from '../src/homologation-issuance'
 import { HomologationObservations } from '../src/homologation-observations'
 import { HomologationRecovery } from '../src/homologation-recovery'
 import { FiscalIngress } from '../src/ingress'
@@ -738,6 +739,45 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       establishmentId: String(document?.establishment_id),
       calculationFixtureId: 'reviewed-sp-v1',
     })
+    const issuance = new HomologationIssuance(
+      appUrl,
+      documents,
+      projections,
+      {
+        readFrozen: async () => {
+          throw new Error('calculation should not be read')
+        },
+      },
+      capabilities,
+      ledger,
+      adapter,
+      {
+        certificate: Buffer.alloc(0),
+        privateKey: Buffer.alloc(0),
+        fingerprint: 'c'.repeat(64),
+        issuerTaxId: '00000000E08G12',
+        validUntil: Date.now() + 86_400_000,
+        minimumRemainingMilliseconds: 0,
+      },
+      Buffer.alloc(0),
+      'e'.repeat(64),
+    )
+    try {
+      await expect(
+        issuance.prepare({
+          tenantId,
+          documentId,
+          drillGrantId: grantId,
+          exchangeId: randomUUID(),
+          actorId: 'operator:phase43',
+        }),
+      ).rejects.toThrow('Homologation schema, WSDL or certificate differs from drill')
+      const [unreserved] = await administrator`select number from fiscal_number_reservations
+        where tenant_id = ${tenantId} and document_id = ${documentId}`
+      expect(unreserved).toBeUndefined()
+    } finally {
+      await issuance.close()
+    }
     expect(await capabilities.getHomologationDrill(randomUUID(), documentId, grantId)).toBeNull()
     const rangeInput = {
       tenantId,

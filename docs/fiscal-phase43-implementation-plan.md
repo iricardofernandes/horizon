@@ -239,6 +239,21 @@ and `profile`. The profile contains `capabilityId`, `issuerAddress` and `lineFac
 as defined by the NF-e issuance profile schema. The reviewer must match the
 approved capability review and differ from its creator. No simulation profile is
 used to supply homologation CFOP, product codes or issuer address.
+An internal issuance preparation service now reads the ready document, frozen
+calculation and historical projections, verifies the reviewed profile and live
+drill against the mounted signing credential, then reserves a number and binds
+the signed NF-e and SOAP envelope to one exchange. It records the prepared
+exchange without sending it. An integrated test with real reviewed issuer facts
+and rule packages is still pending.
+Run `npm run phase43:issuance-prep -- --tenant <uuid> --document <uuid>
+--grant <uuid> --exchange <uuid> --actor <id> --certificate <pem>
+--private-key <pem> --certificate-fingerprint <sha256> --issuer-tax-id <cnpj>
+--schema <zip> --operations <json>` in `fiscal` after building. It also requires
+`DATABASE_URL`, `FISCAL_ARTIFACT_KEY_HEX`, `FISCAL_ARTIFACT_BUCKET`, and
+`FISCAL_ARTIFACT_REGION`; `FISCAL_ARTIFACT_ENDPOINT` is optional. The operations
+file supplies the five reviewed SOAP operation names/namespaces and WSDL digest.
+The command checks these against the active drill, stores only encrypted request
+artifacts, and reports `sent: false`. Reuse the same exchange ID for a retry.
 An internal readiness path now derives the homologation calculation from the frozen
 origin and historical projections only when the drill is active and the reviewed
 calculation approval exists. It refuses a changed rule result between preview and

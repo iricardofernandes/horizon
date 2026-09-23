@@ -9,7 +9,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts --format cjs --platform node --out-dir dist --clean",
+    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts src/phase43-issuance-prep-cli.ts --format cjs --platform node --out-dir dist --clean",
     "start": "node dist/worker.js",
     "backfill": "node dist/backfill-cli.js",
     "phase41:rollout": "node dist/phase41-rollout-cli.js",
@@ -20,6 +20,7 @@
     "phase43:calculation-approval": "node dist/phase43-number-range-cli.js --action calculation",
     "phase43:issuance-profile": "node dist/phase43-number-range-cli.js --action issuance-profile",
     "phase43:readiness": "node dist/phase43-readiness-cli.js",
+    "phase43:issuance-prep": "node dist/phase43-issuance-prep-cli.js",
     "phase42:verify-sources": "node scripts/verify-phase42-sources.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
