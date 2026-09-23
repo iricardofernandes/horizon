@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { cp, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Readable } from 'node:stream'
 import { promisify } from 'node:util'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import postgres from 'postgres'
@@ -462,23 +463,34 @@ it('runs the approved manual tuple through signed XML, restart consultation and 
     expect(correctionBindings?.count).toBe(2)
 
     // Restore the database and encrypted object bytes into a clean PostgreSQL instance.
-    const backupPath = join(directory, 'fiscal-backup.dump')
-    await promisify(execFile)(
-      'pg_dump',
-      ['--format=custom', '--no-owner', '--file', backupPath, container.getConnectionUri()],
-      { windowsHide: true },
+    const backupPath = '/tmp/fiscal-backup.dump'
+    const backup = await container.exec(
+      [
+        'pg_dump',
+        '--format=custom',
+        '--no-owner',
+        '--file',
+        backupPath,
+        '-U',
+        'postgres',
+        '-d',
+        'horizon_phase42_flow_test',
+      ],
+      { env: { PGPASSWORD: 'test' } },
     )
+    if (backup.exitCode !== 0) throw new Error(`pg_dump failed: ${backup.stderr}`)
     restoredDirectory = await mkdtemp(join(tmpdir(), 'horizon-phase42-restored-'))
     const restoredObjects = join(restoredDirectory, 'objects')
-    await cp(directory, restoredObjects, {
-      recursive: true,
-      filter: (source) => !source.endsWith('.dump'),
-    })
+    await cp(directory, restoredObjects, { recursive: true })
     restoredContainer = await new PostgreSqlContainer('postgres:17-alpine')
       .withDatabase('horizon_phase42_restored_test')
       .withUsername('postgres')
       .withPassword('test')
       .start()
+    await restoredContainer.copyArchiveToContainer(
+      (await container.copyArchiveFromContainer(backupPath)) as Readable,
+      '/tmp',
+    )
     const restoredAdmin = postgres(restoredContainer.getConnectionUri(), { max: 1 })
     try {
       await restoredAdmin.unsafe(
@@ -487,11 +499,19 @@ it('runs the approved manual tuple through signed XML, restart consultation and 
         [],
         { prepare: false },
       )
-      await promisify(execFile)(
-        'pg_restore',
-        ['--no-owner', '--dbname', restoredContainer.getConnectionUri(), backupPath],
-        { windowsHide: true },
+      const restore = await restoredContainer.exec(
+        [
+          'pg_restore',
+          '--no-owner',
+          '-U',
+          'postgres',
+          '-d',
+          'horizon_phase42_restored_test',
+          backupPath,
+        ],
+        { env: { PGPASSWORD: 'test' } },
       )
+      if (restore.exitCode !== 0) throw new Error(`pg_restore failed: ${restore.stderr}`)
       const restoredUrl = restoredContainer
         .getConnectionUri()
         .replace('postgres:test@', 'horizon_app:test@')
