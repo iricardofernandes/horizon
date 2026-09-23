@@ -30,17 +30,28 @@ const reviewSchema = z.object({
 const activationSchema = z.object({
   tenantId: z.uuid(),
   capabilityId: z.uuid(),
-  action: z.enum(['activate_simulated', 'deactivate']),
+  action: z.enum(['activate_simulated', 'activate_homologated', 'deactivate']),
   evidenceDigest: digest,
   actorId: z.string().min(1).max(200),
   reason: z.string().min(10).max(1000),
   occurredAt: z.iso.datetime({ offset: true }),
 })
 
+const homologationEvidenceSchema = z.object({
+  tenantId: z.uuid(),
+  capabilityId: z.uuid(),
+  sourceManifestDigest: digest,
+  endpointSetDigest: digest,
+  certificateFingerprint: digest,
+  roundTripDigest: digest,
+  reviewedBy: z.string().min(1).max(200),
+  reviewedAt: z.iso.datetime({ offset: true }),
+})
+
 export type FiscalCapabilityDefinition = z.infer<typeof definitionSchema>
 export type ActiveFiscalCapability = Omit<FiscalCapabilityDefinition, 'createdBy'> & {
   id: string
-  status: 'simulated'
+  status: 'simulated' | 'homologated'
   activatedAt: string
   evidenceDigest: string
 }
@@ -148,6 +159,40 @@ export class FiscalCapabilities {
     })
   }
 
+  async recordHomologationEvidence(
+    input: z.input<typeof homologationEvidenceSchema>,
+  ): Promise<{ id: string; existing: boolean }> {
+    const value = homologationEvidenceSchema.parse(input)
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const id = randomUUID()
+      const inserted = await tx`insert into fiscal_capability_homologation_evidence (
+          id, tenant_id, capability_id, source_manifest_digest, endpoint_set_digest,
+          certificate_fingerprint, round_trip_digest, reviewed_by, reviewed_at
+        ) values (
+          ${id}, ${value.tenantId}, ${value.capabilityId}, ${value.sourceManifestDigest},
+          ${value.endpointSetDigest}, ${value.certificateFingerprint},
+          ${value.roundTripDigest}, ${value.reviewedBy}, ${value.reviewedAt}
+        ) on conflict on constraint fiscal_homologation_evidence_once do nothing returning id`
+      if (inserted.length > 0) return { id, existing: false }
+      const [existing] = await tx`select id, source_manifest_digest, endpoint_set_digest,
+          certificate_fingerprint, round_trip_digest, reviewed_by, reviewed_at
+        from fiscal_capability_homologation_evidence
+        where tenant_id = ${value.tenantId} and capability_id = ${value.capabilityId}`
+      if (
+        !existing ||
+        existing.source_manifest_digest !== value.sourceManifestDigest ||
+        existing.endpoint_set_digest !== value.endpointSetDigest ||
+        existing.certificate_fingerprint !== value.certificateFingerprint ||
+        existing.round_trip_digest !== value.roundTripDigest ||
+        existing.reviewed_by !== value.reviewedBy ||
+        new Date(existing.reviewed_at).toISOString() !== value.reviewedAt
+      )
+        throw new Error('Conflicting Fiscal homologation evidence')
+      return { id: String(existing.id), existing: true }
+    })
+  }
+
   async listActive(tenantId: string): Promise<ActiveFiscalCapability[]> {
     z.uuid().parse(tenantId)
     const rows = await this.#db.begin(async (tx) => {
@@ -160,7 +205,7 @@ export class FiscalCapabilities {
           where event.tenant_id = definition.tenant_id
             and event.capability_id = definition.id
           order by event.created_at desc, event.id desc limit 1
-        ) latest on latest.action = 'activate_simulated'
+        ) latest on latest.action in ('activate_simulated', 'activate_homologated')
         where definition.tenant_id = ${tenantId}
         order by definition.model, definition.environment, definition.establishment_id,
           definition.jurisdiction_code, definition.operation`
@@ -178,7 +223,7 @@ export class FiscalCapabilities {
       sourceManifestDigest: String(row.source_manifest_digest),
       schemaPackageDigest: String(row.schema_package_digest),
       calculationFixtureId: String(row.calculation_fixture_id),
-      status: 'simulated',
+      status: row.environment === 'homologation' ? 'homologated' : 'simulated',
       activatedAt: new Date(row.occurred_at).toISOString(),
       evidenceDigest: String(row.evidence_digest),
     }))

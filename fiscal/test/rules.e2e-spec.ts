@@ -175,6 +175,91 @@ it('keeps capability definitions inactive until independent review and activatio
   ).rejects.toThrow('append-only')
 })
 
+it('activates a homologation tuple only after matching reviewed round-trip evidence', async () => {
+  const tenantId = randomUUID()
+  const otherTenantId = randomUUID()
+  await administrator`insert into tenants (id) values (${tenantId}), (${otherTenantId})`
+  const definition = await capabilities.register({
+    tenantId,
+    model: '55',
+    environment: 'homologation',
+    establishmentId: randomUUID(),
+    jurisdictionKind: 'uf',
+    jurisdictionCode: 'SP',
+    operation: 'normal-sale',
+    adapterVersion: 'nfe55-sefaz-sp-v1',
+    sourceManifestDigest: 'a'.repeat(64),
+    schemaPackageDigest: 'b'.repeat(64),
+    calculationFixtureId: 'reviewed-sp-homologation-v1',
+    createdBy: 'importer:phase43',
+  })
+  const activation = {
+    tenantId,
+    capabilityId: definition.id,
+    action: 'activate_homologated' as const,
+    evidenceDigest: 'c'.repeat(64),
+    actorId: 'release:phase43',
+    reason: 'Activate the exact reviewed SP homologation tuple',
+    occurredAt: '2026-09-23T15:00:00.000Z',
+  }
+  await expect(capabilities.change(activation)).rejects.toMatchObject({ code: '23514' })
+  await capabilities.review({
+    tenantId,
+    capabilityId: definition.id,
+    approved: true,
+    reviewedBy: 'reviewer:phase43',
+    interpretation: 'Approve only this exact issuer, adapter and SP homologation source.',
+    reviewedAt: '2026-09-23T14:00:00.000Z',
+  })
+  await expect(capabilities.change(activation)).rejects.toMatchObject({ code: '23514' })
+  const evidence = {
+    tenantId,
+    capabilityId: definition.id,
+    sourceManifestDigest: 'a'.repeat(64),
+    endpointSetDigest: 'd'.repeat(64),
+    certificateFingerprint: 'e'.repeat(64),
+    roundTripDigest: 'c'.repeat(64),
+    reviewedBy: 'reviewer:phase43',
+    reviewedAt: '2026-09-23T14:30:00.000Z',
+  }
+  await expect(
+    capabilities.recordHomologationEvidence({
+      ...evidence,
+      sourceManifestDigest: 'f'.repeat(64),
+    }),
+  ).rejects.toMatchObject({ code: '23514' })
+  const recorded = await capabilities.recordHomologationEvidence(evidence)
+  expect(await capabilities.recordHomologationEvidence(evidence)).toEqual({
+    ...recorded,
+    existing: true,
+  })
+  await expect(
+    capabilities.change({ ...activation, evidenceDigest: 'f'.repeat(64) }),
+  ).rejects.toMatchObject({ code: '23514' })
+  await capabilities.change(activation)
+  expect(await capabilities.listActive(tenantId)).toEqual([
+    expect.objectContaining({
+      id: definition.id,
+      environment: 'homologation',
+      status: 'homologated',
+      evidenceDigest: evidence.roundTripDigest,
+    }),
+  ])
+  expect(await capabilities.listActive(otherTenantId)).toEqual([])
+  await expect(
+    administrator`update fiscal_capability_homologation_evidence
+      set round_trip_digest = ${'f'.repeat(64)} where capability_id = ${definition.id}`,
+  ).rejects.toThrow('append-only')
+  await capabilities.change({
+    ...activation,
+    action: 'deactivate',
+    evidenceDigest: 'f'.repeat(64),
+    reason: 'Deactivate the scoped homologation capability',
+    occurredAt: '2026-09-23T16:00:00.000Z',
+  })
+  expect(await capabilities.listActive(tenantId)).toEqual([])
+})
+
 it('freezes a tenant-owned manual origin and creates one digest-verified draft', async () => {
   const tenantId = randomUUID()
   const otherTenantId = randomUUID()
