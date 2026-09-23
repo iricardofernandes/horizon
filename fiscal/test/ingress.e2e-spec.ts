@@ -507,9 +507,18 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     const operationNamespace = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4'
     const operations: SefazOperationMap = {
       wsdlDigest: 'a'.repeat(64),
-      authorization: { operation: 'nfeAutorizacaoLote', operationNamespace },
-      receipt: { operation: 'nfeRetAutorizacaoLote', operationNamespace },
-      protocol: { operation: 'nfeConsultaNF', operationNamespace },
+      authorization: {
+        operation: 'nfeAutorizacaoLote',
+        operationNamespace: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4',
+      },
+      receipt: {
+        operation: 'nfeRetAutorizacaoLote',
+        operationNamespace: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRetAutorizacao4',
+      },
+      protocol: {
+        operation: 'nfeConsultaNF',
+        operationNamespace: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4',
+      },
       status: { operation: 'nfeStatusServicoNF', operationNamespace },
       event: { operation: 'nfeRecepcaoEvento', operationNamespace },
     }
@@ -681,6 +690,8 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     const authorization = {
       service: 'authorization' as const,
       request: Buffer.from('<prepared-authorization/>'),
+      operation: 'nfeAutorizacaoLote',
+      operationNamespace: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4',
       expectedAccessKey: accessKey,
     }
     await ledger.prepare({ ...input, exchangeId: authorizationId }, authorization)
@@ -694,13 +705,14 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       parentExchangeId: authorizationId,
       accessKey,
     })
-    const consultationSoap = (service: string, payload: string) =>
+    const consultationSoap = (operation: string, service: string, payload: string) =>
       Buffer.from(
         `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>` +
-          `<${service}Response xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/${service}">` +
-          `<nfeResultMsg>${payload}</nfeResultMsg></${service}Response></s:Body></s:Envelope>`,
+          `<${operation}Response xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/${service}">` +
+          `<nfeResultMsg>${payload}</nfeResultMsg></${operation}Response></s:Body></s:Envelope>`,
       )
     const protocolSoap = consultationSoap(
+      'nfeConsultaNF',
       'NFeConsultaProtocolo4',
       `<retConsSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
         '<tpAmb>2</tpAmb><cUF>35</cUF><cStat>217</cStat>' +
@@ -728,6 +740,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
 
     const receipt = '123456789012345'
     const authorizationSoap = consultationSoap(
+      'nfeAutorizacaoLote',
       'NFeAutorizacao4',
       `<retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
         `<tpAmb>2</tpAmb><cUF>35</cUF><cStat>103</cStat><xMotivo>Lote recebido</xMotivo>` +
@@ -783,6 +796,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       ),
     ).rejects.toThrow('does not match a started authorization')
     const receiptSoap = consultationSoap(
+      'nfeRetAutorizacaoLote',
       'NFeRetAutorizacao4',
       `<retConsReciNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
         `<tpAmb>2</tpAmb><cUF>35</cUF><cStat>105</cStat><xMotivo>Em processamento</xMotivo>` +

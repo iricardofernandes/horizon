@@ -49,6 +49,8 @@ export type SefazExchange = { request: Buffer; response: SefazResponse }
 export type PreparedSefazExchange = {
   service: SefazService
   request: Buffer
+  operation: string
+  operationNamespace: string
   expectedAccessKey?: string
   expectedReceipt?: string
 }
@@ -98,6 +100,8 @@ export class SefazNfe55HomologationAdapter {
     return {
       service: input.service,
       request,
+      operation: operation.operation,
+      operationNamespace: operation.operationNamespace,
       ...('accessKey' in input ? { expectedAccessKey: input.accessKey } : {}),
       ...(input.service === 'receipt' ? { expectedReceipt: input.receipt } : {}),
     }
@@ -109,6 +113,8 @@ export class SefazNfe55HomologationAdapter {
       soap,
       ...(prepared.expectedAccessKey ? { expectedAccessKey: prepared.expectedAccessKey } : {}),
       ...(prepared.expectedReceipt ? { expectedReceipt: prepared.expectedReceipt } : {}),
+      expectedOperation: prepared.operation,
+      expectedOperationNamespace: prepared.operationNamespace,
     })
   }
 

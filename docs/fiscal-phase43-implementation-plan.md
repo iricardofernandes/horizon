@@ -159,6 +159,10 @@ The homologation SOAP adapter now exposes a prepared, validated envelope and a
 separate correlated response parser. The durable worker must persist the exact
 prepared bytes before marking transmission started; after an ambiguous send it
 must consult the authority instead of resubmitting that envelope.
+The response parser now also binds the SOAP wrapper to the prepared operation,
+requires one result payload and the expected service version, and rejects duplicate
+status fields. Inbound payload XSD validation and independent review of the current
+response schema package remain open before live use.
 
 An internal exchange ledger now persists the request artifact, one send marker,
 the raw response artifact and its parsed `cStat`/receipt/protocol facts. A

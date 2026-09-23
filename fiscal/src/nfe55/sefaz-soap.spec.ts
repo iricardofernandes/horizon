@@ -91,8 +91,8 @@ it('reports a SOAP fault without turning it into a fiscal outcome', () => {
 
 it('correlates a cancellation event to its key, environment and event type', () => {
   const payload =
-    `<retEnvEvento xmlns="${namespace}"><tpAmb>2</tpAmb><cOrgao>35</cOrgao>` +
-    '<cStat>128</cStat><xMotivo>Lote processado</xMotivo><retEvento><infEvento>' +
+    `<retEnvEvento xmlns="${namespace}" versao="1.00"><tpAmb>2</tpAmb><cOrgao>35</cOrgao>` +
+    '<cStat>128</cStat><xMotivo>Lote processado</xMotivo><retEvento versao="1.00"><infEvento>' +
     `<tpAmb>2</tpAmb><cOrgao>35</cOrgao><chNFe>${key}</chNFe>` +
     '<tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento>' +
     '<cStat>135</cStat><xMotivo>Evento registrado</xMotivo>' +
@@ -118,7 +118,7 @@ it('correlates a cancellation event to its key, environment and event type', () 
 
 it('retains receipts and rejects wrong environments or hostile XML', () => {
   const receipt = soap(
-    `<retEnviNFe xmlns="${namespace}"><tpAmb>2</tpAmb><cUF>35</cUF>` +
+    `<retEnviNFe xmlns="${namespace}" versao="4.00"><tpAmb>2</tpAmb><cUF>35</cUF>` +
       '<cStat>103</cStat><xMotivo>Lote recebido</xMotivo>' +
       '<nRec>123456789012345</nRec></retEnviNFe>',
   )
@@ -137,4 +137,34 @@ it('retains receipts and rejects wrong environments or hostile XML', () => {
       soap: Buffer.from(`<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>${receipt}`),
     }),
   ).toThrow('forbidden declarations')
+})
+
+it('rejects duplicate status fields, mismatched versions and extra SOAP payloads', () => {
+  const payload =
+    `<retEnviNFe xmlns="${namespace}" versao="4.00"><tpAmb>2</tpAmb><cUF>35</cUF>` +
+    '<cStat>103</cStat><xMotivo>Lote recebido</xMotivo>' +
+    '<nRec>123456789012345</nRec></retEnviNFe>'
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'authorization',
+      soap: soap(payload.replace('<cStat>103</cStat>', '<cStat>103</cStat><cStat>100</cStat>')),
+    }),
+  ).toThrow('duplicate cStat')
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'authorization',
+      soap: soap(payload.replace('versao="4.00"', 'versao="3.10"')),
+    }),
+  ).toThrow('version')
+  expect(() =>
+    parseSefazSoapResponse({ service: 'authorization', soap: soap(payload + payload) }),
+  ).toThrow('unique NF-e payload')
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'authorization',
+      soap: Buffer.from(
+        soap(payload).toString().replace('</soap12:Body>', '<unexpected/></soap12:Body>'),
+      ),
+    }),
+  ).toThrow('unique response')
 })

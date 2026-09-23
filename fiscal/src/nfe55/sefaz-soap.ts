@@ -55,12 +55,26 @@ function parseXml(input: Buffer): XmlDocument & { documentElement: XmlElement } 
 }
 
 function namedChild(parent: XmlElement, name: string, namespace: string): XmlElement | null {
+  let match: XmlElement | null = null
   for (let node = parent.firstChild; node; node = node.nextSibling) {
     const element = node as XmlElement
-    if (element.nodeType === 1 && element.localName === name && element.namespaceURI === namespace)
-      return element
+    if (
+      element.nodeType === 1 &&
+      element.localName === name &&
+      element.namespaceURI === namespace
+    ) {
+      if (match) throw new Error(`SEFAZ response contains duplicate ${name}`)
+      match = element
+    }
   }
-  return null
+  return match
+}
+
+function elementChildren(parent: XmlElement): XmlElement[] {
+  const elements: XmlElement[] = []
+  for (let node = parent.firstChild; node; node = node.nextSibling)
+    if (node.nodeType === 1) elements.push(node as XmlElement)
+  return elements
 }
 
 function child(parent: XmlElement, name: string): XmlElement | null {
@@ -152,6 +166,8 @@ export function parseSefazSoapResponse(input: {
   soap: Buffer
   expectedAccessKey?: string
   expectedReceipt?: string
+  expectedOperation?: string
+  expectedOperationNamespace?: string
 }): SefazResponse {
   const document = parseXml(input.soap)
   const envelope = document.documentElement
@@ -159,21 +175,44 @@ export function parseSefazSoapResponse(input: {
     throw new Error('SEFAZ response is not SOAP 1.2')
   const body = namedChild(envelope, 'Body', soapNamespace)
   if (!body) throw new Error('SEFAZ SOAP body is missing')
+  if (elementChildren(envelope).filter((element) => element.localName === 'Body').length !== 1)
+    throw new Error('SEFAZ SOAP envelope has an invalid body')
   const fault = namedChild(body, 'Fault', soapNamespace)
   if (fault) {
+    if (elementChildren(body).length !== 1)
+      throw new Error('SEFAZ SOAP fault body has extra elements')
     const code = namedChild(fault, 'Code', soapNamespace)
     const faultValue = code ? namedChild(code, 'Value', soapNamespace)?.textContent?.trim() : null
     throw new SefazSoapFault(faultValue || 'unknown')
   }
-  const payloads = Array.from(
-    { length: body.getElementsByTagNameNS(nfeNamespace, '*').length },
-    (_, index) => body.getElementsByTagNameNS(nfeNamespace, '*').item(index),
+  const bodyElements = elementChildren(body)
+  if (bodyElements.length !== 1) throw new Error('SEFAZ SOAP body has no unique response')
+  const wrapper = bodyElements[0]
+  if (!wrapper) throw new Error('SEFAZ SOAP response is missing')
+  if (input.expectedOperation && input.expectedOperationNamespace) {
+    if (
+      wrapper.localName !== `${input.expectedOperation}Response` ||
+      wrapper.namespaceURI !== input.expectedOperationNamespace
+    )
+      throw new Error('SEFAZ SOAP response operation does not match the request')
+  } else if (
+    !wrapper.localName?.endsWith('Response') ||
+    !wrapper.namespaceURI?.startsWith('http://www.portalfiscal.inf.br/nfe/wsdl/')
+  ) {
+    throw new Error('SEFAZ SOAP response wrapper is invalid')
+  }
+  const result = elementChildren(wrapper)
+  if (
+    result.length !== 1 ||
+    result[0]?.localName !== 'nfeResultMsg' ||
+    result[0]?.namespaceURI !== wrapper.namespaceURI
   )
-    .filter((node): node is XmlElement => node !== null)
-    .filter((node) => (node.parentNode as XmlElement | null)?.namespaceURI !== nfeNamespace)
+    throw new Error('SEFAZ SOAP result message is invalid')
+  const payloads = result[0] ? elementChildren(result[0]) : []
   if (payloads.length !== 1) throw new Error('SEFAZ SOAP body has no unique NF-e payload')
   const payload = payloads[0]
-  if (!payload) throw new Error('SEFAZ response payload is missing')
+  if (!payload || payload.namespaceURI !== nfeNamespace)
+    throw new Error('SEFAZ response payload is missing')
   const expectedRoot: Record<SefazResponse['service'], string> = {
     authorization: 'retEnviNFe',
     receipt: 'retConsReciNFe',
@@ -183,6 +222,9 @@ export function parseSefazSoapResponse(input: {
   }
   if (payload.localName !== expectedRoot[input.service])
     throw new Error('SEFAZ response service does not match the request')
+  const version = input.service === 'event' ? '1.00' : '4.00'
+  if (payload.getAttribute('versao') !== version)
+    throw new Error('SEFAZ response version does not match the service')
   if (required(payload, 'tpAmb') !== '2')
     throw new Error('SEFAZ response has the wrong environment')
   if (
@@ -200,9 +242,13 @@ export function parseSefazSoapResponse(input: {
     throw new Error('SEFAZ response receipt differs from the request')
   const protocol = child(payload, 'protNFe')
   const protocolInfo = protocol ? child(protocol, 'infProt') : null
+  if (protocol && (protocol.getAttribute('versao') !== '4.00' || !protocolInfo))
+    throw new Error('SEFAZ response protocol has an invalid version or structure')
   const documentStatusCode = protocolInfo ? value(protocolInfo, 'cStat') : null
   const event = child(payload, 'retEvento')
   const eventInfo = event ? child(event, 'infEvento') : null
+  if (event && (event.getAttribute('versao') !== '1.00' || !eventInfo))
+    throw new Error('SEFAZ event response has an invalid version or structure')
   if (eventInfo && input.service === 'event') {
     if (
       required(eventInfo, 'tpAmb') !== '2' ||

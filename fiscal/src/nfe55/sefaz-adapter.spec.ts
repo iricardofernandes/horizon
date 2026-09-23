@@ -79,6 +79,14 @@ it('rejects a response bound to a different prepared service', async () => {
       '</s:Body></s:Envelope>',
   )
   expect(() => adapter.parseResponse(prepared, wrong)).toThrow()
+  const wrongOperation = Buffer.from(
+    `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>` +
+      `<nfeAutorizacaoLoteResponse xmlns="${operationNamespace}"><nfeResultMsg>` +
+      `<retConsStatServ xmlns="${namespace}" versao="4.00"><tpAmb>2</tpAmb><cUF>35</cUF>` +
+      '<cStat>107</cStat><xMotivo>Servico em operacao</xMotivo></retConsStatServ>' +
+      '</nfeResultMsg></nfeAutorizacaoLoteResponse></s:Body></s:Envelope>',
+  )
+  expect(() => adapter.parseResponse(prepared, wrongOperation)).toThrow('operation does not match')
 })
 
 it('refuses an unsigned authorization before sending to the authority', async () => {
