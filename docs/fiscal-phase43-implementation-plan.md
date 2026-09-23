@@ -1,9 +1,11 @@
 # Phase 43 — NF-e model 55 homologation for one issuer and UF
 
-Status: **planned; no homologation credential or issuer tuple is recorded as configured**.
+Status: **in progress; no homologation credential or issuer tuple is recorded as configured**.
 Official portal reconnaissance was checked on 2026-09-23; recheck versions and
 endpoints before implementation. This is the
 execution plan for [Phase 43](fiscal-implementation-plan.md#43--one-nf-e-sefaz-homologation-path).
+The [candidate source manifest](fiscal-phase43-source-manifest.json) records exact
+retained hashes and the decisions still pending independent review.
 Phase 42 completed one local model-55 simulation tuple. Phase 43 proves a separate,
 real NF-e 4.00 homologation path against the official authorizer and prepares the
 operational dispatch gate. It does not activate production transmission.

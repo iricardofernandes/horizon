@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "phase": 43,
+  "status": "candidate-sources-pending-independent-review",
+  "retrievedAt": "2026-09-23",
+  "selection": {
+    "documentModel": "55",
+    "environment": "homologation",
+    "jurisdiction": "SP",
+    "operation": "normal-sale",
+    "issuerEstablishmentId": null,
+    "issuerCredentialFingerprint": null,
+    "adapterVersion": null,
+    "schemaRelease": null,
+    "fiscalReviewer": null,
+    "reviewDecision": null,
+    "activationAllowed": false
+  },
+  "candidateSources": [
+    {
+      "id": "nfe-moc-7.0-general",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=LrBx7WT9PuA%3D",
+      "sha256": "f664dcf94b77cabb32311620d85a7eb02cdf86adb2d4632ce178af2572dd2ad1"
+    },
+    {
+      "id": "nfe-nt-2026.004-v1.01",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=BTZQzgsO9Ws%3D",
+      "sha256": "5f24a25351e790692754b07bbefac42ac67e70167a62a7806395d880f56675be"
+    },
+    {
+      "id": "nfe-nt-2025.002-v1.51",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=AKD%2FmuSmiIY%3D",
+      "sha256": "a4aaaa181522b43cd90b502f8ccb9e4bdabea30fed838e2d0790be5ba77254a4"
+    },
+    {
+      "id": "nfe-pl-010f-v1.04-document",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=8ITFuBLltXs%3D",
+      "sha256": "b8589490a58a09a993a80e6ac4d7ed10f20892061ecfc56719337098d4b95998"
+    },
+    {
+      "id": "nfe-pl-010d-v1.03-event-candidate",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=%20pBOYTXBtbk%3D",
+      "sha256": "45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b"
+    }
+  ],
+  "homologationServices": {
+    "sourceUrl": "https://hom.nfe.fazenda.gov.br/portal/webServices.aspx?tipoConteudo=VjrjMInPXGA%3D",
+    "jurisdiction": "SP",
+    "wsdlReviewed": false,
+    "endpointSetDigest": null
+  },
+  "openDecisions": [
+    "Confirm a legally credentialed SP issuer and ICP-Brasil certificate custody.",
+    "Review effective technical notes, response XSDs, WSDL operations and event detail XSD for the selected date.",
+    "Approve the exact source combination and executable fixtures with an independent Fiscal reviewer.",
+    "Run live homologation and retain redacted authority evidence before capability activation."
+  ]
+}
