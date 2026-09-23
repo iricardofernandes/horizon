@@ -636,6 +636,8 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     const runner = new HomologationExchangeRunner(
       ledger,
       {
+        endpointSetDigest: input.endpointDigest,
+        certificateFingerprint: input.certificateFingerprint,
         async send() {
           sends += 1
           return soap
@@ -644,6 +646,10 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       adapter,
     )
     const runInput = { ...input, exchangeId: randomUUID(), workerId: 'worker-a' }
+    await expect(
+      runner.execute({ ...runInput, endpointDigest: 'd'.repeat(64) }, prepared),
+    ).rejects.toThrow('runtime binding differs')
+    expect(sends).toBe(0)
     expect((await runner.execute(runInput, prepared)).statusCode).toBe('107')
     await expect(runner.execute(runInput, prepared)).rejects.toBeInstanceOf(
       UncertainSefazOutcomeError,
@@ -652,6 +658,8 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     const malformedRunner = new HomologationExchangeRunner(
       ledger,
       {
+        endpointSetDigest: input.endpointDigest,
+        certificateFingerprint: input.certificateFingerprint,
         async send() {
           return Buffer.from('<invalid>')
         },
@@ -721,6 +729,8 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     const protocolRunner = new HomologationExchangeRunner(
       ledger,
       {
+        endpointSetDigest: input.endpointDigest,
+        certificateFingerprint: input.certificateFingerprint,
         async send() {
           return protocolSoap
         },
@@ -805,6 +815,8 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     const receiptRunner = new HomologationExchangeRunner(
       ledger,
       {
+        endpointSetDigest: input.endpointDigest,
+        certificateFingerprint: input.certificateFingerprint,
         async send() {
           return receiptSoap
         },

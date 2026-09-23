@@ -19,14 +19,24 @@ export class HomologationExchangeRunner {
       HomologationExchangeLedger,
       'prepare' | 'markStarted' | 'recordRawResponse' | 'recordParsedResponse'
     >,
-    private readonly transport: { send(service: SefazService, envelope: Buffer): Promise<Buffer> },
-    private readonly parser: Pick<SefazNfe55HomologationAdapter, 'parseResponse'>,
+    private readonly transport: {
+      endpointSetDigest: string
+      certificateFingerprint: string
+      send(service: SefazService, envelope: Buffer): Promise<Buffer>
+    },
+    private readonly parser: Pick<SefazNfe55HomologationAdapter, 'parseResponse' | 'wsdlDigest'>,
   ) {}
 
   async execute(
     input: PreparedInput & { workerId: string },
     prepared: PreparedSefazExchange,
   ): Promise<SefazResponse> {
+    if (
+      input.endpointDigest !== this.transport.endpointSetDigest ||
+      input.certificateFingerprint !== this.transport.certificateFingerprint ||
+      input.wsdlDigest !== this.parser.wsdlDigest
+    )
+      throw new Error('SEFAZ runtime binding differs from the approved drill grant')
     const { workerId, ...evidence } = input
     await this.ledger.prepare(evidence, prepared)
     if (!(await this.ledger.markStarted(input.tenantId, input.exchangeId, workerId)))

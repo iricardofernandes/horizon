@@ -88,7 +88,12 @@ it('permits only the pinned SP homologation service paths', async () => {
     status: `${root}nfestatusservico4.asmx`,
     event: `${root}nferecepcaoevento4.asmx`,
   }
-  expect(() => new SefazHomologationTransport(endpoints, loaded)).not.toThrow()
+  const transport = new SefazHomologationTransport(endpoints, loaded)
+  expect(transport.endpointSetDigest).toMatch(/^[0-9a-f]{64}$/)
+  expect(transport.endpointSetDigest).toBe(
+    new SefazHomologationTransport(endpoints, loaded).endpointSetDigest,
+  )
+  expect(transport.certificateFingerprint).toBe(loaded.fingerprint)
   await expect(
     new SefazHomologationTransport(endpoints, {
       ...loaded,

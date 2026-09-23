@@ -185,6 +185,9 @@ the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the
 The adapter also checks the access key's issuer against that certificate identity
 before preparing authorization, consultation or cancellation. Certificate chain,
 revocation and SEFAZ credentialing evidence still require review for the real issuer.
+The exchange runner now compares each grant's endpoint, certificate and WSDL
+digests with its actual transport and adapter before persisting or sending a request;
+the transport computes its endpoint digest from the five validated SP URLs.
 
 `GET /fiscal/documents/:id/v2` and
 `GET /fiscal/documents/:id/artifacts/v2` now carry the environment and

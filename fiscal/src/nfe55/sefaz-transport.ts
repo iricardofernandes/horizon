@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { request } from 'node:https'
 import { z } from 'zod'
 import type { HomologationCredential } from './homologation-credential'
@@ -28,6 +29,8 @@ export class SefazTransportError extends Error {
 }
 
 export class SefazHomologationTransport {
+  readonly endpointSetDigest: string
+  readonly certificateFingerprint: string
   readonly #endpoints: Record<SefazService, URL>
   readonly #settings: z.infer<typeof settingsSchema>
 
@@ -54,6 +57,15 @@ export class SefazHomologationTransport {
         return [service, endpoint]
       }),
     ) as Record<SefazService, URL>
+    this.endpointSetDigest = createHash('sha256')
+      .update('sefaz-sp-homologation-endpoints-v1\n')
+      .update(
+        (Object.keys(endpointNames) as SefazService[])
+          .map((service) => `${service}=${this.#endpoints[service].href}`)
+          .join('\n'),
+      )
+      .digest('hex')
+    this.certificateFingerprint = credential.fingerprint
   }
 
   async send(service: SefazService, soapEnvelope: Buffer): Promise<Buffer> {

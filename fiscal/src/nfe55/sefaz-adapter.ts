@@ -57,6 +57,8 @@ export type PreparedSefazExchange = {
 
 /** Performs one exchange. It never retries an ambiguous authorization or event submission. */
 export class SefazNfe55HomologationAdapter {
+  readonly wsdlDigest: string
+
   constructor(
     private readonly transport: {
       send(service: SefazService, soapEnvelope: Buffer): Promise<Buffer>
@@ -64,7 +66,7 @@ export class SefazNfe55HomologationAdapter {
     private readonly credential: Pick<HomologationCredential, 'certificate' | 'issuerTaxId'>,
     private readonly operations: SefazOperationMap,
   ) {
-    digestSchema.parse(operations.wsdlDigest)
+    this.wsdlDigest = digestSchema.parse(operations.wsdlDigest)
   }
 
   async prepare(input: SefazExchangeInput): Promise<PreparedSefazExchange> {
