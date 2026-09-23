@@ -160,6 +160,14 @@ separate correlated response parser. The durable worker must persist the exact
 prepared bytes before marking transmission started; after an ambiguous send it
 must consult the authority instead of resubmitting that envelope.
 
+An internal exchange ledger now persists the request artifact, one send marker,
+the raw response artifact and its parsed `cStat`/receipt/protocol facts. A
+time-limited drill grant requires an independently reviewed SP homologation
+capability and binds document, endpoint, WSDL, certificate and adapter digests.
+The runner records the raw response before parsing and refuses a second send
+after a send marker, including when the first response was lost. This ledger is
+not yet wired to the Fiscal issue worker or a live SEFAZ credential.
+
 1. pack shipment and freeze the commercial lines, recipient, issuer, quantities,
    prices and revision into an idempotent `sales.fiscal-origin.recorded` event;
 2. have Fiscal ingest that origin, validate and issue the exact document;

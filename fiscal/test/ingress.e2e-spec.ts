@@ -15,10 +15,17 @@ import { FiscalArtifacts } from '../src/artifacts'
 import { type AuditRow, verifyAuditRows } from '../src/audit'
 import { FiscalBackfill, HttpOwnerFiscalClient, type OwnerFiscalClient } from '../src/backfill'
 import { canonicalDigest } from '../src/canonical-json'
+import { FiscalCapabilities } from '../src/capabilities'
 import { FiscalConsumer } from '../src/consumer'
 import { FiscalDocuments } from '../src/documents'
+import { HomologationExchangeLedger } from '../src/homologation-exchange-ledger'
+import {
+  HomologationExchangeRunner,
+  UncertainSefazOutcomeError,
+} from '../src/homologation-exchange-runner'
 import { FiscalIngress } from '../src/ingress'
 import { FiscalLifecycle } from '../src/lifecycle'
+import { SefazNfe55HomologationAdapter, type SefazOperationMap } from '../src/nfe55/sefaz-adapter'
 import { FiscalOutboxRelay } from '../src/outbox'
 import { DeterministicAuthorityGateway } from '../src/ports'
 import { FiscalProjections } from '../src/projections'
@@ -480,10 +487,177 @@ it('ingests one canonical pre-dispatch origin and rejects conflicting versions',
       environment: 'simulation',
     }),
   ).rejects.toThrow()
+  await verifyHomologationLedger(tenantId, draft.id)
   await expect(ingress.accept({ ...legacy, eventId: randomUUID() })).rejects.toThrow(
     'Conflicting fiscal origin payload',
   )
 })
+
+async function verifyHomologationLedger(tenantId: string, documentId: string): Promise<void> {
+  const artifacts = new FiscalArtifacts(
+    appUrl,
+    new EncryptedFiscalArtifactStore(new LocalObjectStore(artifactRoot), artifactKey),
+  )
+  const ledger = new HomologationExchangeLedger(appUrl, artifacts)
+  const capabilities = new FiscalCapabilities(appUrl)
+  try {
+    const operationNamespace = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4'
+    const operations: SefazOperationMap = {
+      wsdlDigest: 'a'.repeat(64),
+      authorization: { operation: 'nfeAutorizacaoLote', operationNamespace },
+      receipt: { operation: 'nfeRetAutorizacaoLote', operationNamespace },
+      protocol: { operation: 'nfeConsultaNF', operationNamespace },
+      status: { operation: 'nfeStatusServicoNF', operationNamespace },
+      event: { operation: 'nfeRecepcaoEvento', operationNamespace },
+    }
+    const adapter = new SefazNfe55HomologationAdapter(
+      {
+        async send() {
+          throw new Error('No network send in ledger test')
+        },
+      },
+      { certificate: Buffer.alloc(0) },
+      operations,
+    )
+    const prepared = await adapter.prepare({ service: 'status' })
+    const [document] = await administrator`select establishment_id from fiscal_documents
+      where tenant_id = ${tenantId} and id = ${documentId}`
+    const capability = await capabilities.register({
+      tenantId,
+      model: '55',
+      environment: 'homologation',
+      establishmentId: String(document?.establishment_id),
+      jurisdictionKind: 'uf',
+      jurisdictionCode: 'SP',
+      operation: 'normal-sale',
+      adapterVersion: 'nfe55-sp-homologation-v1',
+      sourceManifestDigest: 'd'.repeat(64),
+      schemaPackageDigest: 'e'.repeat(64),
+      calculationFixtureId: 'reviewed-sp-v1',
+      createdBy: 'author:phase43',
+    })
+    await capabilities.review({
+      tenantId,
+      capabilityId: capability.id,
+      approved: true,
+      reviewedBy: 'reviewer:phase43',
+      interpretation: 'Scoped offline exchange drill.',
+      reviewedAt: new Date().toISOString(),
+    })
+    const grantId = randomUUID()
+    const grantInput = {
+      tenantId,
+      documentId,
+      grantId,
+      capabilityId: capability.id,
+      endpointDigest: 'b'.repeat(64),
+      wsdlDigest: operations.wsdlDigest,
+      certificateFingerprint: 'c'.repeat(64),
+      issuedBy: 'operator:phase43',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    }
+    await ledger.grantDrill(grantInput)
+    await ledger.grantDrill(grantInput)
+    await expect(
+      ledger.grantDrill({ ...grantInput, grantId: randomUUID(), issuedBy: 'reviewer:phase43' }),
+    ).rejects.toThrow('independent approved reviewer')
+    const exchangeId = randomUUID()
+    const input = {
+      tenantId,
+      documentId,
+      exchangeId,
+      drillGrantId: grantId,
+      parentExchangeId: null,
+      endpointDigest: 'b'.repeat(64),
+      wsdlDigest: operations.wsdlDigest,
+      certificateFingerprint: 'c'.repeat(64),
+      adapterVersion: 'nfe55-sp-homologation-v1',
+      actorId: 'tester:phase43',
+    }
+    await expect(
+      ledger.prepare(
+        {
+          ...input,
+          exchangeId: randomUUID(),
+          drillGrantId: randomUUID(),
+        },
+        prepared,
+      ),
+    ).rejects.toThrow()
+    const first = await ledger.prepare(input, prepared)
+    expect(await ledger.prepare(input, prepared)).toEqual(first)
+    await expect(
+      ledger.prepare({ ...input, endpointDigest: 'd'.repeat(64) }, prepared),
+    ).rejects.toThrow('SEFAZ exchange differs from approved drill grant')
+    expect(await ledger.markStarted(tenantId, exchangeId, 'worker-a')).toBe(true)
+    expect(await ledger.markStarted(tenantId, exchangeId, 'worker-b')).toBe(false)
+    const soap = Buffer.from(
+      `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>` +
+        `<nfeStatusServicoNFResponse xmlns="${operationNamespace}"><nfeResultMsg>` +
+        `<retConsStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
+        '<tpAmb>2</tpAmb><cUF>35</cUF><cStat>107</cStat>' +
+        '<xMotivo>Servico em operacao</xMotivo></retConsStatServ>' +
+        '</nfeResultMsg></nfeStatusServicoNFResponse></s:Body></s:Envelope>',
+    )
+    const rawDigest = await ledger.recordRawResponse(tenantId, documentId, exchangeId, soap)
+    expect(await ledger.recordRawResponse(tenantId, documentId, exchangeId, soap)).toBe(rawDigest)
+    await ledger.recordParsedResponse(
+      tenantId,
+      documentId,
+      exchangeId,
+      adapter.parseResponse(prepared, soap),
+    )
+    const [row] = await administrator`select raw.response_digest, parsed.cstat,
+        parsed.response_digest as parsed_digest
+      from fiscal_homologation_raw_responses raw
+      join fiscal_homologation_parsed_responses parsed using (tenant_id, exchange_id)
+      where raw.tenant_id = ${tenantId} and raw.exchange_id = ${exchangeId}`
+    expect(row).toMatchObject({
+      response_digest: rawDigest,
+      parsed_digest: rawDigest,
+      cstat: '107',
+    })
+    await expect(
+      ledger.recordRawResponse(tenantId, documentId, exchangeId, Buffer.from('another response')),
+    ).rejects.toThrow('Conflicting immutable SEFAZ response')
+    let sends = 0
+    const runner = new HomologationExchangeRunner(
+      ledger,
+      {
+        async send() {
+          sends += 1
+          return soap
+        },
+      },
+      adapter,
+    )
+    const runInput = { ...input, exchangeId: randomUUID(), workerId: 'worker-a' }
+    expect((await runner.execute(runInput, prepared)).statusCode).toBe('107')
+    await expect(runner.execute(runInput, prepared)).rejects.toBeInstanceOf(
+      UncertainSefazOutcomeError,
+    )
+    expect(sends).toBe(1)
+    const malformedRunner = new HomologationExchangeRunner(
+      ledger,
+      {
+        async send() {
+          return Buffer.from('<invalid>')
+        },
+      },
+      adapter,
+    )
+    const malformedInput = { ...input, exchangeId: randomUUID(), workerId: 'worker-a' }
+    await expect(malformedRunner.execute(malformedInput, prepared)).rejects.toThrow()
+    const [rawOnly] = await administrator`select raw.response_digest, parsed.cstat
+      from fiscal_homologation_raw_responses raw
+      left join fiscal_homologation_parsed_responses parsed using (tenant_id, exchange_id)
+      where raw.tenant_id = ${tenantId} and raw.exchange_id = ${malformedInput.exchangeId}`
+    expect(rawOnly?.response_digest).toMatch(/^[0-9a-f]{64}$/)
+    expect(rawOnly?.cstat).toBeNull()
+  } finally {
+    await Promise.all([ledger.close(), artifacts.close(), capabilities.close()])
+  }
+}
 
 it('creates one intent for two messages about one delivery and isolates tenants', async () => {
   const tenantId = randomUUID()
