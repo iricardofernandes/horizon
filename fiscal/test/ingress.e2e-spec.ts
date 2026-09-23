@@ -683,6 +683,12 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     }
     await ledger.grantDrill(grantInput)
     await ledger.grantDrill(grantInput)
+    expect(await capabilities.getHomologationDrill(tenantId, documentId, grantId)).toMatchObject({
+      id: capability.id,
+      establishmentId: String(document?.establishment_id),
+      calculationFixtureId: 'reviewed-sp-v1',
+    })
+    expect(await capabilities.getHomologationDrill(randomUUID(), documentId, grantId)).toBeNull()
     const rangeInput = {
       tenantId,
       capabilityId: capability.id,

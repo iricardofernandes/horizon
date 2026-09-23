@@ -13,6 +13,7 @@ const commandSchema = z.strictObject({
   documentId: z.uuid(),
   actorId: z.string().min(1).max(200),
 })
+const drillCommandSchema = commandSchema.extend({ drillGrantId: z.uuid() })
 
 type ReadyResult = Extract<FiscalCalculationOutcome, { supported: true }> & {
   capabilityId: string
@@ -28,17 +29,33 @@ export class FiscalReadiness {
       FiscalProjections,
       'resolveIssuer' | 'resolveParty' | 'resolveClassification'
     >,
-    private readonly capabilities: Pick<FiscalCapabilities, 'listActive'>,
+    private readonly capabilities: Pick<FiscalCapabilities, 'listActive'> &
+      Partial<Pick<FiscalCapabilities, 'getHomologationDrill'>>,
     private readonly calculations: Pick<FiscalCalculations, 'preview' | 'validateDocument'>,
   ) {}
 
   async validate(input: z.input<typeof commandSchema>): Promise<ReadyOutcome> {
-    const command = commandSchema.parse(input)
+    return this.validateInternal(commandSchema.parse(input), 'simulation')
+  }
+
+  /** Internal drill only; the public readiness route remains simulation scoped. */
+  async validateHomologationDrill(
+    input: z.input<typeof drillCommandSchema>,
+  ): Promise<ReadyOutcome> {
+    const command = drillCommandSchema.parse(input)
+    return this.validateInternal(command, 'homologation', command.drillGrantId)
+  }
+
+  private async validateInternal(
+    command: z.infer<typeof commandSchema>,
+    environment: 'simulation' | 'homologation',
+    drillGrantId?: string,
+  ): Promise<ReadyOutcome> {
     const document = await this.documents.get(command.tenantId, command.documentId)
     if (!document) throw new Error('Fiscal document not found')
     if (document.status !== 'draft' && document.status !== 'ready')
       throw new Error('Fiscal document is not a draft')
-    if (document.model !== '55' || document.environment !== 'simulation')
+    if (document.model !== '55' || document.environment !== environment)
       throw new Error('Fiscal capability is unsupported')
 
     const snapshot = parseFiscalOriginSnapshot(
@@ -51,18 +68,28 @@ export class FiscalReadiness {
     )
       throw new Error('Fiscal capability is unsupported')
 
-    const capabilities = await this.capabilities.listActive(command.tenantId)
-    const capability = capabilities.find(
-      (candidate) =>
-        candidate.model === '55' &&
-        candidate.environment === 'simulation' &&
-        candidate.establishmentId === document.establishmentId &&
-        candidate.jurisdictionKind === 'uf' &&
-        candidate.jurisdictionCode === 'SP' &&
-        candidate.operation === 'normal-sale' &&
-        candidate.calculationFixtureId === PHASE41_FIXTURE_ID,
-    )
+    const capability =
+      environment === 'simulation'
+        ? (await this.capabilities.listActive(command.tenantId)).find(
+            (candidate) =>
+              candidate.model === '55' &&
+              candidate.environment === 'simulation' &&
+              candidate.establishmentId === document.establishmentId &&
+              candidate.jurisdictionKind === 'uf' &&
+              candidate.jurisdictionCode === 'SP' &&
+              candidate.operation === 'normal-sale' &&
+              candidate.calculationFixtureId === PHASE41_FIXTURE_ID,
+          )
+        : drillGrantId
+          ? await this.capabilities.getHomologationDrill?.(
+              command.tenantId,
+              command.documentId,
+              drillGrantId,
+            )
+          : null
     if (!capability) throw new Error('Fiscal capability is unsupported')
+    if (capability.establishmentId !== document.establishmentId)
+      throw new Error('Fiscal capability establishment differs from document')
 
     const utcDate = document.createdAt.slice(0, 10)
     let issuer = await this.projections.resolveIssuer(
@@ -115,6 +142,7 @@ export class FiscalReadiness {
       recipient,
       snapshot,
       classifications,
+      environment,
     })
     const preview = await this.calculations.preview(calculationInput)
     if (!preview.supported) return preview
@@ -136,6 +164,8 @@ export class FiscalReadiness {
       },
     })
     if (!locked.supported) return locked
+    if (locked.resultDigest !== preview.resultDigest || locked.rulesDigest !== preview.rulesDigest)
+      throw new Error('Fiscal rules changed between preview and readiness binding')
     return { ...locked, capabilityId: capability.id, reconciliationDigest: reconciliation }
   }
 }
@@ -151,6 +181,7 @@ function deriveCalculationInput(input: {
     string,
     NonNullable<Awaited<ReturnType<FiscalProjections['resolveClassification']>>>
   >
+  environment: 'simulation' | 'homologation'
 }): FiscalCalculationInput {
   const issuerAddress = input.issuer.company.address
   const recipientAddress = input.recipient.profile.address
@@ -176,7 +207,7 @@ function deriveCalculationInput(input: {
     recipientPartyId: input.recipient.partyId,
     recipientProfileRevision: input.recipient.revision,
     model: '55',
-    environment: 'simulation',
+    environment: input.environment,
     operation: PHASE41_SCENARIO_ID,
     purpose: 'normal',
     issuer: { regime: 'normal', stateCode: '35', municipalityCode: issuerAddress.municipalityCode },

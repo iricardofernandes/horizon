@@ -16,6 +16,7 @@ const customerId = randomUUID()
 const itemId = randomUUID()
 const lineId = randomUUID()
 const capabilityId = randomUUID()
+const drillGrantId = randomUUID()
 
 describe('Fiscal readiness derivation', () => {
   it('derives calculation facts from frozen projections and records exact revisions', async () => {
@@ -118,12 +119,65 @@ describe('Fiscal readiness derivation', () => {
     ).resolves.toMatchObject({ supported: true })
     expect(derived).toMatchObject({ issueDate: '2026-09-22', issuerProfileRevision: 3 })
   })
+
+  it('derives homologation facts only through a reviewed drill capability', async () => {
+    let derived: FiscalCalculationInput | undefined
+    const readiness = scenario(
+      {
+        async preview(input) {
+          derived = fiscalCalculationInputSchema.parse(input)
+          return calculationResult(derived)
+        },
+        async validateDocument(input) {
+          return calculationResult(input.calculationInput)
+        },
+      },
+      { ncm: '09012100' },
+      false,
+      'homologation',
+    )
+    await expect(
+      readiness.validate({ tenantId, documentId, actorId: 'issuer:test' }),
+    ).rejects.toThrow('unsupported')
+    await expect(
+      readiness.validateHomologationDrill({
+        tenantId,
+        documentId,
+        actorId: 'issuer:test',
+        drillGrantId: randomUUID(),
+      }),
+    ).rejects.toThrow('unsupported')
+    await expect(
+      readiness.validateHomologationDrill({
+        tenantId,
+        documentId,
+        actorId: 'issuer:test',
+        drillGrantId,
+      }),
+    ).resolves.toMatchObject({ supported: true, capabilityId })
+    expect(derived?.environment).toBe('homologation')
+  })
+
+  it('refuses a changed rule result between preview and readiness binding', async () => {
+    const readiness = scenario({
+      async preview(input) {
+        return calculationResult(fiscalCalculationInputSchema.parse(input))
+      },
+      async validateDocument(input) {
+        return { ...calculationResult(input.calculationInput), rulesDigest: '7'.repeat(64) }
+      },
+    })
+    await expect(
+      readiness.validate({ tenantId, documentId, actorId: 'issuer:test' }),
+    ).rejects.toThrow('rules changed between preview')
+  })
 })
 
 function scenario(
   calculations: Pick<FiscalCalculations, 'preview' | 'validateDocument'>,
   classification: { ncm: string | null } = { ncm: '09012100' },
   manual = false,
+  environment: 'simulation' | 'homologation' = 'simulation',
 ): FiscalReadiness {
   return new FiscalReadiness(
     {
@@ -132,10 +186,10 @@ function scenario(
         return {
           id: documentId,
           status: 'draft',
-          simulated: true,
+          simulated: environment === 'simulation',
           snapshotDigest: 'a'.repeat(64),
           model: '55',
-          environment: 'simulation',
+          environment,
           establishmentId,
           series: 1,
           number: null,
@@ -258,6 +312,16 @@ function scenario(
       },
     },
     {
+      async getHomologationDrill(_tenant, _document, grantId) {
+        return grantId === drillGrantId
+          ? {
+              id: capabilityId,
+              establishmentId,
+              calculationFixtureId: 'reviewed-sp-v1',
+              sourceManifestDigest: '1'.repeat(64),
+            }
+          : null
+      },
       async listActive() {
         return [
           {

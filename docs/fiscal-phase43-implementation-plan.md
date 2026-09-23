@@ -230,6 +230,11 @@ The reviewer registers that exact package set with
 `npm run phase43:calculation-approval -- --file <json>` in `fiscal` after building.
 The JSON requires `tenantId`, `capabilityId`, `sourceManifestDigest`,
 `calculationFixtureId`, sorted `packageDigests`, and `reviewedBy`.
+An internal readiness path now derives the homologation calculation from the frozen
+origin and historical projections only when the drill is active and the reviewed
+calculation approval exists. It refuses a changed rule result between preview and
+binding; the public readiness route remains simulation scoped. A reviewed live
+rule package and operator command are still needed to use this path on the issuer.
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the

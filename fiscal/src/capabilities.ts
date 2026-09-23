@@ -76,6 +76,12 @@ export type ActiveFiscalCapability = Omit<FiscalCapabilityDefinition, 'createdBy
   activatedAt: string
   evidenceDigest: string
 }
+export type HomologationDrillCapability = {
+  id: string
+  establishmentId: string
+  calculationFixtureId: string
+  sourceManifestDigest: string
+}
 
 export class FiscalCapabilities {
   readonly #db: ReturnType<typeof postgres>
@@ -86,6 +92,40 @@ export class FiscalCapabilities {
 
   async close(): Promise<void> {
     await this.#db.end()
+  }
+
+  async getHomologationDrill(
+    tenantId: string,
+    documentId: string,
+    grantId: string,
+  ): Promise<HomologationDrillCapability | null> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(documentId)
+    z.uuid().parse(grantId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select definition.id, definition.establishment_id,
+          definition.calculation_fixture_id, definition.source_manifest_digest
+        from fiscal_homologation_drill_grants grant_row
+        join fiscal_capability_definitions definition
+          on definition.tenant_id = grant_row.tenant_id
+          and definition.id = grant_row.capability_id
+        join fiscal_homologation_calculation_approvals approval
+          on approval.tenant_id = definition.tenant_id
+          and approval.capability_id = definition.id
+        where grant_row.tenant_id = ${tenantId} and grant_row.id = ${grantId}
+          and grant_row.document_id = ${documentId} and grant_row.expires_at > now()
+          and definition.environment = 'homologation' and definition.model = '55'
+          and definition.jurisdiction_kind = 'uf' and definition.jurisdiction_code = 'SP'
+          and definition.operation = 'normal-sale'`
+    })
+    if (!row) return null
+    return {
+      id: String(row.id),
+      establishmentId: String(row.establishment_id),
+      calculationFixtureId: String(row.calculation_fixture_id),
+      sourceManifestDigest: String(row.source_manifest_digest),
+    }
   }
 
   async approveHomologationCalculation(
