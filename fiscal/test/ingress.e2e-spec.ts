@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -564,6 +564,111 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       interpretation: 'Scoped offline exchange drill.',
       reviewedAt: new Date().toISOString(),
     })
+    const packageId = randomUUID()
+    const packageBytes = Buffer.from('{"fixture":"reviewed-sp-v1"}')
+    const packageDigest = createHash('sha256').update(packageBytes).digest('hex')
+    await administrator`insert into fiscal_source_packages (
+      id, tenant_id, authority, source_uri, package_digest, published_at, effective_from
+    ) values (
+      ${packageId}, ${tenantId}, 'offline-review-fixture',
+      'https://example.invalid/phase43-rules', ${packageDigest},
+      '2026-09-23', '2026-09-23'
+    )`
+    await administrator`insert into fiscal_source_payloads (
+      tenant_id, package_id, source_bytes, byte_size, imported_by
+    ) values (${tenantId}, ${packageId}, ${packageBytes}, ${packageBytes.length}, 'author:phase43')`
+    await administrator`insert into fiscal_package_reviews (
+      id, tenant_id, package_id, approved, reviewed_by, reviewed_at,
+      interpretation, fixture_ids
+    ) values (
+      ${randomUUID()}, ${tenantId}, ${packageId}, true, 'reviewer:phase43',
+      now(), 'Offline calculation package review fixture', ${['reviewed-sp-v1']}
+    )`
+    const calculationApproval = {
+      tenantId,
+      capabilityId: capability.id,
+      sourceManifestDigest: 'd'.repeat(64),
+      calculationFixtureId: 'reviewed-sp-v1',
+      packageDigests: [packageDigest],
+      reviewedBy: 'reviewer:phase43',
+    }
+    await expect(
+      capabilities.approveHomologationCalculation({
+        ...calculationApproval,
+        packageDigests: ['f'.repeat(64)],
+      }),
+    ).rejects.toThrow('lacks matching independent review')
+    expect(await capabilities.approveHomologationCalculation(calculationApproval)).toEqual({
+      existing: false,
+    })
+    expect(await capabilities.approveHomologationCalculation(calculationApproval)).toEqual({
+      existing: true,
+    })
+    await expect(
+      capabilities.approveHomologationCalculation({
+        ...calculationApproval,
+        packageDigests: ['f'.repeat(64)],
+      }),
+    ).rejects.toThrow('lacks matching independent review')
+    const [draftForGuard] = await administrator`select snapshot_digest
+      from fiscal_documents where tenant_id = ${tenantId} and id = ${documentId}`
+    await expect(
+      administrator.begin(async (tx) => {
+        const calculationId = randomUUID()
+        await tx`insert into fiscal_calculations (
+          id, tenant_id, document_id, input_ciphertext, input_digest,
+          resolved_rules, rules_digest, result_bytes, result_digest,
+          explanation_template_version, explanation_text, rule_version_ids,
+          package_digests, supported, actor_id
+        ) values (
+          ${calculationId}, ${tenantId}, ${documentId}, ${Buffer.from([1])},
+          ${'a'.repeat(64)}, ${tx.json({ fixture: true })}, ${'b'.repeat(64)},
+          ${Buffer.from('{}')}, ${'c'.repeat(64)}, 'fixture-v1', 'Offline guard fixture',
+          ARRAY[]::uuid[], ${['f'.repeat(64)]}::text[], true, 'tester:phase43'
+        )`
+        await tx`insert into fiscal_document_calculation_bindings (
+          tenant_id, document_id, calculation_id
+        ) values (${tenantId}, ${documentId}, ${calculationId})`
+        await tx`insert into fiscal_document_readiness_bindings (
+          tenant_id, document_id, capability_id, issuer_profile_revision,
+          recipient_party_id, recipient_profile_revision, classification_revisions,
+          origin_digest, reconciliation_digest
+        ) values (
+          ${tenantId}, ${documentId}, ${capability.id}, 1, ${randomUUID()}, 1,
+          ${tx.json({})}, ${draftForGuard?.snapshot_digest}, ${'d'.repeat(64)}
+        )`
+        await tx`update fiscal_documents set status = 'ready'
+          where tenant_id = ${tenantId} and id = ${documentId}`
+      }),
+    ).rejects.toThrow('exact reviewed calculation packages')
+    await administrator.begin(async (tx) => {
+      const calculationId = randomUUID()
+      await tx`insert into fiscal_calculations (
+        id, tenant_id, document_id, input_ciphertext, input_digest,
+        resolved_rules, rules_digest, result_bytes, result_digest,
+        explanation_template_version, explanation_text, rule_version_ids,
+        package_digests, supported, actor_id
+      ) values (
+        ${calculationId}, ${tenantId}, ${documentId}, ${Buffer.from([1])},
+        ${'a'.repeat(64)}, ${tx.json({ fixture: true })}, ${'b'.repeat(64)},
+        ${Buffer.from('{}')}, ${'c'.repeat(64)}, 'fixture-v1', 'Offline guard fixture',
+        ARRAY[]::uuid[], ${[packageDigest]}::text[], true, 'tester:phase43'
+      )`
+      await tx`insert into fiscal_document_calculation_bindings (
+        tenant_id, document_id, calculation_id
+      ) values (${tenantId}, ${documentId}, ${calculationId})`
+      await tx`insert into fiscal_document_readiness_bindings (
+        tenant_id, document_id, capability_id, issuer_profile_revision,
+        recipient_party_id, recipient_profile_revision, classification_revisions,
+        origin_digest, reconciliation_digest
+      ) values (
+        ${tenantId}, ${documentId}, ${capability.id}, 1, ${randomUUID()}, 1,
+        ${tx.json({})}, ${draftForGuard?.snapshot_digest}, ${'d'.repeat(64)}
+      )`
+      await tx`update fiscal_documents set status = 'ready'
+        where tenant_id = ${tenantId} and id = ${documentId}`
+    })
+    expect(await documents.get(tenantId, documentId)).toMatchObject({ status: 'ready' })
     const grantId = randomUUID()
     const grantInput = {
       tenantId,
@@ -1133,7 +1238,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     expect(await observations.list(randomUUID(), documentId)).toEqual([])
     const [documentAfterObservation] = await administrator`select status, environment
       from fiscal_documents where tenant_id = ${tenantId} and id = ${documentId}`
-    expect(documentAfterObservation).toMatchObject({ status: 'draft', environment: 'homologation' })
+    expect(documentAfterObservation).toMatchObject({ status: 'ready', environment: 'homologation' })
   } finally {
     await Promise.all([
       ledger.close(),

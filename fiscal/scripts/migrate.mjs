@@ -46,6 +46,7 @@ try {
     '0033_phase43_consultation_terminal_fence.sql',
     '0034_phase43_homologation_number_range.sql',
     '0035_phase43_authorization_binding.sql',
+    '0036_phase43_calculation_approval.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

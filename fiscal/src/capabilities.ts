@@ -60,6 +60,15 @@ const homologationNumberRangeSchema = z.strictObject({
   reviewedBy: z.string().min(1).max(200),
 })
 
+const homologationCalculationApprovalSchema = z.strictObject({
+  tenantId: z.uuid(),
+  capabilityId: z.uuid(),
+  sourceManifestDigest: digest,
+  calculationFixtureId: z.string().min(1).max(160),
+  packageDigests: z.array(digest).min(1).max(20),
+  reviewedBy: z.string().min(1).max(200),
+})
+
 export type FiscalCapabilityDefinition = z.infer<typeof definitionSchema>
 export type ActiveFiscalCapability = Omit<FiscalCapabilityDefinition, 'createdBy'> & {
   id: string
@@ -77,6 +86,49 @@ export class FiscalCapabilities {
 
   async close(): Promise<void> {
     await this.#db.end()
+  }
+
+  async approveHomologationCalculation(
+    input: z.input<typeof homologationCalculationApprovalSchema>,
+  ): Promise<{ existing: boolean }> {
+    const value = homologationCalculationApprovalSchema.parse(input)
+    if (value.packageDigests.join(',') !== [...new Set(value.packageDigests)].sort().join(','))
+      throw new Error('Homologation calculation packages must be sorted and unique')
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const inserted = await tx`insert into fiscal_homologation_calculation_approvals (
+        tenant_id, capability_id, source_manifest_digest, calculation_fixture_id,
+        package_digests, reviewed_by
+      ) values (
+        ${value.tenantId}, ${value.capabilityId}, ${value.sourceManifestDigest},
+        ${value.calculationFixtureId}, ${value.packageDigests}, ${value.reviewedBy}
+      ) on conflict do nothing returning capability_id`
+      const [stored] = await tx`select source_manifest_digest, calculation_fixture_id,
+          package_digests, reviewed_by
+        from fiscal_homologation_calculation_approvals
+        where tenant_id = ${value.tenantId} and capability_id = ${value.capabilityId}`
+      if (
+        !stored ||
+        stored.source_manifest_digest !== value.sourceManifestDigest ||
+        stored.calculation_fixture_id !== value.calculationFixtureId ||
+        JSON.stringify(stored.package_digests) !== JSON.stringify(value.packageDigests) ||
+        stored.reviewed_by !== value.reviewedBy
+      )
+        throw new Error('Conflicting immutable homologation calculation approval')
+      if (inserted.length > 0)
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.reviewedBy,
+          action: 'homologation.calculation-approved',
+          resourceId: value.capabilityId,
+          detail: {
+            sourceManifestDigest: value.sourceManifestDigest,
+            calculationFixtureId: value.calculationFixtureId,
+            packageDigests: value.packageDigests,
+          },
+        })
+      return { existing: inserted.length === 0 }
+    })
   }
 
   async registerHomologationNumberRange(

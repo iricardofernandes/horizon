@@ -17,6 +17,7 @@
     "phase42:rollout-prep": "node dist/phase42-rollout-prep-cli.js",
     "phase43:observations": "node dist/phase43-observations-cli.js",
     "phase43:number-range": "node dist/phase43-number-range-cli.js",
+    "phase43:calculation-approval": "node dist/phase43-number-range-cli.js --action calculation",
     "phase42:verify-sources": "node scripts/verify-phase42-sources.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",

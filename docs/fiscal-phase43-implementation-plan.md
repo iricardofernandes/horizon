@@ -220,6 +220,16 @@ NF-e bytes, exact SOAP envelope, access key, reserved number, schema package and
 drill grant. The adapter validates the signed document before the ledger binds it;
 the database rejects a different envelope or an access key with another series or
 number. This does not yet provide a production worker or live issuance command.
+For homologation, a separate approval now binds the capability's source manifest
+and fixture to the exact reviewed calculation package digests. Each package must
+have retained bytes and an independent review by the same Fiscal reviewer. The
+database refuses a draft-to-ready transition if the calculation used another
+package set. The homologation readiness command and a real reviewed rule package
+are still required before this gate can be exercised for issuance.
+The reviewer registers that exact package set with
+`npm run phase43:calculation-approval -- --file <json>` in `fiscal` after building.
+The JSON requires `tenantId`, `capabilityId`, `sourceManifestDigest`,
+`calculationFixtureId`, sorted `packageDigests`, and `reviewedBy`.
 
 The secret-mounted certificate loader now requires the issuer's exact CNPJ in
 the ICP-Brasil legal-entity `otherName` OID `2.16.76.1.3.3`, following the
