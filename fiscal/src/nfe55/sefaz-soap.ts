@@ -27,6 +27,13 @@ export type SefazResponse = {
   protocol: Buffer | null
 }
 
+export class SefazSoapFault extends Error {
+  constructor(readonly code: string) {
+    super(`SEFAZ SOAP fault: ${code}`)
+    this.name = 'SefazSoapFault'
+  }
+}
+
 function xmlText(input: Buffer): string {
   if (input.length === 0 || input.length > 2_000_000)
     throw new Error('SEFAZ XML size is outside the supported bound')
@@ -152,6 +159,12 @@ export function parseSefazSoapResponse(input: {
     throw new Error('SEFAZ response is not SOAP 1.2')
   const body = namedChild(envelope, 'Body', soapNamespace)
   if (!body) throw new Error('SEFAZ SOAP body is missing')
+  const fault = namedChild(body, 'Fault', soapNamespace)
+  if (fault) {
+    const code = namedChild(fault, 'Code', soapNamespace)
+    const faultValue = code ? namedChild(code, 'Value', soapNamespace)?.textContent?.trim() : null
+    throw new SefazSoapFault(faultValue || 'unknown')
+  }
   const payloads = Array.from(
     { length: body.getElementsByTagNameNS(nfeNamespace, '*').length },
     (_, index) => body.getElementsByTagNameNS(nfeNamespace, '*').item(index),
@@ -209,7 +222,7 @@ export function parseSefazSoapResponse(input: {
         : null,
     documentStatusCode,
     eventStatusCode,
-    response: Buffer.from(new XMLSerializer().serializeToString(payload)),
+    response: Buffer.from(input.soap),
     protocol: protocol
       ? Buffer.from(new XMLSerializer().serializeToString(protocol))
       : event

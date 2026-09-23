@@ -1,6 +1,11 @@
 import { expect, it } from 'vitest'
 import { buildNfe55AccessKey } from './access-key'
-import { parseSefazSoapResponse, serializeSefazRequest, wrapSefazSoap12 } from './sefaz-soap'
+import {
+  parseSefazSoapResponse,
+  SefazSoapFault,
+  serializeSefazRequest,
+  wrapSefazSoap12,
+} from './sefaz-soap'
 
 const key = buildNfe55AccessKey({
   issuerUfCode: '35',
@@ -62,6 +67,7 @@ it('extracts only the correlated SP homologation protocol', () => {
     protocolNumber: '123456789012345',
   })
   expect(result.protocol?.toString()).toContain('<protNFe')
+  expect(result.response.equals(soap(payload))).toBe(true)
   expect(() =>
     parseSefazSoapResponse({
       service: 'authorization',
@@ -69,6 +75,18 @@ it('extracts only the correlated SP homologation protocol', () => {
       expectedAccessKey: '0'.repeat(44),
     }),
   ).toThrow('access key differs')
+})
+
+it('reports a SOAP fault without turning it into a fiscal outcome', () => {
+  const response = Buffer.from(
+    '<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>' +
+      '<s:Fault><s:Code><s:Value>s:Sender</s:Value></s:Code>' +
+      '<s:Reason><s:Text xml:lang="pt-BR">Rejeitado pelo serviço</s:Text></s:Reason>' +
+      '</s:Fault></s:Body></s:Envelope>',
+  )
+  expect(() => parseSefazSoapResponse({ service: 'authorization', soap: response })).toThrow(
+    SefazSoapFault,
+  )
 })
 
 it('retains receipts and rejects wrong environments or hostile XML', () => {
