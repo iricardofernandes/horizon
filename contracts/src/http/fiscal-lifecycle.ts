@@ -38,6 +38,38 @@ export const fiscalCapabilityListSchema = z.strictObject({
   supported: z.array(fiscalCapabilitySchema),
 })
 
+const fiscalCapabilityV2Base = z.strictObject({
+  id: uuidSchema,
+  model: z.literal('55'),
+  establishmentId: uuidSchema,
+  jurisdiction: z.strictObject({ kind: z.literal('uf'), code: z.string().regex(/^[A-Z]{2}$/) }),
+  operation: z.literal('normal-sale'),
+  adapterVersion: z.string().min(1).max(80),
+  sourceManifestDigest: sha256Schema,
+  schemaPackageDigest: sha256Schema,
+  calculationFixtureId: z.string().min(1).max(160),
+  evidenceDigest: sha256Schema,
+  activatedAt: instantSchema,
+  fiscalValue: z.literal(false),
+})
+
+/** Version 2 adds a reviewed homologation read model without changing version 1. */
+export const fiscalCapabilityV2Schema = z.discriminatedUnion('environment', [
+  fiscalCapabilityV2Base.extend({
+    environment: z.literal('simulation'),
+    status: z.literal('simulated'),
+  }),
+  fiscalCapabilityV2Base.extend({
+    environment: z.literal('homologation'),
+    status: z.literal('homologated'),
+  }),
+])
+
+export const fiscalCapabilityListV2Schema = z.strictObject({
+  defaultStatus: z.literal('unsupported'),
+  supported: z.array(fiscalCapabilityV2Schema),
+})
+
 const fiscalManualLineSchema = z.strictObject({
   lineId: uuidSchema,
   itemId: uuidSchema,
@@ -183,6 +215,8 @@ export const fiscalLifecycleProblemCodeSchema = z.enum([
 export type FiscalDocumentStatus = z.infer<typeof fiscalDocumentStatusSchema>
 export type FiscalCapability = z.infer<typeof fiscalCapabilitySchema>
 export type FiscalCapabilityList = z.infer<typeof fiscalCapabilityListSchema>
+export type FiscalCapabilityV2 = z.infer<typeof fiscalCapabilityV2Schema>
+export type FiscalCapabilityListV2 = z.infer<typeof fiscalCapabilityListV2Schema>
 export type FiscalManualOriginRequest = z.infer<typeof fiscalManualOriginRequestSchema>
 export type FiscalDocumentCreateRequest = z.infer<typeof fiscalDocumentCreateRequestSchema>
 export type FiscalDocument = z.infer<typeof fiscalDocumentSchema>

@@ -17,6 +17,7 @@ let cancellationInput: unknown
 let cancellationQueryInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
 let activeCapability = false
+let activeHomologationCapability = false
 const server = createFiscalServer({
   verifier: {
     async verify(authorization) {
@@ -166,6 +167,26 @@ const server = createFiscalServer({
   },
   capabilities: {
     async listActive() {
+      if (activeHomologationCapability)
+        return [
+          {
+            id: randomUUID(),
+            tenantId,
+            model: '55',
+            environment: 'homologation',
+            establishmentId,
+            jurisdictionKind: 'uf',
+            jurisdictionCode: 'SP',
+            operation: 'normal-sale',
+            adapterVersion: 'nfe55-sp-homologation-v1',
+            sourceManifestDigest: 'a'.repeat(64),
+            schemaPackageDigest: 'b'.repeat(64),
+            calculationFixtureId: 'rtc-v0057-model55-normal-sale-sp-2026-01',
+            status: 'homologated',
+            activatedAt: '2026-09-23T15:00:00.000Z',
+            evidenceDigest: 'c'.repeat(64),
+          },
+        ]
       return activeCapability
         ? [
             {
@@ -380,6 +401,24 @@ it('requires a token and reports every capability unsupported', async () => {
   })
   expect(response.status).toBe(200)
   expect(await response.json()).toMatchObject({ defaultStatus: 'unsupported', supported: [] })
+})
+
+it('exposes reviewed homologation only through the version 2 read route', async () => {
+  const headers = { authorization: 'Bearer test' }
+  activeHomologationCapability = true
+  try {
+    const legacy = await fetch(`${base}/capabilities`, { headers })
+    expect(await legacy.json()).toMatchObject({ defaultStatus: 'unsupported', supported: [] })
+    const response = await fetch(`${base}/capabilities/v2`, { headers })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('private, no-store')
+    expect(await response.json()).toMatchObject({
+      defaultStatus: 'unsupported',
+      supported: [{ environment: 'homologation', status: 'homologated', fiscalValue: false }],
+    })
+  } finally {
+    activeHomologationCapability = false
+  }
 })
 
 it('restricts transmission and returns only tenant-scoped document reads', async () => {

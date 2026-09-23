@@ -10,7 +10,9 @@ import {
   fiscalCalculationOutcomeSchema,
   fiscalCancellationRequestSchema,
   fiscalCapabilityListSchema,
+  fiscalCapabilityListV2Schema,
   fiscalCapabilitySchema,
+  fiscalCapabilityV2Schema,
   fiscalCommandAcceptedSchema,
   fiscalCorrectionRequestSchema,
   fiscalDocumentCreateRequestSchema,
@@ -106,6 +108,18 @@ const staticEntries: readonly RegistryEntry[] = [
     kind: 'http',
     description: 'Enabled Fiscal capabilities with unsupported as the default.',
     schema: fiscalCapabilityListSchema,
+  },
+  {
+    id: 'http:fiscal-capability-v2',
+    kind: 'http',
+    description: 'One enabled model-55 simulation or homologation capability without fiscal value.',
+    schema: fiscalCapabilityV2Schema,
+  },
+  {
+    id: 'http:fiscal-capability-list-v2',
+    kind: 'http',
+    description: 'Environment-aware enabled Fiscal capabilities with unsupported as the default.',
+    schema: fiscalCapabilityListV2Schema,
   },
   {
     id: 'http:fiscal-manual-origin-request-v1',

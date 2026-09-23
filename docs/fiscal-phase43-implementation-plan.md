@@ -6,6 +6,9 @@ endpoints before implementation. This is the
 execution plan for [Phase 43](fiscal-implementation-plan.md#43--one-nf-e-sefaz-homologation-path).
 The [candidate source manifest](fiscal-phase43-source-manifest.json) records exact
 retained hashes and the decisions still pending independent review.
+`GET /fiscal/capabilities/v2` exposes activated simulation and homologation rows with
+`fiscalValue: false`; the version 1 route and schema remain simulation-only. Neither
+read route grants document creation or transmission.
 Phase 42 completed one local model-55 simulation tuple. Phase 43 proves a separate,
 real NF-e 4.00 homologation path against the official authorizer and prepares the
 operational dispatch gate. It does not activate production transmission.

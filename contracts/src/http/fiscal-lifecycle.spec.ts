@@ -5,6 +5,7 @@ import {
   fiscalArtifactMetadataSchema,
   fiscalCancellationRequestSchema,
   fiscalCapabilityListSchema,
+  fiscalCapabilityListV2Schema,
   fiscalDocumentCreateRequestSchema,
   fiscalDocumentSchema,
   fiscalManualOriginRequestSchema,
@@ -40,6 +41,46 @@ describe('Fiscal lifecycle HTTP contracts', () => {
       fiscalCapabilityListSchema.safeParse({
         ...value,
         supported: [{ ...value.supported[0], environment: 'production' }],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('adds homologation only in the version 2 capability read model', () => {
+    const capability = {
+      id: randomUUID(),
+      model: '55',
+      environment: 'homologation',
+      establishmentId,
+      jurisdiction: { kind: 'uf', code: 'SP' },
+      operation: 'normal-sale',
+      adapterVersion: 'nfe55-sp-homologation-v1',
+      status: 'homologated',
+      sourceManifestDigest: digest,
+      schemaPackageDigest: 'b'.repeat(64),
+      calculationFixtureId: 'rtc-v0057-model55-normal-sale-sp-2026-01',
+      evidenceDigest: 'c'.repeat(64),
+      activatedAt: '2026-09-23T15:00:00.000Z',
+      fiscalValue: false,
+    } as const
+    expect(
+      fiscalCapabilityListV2Schema.parse({ defaultStatus: 'unsupported', supported: [capability] }),
+    ).toEqual({ defaultStatus: 'unsupported', supported: [capability] })
+    expect(
+      fiscalCapabilityListSchema.safeParse({
+        defaultStatus: 'unsupported',
+        supported: [capability],
+      }).success,
+    ).toBe(false)
+    expect(
+      fiscalCapabilityListV2Schema.safeParse({
+        defaultStatus: 'unsupported',
+        supported: [{ ...capability, status: 'simulated' }],
+      }).success,
+    ).toBe(false)
+    expect(
+      fiscalCapabilityListV2Schema.safeParse({
+        defaultStatus: 'unsupported',
+        supported: [{ ...capability, environment: 'production' }],
       }).success,
     ).toBe(false)
   })

@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import {
+  fiscalCapabilityListV2Schema,
   fiscalCorrectionRequestSchema,
   fiscalDocumentCreateRequestSchema,
   fiscalManualOriginRequestSchema,
@@ -115,6 +116,40 @@ async function handle(
       defaultStatus: 'unsupported',
       supported,
     })
+    return
+  }
+
+  if (request.method === 'GET' && url.pathname === '/capabilities/v2') {
+    const supported = (await dependencies.capabilities.listActive(principal.tenantId))
+      .filter(
+        (capability) =>
+          capability.model === '55' &&
+          capability.jurisdictionKind === 'uf' &&
+          capability.operation === 'normal-sale' &&
+          (capability.environment === 'simulation' || capability.environment === 'homologation'),
+      )
+      .map((capability) => ({
+        id: capability.id,
+        model: '55' as const,
+        environment: capability.environment,
+        establishmentId: capability.establishmentId,
+        jurisdiction: { kind: 'uf' as const, code: capability.jurisdictionCode },
+        operation: 'normal-sale' as const,
+        adapterVersion: capability.adapterVersion,
+        status: capability.status,
+        sourceManifestDigest: capability.sourceManifestDigest,
+        schemaPackageDigest: capability.schemaPackageDigest,
+        calculationFixtureId: capability.calculationFixtureId,
+        evidenceDigest: capability.evidenceDigest,
+        activatedAt: capability.activatedAt,
+        fiscalValue: false as const,
+      }))
+    response.setHeader('cache-control', 'private, no-store')
+    json(
+      response,
+      200,
+      fiscalCapabilityListV2Schema.parse({ defaultStatus: 'unsupported', supported }),
+    )
     return
   }
 
