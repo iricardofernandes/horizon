@@ -375,10 +375,14 @@ The exact HTTP send path now has a local mutual-TLS test for a successful SOAP
 exchange, untrusted server, redirect, oversized response, HTTP 503, connection
 reset and timeout. Live SEFAZ server-chain and credential evidence is still required.
 The [ITI root repository](https://www.gov.br/iti/pt-br/assuntos/repositorio/repositorio-ac-raiz)
-lists the v10 SSL root; the exact root bytes and current SEFAZ server chain need
-independent review. On 2026-09-23, direct WSDL retrieval without a configured root
-failed chain validation, and an untrusted diagnostic request received HTTP 403.
-No WSDL has been approved or pinned from that attempt.
+lists the v10 SSL root. On 2026-09-23, its downloaded certificate fingerprint
+matched the [Microsoft trusted CA inclusion report](https://ccadb.my.salesforce-sites.com/microsoft/IncludedCACertificateReportForMSFT).
+The [official SP NF-e service list](https://portal.fazenda.sp.gov.br/servicos/nfe/Paginas/URL-WEBSERVICES.aspx)
+confirmed the five candidate URLs in the manifest. The state page's HTML changed
+between two retrievals, so its digest is not treated as a stable source pin.
+With the candidate root, TLS validation succeeded, but the authorization WSDL GET
+returned HTTP 403. The root bytes, current SEFAZ chain and operations still need
+independent review with issuer access. No WSDL was approved or pinned.
 
 `GET /fiscal/documents/:id/v2` and
 `GET /fiscal/documents/:id/artifacts/v2` now carry the environment and

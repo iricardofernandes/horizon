@@ -59,9 +59,25 @@
   ],
   "homologationServices": {
     "sourceUrl": "https://hom.nfe.fazenda.gov.br/portal/webServices.aspx?tipoConteudo=VjrjMInPXGA%3D",
+    "stateSourceUrl": "https://portal.fazenda.sp.gov.br/servicos/nfe/Paginas/URL-WEBSERVICES.aspx",
+    "stateSourceRetrievedAt": "2026-09-23",
     "jurisdiction": "SP",
+    "candidateEndpoints": {
+      "authorization": "https://homologacao.nfe.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx",
+      "receipt": "https://homologacao.nfe.fazenda.sp.gov.br/ws/nferetautorizacao4.asmx",
+      "protocol": "https://homologacao.nfe.fazenda.sp.gov.br/ws/nfeconsultaprotocolo4.asmx",
+      "status": "https://homologacao.nfe.fazenda.sp.gov.br/ws/nfestatusservico4.asmx",
+      "event": "https://homologacao.nfe.fazenda.sp.gov.br/ws/nferecepcaoevento4.asmx"
+    },
     "wsdlReviewed": false,
-    "wsdlRetrieval": "2026-09-23: TLS chain validation failed without a reviewed ICP-Brasil root; an untrusted diagnostic GET returned HTTP 403. No WSDL bytes retained or approved.",
+    "wsdlRetrieval": "2026-09-23: with the candidate ICP-Brasil v10 root, TLS validation succeeded but the authorization WSDL GET returned HTTP 403. No WSDL bytes retained or approved; issuer certificate access may be required.",
+    "candidateTlsTrustAnchor": {
+      "sourceUrl": "https://acraiz.icpbrasil.gov.br/credenciadas/RAIZ/ICP-Brasilv10.crt",
+      "pemSha256": "3b3ef39649ba13e10a99bc042cfc112723d8e0503326174f15ab89941a0f33e0",
+      "certificateFingerprint": "6e0bff069a26994c15de2c4888cc54af84882e5495b7fbf66be9ccffec7489f6",
+      "retrievedAt": "2026-09-23",
+      "verification": "Downloaded from the ITI-linked host with TLS verification disabled to bootstrap the self-signed root; DER fingerprint independently matched the Microsoft trusted CA inclusion report. Candidate only, pending reviewer approval."
+    },
     "tlsTrustAnchorFingerprint": null,
     "endpointSetDigest": null
   },
