@@ -35,7 +35,18 @@ export class SefazResponseSchemaValidator {
   constructor(
     private readonly documentSource: SefazResponseSchemaSource,
     private readonly consultationSource: SefazResponseSchemaSource,
-  ) {}
+  ) {
+    verifySource(documentSource, ['authorization', 'status'])
+    verifySource(consultationSource, ['receipt', 'protocol', 'event'])
+  }
+
+  get documentDigest(): string {
+    return this.documentSource.digest
+  }
+
+  get consultationDigest(): string {
+    return this.consultationSource.digest
+  }
 
   async validate(service: SefazService, payload: Buffer): Promise<void> {
     await validateSefazResponseSchema({
@@ -46,6 +57,21 @@ export class SefazResponseSchemaValidator {
           ? this.documentSource
           : this.consultationSource,
     })
+  }
+}
+
+function verifySource(source: SefazResponseSchemaSource, services: SefazService[]): void {
+  if (source.archive.length === 0 || source.archive.length > 2_000_000)
+    throw new Error('SEFAZ response schema package size is outside the supported bound')
+  if (!/^[0-9a-f]{64}$/.test(source.digest))
+    throw new Error('SEFAZ response schema digest is invalid')
+  if (createHash('sha256').update(source.archive).digest('hex') !== source.digest)
+    throw new Error('SEFAZ response schema package digest mismatch')
+  const archive = unzipSync(source.archive)
+  for (const service of services) {
+    const selected = packageByService[service]
+    if (!archive[`${selected.root}${selected.schema}`])
+      throw new Error(`SEFAZ response schema package is missing ${selected.root}${selected.schema}`)
   }
 }
 

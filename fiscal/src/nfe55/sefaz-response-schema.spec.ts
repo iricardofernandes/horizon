@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { beforeAll, expect, it } from 'vitest'
 import {
   type SefazResponseSchemaSource,
+  SefazResponseSchemaValidator,
   validateSefazResponseSchema,
 } from './sefaz-response-schema'
 import type { SefazService } from './sefaz-transport'
@@ -86,6 +87,13 @@ for (const { service, xml } of cases) {
 }
 
 it('refuses a substituted official archive', async () => {
+  expect(
+    () =>
+      new SefazResponseSchemaValidator(
+        { archive: documentSource.archive, digest: '0'.repeat(64) },
+        consultationSource,
+      ),
+  ).toThrow('digest mismatch')
   await expect(
     validateSefazResponseSchema({
       service: 'status',

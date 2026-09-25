@@ -1,14 +1,18 @@
 # Phase 43 — NF-e model 55 homologation for one issuer and UF
 
 Status: **in progress; local implementation is partial, and no homologation credential
-or approved issuer tuple is recorded**. Progress reviewed on 2026-09-23 from the
-repository and working tree. The adapter-version binding described below passed
-typechecking and its focused integration case.
-Official portal reconnaissance was checked on 2026-09-23; recheck versions and
-endpoints before live use. This is the
+or approved issuer tuple is recorded**. Progress reviewed on 2026-09-25 from the
+repository and working tree. The adapter-version and response-schema bindings
+described below passed typechecking and Fiscal integration tests.
+The SEFAZ-SP official service list was rechecked on 2026-09-25 and still lists
+the candidate five version-4.00 homologation endpoints. The schema inventory,
+WSDL and effective rules still need review before live use. This is the
 execution plan for [Phase 43](fiscal-implementation-plan.md#43--one-nf-e-sefaz-homologation-path).
 The [candidate source manifest](fiscal-phase43-source-manifest.json) records exact
 retained hashes and the decisions still pending independent review.
+`make verify-phase43-sources` checks the six retained candidate files and the
+consumed response XSD entries against that manifest. It does not approve their
+interpretation or replace the issuer-specific WSDL and certificate review.
 The [phase 43 runbook](fiscal-phase43-runbook.md) records the command order,
 uncertain-outcome recovery, rollback and restore procedure.
 `GET /fiscal/capabilities/v2` exposes activated simulation and homologation rows with
@@ -18,15 +22,15 @@ Phase 42 completed one local model-55 simulation tuple. Phase 43 proves a separa
 real NF-e 4.00 homologation path against the official authorizer and prepares the
 operational dispatch gate. It does not activate production transmission.
 
-## Progress snapshot (2026-09-23)
+## Progress snapshot (2026-09-25)
 
 | Step | Repository state | Remaining exit evidence |
 |---|---|---|
 | 43.1 Tuple and source freeze | Candidate SP endpoints, source hashes, response XSDs and TLS root are recorded in the manifest. | Select a credentialed issuer and certificate; independently approve the current rules, event schema, WSDL/operations, endpoint set, calculation package and exact tuple. The authorization WSDL request returned HTTP 403, so no WSDL is approved. |
 | 43.2 Capability and contracts | Separate homologation capability review and activation records, a live-exchange evidence gate, and environment-labelled v2 reads/artifacts are implemented. | Register and review an actual tuple and linked live evidence; activate only after the phase exit gates pass. |
 | 43.3 Credential and endpoint boundary | Mounted signing credential checks, issuer-CNPJ binding, a fingerprint-pinned candidate TLS root, five-SP-endpoint allowlist and local mutual-TLS transport coverage are implemented. | Review the real issuer credential, certificate chain/revocation, SEFAZ access and WSDL with the owner. |
-| 43.4 SOAP adapter | Authorization, receipt/protocol consultation, status and cancellation preparation/parsing, response XSD validation and offline coverage are implemented. Its local version is `nfe55-sp-homologation-v1`. | Approve the exact source/schema/operation combination and exercise it with the reviewed issuer facts. |
-| 43.5 Durable authority orchestration | Internal drill grant, immutable number/authorization binding, exchange ledger, one-send marker, bounded consultation, reparse, restore-byte verifier and operator CLIs are implemented. Preparation, send, resume, raw-response reparse and cancellation now compare the running adapter version with the persisted exchange or capability version. | Complete integration with reviewed live inputs and the official authority. The exchange ledger is not connected to the normal Fiscal issue worker. |
+| 43.4 SOAP adapter | Authorization, receipt/protocol consultation, status and cancellation preparation/parsing, response XSD validation and offline coverage are implemented. Its local version is `nfe55-sp-homologation-v1`. Response XSD archive digests are now tied to an immutable capability review and checked before send or reparse. | Approve the exact source/schema/operation combination and exercise it with the reviewed issuer facts. |
+| 43.5 Durable authority orchestration | Internal drill grant, immutable number/authorization binding, exchange ledger, one-send marker, bounded consultation, reparse, restore-byte verifier and operator CLIs are implemented. The normal Fiscal worker can now route prepared exchanges for an active homologated capability with mounted Phase 43 configuration; pre-activation drill exchanges are excluded. Preparation, send, resume, raw-response reparse and cancellation compare the running adapter version with the persisted exchange or capability version. | Complete integration with reviewed live inputs and the official authority. |
 | 43.6 Sales pre-dispatch gate | Scoped shipments freeze an origin at packing; the release projection and database guard reject dispatch without an exact production authorization. | Verify the selected tenant's full flow with a real reviewed tuple; the phase 43 Sales production-outcome subscription stays disabled. |
 | 43.7 Homologation run | Runbook and an empty evidence form are present. | Execute and reconcile authorization, rejection, outage/unknown, consultation and cancellation against SEFAZ with operator and independent reviewer signoff. No live result is recorded. |
 | 43.8 Rollout and recovery | Runbook, observation, deactivation, reparse and restore-verification commands are present. | Demonstrate an actual database/object restore, pending-exchange recovery, capability deactivation, scoped isolation and final support evidence. |
@@ -393,6 +397,11 @@ digests with its actual transport and adapter before persisting or sending a req
 the transport computes its endpoint digest from the five validated SP URLs.
 The transport now requires a separate, fingerprint-pinned ICP-Brasil TLS root
 certificate from a mounted path and keeps peer and hostname verification enabled.
+The two response XSD archives also require retained bytes and package reviews by
+the capability reviewer. Register their exact ZIP digests with
+`npm run phase43:response-schema-approval -- --file <json>` before any exchange.
+The exchange runner and raw-response reparse compare the mounted archive digests
+with that approval before interpreting a response or starting a transmission.
 It now bounds concurrent sends per service and opens a short local circuit after
 repeated transport failures; neither case retries a submission automatically.
 The exact HTTP send path now has a local mutual-TLS test for a successful SOAP

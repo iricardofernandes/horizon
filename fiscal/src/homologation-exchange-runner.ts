@@ -22,7 +22,12 @@ export class HomologationExchangeRunner {
   constructor(
     private readonly ledger: Pick<
       HomologationExchangeLedger,
-      'prepare' | 'markStarted' | 'recordRawResponse' | 'recordParsedResponse' | 'loadPrepared'
+      | 'prepare'
+      | 'markStarted'
+      | 'recordRawResponse'
+      | 'recordParsedResponse'
+      | 'loadPrepared'
+      | 'assertResponseSchemas'
     >,
     private readonly transport: {
       endpointSetDigest: string
@@ -33,7 +38,10 @@ export class HomologationExchangeRunner {
       SefazNfe55HomologationAdapter,
       'parseResponse' | 'wsdlDigest' | 'adapterVersion'
     >,
-    private readonly responseSchemas: Pick<SefazResponseSchemaValidator, 'validate'>,
+    private readonly responseSchemas: Pick<
+      SefazResponseSchemaValidator,
+      'validate' | 'documentDigest' | 'consultationDigest'
+    >,
   ) {}
 
   /** Starts only a prepared exchange or parses already stored response bytes. */
@@ -54,6 +62,12 @@ export class HomologationExchangeRunner {
       loaded.input.adapterVersion !== this.parser.adapterVersion
     )
       throw new Error('SEFAZ runtime binding differs from the approved drill grant')
+    await this.ledger.assertResponseSchemas(
+      loaded.input.tenantId,
+      loaded.input.drillGrantId,
+      this.responseSchemas.documentDigest,
+      this.responseSchemas.consultationDigest,
+    )
     if (loaded.stage === 'observed')
       throw new Error('SEFAZ exchange already has an observed response')
     if (loaded.stage === 'send_started') throw new UncertainSefazOutcomeError()
@@ -84,6 +98,12 @@ export class HomologationExchangeRunner {
     )
       throw new Error('SEFAZ runtime binding differs from the approved drill grant')
     const { workerId, ...evidence } = input
+    await this.ledger.assertResponseSchemas(
+      input.tenantId,
+      input.drillGrantId,
+      this.responseSchemas.documentDigest,
+      this.responseSchemas.consultationDigest,
+    )
     await this.ledger.prepare(evidence, prepared)
     if (!(await this.ledger.markStarted(input.tenantId, input.exchangeId, workerId)))
       throw new UncertainSefazOutcomeError()

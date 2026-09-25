@@ -25,6 +25,7 @@ import {
   HomologationExchangeRunner,
   UncertainSefazOutcomeError,
 } from '../src/homologation-exchange-runner'
+import { HomologationExchangeWorker } from '../src/homologation-exchange-worker'
 import { HomologationIssuance } from '../src/homologation-issuance'
 import { HomologationObservations } from '../src/homologation-observations'
 import { HomologationRawRecovery } from '../src/homologation-raw-recovery'
@@ -680,6 +681,66 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     expect(
       await capabilities.getHomologationEventSchemaDigest(randomUUID(), capability.id),
     ).toBeNull()
+    const responseSchemaApproval = {
+      tenantId,
+      capabilityId: capability.id,
+      sourceManifestDigest: 'd'.repeat(64),
+      documentSchemaDigest: responseSchemas.documentDigest,
+      consultationSchemaDigest: responseSchemas.consultationDigest,
+      reviewedBy: 'reviewer:phase43',
+    }
+    await expect(
+      capabilities.approveHomologationResponseSchemas(responseSchemaApproval),
+    ).rejects.toThrow('retained bytes do not match digest')
+    const documentResponseBytes = await readFile(
+      new URL('../fixtures/official/pl-009p-v1.03.zip', import.meta.url),
+    )
+    const documentResponsePackageId = randomUUID()
+    await administrator`insert into fiscal_source_packages (
+      id, tenant_id, authority, source_uri, package_digest, published_at, effective_from
+    ) values (
+      ${documentResponsePackageId}, ${tenantId}, 'offline-response-schema-fixture',
+      'https://example.invalid/phase43-response-schema',
+      ${responseSchemaApproval.documentSchemaDigest}, '2026-09-23', '2026-09-23'
+    )`
+    await administrator`insert into fiscal_source_payloads (
+      tenant_id, package_id, source_bytes, byte_size, imported_by
+    ) values (
+      ${tenantId}, ${documentResponsePackageId}, ${documentResponseBytes},
+      ${documentResponseBytes.length}, 'author:phase43'
+    )`
+    await administrator`insert into fiscal_package_reviews (
+      id, tenant_id, package_id, approved, reviewed_by, reviewed_at,
+      interpretation, fixture_ids
+    ) values (
+      ${randomUUID()}, ${tenantId}, ${documentResponsePackageId}, true,
+      'reviewer:phase43', now(), 'Offline response package review fixture',
+      ${['reviewed-sp-v1']}
+    )`
+    await expect(
+      capabilities.approveHomologationResponseSchemas({
+        ...responseSchemaApproval,
+        reviewedBy: 'author:phase43',
+      }),
+    ).rejects.toThrow('differ from reviewed capability')
+    await expect(
+      capabilities.approveHomologationResponseSchemas({
+        ...responseSchemaApproval,
+        sourceManifestDigest: '5'.repeat(64),
+      }),
+    ).rejects.toThrow('differ from reviewed capability')
+    expect(await capabilities.approveHomologationResponseSchemas(responseSchemaApproval)).toEqual({
+      existing: false,
+    })
+    expect(await capabilities.approveHomologationResponseSchemas(responseSchemaApproval)).toEqual({
+      existing: true,
+    })
+    await expect(
+      capabilities.approveHomologationResponseSchemas({
+        ...responseSchemaApproval,
+        documentSchemaDigest: '5'.repeat(64),
+      }),
+    ).rejects.toThrow('retained bytes do not match digest')
     const packageId = randomUUID()
     const packageBytes = Buffer.from('{"fixture":"reviewed-sp-v1"}')
     const packageDigest = createHash('sha256').update(packageBytes).digest('hex')
@@ -799,6 +860,20 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     }
     await ledger.grantDrill(grantInput)
     await ledger.grantDrill(grantInput)
+    await ledger.assertResponseSchemas(
+      tenantId,
+      grantId,
+      responseSchemas.documentDigest,
+      responseSchemas.consultationDigest,
+    )
+    await expect(
+      ledger.assertResponseSchemas(
+        tenantId,
+        grantId,
+        '5'.repeat(64),
+        responseSchemas.consultationDigest,
+      ),
+    ).rejects.toThrow('differ from reviewed homologation capability')
     expect(await ledger.drillContext(tenantId, documentId, grantId)).toMatchObject({
       drillGrantId: grantId,
       endpointDigest: grantInput.endpointDigest,
@@ -984,6 +1059,13 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       (await ledger.loadPrepared(tenantId, exchangeId, operations, 'tester:resume')).stage,
     ).toBe('raw_unparsed')
     await expect(
+      new HomologationRawRecovery(ledger, adapter, {
+        validate: responseSchemas.validate.bind(responseSchemas),
+        documentDigest: responseSchemas.documentDigest,
+        consultationDigest: '5'.repeat(64),
+      }).reparse(tenantId, exchangeId, 'tester:resume', operations),
+    ).rejects.toThrow('response schemas differ')
+    await expect(
       new HomologationRawRecovery(
         ledger,
         {
@@ -1038,6 +1120,26 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       responseSchemas,
     )
     const runInput = { ...input, exchangeId: randomUUID(), workerId: 'worker-a' }
+    await expect(
+      new HomologationExchangeRunner(
+        ledger,
+        {
+          endpointSetDigest: input.endpointDigest,
+          certificateFingerprint: input.certificateFingerprint,
+          async send() {
+            sends += 1
+            return soap
+          },
+        },
+        adapter,
+        {
+          validate: responseSchemas.validate.bind(responseSchemas),
+          documentDigest: '5'.repeat(64),
+          consultationDigest: responseSchemas.consultationDigest,
+        },
+      ).execute(runInput, prepared),
+    ).rejects.toThrow('response schemas differ')
+    expect(sends).toBe(0)
     await expect(
       runner.execute({ ...runInput, endpointDigest: 'd'.repeat(64) }, prepared),
     ).rejects.toThrow('runtime binding differs')
@@ -1655,6 +1757,9 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     expect(await capabilities.recordHomologationEvidence(liveShapeEvidence)).toMatchObject({
       existing: true,
     })
+    const preactivationExchangeId = randomUUID()
+    await ledger.prepare({ ...input, exchangeId: preactivationExchangeId }, prepared)
+    expect(await ledger.nextPreparedForActive(tenantId)).toBeNull()
     await capabilities.change({
       tenantId,
       capabilityId: capability.id,
@@ -1667,6 +1772,35 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     expect(await capabilities.listActive(tenantId)).toEqual([
       expect.objectContaining({ id: capability.id, status: 'homologated' }),
     ])
+    expect(await ledger.nextPreparedForActive(tenantId)).toBeNull()
+    const queuedAfterReviewId = randomUUID()
+    await ledger.prepare({ ...input, exchangeId: queuedAfterReviewId }, prepared)
+    expect(await ledger.nextPreparedForActive(tenantId)).toBe(queuedAfterReviewId)
+    const activeWorker = new HomologationExchangeWorker(ledger, runner, operations)
+    expect(await activeWorker.processOne(randomUUID(), 'worker-a')).toBe(false)
+    expect(await activeWorker.processOne(tenantId, 'worker-a')).toBe(true)
+    expect(await ledger.nextPreparedForActive(tenantId)).toBeNull()
+    expect(await activeWorker.processOne(tenantId, 'worker-a')).toBe(false)
+    expect(
+      (await ledger.loadPrepared(tenantId, queuedAfterReviewId, operations, 'tester:phase43'))
+        .stage,
+    ).toBe('observed')
+    const stoppedExchangeId = randomUUID()
+    await ledger.prepare({ ...input, exchangeId: stoppedExchangeId }, prepared)
+    await capabilities.change({
+      tenantId,
+      capabilityId: capability.id,
+      action: 'deactivate',
+      evidenceDigest: liveShapeEvidence.roundTripDigest,
+      actorId: 'release:phase43',
+      reason: 'Offline worker deactivation fixture',
+      occurredAt: new Date(Date.now() + 1_000).toISOString(),
+    })
+    expect(await ledger.nextPreparedForActive(tenantId)).toBeNull()
+    expect(await activeWorker.processOne(tenantId, 'worker-a')).toBe(false)
+    await expect(ledger.markStarted(tenantId, stoppedExchangeId, 'worker-a')).rejects.toThrow(
+      'deactivated before transmission',
+    )
     const [documentAfterObservation] = await administrator`select status, environment
       from fiscal_documents where tenant_id = ${tenantId} and id = ${documentId}`
     expect(documentAfterObservation).toMatchObject({ status: 'ready', environment: 'homologation' })

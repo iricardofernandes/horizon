@@ -19,6 +19,7 @@ import { FiscalIssueWorker } from './issue-worker'
 import { FiscalManualOrigins } from './manual-origins'
 import { DeterministicNfe55Simulator } from './nfe55/simulator'
 import { FiscalOutboxRelay } from './outbox'
+import { loadPhase43WorkerRuntime } from './phase43-worker-runtime'
 import { FiscalProjections } from './projections'
 import { FiscalReadiness } from './readiness'
 import { FiscalRuleStore } from './rule-store'
@@ -60,6 +61,7 @@ const config = z
         .optional(),
     ),
     FISCAL_SIMULATOR_RETRY_DELAY_MS: z.coerce.number().int().min(0).max(300_000).default(1_000),
+    FISCAL_PHASE43_WORKER_CONFIG_PATH: optionalSetting(z.string().min(1)),
   })
   .parse(process.env)
 
@@ -175,6 +177,7 @@ const issueWorker = new FiscalIssueWorker(
   config.FISCAL_SIMULATOR_RETRY_DELAY_MS,
 )
 const outbox = new FiscalOutboxRelay(config.DATABASE_URL, config.RABBITMQ_URL)
+let phase43Runtime: Awaited<ReturnType<typeof loadPhase43WorkerRuntime>> | null = null
 let issueWorkerBusy = false
 const issueWorkerTimer = setInterval(() => {
   if (issueWorkerBusy) return
@@ -182,6 +185,7 @@ const issueWorkerTimer = setInterval(() => {
   void Promise.all(
     Object.keys(keys).map(async (tenantId) => {
       await issueWorker.processOne(tenantId, 'fiscal:issue-worker')
+      await phase43Runtime?.worker.processOne(tenantId, 'fiscal:phase43-worker')
       await outbox.flush(tenantId)
     }),
   )
@@ -220,6 +224,7 @@ async function stop(): Promise<void> {
     outbox.close(),
     ruleStore.close(),
     denylist.close(),
+    phase43Runtime?.close(),
   ])
   s3.destroy()
   await stopTelemetry()
@@ -231,6 +236,12 @@ process.once('SIGINT', () => void stop().then(() => process.exit(0)))
 void consumer
   .start()
   .then(async () => {
+    if (config.FISCAL_PHASE43_WORKER_CONFIG_PATH)
+      phase43Runtime = await loadPhase43WorkerRuntime(
+        config.DATABASE_URL,
+        artifacts,
+        config.FISCAL_PHASE43_WORKER_CONFIG_PATH,
+      )
     await new Promise<void>((resolve) => server.listen(config.PORT, '0.0.0.0', resolve))
   })
   .catch(async (error: unknown) => {
@@ -251,6 +262,7 @@ void consumer
       outbox.close(),
       ruleStore.close(),
       denylist.close(),
+      phase43Runtime?.close(),
     ])
     s3.destroy()
     await stopTelemetry()

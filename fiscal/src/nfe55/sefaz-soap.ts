@@ -274,27 +274,37 @@ export function parseSefazSoapResponse(input: {
   const eventStatusCode = eventInfo ? value(eventInfo, 'cStat') : null
   if (eventStatusCode && !/^\d{3}$/.test(eventStatusCode))
     throw new Error('SEFAZ event response has an invalid status code')
-  const accessKey =
-    (protocolInfo && value(protocolInfo, 'chNFe')) ||
-    (eventInfo && value(eventInfo, 'chNFe')) ||
-    value(payload, 'chNFe')
+  const rootAccessKey = value(payload, 'chNFe')
+  const nestedAccessKey = protocolInfo
+    ? required(protocolInfo, 'chNFe')
+    : eventInfo
+      ? required(eventInfo, 'chNFe')
+      : null
+  if (rootAccessKey && nestedAccessKey && rootAccessKey !== nestedAccessKey)
+    throw new Error('SEFAZ response access key differs from its protocol')
+  const accessKey = nestedAccessKey ?? rootAccessKey
   if (accessKey && !accessKeySchema.safeParse(accessKey).success)
     throw new Error('SEFAZ response has an invalid access key')
+  if (accessKey && !isValidNfeAccessKey(accessKey))
+    throw new Error('SEFAZ response has an invalid access key check digit')
   if (input.expectedAccessKey && accessKey && accessKey !== input.expectedAccessKey)
     throw new Error('SEFAZ response access key differs from the request')
   if (input.service === 'protocol' && accessKey !== input.expectedAccessKey)
     throw new Error('SEFAZ protocol consultation access key is missing or differs')
+  const protocolNumber = protocolInfo
+    ? value(protocolInfo, 'nProt')
+    : eventInfo
+      ? value(eventInfo, 'nProt')
+      : null
+  if (protocolNumber && !receiptSchema.safeParse(protocolNumber).success)
+    throw new Error('SEFAZ response has an invalid protocol number')
   return {
     service: input.service,
     statusCode,
     reason,
     receipt,
     accessKey,
-    protocolNumber: protocolInfo
-      ? value(protocolInfo, 'nProt')
-      : eventInfo
-        ? value(eventInfo, 'nProt')
-        : null,
+    protocolNumber,
     documentStatusCode,
     eventStatusCode,
     response: Buffer.from(input.soap),

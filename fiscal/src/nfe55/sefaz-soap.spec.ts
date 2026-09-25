@@ -75,6 +75,37 @@ it('extracts only the correlated SP homologation protocol', () => {
       expectedAccessKey: '0'.repeat(44),
     }),
   ).toThrow('access key differs')
+  const badCheckDigit = `${key.slice(0, -1)}${key.endsWith('0') ? '1' : '0'}`
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'authorization',
+      soap: soap(payload.replace(key, badCheckDigit)),
+      expectedAccessKey: key,
+    }),
+  ).toThrow('invalid access key check digit')
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'authorization',
+      soap: soap(payload.replace('<nProt>123456789012345</nProt>', '<nProt>invalid</nProt>')),
+      expectedAccessKey: key,
+    }),
+  ).toThrow('invalid protocol number')
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'authorization',
+      soap: soap(payload.replace(`<chNFe>${key}</chNFe>`, '')),
+      expectedAccessKey: key,
+    }),
+  ).toThrow('missing chNFe')
+  expect(() =>
+    parseSefazSoapResponse({
+      service: 'authorization',
+      soap: soap(
+        payload.replace('<cStat>104</cStat>', `<chNFe>${'0'.repeat(44)}</chNFe><cStat>104</cStat>`),
+      ),
+      expectedAccessKey: key,
+    }),
+  ).toThrow('access key differs from its protocol')
 })
 
 it('reports a SOAP fault without turning it into a fiscal outcome', () => {

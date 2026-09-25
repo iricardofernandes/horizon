@@ -18,11 +18,18 @@ de produção nem libera estoque ou financeiro.
    homologação, WSDL, operações SOAP e raiz TLS. Registrar seus digests revisados.
 2. Reter e revisar os bytes dos pacotes de regras e dos XSDs. Definir capability
    separada da simulação, com `sourceManifestDigest`, `schemaPackageDigest` e fixture.
+   Executar `make verify-phase43-sources` para conferir os seis candidatos retidos
+   e os XSDs de resposta antes da revisão independente.
 3. Registrar a capability e sua revisão pelo comando `phase42:capability` com ações
    `register` e `review`. Registrar faixa, pacotes de cálculo, perfil de emissão e
    XSD de evento pelos comandos `phase43:number-range`,
    `phase43:calculation-approval`, `phase43:issuance-profile` e
-   `phase43:event-schema-approval`. Não ativar a capability ainda.
+   `phase43:event-schema-approval`. Reter e revisar também os dois arquivos ZIP
+   de XSD de resposta e registrar `phase43:response-schema-approval -- --file <json>`.
+   O JSON exige `tenantId`, `capabilityId`, `sourceManifestDigest`,
+   `documentSchemaDigest`, `consultationSchemaDigest` e `reviewedBy`.
+   Os digests devem corresponder aos ZIPs passados aos comandos de envio e reparse.
+   Não ativar a capability ainda.
 4. Conferir que `DATABASE_URL`, `FISCAL_ARTIFACT_KEY_HEX`,
    `FISCAL_ARTIFACT_BUCKET` e `FISCAL_ARTIFACT_REGION` apontam ao mesmo ambiente
    isolado. `FISCAL_ARTIFACT_ENDPOINT` é opcional. Montar chave privada e certificado
@@ -103,3 +110,36 @@ restauração terem evidências reais revisadas, registrar a evidência vinculad
 `phase43:activation -- --action evidence --file <json>` e ativar com
 `--action activate`. O banco exige os IDs relacionados de autorização, consulta
 autorizada e cancelamento. A publicação em produção permanece desabilitada.
+
+## Worker após ativação
+
+O worker normal de Fiscal só processa trocas preparadas **depois** da ativação
+`homologated` da capability. Trocas de ensaio preparadas antes dela continuam sob
+o comando explícito do operador. A desativação impede novas seleções; marcadores
+de envio já gravados continuam incertos até consulta ou reconciliação. O banco
+também bloqueia novos marcadores de autorização, evento e estado do serviço após
+a desativação; consultas de recibo e protocolo seguem disponíveis para recuperar
+um envio já iniciado.
+
+Para habilitar esse worker, montar fora do repositório um JSON e apontar
+`FISCAL_PHASE43_WORKER_CONFIG_PATH` para ele. O arquivo contém apenas caminhos e
+identificadores, nunca bytes de chave privada:
+
+```json
+{
+  "certificatePath": "/run/secrets/issuer.crt",
+  "privateKeyPath": "/run/secrets/issuer.key",
+  "certificateFingerprint": "<sha256 do certificado>",
+  "issuerTaxId": "<CNPJ do emitente>",
+  "trustAnchorPath": "/run/secrets/icp-brasil-root.pem",
+  "trustAnchorFingerprint": "<sha256 da raiz>",
+  "operationsPath": "/run/secrets/phase43-operations.json",
+  "endpointsPath": "/run/secrets/phase43-endpoints.json",
+  "documentResponseSchemaPath": "/run/secrets/phase43-document-response.zip",
+  "consultationResponseSchemaPath": "/run/secrets/phase43-consultation-response.zip"
+}
+```
+
+Montar cada arquivo listado no contêiner. O startup valida certificado, chave,
+raiz TLS, endpoints e arquivos XSD. O envio ainda exige grant válido, adapter,
+WSDL, endpoint, certificado e XSDs iguais aos vínculos revisados no banco.

@@ -61,6 +61,7 @@
     "sourceUrl": "https://hom.nfe.fazenda.gov.br/portal/webServices.aspx?tipoConteudo=VjrjMInPXGA%3D",
     "stateSourceUrl": "https://portal.fazenda.sp.gov.br/servicos/nfe/Paginas/URL-WEBSERVICES.aspx",
     "stateSourceRetrievedAt": "2026-09-23",
+    "stateSourceRecheckedAt": "2026-09-25",
     "jurisdiction": "SP",
     "candidateEndpoints": {
       "authorization": "https://homologacao.nfe.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx",

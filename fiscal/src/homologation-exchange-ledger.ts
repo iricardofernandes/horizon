@@ -52,6 +52,70 @@ export class HomologationExchangeLedger {
     await this.#db.end()
   }
 
+  /** Refuses a local response parser whose XSD archives were not reviewed for this drill. */
+  async assertResponseSchemas(
+    tenantId: string,
+    drillGrantId: string,
+    documentDigest: string,
+    consultationDigest: string,
+  ): Promise<void> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(drillGrantId)
+    digest.parse(documentDigest)
+    digest.parse(consultationDigest)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select approval.document_schema_digest, approval.consultation_schema_digest
+        from fiscal_homologation_drill_grants grant_row
+        join fiscal_homologation_response_schema_approvals approval
+          on approval.tenant_id = grant_row.tenant_id
+          and approval.capability_id = grant_row.capability_id
+        where grant_row.tenant_id = ${tenantId} and grant_row.id = ${drillGrantId}`
+    })
+    if (
+      !row ||
+      row.document_schema_digest !== documentDigest ||
+      row.consultation_schema_digest !== consultationDigest
+    )
+      throw new Error('SEFAZ response schemas differ from reviewed homologation capability')
+  }
+
+  /** Selects only prepared exchanges belonging to a currently active homologation tuple. */
+  async nextPreparedForActive(tenantId: string): Promise<string | null> {
+    z.uuid().parse(tenantId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select exchange.id
+        from fiscal_homologation_exchanges exchange
+        join fiscal_homologation_drill_grants grant_row
+          on grant_row.tenant_id = exchange.tenant_id
+          and grant_row.id = exchange.drill_grant_id
+        join fiscal_capability_definitions definition
+          on definition.tenant_id = grant_row.tenant_id
+          and definition.id = grant_row.capability_id
+        join lateral (
+          select event.action, event.created_at from fiscal_capability_activation_events event
+          where event.tenant_id = definition.tenant_id
+            and event.capability_id = definition.id
+          order by event.created_at desc, event.id desc limit 1
+        ) latest on latest.action = 'activate_homologated'
+        left join fiscal_homologation_transmissions transmission
+          on transmission.tenant_id = exchange.tenant_id
+          and transmission.exchange_id = exchange.id
+        where exchange.tenant_id = ${tenantId}
+          and grant_row.expires_at > now()
+          and definition.environment = 'homologation'
+          and definition.model = '55'
+          and definition.jurisdiction_kind = 'uf'
+          and definition.jurisdiction_code = 'SP'
+          and definition.operation = 'normal-sale'
+          and exchange.prepared_at >= latest.created_at
+          and transmission.exchange_id is null
+        order by exchange.prepared_at, exchange.id limit 1`
+    })
+    return row ? String(row.id) : null
+  }
+
   /** Reopens exact stored request bytes; a started exchange must never be sent again. */
   async loadPrepared(
     tenantId: string,

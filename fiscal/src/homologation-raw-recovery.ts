@@ -7,13 +7,16 @@ export class HomologationRawRecovery {
   constructor(
     private readonly ledger: Pick<
       HomologationExchangeLedger,
-      'loadPrepared' | 'recordParsedResponse'
+      'loadPrepared' | 'recordParsedResponse' | 'assertResponseSchemas'
     >,
     private readonly parser: Pick<
       SefazNfe55HomologationAdapter,
       'parseResponse' | 'wsdlDigest' | 'adapterVersion'
     >,
-    private readonly responseSchemas: Pick<SefazResponseSchemaValidator, 'validate'>,
+    private readonly responseSchemas: Pick<
+      SefazResponseSchemaValidator,
+      'validate' | 'documentDigest' | 'consultationDigest'
+    >,
   ) {}
 
   async reparse(
@@ -28,6 +31,12 @@ export class HomologationRawRecovery {
       loaded.input.adapterVersion !== this.parser.adapterVersion
     )
       throw new Error('Stored SEFAZ runtime binding differs from response parser')
+    await this.ledger.assertResponseSchemas(
+      loaded.input.tenantId,
+      loaded.input.drillGrantId,
+      this.responseSchemas.documentDigest,
+      this.responseSchemas.consultationDigest,
+    )
     if (loaded.stage !== 'raw_unparsed' || !loaded.rawResponse)
       throw new Error('SEFAZ exchange has no unparsed stored response')
     const response = this.parser.parseResponse(loaded.prepared, loaded.rawResponse)

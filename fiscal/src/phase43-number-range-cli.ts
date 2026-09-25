@@ -14,9 +14,12 @@ async function main(): Promise<void> {
     action !== 'number-range' &&
     action !== 'calculation' &&
     action !== 'issuance-profile' &&
-    action !== 'event-schema'
+    action !== 'event-schema' &&
+    action !== 'response-schemas'
   )
-    throw new Error('--action must be number-range, calculation, issuance-profile, or event-schema')
+    throw new Error(
+      '--action must be number-range, calculation, issuance-profile, event-schema, or response-schemas',
+    )
   const capabilities = new FiscalCapabilities(databaseUrl)
   try {
     process.stdout.write(
@@ -27,7 +30,9 @@ async function main(): Promise<void> {
             ? await capabilities.registerHomologationIssuanceProfile(input)
             : action === 'event-schema'
               ? await capabilities.approveHomologationEventSchema(input)
-              : await capabilities.registerHomologationNumberRange(input),
+              : action === 'response-schemas'
+                ? await capabilities.approveHomologationResponseSchemas(input)
+                : await capabilities.registerHomologationNumberRange(input),
         null,
         2,
       )}\n`,

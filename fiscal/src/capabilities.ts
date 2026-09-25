@@ -90,6 +90,15 @@ const homologationEventSchemaApprovalInputSchema = z.strictObject({
   reviewedBy: z.string().min(1).max(200),
 })
 
+const homologationResponseSchemaApprovalInputSchema = z.strictObject({
+  tenantId: z.uuid(),
+  capabilityId: z.uuid(),
+  sourceManifestDigest: digest,
+  documentSchemaDigest: digest,
+  consultationSchemaDigest: digest,
+  reviewedBy: z.string().min(1).max(200),
+})
+
 export type FiscalCapabilityDefinition = z.infer<typeof definitionSchema>
 export type ActiveFiscalCapability = Omit<FiscalCapabilityDefinition, 'createdBy'> & {
   id: string
@@ -113,6 +122,61 @@ export class FiscalCapabilities {
 
   async close(): Promise<void> {
     await this.#db.end()
+  }
+
+  async approveHomologationResponseSchemas(
+    input: z.input<typeof homologationResponseSchemaApprovalInputSchema>,
+  ): Promise<{ existing: boolean }> {
+    const value = homologationResponseSchemaApprovalInputSchema.parse(input)
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      for (const expectedDigest of [value.documentSchemaDigest, value.consultationSchemaDigest]) {
+        const [source] = await tx`select payload.source_bytes
+          from fiscal_source_packages package
+          join fiscal_source_payloads payload
+            on payload.tenant_id = package.tenant_id and payload.package_id = package.id
+          where package.tenant_id = ${value.tenantId}
+            and package.package_digest = ${expectedDigest}`
+        if (
+          !source ||
+          createHash('sha256').update(Buffer.from(source.source_bytes)).digest('hex') !==
+            expectedDigest
+        )
+          throw new Error('Homologation response schema retained bytes do not match digest')
+      }
+      const inserted = await tx`insert into fiscal_homologation_response_schema_approvals (
+        tenant_id, capability_id, source_manifest_digest, document_schema_digest,
+        consultation_schema_digest, reviewed_by
+      ) values (
+        ${value.tenantId}, ${value.capabilityId}, ${value.sourceManifestDigest},
+        ${value.documentSchemaDigest}, ${value.consultationSchemaDigest}, ${value.reviewedBy}
+      ) on conflict do nothing returning capability_id`
+      const [stored] = await tx`select source_manifest_digest, document_schema_digest,
+          consultation_schema_digest, reviewed_by
+        from fiscal_homologation_response_schema_approvals
+        where tenant_id = ${value.tenantId} and capability_id = ${value.capabilityId}`
+      if (
+        !stored ||
+        stored.source_manifest_digest !== value.sourceManifestDigest ||
+        stored.document_schema_digest !== value.documentSchemaDigest ||
+        stored.consultation_schema_digest !== value.consultationSchemaDigest ||
+        stored.reviewed_by !== value.reviewedBy
+      )
+        throw new Error('Conflicting immutable homologation response schema approval')
+      if (inserted.length > 0)
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.reviewedBy,
+          action: 'homologation.response-schemas-reviewed',
+          resourceId: value.capabilityId,
+          detail: {
+            sourceManifestDigest: value.sourceManifestDigest,
+            documentSchemaDigest: value.documentSchemaDigest,
+            consultationSchemaDigest: value.consultationSchemaDigest,
+          },
+        })
+      return { existing: inserted.length === 0 }
+    })
   }
 
   async approveHomologationEventSchema(
