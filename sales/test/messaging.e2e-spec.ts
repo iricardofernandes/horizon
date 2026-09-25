@@ -84,6 +84,11 @@ it('projects catalog events and confirms an order from an inventory outcome exac
       ncm: '09012100',
     }),
   )
+  await waitFor(async () => {
+    const [row] = await administrator`select item_id from catalog_items
+      where tenant_id = ${tenantId} and item_id = ${itemId}`
+    return row ?? null
+  })
   publish(
     envelope(tenantId, 'catalog.price.changed', {
       priceListId: randomUUID(),
