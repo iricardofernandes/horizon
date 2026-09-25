@@ -16,6 +16,15 @@ de produção nem libera estoque ou financeiro.
 
 1. Confirmar CNPJ/credenciamento, custódia e validade do certificado, cinco URLs de
    homologação, WSDL, operações SOAP e raiz TLS. Registrar seus digests revisados.
+   Quando a credencial estiver montada, executar `npm run phase43:fetch-wsdl --
+   --certificate <pem> --private-key <pem> --certificate-fingerprint <sha256>
+   --issuer-tax-id <cnpj> --trust-anchor <pem>
+   --trust-anchor-fingerprint <sha256> --endpoints <json>
+   --output-directory </caminho/fora/do/repositorio>` em `fiscal`. O comando usa
+   mTLS, baixa os cinco WSDLs em diretório novo fora do repositório e emite digests
+   individuais e `wsdlSetDigest`. O GET sem certificado retornou HTTP 403 em
+   2026-09-25. Guardar os bytes para revisão independente; não preencher
+   `wsdlReviewed` com base apenas na tentativa de acesso.
 2. Reter e revisar os bytes dos pacotes de regras e dos XSDs. Definir capability
    separada da simulação, com `sourceManifestDigest`, `schemaPackageDigest` e fixture.
    Executar `make verify-phase43-sources` para conferir os seis candidatos retidos

@@ -17,6 +17,22 @@ const endpointNames: Record<SefazService, string> = {
 
 export type SefazEndpoints = Record<SefazService, string>
 
+export function approvedSefazHomologationEndpoint(service: SefazService, value: string): URL {
+  const endpoint = new URL(value)
+  if (
+    endpoint.protocol !== 'https:' ||
+    endpoint.hostname !== 'homologacao.nfe.fazenda.sp.gov.br' ||
+    endpoint.port ||
+    endpoint.username ||
+    endpoint.password ||
+    endpoint.search ||
+    endpoint.hash ||
+    endpoint.pathname.toLowerCase() !== `/ws/${endpointNames[service]}`
+  )
+    throw new Error(`Unapproved SEFAZ homologation endpoint for ${service}`)
+  return endpoint
+}
+
 const settingsSchema = z.strictObject({
   timeoutMilliseconds: z.number().int().min(1_000).max(60_000).default(15_000),
   maximumResponseBytes: z.number().int().min(1_024).max(10_000_000).default(2_000_000),
@@ -55,19 +71,7 @@ export class SefazHomologationTransport {
     })
     this.#endpoints = Object.fromEntries(
       (Object.keys(endpointNames) as SefazService[]).map((service) => {
-        const endpoint = new URL(endpoints[service])
-        if (
-          endpoint.protocol !== 'https:' ||
-          endpoint.hostname !== 'homologacao.nfe.fazenda.sp.gov.br' ||
-          endpoint.port ||
-          endpoint.username ||
-          endpoint.password ||
-          endpoint.search ||
-          endpoint.hash ||
-          endpoint.pathname.toLowerCase() !== `/ws/${endpointNames[service]}`
-        )
-          throw new Error(`Unapproved SEFAZ homologation endpoint for ${service}`)
-        return [service, endpoint]
+        return [service, approvedSefazHomologationEndpoint(service, endpoints[service])]
       }),
     ) as Record<SefazService, URL>
     this.endpointSetDigest = createHash('sha256')

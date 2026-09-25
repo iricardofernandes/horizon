@@ -33,7 +33,9 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
   mesma resposta. Todos os consumidores foram fixados em `@horizon/contracts@0.32.0`.
 - A [lista oficial de serviços da SEFAZ-SP](https://portal.fazenda.sp.gov.br/servicos/nfe/Paginas/URL-WEBSERVICES.aspx)
   ainda apresentava as cinco URLs candidatas de homologação 4.00 em 2026-09-25.
-  WSDL, credencial, fontes efetivas e interpretação fiscal continuam pendentes.
+  O GET de WSDL com a raiz TLS de fingerprint já registrada continuou em HTTP 403.
+  Há agora um comando de coleta por mTLS testado contra servidor local; WSDL,
+  credencial, fontes efetivas e interpretação fiscal continuam pendentes.
 - `node scripts/ci-local.mjs` passou em 2026-09-25, incluindo os testes de
   integração isolados dos serviços, validação dos contratos gerados, limites entre
   módulos e varredura de segredos. O ensaio de SEFAZ e o CI remoto seguem pendentes.

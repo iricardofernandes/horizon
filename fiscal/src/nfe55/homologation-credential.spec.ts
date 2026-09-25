@@ -15,6 +15,7 @@ import {
   sendSefazHttpsRequest,
 } from './sefaz-transport'
 import { loadSefazTrustAnchor } from './sefaz-trust-anchor'
+import { fetchSefazWsdl } from './sefaz-wsdl'
 
 const directories: string[] = []
 
@@ -283,6 +284,61 @@ it('sends SOAP over mutual TLS and rejects redirects, oversized replies and untr
       sendSefazHttpsRequest(endpoint, requestBytes, loaded, otherTrust, settings),
     ).rejects.toThrow()
     expect(authenticatedRequests).toBe(6)
+  } finally {
+    server.closeAllConnections()
+    server.close()
+  }
+})
+
+it('fetches a bounded WSDL over mutual TLS and rejects redirects or non-WSDL bytes', async () => {
+  const input = await credential()
+  const loaded = await loadHomologationCredential(input)
+  const trust = await loadSefazTrustAnchor(input)
+  let mode: 'wsdl' | 'redirect' | 'html' | 'oversized' = 'wsdl'
+  let authenticated = false
+  const server = createHttpsServer(
+    {
+      cert: loaded.certificate,
+      key: loaded.privateKey,
+      ca: trust.certificate,
+      requestCert: true,
+      rejectUnauthorized: true,
+    },
+    (request, response) => {
+      authenticated = (request.socket as TLSSocket).authorized
+      if (request.method !== 'GET' || request.url !== '/ws/nfeautorizacao4.asmx?WSDL') {
+        response.writeHead(400).end()
+      } else if (mode === 'redirect') {
+        response.writeHead(302, { location: 'https://example.org/' }).end()
+      } else if (mode === 'html') {
+        response.writeHead(200, { 'content-type': 'text/html' }).end('<html/>')
+      } else if (mode === 'oversized') {
+        response.writeHead(200, { 'content-type': 'text/xml' }).end(Buffer.alloc(2_000_001, 65))
+      } else {
+        response
+          .writeHead(200, { 'content-type': 'text/xml' })
+          .end('<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"/>')
+      }
+    },
+  )
+  try {
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('Local HTTPS port unavailable')
+    const endpoint = new URL(`https://localhost:${address.port}/ws/nfeautorizacao4.asmx`)
+    await expect(fetchSefazWsdl(endpoint, loaded, trust)).resolves.toEqual(
+      Buffer.from('<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"/>'),
+    )
+    expect(authenticated).toBe(true)
+    mode = 'redirect'
+    await expect(fetchSefazWsdl(endpoint, loaded, trust)).rejects.toThrow('HTTP 302')
+    mode = 'html'
+    await expect(fetchSefazWsdl(endpoint, loaded, trust)).rejects.toThrow('not a valid WSDL')
+    mode = 'oversized'
+    await expect(fetchSefazWsdl(endpoint, loaded, trust)).rejects.toThrow('byte limit')
+    const untrusted = await loadSefazTrustAnchor(await credential())
+    await expect(fetchSefazWsdl(endpoint, loaded, untrusted)).rejects.toThrow()
   } finally {
     server.closeAllConnections()
     server.close()
