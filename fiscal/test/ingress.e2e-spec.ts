@@ -21,6 +21,7 @@ import { canonicalDigest } from '../src/canonical-json'
 import { FiscalCapabilities } from '../src/capabilities'
 import { FiscalConsumer } from '../src/consumer'
 import { FiscalDocuments } from '../src/documents'
+import { FiscalEstablishmentCredentials } from '../src/establishment-credentials'
 import { HomologationCancellation } from '../src/homologation-cancellation'
 import { HomologationDanfe } from '../src/homologation-danfe'
 import { HomologationExchangeLedger } from '../src/homologation-exchange-ledger'
@@ -54,6 +55,99 @@ let documents: FiscalDocuments
 let artifactRoot: string
 let artifactKey: Buffer
 let appUrl: string
+
+it('keeps A1 credentials encrypted and isolated by tenant and establishment', async () => {
+  const tenantA = randomUUID()
+  const tenantB = randomUUID()
+  const establishment = randomUUID()
+  await administrator`insert into tenants (id) values (${tenantA}), (${tenantB})`
+  const registry = new FiscalEstablishmentCredentials(appUrl, artifactKey)
+  const paths: string[] = []
+  try {
+    for (const [index, taxId] of ['12345678000195', '98765432000100'].entries()) {
+      const certificatePath = join(artifactRoot, `a1-${index}.pem`)
+      const privateKeyPath = join(artifactRoot, `a1-${index}.key`)
+      const pfxPath = join(artifactRoot, `a1-${index}.pfx`)
+      paths.push(certificatePath, privateKeyPath, pfxPath)
+      await promisify(execFile)('openssl', [
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-nodes',
+        '-days',
+        '2',
+        '-subj',
+        '/CN=Horizon A1 Test Only',
+        '-addext',
+        `subjectAltName=otherName:2.16.76.1.3.3;PRINTABLE:${taxId}`,
+        '-keyout',
+        privateKeyPath,
+        '-out',
+        certificatePath,
+      ])
+      await promisify(execFile)('openssl', [
+        'pkcs12',
+        '-export',
+        '-inkey',
+        privateKeyPath,
+        '-in',
+        certificatePath,
+        '-out',
+        pfxPath,
+        '-passout',
+        'pass:test-only-password',
+      ])
+      const saved = await registry.upload({
+        tenantId: tenantA,
+        establishmentId: establishment,
+        pfx: await readFile(pfxPath),
+        password: 'test-only-password',
+        actorId: 'test:fiscal-admin',
+      })
+      expect(saved.issuerTaxId).toBe(taxId)
+      if (index === 0) {
+        await expect(
+          registry.upload({
+            tenantId: tenantB,
+            establishmentId: establishment,
+            pfx: await readFile(pfxPath),
+            password: 'wrong',
+            actorId: 'test:fiscal-admin',
+          }),
+        ).rejects.toThrow('Invalid certificate file or password')
+        expect(await registry.list(tenantB)).toHaveLength(0)
+      }
+    }
+    const [active] = await registry.list(tenantA)
+    expect(active?.issuer_tax_id).toBe('98765432000100')
+    expect((await registry.active(tenantA, establishment)).issuerTaxId).toBe('98765432000100')
+    await expect(registry.active(tenantA, randomUUID())).rejects.toThrow(
+      'No certificate configured',
+    )
+    const rows =
+      await administrator`select encrypted_pem, fingerprint from fiscal_establishment_credentials
+      where tenant_id = ${tenantA} order by uploaded_at`
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      expect((row.encrypted_pem as Buffer).toString()).not.toContain('PRIVATE KEY')
+      expect((row.encrypted_pem as Buffer).toString()).not.toContain('CERTIFICATE')
+    }
+    expect(await registry.list(tenantB)).toHaveLength(0)
+    await expect(registry.active(tenantB, establishment)).rejects.toThrow(
+      'No certificate configured',
+    )
+    const wrongKey = new FiscalEstablishmentCredentials(appUrl, randomBytes(32))
+    try {
+      await expect(wrongKey.active(tenantA, establishment)).rejects.toThrow()
+    } finally {
+      await wrongKey.close()
+    }
+  } finally {
+    await registry.close()
+    await Promise.all(paths.map((path) => rm(path, { force: true })))
+  }
+}, 60_000)
 
 beforeAll(async () => {
   ;[container, rabbitmq] = await Promise.all([

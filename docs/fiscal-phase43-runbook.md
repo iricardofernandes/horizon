@@ -16,9 +16,8 @@ de produção nem libera estoque ou financeiro.
 
 1. Confirmar CNPJ/credenciamento, custódia e validade do certificado, cinco URLs de
    homologação, WSDL, operações SOAP e raiz TLS. Registrar seus digests revisados.
-   Quando a credencial estiver montada, executar `npm run phase43:fetch-wsdl --
-   --certificate <pem> --private-key <pem> --certificate-fingerprint <sha256>
-   --issuer-tax-id <cnpj> --trust-anchor <pem>
+   Depois que o A1 for cadastrado no app, executar `npm run phase43:fetch-wsdl --
+   --tenant <uuid> --establishment <uuid> --trust-anchor <pem>
    --trust-anchor-fingerprint <sha256> --endpoints <json>
    --output-directory </caminho/fora/do/repositorio>` em `fiscal`. O comando usa
    mTLS, baixa os cinco WSDLs em diretório novo fora do repositório e emite digests
@@ -41,8 +40,13 @@ de produção nem libera estoque ou financeiro.
    Não ativar a capability ainda.
 4. Conferir que `DATABASE_URL`, `FISCAL_ARTIFACT_KEY_HEX`,
    `FISCAL_ARTIFACT_BUCKET` e `FISCAL_ARTIFACT_REGION` apontam ao mesmo ambiente
-   isolado. `FISCAL_ARTIFACT_ENDPOINT` é opcional. Montar chave privada e certificado
-   fora do repositório; nunca passá-los em JSON, logs ou evidências.
+   isolado. `FISCAL_ARTIFACT_ENDPOINT` é opcional. No app, em Administração da área
+   de trabalho, um administrador Fiscal cadastra o A1 `.pfx`/`.p12` e sua senha
+   para o ID do estabelecimento. O servidor extrai o par PEM, cifra certificado
+   e chave privada com AES-GCM derivado por tenant e não persiste a senha nem o PFX.
+   O cadastro substitui a credencial ativa só daquele estabelecimento; versões
+   anteriores continuam cifradas para consultas já vinculadas. Backup do banco
+   deve preservar também `FISCAL_ARTIFACT_KEY_HEX` sob custódia separada.
 5. Executar build, testes unitários/e2e e migrações em ambiente de ensaio. Fazer
    backup consistente do banco e dos objetos criptografados antes do teste real.
 
@@ -56,11 +60,10 @@ banco e o bucket isolados de homologação, os cinco endpoints SP revisados e se
 registro local de `@horizon/contracts` na versão fixada. As fontes candidatas
 retidas são verificadas novamente no job; isso não substitui a revisão Fiscal.
 
-Montar certificado, chave privada, raiz TLS, arquivos de operações e endpoints
-revisados e os dois ZIPs de XSD de resposta fora do repositório. Registrar os
-caminhos e digests nas variáveis de environment `PHASE43_CERTIFICATE_PATH`,
-`PHASE43_PRIVATE_KEY_PATH`, `PHASE43_CERTIFICATE_FINGERPRINT`,
-`PHASE43_ISSUER_TAX_ID`, `PHASE43_TRUST_ANCHOR_PATH`,
+Montar raiz TLS, arquivos de operações e endpoints revisados e os dois ZIPs de
+XSD de resposta fora do repositório. O certificado A1 é selecionado do banco
+pelo tenant, estabelecimento do documento e fingerprint do grant/exchange.
+Registrar os caminhos e digests nas variáveis de environment `PHASE43_TRUST_ANCHOR_PATH`,
 `PHASE43_TRUST_ANCHOR_FINGERPRINT`, `PHASE43_OPERATIONS_PATH`,
 `PHASE43_ENDPOINTS_PATH`, `PHASE43_DOCUMENT_RESPONSE_SCHEMA_PATH` e
 `PHASE43_CONSULTATION_RESPONSE_SCHEMA_PATH`. Configurar também
@@ -175,10 +178,6 @@ identificadores, nunca bytes de chave privada:
 
 ```json
 {
-  "certificatePath": "/run/secrets/issuer.crt",
-  "privateKeyPath": "/run/secrets/issuer.key",
-  "certificateFingerprint": "<sha256 do certificado>",
-  "issuerTaxId": "<CNPJ do emitente>",
   "trustAnchorPath": "/run/secrets/icp-brasil-root.pem",
   "trustAnchorFingerprint": "<sha256 da raiz>",
   "operationsPath": "/run/secrets/phase43-operations.json",
@@ -188,6 +187,7 @@ identificadores, nunca bytes de chave privada:
 }
 ```
 
-Montar cada arquivo listado no contêiner. O startup valida certificado, chave,
-raiz TLS, endpoints e arquivos XSD. O envio ainda exige grant válido, adapter,
+Montar cada arquivo listado no contêiner. O startup valida raiz TLS, endpoints e
+arquivos XSD. Cada envio carrega e valida a credencial cifrada do estabelecimento
+do documento. O envio ainda exige grant válido, adapter,
 WSDL, endpoint, certificado e XSDs iguais aos vínculos revisados no banco.

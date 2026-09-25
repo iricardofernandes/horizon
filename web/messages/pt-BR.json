@@ -1,4 +1,24 @@
 {
+  "fiscalCertificate": {
+    "title": "Certificado digital NF-e",
+    "copy": "Configure um certificado A1 por estabelecimento. Sem certificado e homologação, a emissão permanece em simulação.",
+    "readOnly": "Somente administradores fiscais podem cadastrar certificados.",
+    "loading": "Carregando certificados…",
+    "empty": "Nenhum certificado cadastrado. Emissão em simulação.",
+    "establishment": "Estabelecimento {id}",
+    "taxId": "CNPJ {value}",
+    "validUntil": "válido até {date}",
+    "establishmentId": "ID do estabelecimento",
+    "file": "Arquivo do certificado (.pfx ou .p12)",
+    "password": "Senha do certificado",
+    "saving": "Salvando…",
+    "save": "Salvar certificado",
+    "saved": "Certificado salvo para este estabelecimento. A emissão real ainda depende da homologação.",
+    "readFailed": "Não foi possível ler o arquivo.",
+    "listFailed": "Não foi possível consultar os certificados.",
+    "fileInvalid": "Selecione um arquivo .pfx ou .p12 de até 512 KiB.",
+    "saveFailed": "Não foi possível salvar o certificado."
+  },
   "access": {
     "activeMembers": "membros ativos",
     "copy": "Convide operadores e controle suas permissões de forma independente em cada módulo.",

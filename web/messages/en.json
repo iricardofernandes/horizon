@@ -1,4 +1,24 @@
 {
+  "fiscalCertificate": {
+    "title": "NF-e digital certificate",
+    "copy": "Configure one A1 certificate per establishment. Without a certificate and homologation, issuance remains simulated.",
+    "readOnly": "Only Fiscal administrators can register certificates.",
+    "loading": "Loading certificates…",
+    "empty": "No certificate registered. Issuance is simulated.",
+    "establishment": "Establishment {id}",
+    "taxId": "Tax ID {value}",
+    "validUntil": "valid until {date}",
+    "establishmentId": "Establishment ID",
+    "file": "Certificate file (.pfx or .p12)",
+    "password": "Certificate password",
+    "saving": "Saving…",
+    "save": "Save certificate",
+    "saved": "Certificate saved for this establishment. Live issuance still requires homologation.",
+    "readFailed": "Could not read the file.",
+    "listFailed": "Could not load certificates.",
+    "fileInvalid": "Select a .pfx or .p12 file up to 512 KiB.",
+    "saveFailed": "Could not save the certificate."
+  },
   "access": {
     "activeMembers": "active members",
     "copy": "Invite operators and control their permissions independently in each module.",

@@ -54,6 +54,7 @@ try {
     '0041_phase43_response_schema_approval.sql',
     '0042_phase43_deactivation_send_fence.sql',
     '0043_phase43_homologation_danfe.sql',
+    '0044_phase43_establishment_credentials.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

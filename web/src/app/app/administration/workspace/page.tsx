@@ -2,6 +2,7 @@
 
 import { useNotice, useSession } from '@/components/shell/workspace-context'
 import { Resource } from '@/components/ui/resource'
+import { FiscalCertificatePanel } from '@/features/settings/fiscal-certificate-panel'
 import { type Workspace, WorkspaceView } from '@/features/settings/workspace-view'
 import { readJson } from '@/lib/api'
 import { useLoader } from '@/lib/use-loader'
@@ -21,13 +22,20 @@ export default function WorkspaceSettingsPage() {
   return (
     <Resource state={state}>
       {(workspace) => (
-        <WorkspaceView
-          canManage={canManage}
-          onChanged={state.reload}
-          setNotice={setNotice}
-          user={session}
-          workspace={workspace}
-        />
+        <>
+          <WorkspaceView
+            canManage={canManage}
+            onChanged={state.reload}
+            setNotice={setNotice}
+            user={session}
+            workspace={workspace}
+          />
+          <FiscalCertificatePanel
+            canManage={(session?.roles ?? []).some(
+              (assignment) => assignment.module === 'fiscal' && assignment.role === 'admin',
+            )}
+          />
+        </>
       )}
     </Resource>
   )

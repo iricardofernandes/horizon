@@ -13,6 +13,7 @@ import { FiscalCapabilities } from './capabilities'
 import { FiscalConsumer } from './consumer'
 import { FiscalDispatch } from './dispatch'
 import { FiscalDocuments } from './documents'
+import { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { FiscalIngress } from './ingress'
 import { FiscalIssuance } from './issuance'
 import { FiscalIssueWorker } from './issue-worker'
@@ -111,6 +112,10 @@ const manualOrigins = new FiscalManualOrigins(
   (tenantId) => new HttpOwnerFiscalClient(urls, () => tokens.forTenant(tenantId)),
 )
 const dispatch = new FiscalDispatch(config.DATABASE_URL)
+const credentials = new FiscalEstablishmentCredentials(
+  config.DATABASE_URL,
+  Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
+)
 const issuanceConfiguration = [
   config.FISCAL_SIMULATION_PROFILE_JSON,
   config.FISCAL_SIMULATION_PRIVATE_KEY_PATH,
@@ -166,6 +171,7 @@ const server = createFiscalServer({
   ...(issuance ? { issuance } : {}),
   ...(cancellation ? { cancellation } : {}),
   rules: ruleStore,
+  credentials,
 })
 const fixedSimulatorScenario = config.FISCAL_SIMULATOR_SCENARIO
 const issueWorker = new FiscalIssueWorker(
@@ -223,6 +229,7 @@ async function stop(): Promise<void> {
     cancellation?.close(),
     outbox.close(),
     ruleStore.close(),
+    credentials.close(),
     denylist.close(),
     phase43Runtime?.close(),
   ])
@@ -241,6 +248,7 @@ void consumer
         config.DATABASE_URL,
         artifacts,
         config.FISCAL_PHASE43_WORKER_CONFIG_PATH,
+        Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
       )
     await new Promise<void>((resolve) => server.listen(config.PORT, '0.0.0.0', resolve))
   })
@@ -261,6 +269,7 @@ void consumer
       cancellation?.close(),
       outbox.close(),
       ruleStore.close(),
+      credentials.close(),
       denylist.close(),
       phase43Runtime?.close(),
     ])

@@ -6,6 +6,14 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
 
 ## Verificação local (2026-09-25)
 
+- O app agora apresenta o cadastro de A1 `.pfx`/`.p12` com senha por estabelecimento
+  para administradores Fiscal. Um certificado de laboratório com CNPJ sintético
+  validou extração, persistência cifrada, troca da credencial ativa e isolamento
+  entre tenants em PostgreSQL. O worker e os comandos de homologação selecionam
+  a credencial pelo tenant, estabelecimento do documento e fingerprint vinculado
+  à troca; o simulador continua disponível sem certificado real. Este teste não
+  comprova credenciamento ICP-Brasil nem emissão na SEFAZ.
+
 - Commit `02ecd8f`: vínculo imutável dos dois pacotes XSD de resposta, seleção do
   worker somente após ativação, bloqueio de novos envios após desativação e
   validação de correlação da resposta SOAP.

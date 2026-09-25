@@ -15,6 +15,7 @@ let correctionInput: unknown
 let statusQueryInput: unknown
 let cancellationInput: unknown
 let cancellationQueryInput: unknown
+let certificateUploadInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
 let activeCapability = false
 let activeHomologationCapability = false
@@ -295,6 +296,21 @@ const server = createFiscalServer({
       }
     },
   },
+  credentials: {
+    async list(requestedTenant) {
+      if (requestedTenant !== tenantId) throw new Error('Wrong tenant')
+      return []
+    },
+    async upload(input) {
+      certificateUploadInput = input
+      return {
+        establishmentId: input.establishmentId,
+        issuerTaxId: '12345678000195',
+        fingerprint: 'a'.repeat(64),
+        validUntil: '2027-01-01T00:00:00.000Z',
+      }
+    },
+  },
 })
 let base: string
 
@@ -307,6 +323,42 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()))
+})
+
+it('restricts certificate upload to Fiscal admins and takes tenant identity from the token', async () => {
+  const headers = { authorization: 'Bearer test', 'content-type': 'application/json' }
+  const body = JSON.stringify({
+    tenantId: otherTenant,
+    establishmentId,
+    pfxBase64: Buffer.from('fake-pfx').toString('base64'),
+    password: 'test-password',
+  })
+  role = 'issuer'
+  expect(
+    (await fetch(`${base}/establishment-credentials`, { method: 'POST', headers, body })).status,
+  ).toBe(403)
+  role = 'admin'
+  expect(
+    (await fetch(`${base}/establishment-credentials`, { method: 'POST', headers, body })).status,
+  ).toBe(400)
+  const accepted = await fetch(`${base}/establishment-credentials`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      establishmentId,
+      pfxBase64: Buffer.from('fake-pfx').toString('base64'),
+      password: 'test-password',
+    }),
+  })
+  expect(accepted.status).toBe(201)
+  expect(certificateUploadInput).toMatchObject({
+    tenantId,
+    establishmentId,
+    actorId: expect.any(String),
+  })
+  expect(await accepted.text()).not.toContain('test-password')
+  expect((await fetch(`${base}/establishment-credentials`, { headers })).status).toBe(200)
+  role = 'viewer'
 })
 
 it('scopes correction and explicit status consultation to the caller tenant', async () => {

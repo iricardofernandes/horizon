@@ -9,7 +9,12 @@ import type { SefazOperationMap } from './nfe55/sefaz-adapter'
 export class HomologationExchangeWorker {
   constructor(
     private readonly ledger: Pick<HomologationExchangeLedger, 'nextPreparedForActive'>,
-    private readonly runner: Pick<HomologationExchangeRunner, 'resume'>,
+    private readonly runner:
+      | Pick<HomologationExchangeRunner, 'resume'>
+      | ((
+          tenantId: string,
+          exchangeId: string,
+        ) => Promise<Pick<HomologationExchangeRunner, 'resume'>>),
     private readonly operations: SefazOperationMap,
   ) {}
 
@@ -17,7 +22,9 @@ export class HomologationExchangeWorker {
     const exchangeId = await this.ledger.nextPreparedForActive(tenantId)
     if (!exchangeId) return false
     try {
-      await this.runner.resume(
+      const runner =
+        typeof this.runner === 'function' ? await this.runner(tenantId, exchangeId) : this.runner
+      await runner.resume(
         { tenantId, exchangeId, workerId, actorId: `worker:${workerId}` },
         this.operations,
       )

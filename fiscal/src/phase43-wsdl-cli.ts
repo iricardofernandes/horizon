@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
-import { loadHomologationCredential } from './nfe55/homologation-credential'
+import { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { approvedSefazHomologationEndpoint, type SefazService } from './nfe55/sefaz-transport'
 import { loadSefazTrustAnchor } from './nfe55/sefaz-trust-anchor'
 import { fetchSefazWsdl } from './nfe55/sefaz-wsdl'
@@ -16,13 +16,20 @@ function flag(name: string): string {
 }
 
 async function main(): Promise<void> {
-  const [credential, trustAnchor, endpoints] = await Promise.all([
-    loadHomologationCredential({
-      certificatePath: flag('certificate'),
-      privateKeyPath: flag('private-key'),
-      expectedFingerprint: flag('certificate-fingerprint'),
-      expectedIssuerTaxId: flag('issuer-tax-id'),
-    }),
+  const databaseUrl = z.url().parse(process.env.DATABASE_URL)
+  const key = Buffer.from(
+    z
+      .string()
+      .regex(/^[0-9a-f]{64}$/i)
+      .parse(process.env.FISCAL_ARTIFACT_KEY_HEX),
+    'hex',
+  )
+  const tenantId = z.uuid().parse(flag('tenant'))
+  const establishmentId = z.uuid().parse(flag('establishment'))
+  const credentials = new FiscalEstablishmentCredentials(databaseUrl, key)
+  const credential = await credentials.active(tenantId, establishmentId)
+  await credentials.close()
+  const [trustAnchor, endpoints] = await Promise.all([
     loadSefazTrustAnchor({
       certificatePath: flag('trust-anchor'),
       expectedFingerprint: flag('trust-anchor-fingerprint'),

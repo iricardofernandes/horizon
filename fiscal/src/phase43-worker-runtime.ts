@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
+import { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { HomologationExchangeLedger } from './homologation-exchange-ledger'
 import { HomologationExchangeRunner } from './homologation-exchange-runner'
 import { HomologationExchangeWorker } from './homologation-exchange-worker'
-import { loadHomologationCredential } from './nfe55/homologation-credential'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from './nfe55/sefaz-adapter'
 import { SefazResponseSchemaValidator } from './nfe55/sefaz-response-schema'
 import { SefazHomologationTransport } from './nfe55/sefaz-transport'
@@ -14,10 +14,6 @@ import { digestSchema, endpointsSchema, operationsSchema } from './phase43-runti
 
 const path = z.string().min(1)
 const configSchema = z.strictObject({
-  certificatePath: path,
-  privateKeyPath: path,
-  certificateFingerprint: digestSchema,
-  issuerTaxId: z.string().min(1),
   trustAnchorPath: path,
   trustAnchorFingerprint: digestSchema,
   operationsPath: path,
@@ -26,21 +22,16 @@ const configSchema = z.strictObject({
   consultationResponseSchemaPath: path,
 })
 
-/** Loads only mounted paths; the key and certificate never enter the config JSON. */
+/** Shared SEFAZ sources are mounted; each exchange resolves its own encrypted credential. */
 export async function loadPhase43WorkerRuntime(
   databaseUrl: string,
   artifacts: FiscalArtifacts,
   configPath: string,
+  credentialMasterKey: Buffer,
 ): Promise<{ worker: HomologationExchangeWorker; close(): Promise<void> }> {
   const config = configSchema.parse(JSON.parse(await readFile(configPath, 'utf8')))
-  const [credential, trustAnchor, operations, endpoints, documentArchive, consultationArchive] =
+  const [trustAnchor, operations, endpoints, documentArchive, consultationArchive] =
     await Promise.all([
-      loadHomologationCredential({
-        certificatePath: config.certificatePath,
-        privateKeyPath: config.privateKeyPath,
-        expectedFingerprint: config.certificateFingerprint,
-        expectedIssuerTaxId: config.issuerTaxId,
-      }),
       loadSefazTrustAnchor({
         certificatePath: config.trustAnchorPath,
         expectedFingerprint: config.trustAnchorFingerprint,
@@ -65,11 +56,20 @@ export async function loadPhase43WorkerRuntime(
     },
   )
   const ledger = new HomologationExchangeLedger(databaseUrl, artifacts)
-  const adapter = new SefazNfe55HomologationAdapter(credential, operations)
-  const transport = new SefazHomologationTransport(endpoints, credential, trustAnchor)
-  const runner = new HomologationExchangeRunner(ledger, transport, adapter, schemas)
+  const credentials = new FiscalEstablishmentCredentials(databaseUrl, credentialMasterKey)
   return {
-    worker: new HomologationExchangeWorker(ledger, runner, operations),
-    close: () => ledger.close(),
+    worker: new HomologationExchangeWorker(
+      ledger,
+      async (tenantId, exchangeId) => {
+        const credential = await credentials.forExchange(tenantId, exchangeId)
+        const adapter = new SefazNfe55HomologationAdapter(credential, operations)
+        const transport = new SefazHomologationTransport(endpoints, credential, trustAnchor)
+        return new HomologationExchangeRunner(ledger, transport, adapter, schemas)
+      },
+      operations,
+    ),
+    close: async () => {
+      await Promise.all([ledger.close(), credentials.close()])
+    },
   }
 }

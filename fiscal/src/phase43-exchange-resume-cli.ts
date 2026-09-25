@@ -4,10 +4,10 @@ import { S3Client } from '@aws-sdk/client-s3'
 import { z } from 'zod'
 import { EncryptedFiscalArtifactStore, S3ObjectStore } from './artifact-store'
 import { FiscalArtifacts } from './artifacts'
+import { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { HomologationExchangeLedger } from './homologation-exchange-ledger'
 import { HomologationExchangeRunner } from './homologation-exchange-runner'
 import { HomologationRecovery } from './homologation-recovery'
-import { loadHomologationCredential } from './nfe55/homologation-credential'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from './nfe55/sefaz-adapter'
 import { SefazResponseSchemaValidator } from './nfe55/sefaz-response-schema'
 import type { SefazResponse } from './nfe55/sefaz-soap'
@@ -47,14 +47,9 @@ async function main(): Promise<void> {
   const documentId =
     action === 'consult' || action === 'status' ? z.uuid().parse(flag('document')) : null
   const drillGrantId = action === 'status' ? z.uuid().parse(flag('grant')) : null
-  const [credential, trustAnchor, operations, endpoints, documentSchemas, consultationSchemas] =
+  const credentials = new FiscalEstablishmentCredentials(databaseUrl, key)
+  const [trustAnchor, operations, endpoints, documentSchemas, consultationSchemas] =
     await Promise.all([
-      loadHomologationCredential({
-        certificatePath: flag('certificate'),
-        privateKeyPath: flag('private-key'),
-        expectedFingerprint: flag('certificate-fingerprint'),
-        expectedIssuerTaxId: flag('issuer-tax-id'),
-      }),
       loadSefazTrustAnchor({
         certificatePath: flag('trust-anchor'),
         expectedFingerprint: flag('trust-anchor-fingerprint'),
@@ -76,6 +71,19 @@ async function main(): Promise<void> {
     new EncryptedFiscalArtifactStore(new S3ObjectStore(s3, bucket), key),
   )
   const ledger = new HomologationExchangeLedger(databaseUrl, artifacts)
+  const credential =
+    documentId && drillGrantId
+      ? await credentials.forDocument(
+          tenantId,
+          documentId,
+          (await ledger.drillContext(tenantId, documentId, drillGrantId)).certificateFingerprint,
+        )
+      : documentId
+        ? await credentials.forExchange(
+            tenantId,
+            (await ledger.recoveryTarget(tenantId, documentId)).parentExchangeId,
+          )
+        : await credentials.forExchange(tenantId, exchangeId)
   const adapter = new SefazNfe55HomologationAdapter(credential, operations)
   const transport = new SefazHomologationTransport(endpoints, credential, trustAnchor)
   const responseSchemas = new SefazResponseSchemaValidator(documentSchemas, consultationSchemas)
@@ -136,7 +144,7 @@ async function main(): Promise<void> {
       )}\n`,
     )
   } finally {
-    await Promise.all([ledger.close(), artifacts.close()])
+    await Promise.all([ledger.close(), artifacts.close(), credentials.close()])
     s3.destroy()
   }
 }

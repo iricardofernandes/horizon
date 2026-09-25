@@ -7,9 +7,9 @@ import { FiscalArtifacts } from './artifacts'
 import { FiscalCalculations } from './calculations'
 import { FiscalCapabilities } from './capabilities'
 import { FiscalDocuments } from './documents'
+import { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { HomologationExchangeLedger } from './homologation-exchange-ledger'
 import { HomologationIssuance } from './homologation-issuance'
-import { loadHomologationCredential } from './nfe55/homologation-credential'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from './nfe55/sefaz-adapter'
 import { digestSchema, operationsSchema } from './phase43-runtime-input'
 import { FiscalProjections } from './projections'
@@ -36,12 +36,8 @@ async function main(): Promise<void> {
   const drillGrantId = z.uuid().parse(flag('grant'))
   const exchangeId = z.uuid().parse(flag('exchange'))
   const actorId = z.string().min(1).max(200).parse(flag('actor'))
-  const certificate = await loadHomologationCredential({
-    certificatePath: flag('certificate'),
-    privateKeyPath: flag('private-key'),
-    expectedFingerprint: flag('certificate-fingerprint'),
-    expectedIssuerTaxId: flag('issuer-tax-id'),
-  })
+  const credentials = new FiscalEstablishmentCredentials(databaseUrl, key)
+  const certificate = await credentials.forDocument(tenantId, documentId)
   const schemaZip = await readFile(flag('schema'))
   const schemaDigest = createHash('sha256').update(schemaZip).digest('hex')
   const operations: SefazOperationMap = operationsSchema.parse(
@@ -107,6 +103,7 @@ async function main(): Promise<void> {
       rules.close(),
       projections.close(),
       documents.close(),
+      credentials.close(),
       s3.destroy(),
     ])
   }

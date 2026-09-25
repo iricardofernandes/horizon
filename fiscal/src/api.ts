@@ -16,6 +16,7 @@ import { canonicalDigest } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
 import type { FiscalDispatch } from './dispatch'
 import type { FiscalDocuments } from './documents'
+import type { FiscalEstablishmentCredentials } from './establishment-credentials'
 import type { FiscalIssuance } from './issuance'
 import type { FiscalManualOrigins } from './manual-origins'
 import type { FiscalReadiness } from './readiness'
@@ -41,6 +42,7 @@ export function createFiscalServer(dependencies: {
   issuance?: Pick<FiscalIssuance, 'issue'>
   cancellation?: Pick<FiscalCancellation, 'request'>
   rules: Pick<FiscalRuleStore, 'proposeOverride'>
+  credentials?: Pick<FiscalEstablishmentCredentials, 'list' | 'upload'>
 }): Server {
   return createServer((request, response) => {
     void handle(request, response, dependencies).catch(() =>
@@ -72,6 +74,7 @@ async function handle(
     issuance?: Pick<FiscalIssuance, 'issue'>
     cancellation?: Pick<FiscalCancellation, 'request'>
     rules: Pick<FiscalRuleStore, 'proposeOverride'>
+    credentials?: Pick<FiscalEstablishmentCredentials, 'list' | 'upload'>
   },
 ): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://fiscal.local')
@@ -87,6 +90,49 @@ async function handle(
     return
   }
   if (!requirePermission(principal, 'read', response)) return
+
+  if (url.pathname === '/establishment-credentials' && dependencies.credentials) {
+    response.setHeader('cache-control', 'private, no-store')
+    if (request.method === 'GET') {
+      if (!requirePermission(principal, 'credentials:manage', response)) return
+      json(response, 200, { data: await dependencies.credentials.list(principal.tenantId) })
+      return
+    }
+    if (request.method === 'POST') {
+      if (!requirePermission(principal, 'credentials:manage', response)) return
+      try {
+        const body = z
+          .strictObject({
+            establishmentId: z.uuid(),
+            pfxBase64: z
+              .string()
+              .min(1)
+              .max(700_000)
+              .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+            password: z.string().min(1).max(1024),
+          })
+          .parse(await readJson(request))
+        const pfx = Buffer.from(body.pfxBase64, 'base64')
+        if (pfx.toString('base64') !== body.pfxBase64)
+          throw new SyntaxError('Invalid certificate encoding')
+        const saved = await dependencies.credentials.upload({
+          tenantId: principal.tenantId,
+          establishmentId: body.establishmentId,
+          pfx,
+          password: body.password,
+          actorId: principal.subject,
+        })
+        json(response, 201, saved)
+      } catch (error) {
+        if (error instanceof z.ZodError || error instanceof SyntaxError)
+          problem(response, 400, 'Bad Request', 'Invalid certificate upload')
+        else if (error instanceof Error && /certificate|password|Certificate/.test(error.message))
+          problem(response, 422, 'Unprocessable Content', error.message)
+        else throw error
+      }
+      return
+    }
+  }
 
   if (request.method === 'GET' && url.pathname === '/capabilities') {
     const supported = (await dependencies.capabilities.listActive(principal.tenantId))

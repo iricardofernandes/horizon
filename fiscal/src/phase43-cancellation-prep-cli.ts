@@ -4,9 +4,9 @@ import { z } from 'zod'
 import { EncryptedFiscalArtifactStore, S3ObjectStore } from './artifact-store'
 import { FiscalArtifacts } from './artifacts'
 import { FiscalCapabilities } from './capabilities'
+import { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { HomologationCancellation } from './homologation-cancellation'
 import { HomologationExchangeLedger } from './homologation-exchange-ledger'
-import { loadHomologationCredential } from './nfe55/homologation-credential'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from './nfe55/sefaz-adapter'
 import { digestSchema, operationsSchema } from './phase43-runtime-input'
 
@@ -32,13 +32,8 @@ async function main(): Promise<void> {
   const actorId = z.string().min(1).max(200).parse(flag('actor'))
   const reason = z.string().trim().min(15).max(255).parse(flag('reason'))
   const occurredAt = flag('occurred-at')
-  const [credential, schemaZip, operations] = await Promise.all([
-    loadHomologationCredential({
-      certificatePath: flag('certificate'),
-      privateKeyPath: flag('private-key'),
-      expectedFingerprint: flag('certificate-fingerprint'),
-      expectedIssuerTaxId: flag('issuer-tax-id'),
-    }),
+  const credentials = new FiscalEstablishmentCredentials(databaseUrl, key)
+  const [schemaZip, operations] = await Promise.all([
     readFile(flag('event-schema')),
     readFile(flag('operations'), 'utf8').then(
       (bytes) => operationsSchema.parse(JSON.parse(bytes)) as SefazOperationMap,
@@ -55,6 +50,12 @@ async function main(): Promise<void> {
   )
   const ledger = new HomologationExchangeLedger(databaseUrl, artifacts)
   const capabilities = new FiscalCapabilities(databaseUrl)
+  const target = await ledger.cancellationTarget(tenantId, documentId, exchangeId)
+  const credential = await credentials.forDocument(
+    tenantId,
+    documentId,
+    target.certificateFingerprint,
+  )
   const adapter = new SefazNfe55HomologationAdapter(credential, operations)
   const cancellation = new HomologationCancellation(
     ledger,
@@ -74,7 +75,12 @@ async function main(): Promise<void> {
     })
     process.stdout.write(`${JSON.stringify({ ...result, sent: false }, null, 2)}\n`)
   } finally {
-    await Promise.all([ledger.close(), capabilities.close(), artifacts.close()])
+    await Promise.all([
+      ledger.close(),
+      capabilities.close(),
+      artifacts.close(),
+      credentials.close(),
+    ])
     s3.destroy()
   }
 }
