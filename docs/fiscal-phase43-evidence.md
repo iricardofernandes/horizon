@@ -33,6 +33,8 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
 - `node scripts/ci-local.mjs` passou em 2026-09-25, incluindo os testes de
   integração isolados dos serviços, validação dos contratos gerados, limites entre
   módulos e varredura de segredos. O ensaio de SEFAZ e o CI remoto seguem pendentes.
+- Uma instalação limpa do Sales resolveu `@horizon/contracts@0.32.0` pelo registro
+  local; o typecheck e os 13 testes de integração do Sales passaram com esse pacote.
 
 ## Tupla aprovada
 
