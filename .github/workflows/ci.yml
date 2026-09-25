@@ -75,6 +75,10 @@ jobs:
       - name: install
         run: npm ci --no-audit --no-fund
 
+      - name: verify retained phase 43 source bytes
+        if: matrix.path == 'fiscal'
+        run: npm run phase43:verify-sources
+
       - name: typecheck
         run: npm run typecheck --if-present
 

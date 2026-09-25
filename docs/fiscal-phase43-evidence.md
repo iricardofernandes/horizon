@@ -46,6 +46,10 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
   `make test-phase10` passou no Chromium com trace correlacionado entre Web,
   gateway, Sales, Inventory, Financial e Webhooks. Isto verifica o caminho dourado
   existente, não uma transmissão de homologação.
+- O workflow manual `phase43-homologation.yml` foi preparado para executar uma
+  troca por vez em runner e environment dedicados. O resumo de log omite recibo,
+  protocolo e XML; a checagem local de 21 testes de scripts passou. O workflow
+  ainda não foi executado com credencial real nem aprovado por revisor Fiscal.
 
 ## Tupla aprovada
 

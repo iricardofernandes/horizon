@@ -1,0 +1,79 @@
+name: phase 43 SP homologation drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Reviewed exchange operation
+        required: true
+        type: choice
+        options: [resume, consult, status]
+      tenant_id:
+        description: Approved tenant UUID
+        required: true
+        type: string
+      exchange_id:
+        description: Stable exchange UUID
+        required: true
+        type: string
+      document_id:
+        description: Document UUID for consult or status
+        required: false
+        type: string
+      grant_id:
+        description: Approved drill grant UUID for status
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase43-sp-homologation
+  cancel-in-progress: false
+
+jobs:
+  exchange:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, fiscal-homologation]
+    environment: fiscal-homologation
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install Fiscal from the runner's local contract registry
+        working-directory: fiscal
+        run: npm ci --no-audit --no-fund
+      - name: Build the approved exchange command
+        working-directory: fiscal
+        run: npm run build
+      - name: Verify retained candidate source bytes
+        working-directory: fiscal
+        run: npm run phase43:verify-sources
+      - name: Execute one grant-bound homologation exchange
+        env:
+          PHASE43_ACTION: ${{ inputs.action }}
+          PHASE43_TENANT_ID: ${{ inputs.tenant_id }}
+          PHASE43_EXCHANGE_ID: ${{ inputs.exchange_id }}
+          PHASE43_DOCUMENT_ID: ${{ inputs.document_id }}
+          PHASE43_GRANT_ID: ${{ inputs.grant_id }}
+          PHASE43_ACTOR_ID: ${{ github.actor }}
+          PHASE43_WORKER_ID: gha-${{ github.run_id }}
+          PHASE43_CERTIFICATE_PATH: ${{ vars.PHASE43_CERTIFICATE_PATH }}
+          PHASE43_PRIVATE_KEY_PATH: ${{ vars.PHASE43_PRIVATE_KEY_PATH }}
+          PHASE43_CERTIFICATE_FINGERPRINT: ${{ vars.PHASE43_CERTIFICATE_FINGERPRINT }}
+          PHASE43_ISSUER_TAX_ID: ${{ vars.PHASE43_ISSUER_TAX_ID }}
+          PHASE43_TRUST_ANCHOR_PATH: ${{ vars.PHASE43_TRUST_ANCHOR_PATH }}
+          PHASE43_TRUST_ANCHOR_FINGERPRINT: ${{ vars.PHASE43_TRUST_ANCHOR_FINGERPRINT }}
+          PHASE43_OPERATIONS_PATH: ${{ vars.PHASE43_OPERATIONS_PATH }}
+          PHASE43_ENDPOINTS_PATH: ${{ vars.PHASE43_ENDPOINTS_PATH }}
+          PHASE43_DOCUMENT_RESPONSE_SCHEMA_PATH: ${{ vars.PHASE43_DOCUMENT_RESPONSE_SCHEMA_PATH }}
+          PHASE43_CONSULTATION_RESPONSE_SCHEMA_PATH: ${{ vars.PHASE43_CONSULTATION_RESPONSE_SCHEMA_PATH }}
+          DATABASE_URL: ${{ secrets.PHASE43_DATABASE_URL }}
+          FISCAL_ARTIFACT_KEY_HEX: ${{ secrets.PHASE43_ARTIFACT_KEY_HEX }}
+          FISCAL_ARTIFACT_BUCKET: ${{ vars.PHASE43_ARTIFACT_BUCKET }}
+          FISCAL_ARTIFACT_REGION: ${{ vars.PHASE43_ARTIFACT_REGION }}
+          FISCAL_ARTIFACT_ENDPOINT: ${{ vars.PHASE43_ARTIFACT_ENDPOINT }}
+        run: node scripts/phase43-live-exchange.mjs

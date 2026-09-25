@@ -50,7 +50,8 @@ run('secret scan', 'docker', [
   'run', '--rm', '-v', `${ROOT}:/repo`, 'zricethezav/gitleaks:latest',
   'detect', '--source=/repo', '--redact', '--exit-code', '1',
 ])
-run('compatibility analysis tests', process.execPath, ['--test', 'scripts/lib/contract-diff.test.mjs'])
+run('repository script tests', process.execPath, ['--test', 'scripts/lib/*.test.mjs'])
+run('phase43 retained sources', 'npm', ['run', 'phase43:verify-sources'], join(ROOT, 'fiscal'))
 
 for (const project of projects) {
   for (const script of ['typecheck', 'lint', 'test', 'build'])

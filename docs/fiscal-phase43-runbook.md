@@ -37,6 +37,38 @@ de produção nem libera estoque ou financeiro.
 5. Executar build, testes unitários/e2e e migrações em ambiente de ensaio. Fazer
    backup consistente do banco e dos objetos criptografados antes do teste real.
 
+## Job manual de homologação
+
+O workflow `phase43-homologation.yml` executa **uma** troca por disparo manual,
+somente em `main`, em um runner Linux dedicado com o rótulo
+`fiscal-homologation`. Configurar antes o environment `fiscal-homologation` com
+revisores obrigatórios distintos do operador. O runner precisa alcançar apenas o
+banco e o bucket isolados de homologação, os cinco endpoints SP revisados e seu
+registro local de `@horizon/contracts` na versão fixada. As fontes candidatas
+retidas são verificadas novamente no job; isso não substitui a revisão Fiscal.
+
+Montar certificado, chave privada, raiz TLS, arquivos de operações e endpoints
+revisados e os dois ZIPs de XSD de resposta fora do repositório. Registrar os
+caminhos e digests nas variáveis de environment `PHASE43_CERTIFICATE_PATH`,
+`PHASE43_PRIVATE_KEY_PATH`, `PHASE43_CERTIFICATE_FINGERPRINT`,
+`PHASE43_ISSUER_TAX_ID`, `PHASE43_TRUST_ANCHOR_PATH`,
+`PHASE43_TRUST_ANCHOR_FINGERPRINT`, `PHASE43_OPERATIONS_PATH`,
+`PHASE43_ENDPOINTS_PATH`, `PHASE43_DOCUMENT_RESPONSE_SCHEMA_PATH` e
+`PHASE43_CONSULTATION_RESPONSE_SCHEMA_PATH`. Configurar também
+`PHASE43_ARTIFACT_BUCKET`, `PHASE43_ARTIFACT_REGION` e, se necessário,
+`PHASE43_ARTIFACT_ENDPOINT`. Manter `PHASE43_DATABASE_URL` e
+`PHASE43_ARTIFACT_KEY_HEX` como secrets do environment; a credencial AWS do bucket
+deve vir da identidade restrita do runner. Não armazenar bytes de certificado ou
+chave como variáveis do workflow.
+
+Disparar `resume`, `consult` ou `status` com tenant e exchange IDs previamente
+aprovados. `consult` e `status` exigem document ID; `status` também exige grant ID.
+O CLI valida o grant, os digests e a capacidade antes de transmitir. O log do job
+mostra apenas serviço, códigos, digest da resposta e presença de recibo/protocolo.
+Conferir as referências completas no ledger restrito e confrontar o resultado com
+o portal oficial; registrar a evidência redigida no documento da fase. O workflow
+não aprova fontes, não reconcilia resultados incertos e não ativa a capability.
+
 ## Sequência por documento
 
 1. Congelar a origem com Sales em `packed` e criar o draft interno. Conferir o
