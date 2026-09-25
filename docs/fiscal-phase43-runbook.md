@@ -64,6 +64,13 @@ de produção nem libera estoque ou financeiro.
    `phase43:exchange-resume` para o exchange ID do evento. Comparar o `128/135`
    observado e o protocolo com o portal. Registrar digests, não XML protegido.
 
+Após a autorização observada, `phase43:danfe -- --tenant <uuid> --document <uuid>`
+gera um PDF de homologação somente a partir do XML assinado e do protocolo
+retidos. O comando devolve o digest do artefato `danfe`. Conferir o título, a marca
+"HOMOLOGAÇÃO — SEM VALOR FISCAL" em todas as páginas e o rótulo
+`environment: homologation`, `fiscalValue: false` na leitura v2. O PDF é um
+resumo para o ensaio; não substitui um DANFE de produção.
+
 Usar documentos separados para autorização normal, rejeição de negócio e falha
 temporária. O caso de resposta perdida exige consulta e reconciliação manual se
 continuar incerto; um `not_found` isolado não libera reenvio.

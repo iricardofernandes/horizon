@@ -10,6 +10,23 @@ export async function renderSimulatedDanfe(input: {
   state: DanfeState
   protocol?: Buffer
 }): Promise<Buffer> {
+  return renderDanfe({ ...input, environment: 'simulation' })
+}
+
+/** A homologation PDF is always marked as having no fiscal value. */
+export async function renderHomologationDanfe(input: {
+  signedXml: Buffer
+  protocol: Buffer
+}): Promise<Buffer> {
+  return renderDanfe({ ...input, state: 'authorized', environment: 'homologation' })
+}
+
+async function renderDanfe(input: {
+  signedXml: Buffer
+  state: DanfeState
+  protocol?: Buffer
+  environment: 'simulation' | 'homologation'
+}): Promise<Buffer> {
   if (input.signedXml.length === 0 || input.signedXml.length > 10 * 1024 * 1024)
     throw new Error('DANFE signed XML size is invalid')
   if (input.state === 'authorized' && !input.protocol)
@@ -50,7 +67,9 @@ export async function renderSimulatedDanfe(input: {
     `Total da nota: R$ ${first(total, 'vNF')}`,
     `XML SHA-256: ${createHash('sha256').update(input.signedXml).digest('hex')}`,
     ...(input.protocol
-      ? [`Protocolo simulado SHA-256: ${createHash('sha256').update(input.protocol).digest('hex')}`]
+      ? [
+          `${input.environment === 'simulation' ? 'Protocolo simulado' : 'Protocolo SEFAZ'} SHA-256: ${createHash('sha256').update(input.protocol).digest('hex')}`,
+        ]
       : []),
     '',
     'Itens',
@@ -58,7 +77,11 @@ export async function renderSimulatedDanfe(input: {
   ]
   const pdf = await PDFDocument.create({ updateMetadata: false })
   const fixedDate = new Date('2026-01-01T00:00:00.000Z')
-  pdf.setTitle('DANFE de simulação - NF-e modelo 55')
+  pdf.setTitle(
+    input.environment === 'simulation'
+      ? 'DANFE de simulação - NF-e modelo 55'
+      : 'DANFE de homologação - NF-e modelo 55 - SEM VALOR FISCAL',
+  )
   pdf.setAuthor('Horizon Fiscal')
   pdf.setCreationDate(fixedDate)
   pdf.setModificationDate(fixedDate)
@@ -68,21 +91,31 @@ export async function renderSimulatedDanfe(input: {
   const pageCount = Math.max(1, Math.ceil(lines.length / perPage))
   for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
     const page = pdf.addPage([595.28, 841.89])
-    page.drawText('DANFE — NF-e 55 — AMBIENTE DE SIMULAÇÃO', {
-      x: 32,
-      y: 800,
-      size: 13,
-      font: bold,
-    })
-    page.drawText('SIMULAÇÃO — SEM VALOR FISCAL', {
-      x: 42,
-      y: 450,
-      size: 30,
-      font: bold,
-      color: rgb(0.88, 0.7, 0.7),
-      rotate: degrees(35),
-      opacity: 0.6,
-    })
+    page.drawText(
+      input.environment === 'simulation'
+        ? 'DANFE — NF-e 55 — AMBIENTE DE SIMULAÇÃO'
+        : 'DANFE — NF-e 55 — AMBIENTE DE HOMOLOGAÇÃO',
+      {
+        x: 32,
+        y: 800,
+        size: 13,
+        font: bold,
+      },
+    )
+    page.drawText(
+      input.environment === 'simulation'
+        ? 'SIMULAÇÃO — SEM VALOR FISCAL'
+        : 'HOMOLOGAÇÃO — SEM VALOR FISCAL',
+      {
+        x: 42,
+        y: 450,
+        size: 30,
+        font: bold,
+        color: rgb(0.88, 0.7, 0.7),
+        rotate: degrees(35),
+        opacity: 0.6,
+      },
+    )
     if (input.state === 'preview')
       page.drawText('NÃO AUTORIZADA', {
         x: 180,
@@ -92,13 +125,16 @@ export async function renderSimulatedDanfe(input: {
         color: rgb(0.75, 0.1, 0.1),
       })
     else
-      page.drawText('AUTORIZAÇÃO SIMULADA', {
-        x: 160,
-        y: 725,
-        size: 18,
-        font: bold,
-        color: rgb(0.1, 0.35, 0.1),
-      })
+      page.drawText(
+        input.environment === 'simulation' ? 'AUTORIZAÇÃO SIMULADA' : 'AUTORIZADA EM HOMOLOGAÇÃO',
+        {
+          x: 160,
+          y: 725,
+          size: 18,
+          font: bold,
+          color: rgb(0.1, 0.35, 0.1),
+        },
+      )
     for (const [index, line] of lines
       .slice(pageIndex * perPage, (pageIndex + 1) * perPage)
       .entries())
@@ -110,12 +146,15 @@ export async function renderSimulatedDanfe(input: {
           .slice(0, 110),
         { x: 32, y: 690 - index * 14, size: 8, font },
       )
-    page.drawText(`Página ${pageIndex + 1} de ${pageCount} — SIMULAÇÃO — SEM VALOR FISCAL`, {
-      x: 32,
-      y: 25,
-      size: 8,
-      font: bold,
-    })
+    page.drawText(
+      `Página ${pageIndex + 1} de ${pageCount} — ${input.environment === 'simulation' ? 'SIMULAÇÃO' : 'HOMOLOGAÇÃO'} — SEM VALOR FISCAL`,
+      {
+        x: 32,
+        y: 25,
+        size: 8,
+        font: bold,
+      },
+    )
   }
   return Buffer.from(await pdf.save({ useObjectStreams: false }))
 }

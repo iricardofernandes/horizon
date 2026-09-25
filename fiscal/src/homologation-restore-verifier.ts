@@ -9,7 +9,7 @@ export class HomologationRestoreVerifier {
 
   constructor(
     databaseUrl: string,
-    private readonly artifacts: Pick<FiscalArtifacts, 'getV2'>,
+    private readonly artifacts: Pick<FiscalArtifacts, 'getV2' | 'listV2'>,
     private readonly observations: Pick<HomologationObservations, 'list'>,
   ) {
     this.#db = postgres(databaseUrl, { max: 5, connection: { statement_timeout: 5000 } })
@@ -46,7 +46,7 @@ export class HomologationRestoreVerifier {
         where tenant_id = ${tenantId} and document_id = ${documentId}`
     })
     const checks: Array<{
-      kind: 'homologation_request' | 'homologation_response' | 'homologation_protocol'
+      kind: 'homologation_request' | 'homologation_response' | 'homologation_protocol' | 'danfe'
       digest: string
       sourceSchema: string
     }> = []
@@ -85,6 +85,16 @@ export class HomologationRestoreVerifier {
         sourceSchema: `sefaz-nfe400-signed-document:${binding.schema_digest}`,
       })
     }
+    const listed = await this.artifacts.listV2(tenantId, documentId)
+    if (listed?.environment !== 'homologation')
+      throw new Error('Homologation restore artifact list is unavailable')
+    for (const artifact of listed.artifacts)
+      if (artifact.kind === 'danfe')
+        checks.push({
+          kind: 'danfe',
+          digest: artifact.digest,
+          sourceSchema: 'horizon-danfe-homologation-v1',
+        })
     const unique = [
       ...new Map(checks.map((check) => [`${check.kind}:${check.digest}`, check])).values(),
     ]

@@ -10,6 +10,7 @@ import { fiscalArtifactListV2Schema } from '@horizon/contracts'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { RabbitMQContainer, type StartedRabbitMQContainer } from '@testcontainers/rabbitmq'
 import { connect } from 'amqplib'
+import { PDFDocument } from 'pdf-lib'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { EncryptedFiscalArtifactStore, LocalObjectStore } from '../src/artifact-store'
@@ -21,6 +22,7 @@ import { FiscalCapabilities } from '../src/capabilities'
 import { FiscalConsumer } from '../src/consumer'
 import { FiscalDocuments } from '../src/documents'
 import { HomologationCancellation } from '../src/homologation-cancellation'
+import { HomologationDanfe } from '../src/homologation-danfe'
 import { HomologationExchangeLedger } from '../src/homologation-exchange-ledger'
 import {
   HomologationExchangeRunner,
@@ -1258,7 +1260,16 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       numericCode: '12345678',
     })
     const authorizationId = randomUUID()
-    const signedXml = Buffer.from('<NFe>offline-signed-fixture</NFe>')
+    const signedXml = Buffer.from(
+      `<NFe><infNFe Id="NFe${accessKey}"><ide><serie>1</serie><nNF>${reservedNumber}</nNF>` +
+        '<dhEmi>2026-09-23T12:00:00-03:00</dhEmi></ide>' +
+        '<emit><CNPJ>00000000E08G12</CNPJ><xNome>Emitente offline</xNome></emit>' +
+        '<dest><CNPJ>11111111111111</CNPJ><xNome>Destinatario offline</xNome></dest>' +
+        '<det><prod><cProd>A</cProd><xProd>Cafe</xProd><qCom>1</qCom>' +
+        '<vUnCom>10.00</vUnCom><vProd>10.00</vProd></prod></det>' +
+        '<total><ICMSTot><vProd>10.00</vProd><vNF>10.00</vNF></ICMSTot></total>' +
+        '</infNFe></NFe>',
+    )
     const authorization = {
       service: 'authorization' as const,
       request: Buffer.from(`<prepared-authorization>${signedXml}</prepared-authorization>`),
@@ -1303,6 +1314,14 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       authorizationAdapter,
     )
     expect(bound).toMatchObject({ prepared: authorization })
+    const preAuthorizationDanfe = new HomologationDanfe(appUrl, artifacts)
+    try {
+      await expect(preAuthorizationDanfe.render(tenantId, documentId)).rejects.toThrow(
+        'Unique authorized homologation protocol is unavailable',
+      )
+    } finally {
+      await preAuthorizationDanfe.close()
+    }
     expect(
       await ledger.bindAuthorization(
         { ...input, exchangeId: authorizationId },
@@ -1552,6 +1571,20 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       decision: 'authorized',
       protocol_number: cancellationProtocol,
     })
+    const authorizedDanfe = new HomologationDanfe(appUrl, artifacts)
+    try {
+      const rendered = await authorizedDanfe.render(tenantId, documentId)
+      expect(rendered.exchangeId).toBe(authorizedConsultation.exchangeId)
+      expect(await authorizedDanfe.render(tenantId, documentId)).toEqual(rendered)
+      const artifact = await artifacts.getV2(tenantId, documentId, 'danfe', rendered.digest)
+      expect(artifact.metadata).toMatchObject({
+        environment: 'homologation',
+        sourceSchema: 'horizon-danfe-homologation-v1',
+      })
+      expect((await PDFDocument.load(artifact.bytes)).getTitle()).toContain('SEM VALOR FISCAL')
+    } finally {
+      await authorizedDanfe.close()
+    }
     expect(
       await ledger.cancellationTarget(tenantId, documentId, eventInput.exchangeId),
     ).toMatchObject({

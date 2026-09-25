@@ -9,7 +9,7 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
 - Commit `02ecd8f`: vínculo imutável dos dois pacotes XSD de resposta, seleção do
   worker somente após ativação, bloqueio de novos envios após desativação e
   validação de correlação da resposta SOAP.
-- Fiscal: typecheck, lint, build, 92 testes unitários e 25 testes de integração
+- Fiscal: typecheck, lint, build, 93 testes unitários e 25 testes de integração
   passaram localmente. O teste de integração usa PostgreSQL e RabbitMQ isolados;
   não chama a SEFAZ.
 - `make verify-phase43-sources` conferiu os seis arquivos candidatos retidos e
@@ -19,6 +19,9 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
   sem resposta permaneceu sem reenvio, uma resposta bruta foi interpretada e a
   capability desativada não selecionou novos envios. Isso não substitui a restauração
   do ensaio com o emissor real.
+- O PDF de homologação local usa um título próprio e a marca "SEM VALOR FISCAL"
+  em cada página; sua geração exige XML assinado retido e protocolo autorizado.
+  O arquivo restaurado foi conferido pelo verificador de artefatos.
 - A [lista oficial de serviços da SEFAZ-SP](https://portal.fazenda.sp.gov.br/servicos/nfe/Paginas/URL-WEBSERVICES.aspx)
   ainda apresentava as cinco URLs candidatas de homologação 4.00 em 2026-09-25.
   WSDL, credencial, fontes efetivas e interpretação fiscal continuam pendentes.
