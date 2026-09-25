@@ -38,6 +38,10 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
 - `node scripts/ci-local.mjs --full` passou em 2026-09-25: instalações limpas,
   verificações de código, testes de integração e build das 12 imagens Docker. O
   caminho dourado no navegador, gateway e Terraform pertencem a jobs separados.
+- `make demo` passou duas vezes no ambiente local em 2026-09-25. O comando
+  `make test-phase10` passou no Chromium com trace correlacionado entre Web,
+  gateway, Sales, Inventory, Financial e Webhooks. Isto verifica o caminho dourado
+  existente, não uma transmissão de homologação.
 
 ## Tupla aprovada
 
