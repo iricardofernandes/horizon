@@ -1,5 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto'
+import type { Readable } from 'node:stream'
 import { salesFiscalOriginRecorded } from '@horizon/contracts'
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { SalesModuleEventHandlers } from '@/application/consume-module-events'
@@ -29,6 +31,7 @@ import {
 } from '@/domain/value-objects/sales-values'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
+import { e2ePostgresContainer } from './setup-e2e'
 
 const clock = { now: () => new Date() }
 
@@ -639,6 +642,7 @@ it('blocks a scoped dispatch in PostgreSQL until its exact production release', 
       dispatchedOn: today(),
     })
   expect((await dispatch()).isLeft()).toBe(true)
+  await verifyRestoredFiscalGate(fixture.tenantId, shipmentId)
   await expect(administrator`insert into shipments (
     id, tenant_id, order_id, warehouse_id, status, value, currency,
     picked_by, packed_by, dispatched_by, dispatched_on, created_at, updated_at
@@ -730,3 +734,85 @@ it('blocks a scoped dispatch in PostgreSQL until its exact production release', 
   const [dispatched] = await administrator`select status from shipments where id = ${shipmentId}`
   expect(dispatched?.status).toBe('dispatched')
 })
+
+async function verifyRestoredFiscalGate(tenantId: string, shipmentId: string): Promise<void> {
+  const source = e2ePostgresContainer()
+  const backupPath = '/tmp/sales-phase43-backup.dump'
+  const backup = await source.exec(
+    [
+      'pg_dump',
+      '--format=custom',
+      '--no-owner',
+      '--file',
+      backupPath,
+      '-U',
+      'postgres',
+      '-d',
+      'horizon_test',
+    ],
+    { env: { PGPASSWORD: 'test' } },
+  )
+  if (backup.exitCode !== 0) throw new Error(`Sales pg_dump failed: ${backup.stderr}`)
+  let restoredContainer: StartedPostgreSqlContainer | null = null
+  try {
+    restoredContainer = await new PostgreSqlContainer('postgres:17-alpine')
+      .withDatabase('horizon_sales_restored_test')
+      .withUsername('postgres')
+      .withPassword('test')
+      .start()
+    await restoredContainer.copyArchiveToContainer(
+      (await source.copyArchiveFromContainer(backupPath)) as Readable,
+      '/tmp',
+    )
+    const restoredUrl = restoredContainer.getConnectionUri()
+    const restoredAdmin = postgres(restoredUrl, { max: 1 })
+    try {
+      await restoredAdmin.unsafe(
+        `CREATE ROLE horizon_owner LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+         CREATE ROLE horizon_app LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+         CREATE ROLE horizon_relay LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;`,
+        [],
+        { prepare: false },
+      )
+      const restore = await restoredContainer.exec(
+        [
+          'pg_restore',
+          '--no-owner',
+          '--exit-on-error',
+          '-U',
+          'postgres',
+          '-d',
+          'horizon_sales_restored_test',
+          backupPath,
+        ],
+        { env: { PGPASSWORD: 'test' } },
+      )
+      if (restore.exitCode !== 0) throw new Error(`Sales pg_restore failed: ${restore.stderr}`)
+      const [restored] = await restoredAdmin`select status from shipments
+        where tenant_id = ${tenantId} and id = ${shipmentId}`
+      expect(restored?.status).toBe('packed')
+      await expect(restoredAdmin`update shipments
+        set status = 'dispatched', dispatched_by = 'direct-sql', dispatched_on = ${today()}
+        where tenant_id = ${tenantId} and id = ${shipmentId}`).rejects.toThrow(
+        'lacks production fiscal authorization',
+      )
+      const restoredDatabase = new SalesDatabase({
+        url: restoredUrl.replace('postgres:test@', 'horizon_app:test@'),
+      })
+      try {
+        const result = await new DispatchShipmentUseCase(restoredDatabase, clock).execute({
+          context: commandOf(tenantId),
+          shipmentId,
+          dispatchedOn: today(),
+        })
+        expect(result.isLeft()).toBe(true)
+      } finally {
+        await restoredDatabase.close()
+      }
+    } finally {
+      await restoredAdmin.end()
+    }
+  } finally {
+    await restoredContainer?.stop()
+  }
+}

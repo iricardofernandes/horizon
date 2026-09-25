@@ -19,6 +19,10 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
   sem resposta permaneceu sem reenvio, uma resposta bruta foi interpretada e a
   capability desativada não selecionou novos envios. Isso não substitui a restauração
   do ensaio com o emissor real.
+- Outro teste local restaurou o banco do Sales em um PostgreSQL isolado no estado
+  `packed`, sem autorização de produção. Após a restauração, tanto o comando de
+  expedição quanto a proteção SQL continuaram a bloquear o envio. A suíte de 13
+  testes de integração do Sales passou com essa verificação.
 - O PDF de homologação local usa um título próprio e a marca "SEM VALOR FISCAL"
   em cada página; sua geração exige XML assinado retido e protocolo autorizado.
   O arquivo restaurado foi conferido pelo verificador de artefatos.

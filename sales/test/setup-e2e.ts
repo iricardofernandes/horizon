@@ -26,6 +26,11 @@ const OWNER_ROLE = 'horizon_owner'
 const APP_ROLE = 'horizon_app'
 const APP_PASSWORD = 'test'
 
+export function e2ePostgresContainer(): StartedPostgreSqlContainer {
+  if (!postgres) throw new Error('Sales e2e PostgreSQL is not ready')
+  return postgres
+}
+
 beforeAll(async () => {
   ;[postgres, redis, rabbitmq] = await Promise.all([
     new PostgreSqlContainer('postgres:17-alpine')
