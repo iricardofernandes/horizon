@@ -4,6 +4,20 @@ Status: **pendente**. Este registro não atesta emissão real. Preencher somente
 evidências do emissor credenciado e revisão Fiscal independente. Não incluir XML
 integral, certificado, chave privada, dados pessoais do destinatário ou segredos.
 
+## Verificação local (2026-09-25)
+
+- Commit `02ecd8f`: vínculo imutável dos dois pacotes XSD de resposta, seleção do
+  worker somente após ativação, bloqueio de novos envios após desativação e
+  validação de correlação da resposta SOAP.
+- Fiscal: typecheck, lint, build, 92 testes unitários e 25 testes de integração
+  passaram localmente. O teste de integração usa PostgreSQL e RabbitMQ isolados;
+  não chama a SEFAZ.
+- `make verify-phase43-sources` conferiu os seis arquivos candidatos retidos e
+  os XSDs de resposta extraídos por SHA-256.
+- A [lista oficial de serviços da SEFAZ-SP](https://portal.fazenda.sp.gov.br/servicos/nfe/Paginas/URL-WEBSERVICES.aspx)
+  ainda apresentava as cinco URLs candidatas de homologação 4.00 em 2026-09-25.
+  WSDL, credencial, fontes efetivas e interpretação fiscal continuam pendentes.
+
 ## Tupla aprovada
 
 | Campo | Evidência |
