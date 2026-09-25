@@ -35,6 +35,9 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
   módulos e varredura de segredos. O ensaio de SEFAZ e o CI remoto seguem pendentes.
 - Uma instalação limpa do Sales resolveu `@horizon/contracts@0.32.0` pelo registro
   local; o typecheck e os 13 testes de integração do Sales passaram com esse pacote.
+- `node scripts/ci-local.mjs --full` passou em 2026-09-25: instalações limpas,
+  verificações de código, testes de integração e build das 12 imagens Docker. O
+  caminho dourado no navegador, gateway e Terraform pertencem a jobs separados.
 
 ## Tupla aprovada
 
