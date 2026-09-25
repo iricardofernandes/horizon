@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Readable } from 'node:stream'
 import { promisify } from 'node:util'
 import { fiscalArtifactListV2Schema } from '@horizon/contracts'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
@@ -1785,6 +1786,13 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       (await ledger.loadPrepared(tenantId, queuedAfterReviewId, operations, 'tester:phase43'))
         .stage,
     ).toBe('observed')
+    const pendingStatusId = randomUUID()
+    await ledger.prepare({ ...input, exchangeId: pendingStatusId }, prepared)
+    expect(await ledger.markStarted(tenantId, pendingStatusId, 'worker-a')).toBe(true)
+    const rawOnlyStatusId = randomUUID()
+    await ledger.prepare({ ...input, exchangeId: rawOnlyStatusId }, prepared)
+    expect(await ledger.markStarted(tenantId, rawOnlyStatusId, 'worker-a')).toBe(true)
+    await ledger.recordRawResponse(tenantId, documentId, rawOnlyStatusId, soap)
     const stoppedExchangeId = randomUUID()
     await ledger.prepare({ ...input, exchangeId: stoppedExchangeId }, prepared)
     await capabilities.change({
@@ -1801,6 +1809,19 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     await expect(ledger.markStarted(tenantId, stoppedExchangeId, 'worker-a')).rejects.toThrow(
       'deactivated before transmission',
     )
+    await verifyRestoredHomologationLedger({
+      tenantId,
+      documentId,
+      pendingStatusId,
+      rawOnlyStatusId,
+      operations,
+      adapter,
+      responseSchemas,
+      endpointDigest: input.endpointDigest,
+      certificateFingerprint: input.certificateFingerprint,
+      sourceObservations: observations,
+      sourceArtifacts: artifacts,
+    })
     const [documentAfterObservation] = await administrator`select status, environment
       from fiscal_documents where tenant_id = ${tenantId} and id = ${documentId}`
     expect(documentAfterObservation).toMatchObject({ status: 'ready', environment: 'homologation' })
@@ -1810,6 +1831,167 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       artifacts.close(),
       capabilities.close(),
       observations.close(),
+    ])
+  }
+}
+
+async function verifyRestoredHomologationLedger(input: {
+  tenantId: string
+  documentId: string
+  pendingStatusId: string
+  rawOnlyStatusId: string
+  operations: SefazOperationMap
+  adapter: SefazNfe55HomologationAdapter
+  responseSchemas: SefazResponseSchemaValidator
+  endpointDigest: string
+  certificateFingerprint: string
+  sourceObservations: HomologationObservations
+  sourceArtifacts: FiscalArtifacts
+}): Promise<void> {
+  const backupPath = '/tmp/fiscal-phase43-backup.dump'
+  const backup = await container.exec(
+    [
+      'pg_dump',
+      '--format=custom',
+      '--no-owner',
+      '--file',
+      backupPath,
+      '-U',
+      'postgres',
+      '-d',
+      'horizon_fiscal_test',
+    ],
+    { env: { PGPASSWORD: 'test' } },
+  )
+  if (backup.exitCode !== 0) throw new Error(`Phase 43 pg_dump failed: ${backup.stderr}`)
+  const restoredDirectory = await mkdtemp(join(tmpdir(), 'horizon-phase43-restored-'))
+  const restoredObjects = join(restoredDirectory, 'objects')
+  let restoredContainer: StartedPostgreSqlContainer | null = null
+  try {
+    await cp(artifactRoot, restoredObjects, { recursive: true })
+    restoredContainer = await new PostgreSqlContainer('postgres:17-alpine')
+      .withDatabase('horizon_phase43_restored_test')
+      .withUsername('postgres')
+      .withPassword('test')
+      .start()
+    await restoredContainer.copyArchiveToContainer(
+      (await container.copyArchiveFromContainer(backupPath)) as Readable,
+      '/tmp',
+    )
+    const restoredAdmin = postgres(restoredContainer.getConnectionUri(), { max: 1 })
+    try {
+      await restoredAdmin.unsafe(
+        `CREATE ROLE horizon_owner LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+         CREATE ROLE horizon_app LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;`,
+        [],
+        { prepare: false },
+      )
+      const restore = await restoredContainer.exec(
+        [
+          'pg_restore',
+          '--no-owner',
+          '-U',
+          'postgres',
+          '-d',
+          'horizon_phase43_restored_test',
+          backupPath,
+        ],
+        { env: { PGPASSWORD: 'test' } },
+      )
+      if (restore.exitCode !== 0) throw new Error(`Phase 43 pg_restore failed: ${restore.stderr}`)
+    } finally {
+      await restoredAdmin.end()
+    }
+    const restoredUrl = restoredContainer
+      .getConnectionUri()
+      .replace('postgres:test@', 'horizon_app:test@')
+    const restoredArtifacts = new FiscalArtifacts(
+      restoredUrl,
+      new EncryptedFiscalArtifactStore(new LocalObjectStore(restoredObjects), artifactKey),
+    )
+    const restoredObservations = new HomologationObservations(restoredUrl)
+    const restoredLedger = new HomologationExchangeLedger(restoredUrl, restoredArtifacts)
+    const restoredVerifier = new HomologationRestoreVerifier(
+      restoredUrl,
+      restoredArtifacts,
+      restoredObservations,
+    )
+    try {
+      const source = new HomologationRestoreVerifier(
+        appUrl,
+        input.sourceArtifacts,
+        input.sourceObservations,
+      )
+      let sourceDigests: string[]
+      try {
+        sourceDigests = (await source.verify(input.tenantId, input.documentId)).digests
+      } finally {
+        await source.close()
+      }
+      expect((await restoredVerifier.verify(input.tenantId, input.documentId)).digests).toEqual(
+        sourceDigests,
+      )
+      await expect(restoredVerifier.verify(randomUUID(), input.documentId)).rejects.toThrow(
+        'Homologation restore document is unavailable',
+      )
+      expect(await restoredLedger.nextPreparedForActive(input.tenantId)).toBeNull()
+      let sends = 0
+      const runner = new HomologationExchangeRunner(
+        restoredLedger,
+        {
+          endpointSetDigest: input.endpointDigest,
+          certificateFingerprint: input.certificateFingerprint,
+          async send() {
+            sends += 1
+            throw new Error('Restored pending exchange must not be resent')
+          },
+        },
+        input.adapter,
+        input.responseSchemas,
+      )
+      await expect(
+        runner.resume(
+          {
+            tenantId: input.tenantId,
+            exchangeId: input.pendingStatusId,
+            actorId: 'tester:restore',
+            workerId: 'worker-restored',
+          },
+          input.operations,
+        ),
+      ).rejects.toBeInstanceOf(UncertainSefazOutcomeError)
+      expect(sends).toBe(0)
+      expect(
+        (
+          await new HomologationRawRecovery(
+            restoredLedger,
+            input.adapter,
+            input.responseSchemas,
+          ).reparse(input.tenantId, input.rawOnlyStatusId, 'tester:restore', input.operations)
+        ).statusCode,
+      ).toBe('107')
+      expect(
+        (
+          await restoredLedger.loadPrepared(
+            input.tenantId,
+            input.rawOnlyStatusId,
+            input.operations,
+            'tester:restore',
+          )
+        ).stage,
+      ).toBe('observed')
+    } finally {
+      await Promise.all([
+        restoredVerifier.close(),
+        restoredLedger.close(),
+        restoredObservations.close(),
+        restoredArtifacts.close(),
+      ])
+    }
+  } finally {
+    await Promise.allSettled([
+      restoredContainer?.stop(),
+      rm(restoredDirectory, { recursive: true, force: true }),
     ])
   }
 }
