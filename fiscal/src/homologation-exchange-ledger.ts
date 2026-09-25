@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { fiscalDocumentHomologationObserved } from '@horizon/contracts'
 import postgres from 'postgres'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
@@ -660,18 +661,19 @@ export class HomologationExchangeLedger {
     const decision = classifySefazResponse(response)
     await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
-      const [exchange] = await tx`select document_id, service from fiscal_homologation_exchanges
+      const [exchange] = await tx`select document_id, service, request_digest, adapter_version
+        from fiscal_homologation_exchanges
         where tenant_id = ${tenantId} and id = ${exchangeId}`
       if (exchange?.document_id !== documentId || exchange.service !== response.service)
         throw new Error('Parsed SEFAZ response differs from exchange')
-      await tx`insert into fiscal_homologation_parsed_responses (
+      const inserted = await tx`insert into fiscal_homologation_parsed_responses (
         tenant_id, exchange_id, response_digest, protocol_digest, cstat,
         document_cstat, event_cstat, receipt, protocol_number, decision, decision_version
       ) values (
         ${tenantId}, ${exchangeId}, ${raw.metadata.digest}, ${protocol?.digest ?? null},
         ${response.statusCode}, ${response.documentStatusCode}, ${response.eventStatusCode},
         ${response.receipt}, ${response.protocolNumber}, ${decision}, ${SEFAZ_DECISION_VERSION}
-      ) on conflict do nothing`
+      ) on conflict do nothing returning exchange_id`
       const [stored] = await tx`select response_digest, protocol_digest, cstat,
           document_cstat, event_cstat, receipt, protocol_number, decision, decision_version
         from fiscal_homologation_parsed_responses
@@ -689,6 +691,28 @@ export class HomologationExchangeLedger {
         stored.decision_version !== SEFAZ_DECISION_VERSION
       )
         throw new Error('Conflicting parsed SEFAZ response')
+      if (inserted.length > 0) {
+        const payload = fiscalDocumentHomologationObserved.payload.parse({
+          documentId,
+          exchangeId,
+          service: response.service,
+          model: '55',
+          environment: 'homologation',
+          fiscalValue: false,
+          adapterVersion: exchange.adapter_version,
+          decision,
+          statusCode: response.statusCode,
+          documentStatusCode: response.documentStatusCode,
+          eventStatusCode: response.eventStatusCode,
+          requestDigest: exchange.request_digest,
+          responseDigest: raw.metadata.digest,
+          protocolDigest: protocol?.digest ?? null,
+          observedAt: new Date().toISOString(),
+        })
+        await tx`insert into fiscal_outbox (tenant_id, event_id, event_type, payload)
+          values (${tenantId}, ${randomUUID()}, ${fiscalDocumentHomologationObserved.type},
+            ${tx.json(payload as postgres.JSONValue)})`
+      }
     })
   }
 

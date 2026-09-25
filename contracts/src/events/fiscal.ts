@@ -58,6 +58,44 @@ export const fiscalDocumentCancelled = defineEvent({
   }),
 })
 
+export const fiscalDocumentHomologationObserved = defineEvent({
+  type: 'fiscal.document.homologation-observed',
+  version: 1,
+  description:
+    'One parsed SP NF-e homologation exchange was retained. This observation has no fiscal value and never releases a shipment, stock or money effect.',
+  payload: z.strictObject({
+    documentId: uuidSchema,
+    exchangeId: uuidSchema,
+    service: z.enum(['authorization', 'receipt', 'protocol', 'status', 'event']),
+    model: z.literal('55'),
+    environment: z.literal('homologation'),
+    fiscalValue: z.literal(false),
+    adapterVersion: z.string().min(1).max(160),
+    decision: z.enum([
+      'authorized',
+      'rejected',
+      'cancelled',
+      'pending',
+      'available',
+      'unavailable',
+      'unknown',
+    ]),
+    statusCode: z.string().regex(/^[0-9]{3}$/),
+    documentStatusCode: z
+      .string()
+      .regex(/^[0-9]{3}$/)
+      .nullable(),
+    eventStatusCode: z
+      .string()
+      .regex(/^[0-9]{3}$/)
+      .nullable(),
+    requestDigest: sha256Schema,
+    responseDigest: sha256Schema,
+    protocolDigest: sha256Schema.nullable(),
+    observedAt: instantSchema,
+  }),
+})
+
 const productionDocumentFact = z.strictObject({
   documentId: uuidSchema,
   documentRevision: z.number().int().positive(),

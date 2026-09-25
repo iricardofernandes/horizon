@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   fiscalDocumentAuthorized,
   fiscalDocumentCancelled,
+  fiscalDocumentHomologationObserved,
   fiscalDocumentProductionOutcome,
   fiscalDocumentRejected,
 } from './fiscal'
@@ -70,6 +71,43 @@ describe('Fiscal simulation status events', () => {
     ).toBe(false)
     expect(
       fiscalDocumentAuthorized.payload.safeParse({ ...payload, simulated: false }).success,
+    ).toBe(false)
+  })
+})
+
+describe('homologation observation event', () => {
+  it('carries only no-value, environment-tagged authority metadata', () => {
+    const payload = {
+      documentId: randomUUID(),
+      exchangeId: randomUUID(),
+      service: 'protocol',
+      model: '55',
+      environment: 'homologation',
+      fiscalValue: false,
+      adapterVersion: 'nfe55-sp-homologation-v1',
+      decision: 'authorized',
+      statusCode: '100',
+      documentStatusCode: '100',
+      eventStatusCode: null,
+      requestDigest: 'a'.repeat(64),
+      responseDigest: 'b'.repeat(64),
+      protocolDigest: 'c'.repeat(64),
+      observedAt: '2026-09-25T15:00:00.000Z',
+    }
+    expect(fiscalDocumentHomologationObserved.payload.safeParse(payload).success).toBe(true)
+    expect(
+      fiscalDocumentHomologationObserved.payload.safeParse({
+        ...payload,
+        environment: 'production',
+      }).success,
+    ).toBe(false)
+    expect(
+      fiscalDocumentHomologationObserved.payload.safeParse({ ...payload, fiscalValue: true })
+        .success,
+    ).toBe(false)
+    expect(
+      fiscalDocumentHomologationObserved.payload.safeParse({ ...payload, signedXml: '<NFe/>' })
+        .success,
     ).toBe(false)
   })
 })

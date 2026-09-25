@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.31.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.32.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -246,6 +246,29 @@ A recorded settlement was undone — a bounced payment, a wrong installment. The
 
 ## `fiscal`
 
+### `fiscal.document.homologation-observed` — v1
+
+One parsed SP NF-e homologation exchange was retained. This observation has no fiscal value and never releases a shipment, stock or money effect.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `documentId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `exchangeId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `service` | `authorization` \| `receipt` \| `protocol` \| `status` \| `event` | yes | — |
+| `model` | string | yes | — |
+| `environment` | string | yes | — |
+| `fiscalValue` | boolean | yes | — |
+| `adapterVersion` | string | yes | min length 1. max length 160 |
+| `decision` | `authorized` \| `rejected` \| `cancelled` \| `pending` \| `available` \| `unavailable` \| `unknown` | yes | — |
+| `statusCode` | string | yes | pattern `^[0-9]{3}$` |
+| `documentStatusCode` | any | yes | — |
+| `eventStatusCode` | any | yes | — |
+| `requestDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `responseDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `protocolDigest` | any | yes | — |
+| `observedAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
 ### `fiscal.document.production-outcome` — v1
 
 Future production authority outcome for one frozen Sales shipment. Phase 43 does not publish this event or enable production transmission; Sales uses the exact origin and document revision to maintain a fail-closed release projection.

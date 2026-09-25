@@ -22,6 +22,11 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
 - O PDF de homologação local usa um título próprio e a marca "SEM VALOR FISCAL"
   em cada página; sua geração exige XML assinado retido e protocolo autorizado.
   O arquivo restaurado foi conferido pelo verificador de artefatos.
+- A resposta interpretada cria um evento `fiscal.document.homologation-observed` v1
+  na mesma transação da observação imutável. O payload contém ambiente de
+  homologação, `fiscalValue: false`, decisão e digests, sem XML bruto. A integração
+  local confere publicação pelo relay e ausência de duplicata ao reprocessar a
+  mesma resposta. Todos os consumidores foram fixados em `@horizon/contracts@0.32.0`.
 - A [lista oficial de serviços da SEFAZ-SP](https://portal.fazenda.sp.gov.br/servicos/nfe/Paginas/URL-WEBSERVICES.aspx)
   ainda apresentava as cinco URLs candidatas de homologação 4.00 em 2026-09-25.
   WSDL, credencial, fontes efetivas e interpretação fiscal continuam pendentes.

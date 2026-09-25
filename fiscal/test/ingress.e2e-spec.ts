@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { promisify } from 'node:util'
-import { fiscalArtifactListV2Schema } from '@horizon/contracts'
+import { fiscalArtifactListV2Schema, fiscalDocumentHomologationObserved } from '@horizon/contracts'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { RabbitMQContainer, type StartedRabbitMQContainer } from '@testcontainers/rabbitmq'
 import { connect } from 'amqplib'
@@ -106,6 +106,7 @@ it('publishes tenant-scoped simulation outbox events with confirms and marks del
   const otherTenantId = randomUUID()
   const eventId = randomUUID()
   const otherEventId = randomUUID()
+  const homologationEventId = randomUUID()
   const documentId = randomUUID()
   const payload = {
     documentId,
@@ -130,18 +131,44 @@ it('publishes tenant-scoped simulation outbox events with confirms and marks del
       ${administrator.json(payload)}),
       (${otherTenantId}, ${otherEventId}, 'fiscal.document.simulation-authorized',
       ${administrator.json({ ...payload, documentId: randomUUID() })})`
+  const homologationPayload = fiscalDocumentHomologationObserved.payload.parse({
+    documentId,
+    exchangeId: randomUUID(),
+    service: 'status',
+    model: '55',
+    environment: 'homologation',
+    fiscalValue: false,
+    adapterVersion: 'nfe55-sp-homologation-v1',
+    decision: 'available',
+    statusCode: '107',
+    documentStatusCode: null,
+    eventStatusCode: null,
+    requestDigest: 'c'.repeat(64),
+    responseDigest: 'd'.repeat(64),
+    protocolDigest: null,
+    observedAt: '2026-09-22T17:00:00.000Z',
+  })
+  await administrator`insert into fiscal_outbox (tenant_id, event_id, event_type, payload)
+    values (${tenantId}, ${homologationEventId}, ${fiscalDocumentHomologationObserved.type},
+      ${administrator.json(homologationPayload)})`
   const connection = await connect(rabbitmq.getAmqpUrl())
   const channel = await connection.createChannel()
   const relay = new FiscalOutboxRelay(appUrl, rabbitmq.getAmqpUrl())
   try {
     await channel.assertExchange('horizon.events', 'topic', { durable: true })
     await channel.assertQueue('phase42.fiscal-outbox.test', { durable: true })
+    await channel.assertQueue('phase43.homologation-outbox.test', { durable: true })
     await channel.bindQueue(
       'phase42.fiscal-outbox.test',
       'horizon.events',
       'fiscal.document.simulation-authorized',
     )
-    expect(await relay.flush(tenantId)).toBe(1)
+    await channel.bindQueue(
+      'phase43.homologation-outbox.test',
+      'horizon.events',
+      fiscalDocumentHomologationObserved.type,
+    )
+    expect(await relay.flush(tenantId)).toBe(2)
     expect(await relay.flush(tenantId)).toBe(0)
     const received = await channel.get('phase42.fiscal-outbox.test', { noAck: true })
     expect(received).not.toBe(false)
@@ -154,6 +181,19 @@ it('publishes tenant-scoped simulation outbox events with confirms and marks del
       payload: { documentId, simulated: true },
     })
     expect(await channel.get('phase42.fiscal-outbox.test', { noAck: true })).toBe(false)
+    const homologationReceived = await channel.get('phase43.homologation-outbox.test', {
+      noAck: true,
+    })
+    expect(homologationReceived).not.toBe(false)
+    if (!homologationReceived) throw new Error('Homologation outbox event was not published')
+    expect(JSON.parse(homologationReceived.content.toString())).toMatchObject({
+      eventId: homologationEventId,
+      tenantId,
+      eventType: fiscalDocumentHomologationObserved.type,
+      eventVersion: 1,
+      payload: { environment: 'homologation', fiscalValue: false, decision: 'available' },
+    })
+    expect(await channel.get('phase43.homologation-outbox.test', { noAck: true })).toBe(false)
     const rows = await administrator`select tenant_id, delivered_at from fiscal_outbox
       where event_id in (${eventId}, ${otherEventId}) order by tenant_id`
     expect(rows.find((row) => row.tenant_id === tenantId)?.delivered_at).not.toBeNull()
@@ -165,6 +205,7 @@ it('publishes tenant-scoped simulation outbox events with confirms and marks del
   } finally {
     await relay.close()
     await channel.deleteQueue('phase42.fiscal-outbox.test')
+    await channel.deleteQueue('phase43.homologation-outbox.test')
     await channel.close()
     await connection.close()
   }
@@ -1409,12 +1450,29 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
         `<infRec><nRec>${receipt}</nRec><tMed>1</tMed></infRec></retEnviNFe>`,
     )
     await ledger.recordRawResponse(tenantId, documentId, authorizationId, authorizationSoap)
-    await ledger.recordParsedResponse(
-      tenantId,
+    const parsedAuthorization = adapter.parseResponse(authorization, authorizationSoap)
+    await ledger.recordParsedResponse(tenantId, documentId, authorizationId, parsedAuthorization)
+    const observationsOutbox = await administrator`select event_id, payload from fiscal_outbox
+      where tenant_id = ${tenantId}
+        and event_type = ${fiscalDocumentHomologationObserved.type}
+        and payload->>'exchangeId' = ${authorizationId}`
+    expect(observationsOutbox).toHaveLength(1)
+    expect(
+      fiscalDocumentHomologationObserved.payload.parse(observationsOutbox[0]?.payload),
+    ).toMatchObject({
       documentId,
-      authorizationId,
-      adapter.parseResponse(authorization, authorizationSoap),
-    )
+      exchangeId: authorizationId,
+      service: 'authorization',
+      environment: 'homologation',
+      fiscalValue: false,
+      decision: 'pending',
+    })
+    await ledger.recordParsedResponse(tenantId, documentId, authorizationId, parsedAuthorization)
+    const [observationCount] = await administrator`select count(*)::integer as count
+      from fiscal_outbox where tenant_id = ${tenantId}
+        and event_type = ${fiscalDocumentHomologationObserved.type}
+        and payload->>'exchangeId' = ${authorizationId}`
+    expect(observationCount?.count).toBe(1)
     const [authorizationDecision] = await administrator`select decision
       from fiscal_homologation_parsed_responses
       where tenant_id = ${tenantId} and exchange_id = ${authorizationId}`

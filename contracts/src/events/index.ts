@@ -19,6 +19,7 @@ import {
 import {
   fiscalDocumentAuthorized,
   fiscalDocumentCancelled,
+  fiscalDocumentHomologationObserved,
   fiscalDocumentProductionOutcome,
   fiscalDocumentRejected,
 } from './fiscal'
@@ -146,6 +147,7 @@ export const EVENTS: readonly EventDefinition[] = [
   fiscalDocumentAuthorized,
   fiscalDocumentRejected,
   fiscalDocumentCancelled,
+  fiscalDocumentHomologationObserved,
   fiscalDocumentProductionOutcome,
   treasuryAccountOpened,
   treasuryEntryRecorded,
