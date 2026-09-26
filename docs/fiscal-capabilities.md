@@ -20,13 +20,16 @@ and release approval. An issuer, UF or municipality never inherits another's sta
 | NFC-e 65 | any | none configured | any | counter (cashier) sale, offline contingency (`tpEmis` 9), EPEC, correction letter, return or complement of an NFC-e | none | unsupported | [ADR 0053](adr/0053-nfce-is-a-separate-model-over-the-sales-shipment.md) |
 | NFC-e 65 | homologation | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
 | NFC-e 65 | production | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
+| National NFS-e | simulation | one locally configured establishment | São Paulo (IBGE 3550308), routed by the reviewed registry version of the 2026-09-18 adhesion list | service-provision (DPS layout 1.01, query by DPS and key, cancellation 101101 inside the municipal window, substitution 105102) | `nfse-national-simulator-v1` | simulated locally | [Phase 47 evidence](fiscal-phase47-evidence.md) |
+| National NFS-e | any | none configured | municipalities with their own issuing system (for example Campinas 3509502: agreement active, national issuer "Não") or absent from the reviewed registry | any | none | unsupported (needs its own adapter and support row) | [ADR 0054](adr/0054-national-nfse-is-keyed-by-municipality-and-reconciled-by-dps.md) |
+| National NFS-e | any | none configured | any | Simples Nacional or MEI provider, withholding, deductions, benefits, export, tomador or intermediary issuance, manifestation and fiscal-analysis events | none | unsupported | [ADR 0054](adr/0054-national-nfse-is-keyed-by-municipality-and-reconciled-by-dps.md) |
 | National NFS-e | restricted production | none configured | no municipality configured | issue/query/cancel | none | unsupported | none |
 | National NFS-e | production | none configured | no municipality configured | issue/query/cancel | none | unsupported | none |
 
 This matrix is configuration and release evidence, not a guess from a service URL.
 The Fiscal read API returns `unsupported` by default and exposes only the locally
 activated Phase 42 simulation tuple; the model 65 tuple is read from the version 2 kind
-catalogue. Supplier XML import verifies the signed bytes but never
+catalogue, and the NFS-e tuple from the registry resolution and `/fiscal/service-documents`. Supplier XML import verifies the signed bytes but never
 claims authority status ([ADR 0051](adr/0051-supplier-xml-is-evidence-not-an-operational-fact.md)). An emulated drill cannot activate a homologation
 row ([ADR 0050](adr/0050-fiscal-authorizer-follows-issuer-jurisdiction.md)). Homologation and production routes remain
 disabled. Source artifacts and checksums are tracked in

@@ -26,6 +26,7 @@ import { FiscalManualOrigins } from './manual-origins'
 import { DeterministicNfce65Simulator } from './nfce65/simulator'
 import { nfe55IssuanceProfileSchema } from './nfe55/issuance-profile'
 import { DeterministicNfe55Simulator } from './nfe55/simulator'
+import { createServiceRuntime } from './nfse/runtime'
 import { FiscalOutboxRelay } from './outbox'
 import { loadPhase43WorkerRuntime } from './phase43-worker-runtime'
 import { FiscalProjections } from './projections'
@@ -71,6 +72,7 @@ const config = z
     FISCAL_SIMULATOR_RETRY_DELAY_MS: z.coerce.number().int().min(0).max(300_000).default(1_000),
     FISCAL_PHASE43_WORKER_CONFIG_PATH: optionalSetting(z.string().min(1)),
     FISCAL_INBOUND_SCHEMA_PATH: optionalSetting(z.string().min(1)),
+    FISCAL_NFSE_SCHEMA_PATH: optionalSetting(z.string().min(1)),
   })
   .parse(process.env)
 
@@ -218,6 +220,39 @@ const correctionLetters = config.FISCAL_PHASE42_EVENT_SCHEMA_PATH
       '45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b',
     )
   : undefined
+// The reviewed national NFS-e facts travel in the same issuance profile (Phase 47).
+const fullProfile = issuance
+  ? nfe55IssuanceProfileSchema.parse(JSON.parse(config.FISCAL_SIMULATION_PROFILE_JSON as string))
+  : undefined
+if (config.FISCAL_NFSE_SCHEMA_PATH && !fullProfile?.service)
+  throw new Error('The NFS-e schema path requires the issuance profile service block')
+const serviceRuntime = createServiceRuntime({
+  databaseUrl: config.DATABASE_URL,
+  masterKey: Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
+  projections,
+  capabilities,
+  calculations,
+  documents,
+  artifacts,
+  dispatch,
+  ownerForTenant: (tenantId) => new HttpOwnerFiscalClient(urls, () => tokens.forTenant(tenantId)),
+  ...(fullProfile && config.FISCAL_NFSE_SCHEMA_PATH
+    ? {
+        issuance: {
+          profile: fullProfile,
+          credential: {
+            privateKey: readFileSync(config.FISCAL_SIMULATION_PRIVATE_KEY_PATH as string),
+            certificate: readFileSync(config.FISCAL_SIMULATION_CERTIFICATE_PATH as string),
+          },
+          schemaZip: readFileSync(config.FISCAL_NFSE_SCHEMA_PATH),
+          ...(config.FISCAL_SIMULATOR_SCENARIO
+            ? { scenario: config.FISCAL_SIMULATOR_SCENARIO }
+            : {}),
+          retryDelayMilliseconds: config.FISCAL_SIMULATOR_RETRY_DELAY_MS,
+        },
+      }
+    : {}),
+})
 const server = createFiscalServer({
   verifier,
   documents,
@@ -239,6 +274,7 @@ const server = createFiscalServer({
     links: documentLinks,
     ...(correctionLetters ? { correctionLetters } : {}),
   },
+  service: serviceRuntime.dependencies,
 })
 const fixedSimulatorScenario = config.FISCAL_SIMULATOR_SCENARIO
 const simulator = new DeterministicNfe55Simulator(
@@ -252,6 +288,7 @@ const issueWorker = new FiscalIssueWorker(
   new DeterministicNfce65Simulator(
     fixedSimulatorScenario ? () => fixedSimulatorScenario : undefined,
   ),
+  serviceRuntime.processor,
 )
 const outbox = new FiscalOutboxRelay(config.DATABASE_URL, config.RABBITMQ_URL)
 let phase43Runtime: Awaited<ReturnType<typeof loadPhase43WorkerRuntime>> | null = null
@@ -312,6 +349,7 @@ async function stop(): Promise<void> {
     linkedOrigins.close(),
     documentLinks.close(),
     correctionLetters?.close(),
+    serviceRuntime.close(),
     denylist.close(),
     phase43Runtime?.close(),
   ])
@@ -352,6 +390,7 @@ void consumer
       outbox.close(),
       ruleStore.close(),
       credentials.close(),
+      serviceRuntime.close(),
       denylist.close(),
       phase43Runtime?.close(),
     ])

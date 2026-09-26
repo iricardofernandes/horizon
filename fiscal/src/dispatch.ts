@@ -10,6 +10,7 @@ import postgres from 'postgres'
 import { z } from 'zod'
 import { appendAudit } from './audit'
 import { canonicalDigest } from './canonical-json'
+import { appendServiceOutcome, recordNfseGeneration } from './nfse/outcome'
 
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/)
 const commandSchema = z.object({
@@ -37,6 +38,20 @@ const observationSchema = z.strictObject({
   protocolDigest: digestSchema.nullable(),
   /** Model 65 names why the simulated authority rejected it (for example a late emission). */
   rejectionCode: z.string().min(1).max(40).optional(),
+  /** What the national NFS-e system generated; required to authorize an NFS-e. */
+  nfse: z
+    .strictObject({
+      dpsId: z.string().regex(/^DPS[0-9]{42}$/),
+      nfseKey: z.string().regex(/^[0-9]{50}$/),
+      nfseNumber: z.string().regex(/^[1-9][0-9]{0,12}$/),
+      processedAt: z.iso.datetime({ offset: true }),
+      nfseXmlDigest: digestSchema,
+      valuesDigest: digestSchema,
+      calculationMatches: z.boolean(),
+      /** Event 105102 on the original, when this NFS-e substitutes one. */
+      substitutionEventDigest: digestSchema.nullable(),
+    })
+    .optional(),
 })
 
 export type DispatchCommand = {
@@ -59,7 +74,7 @@ export type DispatchLease = {
   attemptCount: number
   leaseUntil: string
   /** Absent in leases built before Phase 46; model 55 then. */
-  model?: '55' | '65'
+  model?: '55' | '65' | 'nfse'
 }
 
 /** Durable Phase 42 command queue. Adapter I/O is deliberately outside its transactions. */
@@ -169,7 +184,7 @@ export class FiscalDispatch {
       const committed = await findCommand(tx, value.tenantId, value.idempotencyKey)
       if (committed) return verifyExisting(committed, value, 'issuance')
       if (document.status !== 'ready') throw new Error('Fiscal document is not ready')
-      if (!['55', '65'].includes(document.model) || document.environment !== 'simulation')
+      if (!['55', '65', 'nfse'].includes(document.model) || document.environment !== 'simulation')
         throw new Error('Unsupported Fiscal issuance tuple')
       const [binding] = await tx`select binding.signed_xml_digest
         from fiscal_document_issuance_bindings binding
@@ -299,7 +314,7 @@ export class FiscalDispatch {
       if (committed)
         return verifyExisting(committed, { ...value, artifactDigest: undefined }, 'cancellation')
       if (document.status !== 'authorized') throw new Error('Fiscal cancellation is not allowed')
-      if (!['55', '65'].includes(document.model) || document.environment !== 'simulation')
+      if (!['55', '65', 'nfse'].includes(document.model) || document.environment !== 'simulation')
         throw new Error('Unsupported Fiscal cancellation tuple')
       const [binding] = await tx`select binding.access_key
         from fiscal_document_issuance_bindings binding
@@ -491,7 +506,7 @@ export class FiscalDispatch {
           : null,
         attemptCount: Number(leased.attempt_count),
         leaseUntil: new Date(leased.lease_until).toISOString(),
-        model: job.model === '65' ? '65' : '55',
+        model: job.model === '65' || job.model === 'nfse' ? job.model : '55',
       }
     })
   }
@@ -517,7 +532,7 @@ export class FiscalDispatch {
     return this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
       const [lease] = await tx`select command.document_id, command.kind, job.lease_owner,
-          job.lease_until, document.status
+          job.lease_until, document.status, document.model
         from fiscal_dispatch_commands command
         join fiscal_dispatch_jobs job on job.tenant_id = command.tenant_id
           and job.command_id = command.id
@@ -573,6 +588,19 @@ export class FiscalDispatch {
         )
           throw new Error('Conflicting duplicate Fiscal observation')
       }
+      const nfseAuthorization =
+        lease.model === 'nfse' && !isCancellation && value.outcome === 'authorized'
+      if (nfseAuthorization && !value.nfse)
+        throw new Error('An NFS-e is authorized only with its generation record')
+      if (nfseAuthorization && value.nfse && value.protocolDigest !== value.nfse.nfseXmlDigest)
+        throw new Error('NFS-e generation evidence differs from the observation')
+      if (nfseAuthorization && value.nfse)
+        await recordNfseGeneration(tx, {
+          tenantId: value.tenantId,
+          documentId: String(lease.document_id),
+          commandId: value.commandId,
+          ...value.nfse,
+        })
       const nextStatus = isCancellation
         ? value.outcome === 'unknown'
           ? 'cancellation_unknown'
@@ -635,6 +663,7 @@ export class FiscalDispatch {
           responseDigest: value.responseDigest,
           protocolDigest: value.protocolDigest,
           rejectionCode: value.rejectionCode ?? null,
+          substitutionEventDigest: value.nfse?.substitutionEventDigest ?? null,
         })
       if (nextStatus !== 'unknown' && nextStatus !== 'cancellation_unknown')
         await tx`update fiscal_dispatch_jobs set state = 'done', lease_owner = null,
@@ -706,6 +735,7 @@ async function appendSimulationEvent(
     responseDigest: string
     protocolDigest: string | null
     rejectionCode?: string | null
+    substitutionEventDigest?: string | null
   },
 ): Promise<void> {
   const [document] = await tx`select document.root_document_id, document.revision,
@@ -724,6 +754,10 @@ async function appendSimulationEvent(
   }
   if (document.model === '65') {
     await appendConsumerOutcome(tx, input, document)
+    return
+  }
+  if (document.model === 'nfse') {
+    await appendServiceOutcome(tx, input)
     return
   }
   const observedAt = new Date().toISOString()

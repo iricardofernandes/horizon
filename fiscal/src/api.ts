@@ -24,6 +24,7 @@ import { handleLinkedRoute, type LinkedDependencies } from './linked-api'
 import type { FiscalLinkedOrigins } from './linked-origins'
 import type { FiscalManualOrigins } from './manual-origins'
 import { ReadinessStale } from './nfce65/build'
+import { handleServiceRoute, type ServiceDependencies } from './nfse/api'
 import { ConsumerNotEligible, type FiscalReadiness } from './readiness'
 import type { FiscalRuleStore } from './rule-store'
 
@@ -51,6 +52,7 @@ export type FiscalServerDependencies = {
   credentials?: Pick<FiscalEstablishmentCredentials, 'list' | 'upload'>
   inbound?: InboundDependencies
   linked?: LinkedDependencies & { origins: Pick<FiscalLinkedOrigins, 'create' | 'kindOf'> }
+  service?: ServiceDependencies
 }
 
 export function createFiscalServer(dependencies: FiscalServerDependencies): Server {
@@ -87,6 +89,11 @@ async function handle(
   if (
     dependencies.linked &&
     (await handleLinkedRoute(request, response, url, principal, dependencies.linked))
+  )
+    return
+  if (
+    dependencies.service &&
+    (await handleServiceRoute(request, response, url, principal, dependencies.service))
   )
     return
 
@@ -396,8 +403,10 @@ async function handle(
   if (request.method === 'GET' && artifactListV2?.[1]) {
     const found = await dependencies.artifacts.listV2(principal.tenantId, artifactListV2[1])
     response.setHeader('cache-control', 'private, no-store')
-    if (!found) problem(response, 404, 'Not Found', 'Fiscal document not found')
-    else json(response, 200, fiscalArtifactListV2Schema.parse(found))
+    const listed = found ? fiscalArtifactListV2Schema.safeParse(found) : null
+    // An NFS-e keeps kinds (`nfse_xml`) this NF-e schema does not name: use the v1 list.
+    if (!listed?.success) problem(response, 404, 'Not Found', 'Fiscal document not found')
+    else json(response, 200, listed.data)
     return
   }
 
@@ -411,7 +420,7 @@ async function handle(
   }
 
   const artifact =
-    /^\/documents\/([0-9a-f-]{36})\/artifacts\/(v2\/)?(xml|response|protocol|pdf|unsigned_xml|signed_xml|issuance_request|issuance_response|authorization_protocol|cancellation_request|cancellation_response|cancellation_protocol|danfe|homologation_request|homologation_response|homologation_protocol)$/.exec(
+    /^\/documents\/([0-9a-f-]{36})\/artifacts\/(v2\/)?(xml|response|protocol|pdf|unsigned_xml|signed_xml|issuance_request|issuance_response|authorization_protocol|cancellation_request|cancellation_response|cancellation_protocol|danfe|homologation_request|homologation_response|homologation_protocol|nfse_xml|substitution_event)$/.exec(
       url.pathname,
     )
   if (request.method === 'GET' && artifact) {
@@ -449,7 +458,9 @@ async function handle(
   const documentV2 = /^\/documents\/([0-9a-f-]{36})\/v2$/.exec(url.pathname)
   if (request.method === 'GET' && documentV2?.[1]) {
     const found = await dependencies.documents.get(principal.tenantId, documentV2[1])
-    if (!found) problem(response, 404, 'Not Found', 'Fiscal document not found')
+    // An NFS-e is read from `/service-documents/{id}`.
+    if (!found || found.model === 'nfse')
+      problem(response, 404, 'Not Found', 'Fiscal document not found')
     else
       json(
         response,

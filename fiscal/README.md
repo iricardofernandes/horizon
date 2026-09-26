@@ -104,6 +104,26 @@ establishment's active sale. It prints the `consumer` block for
 `FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase46-smoke.mjs` runs the local-stack smoke
 through Kong.
 
+### National NFS-e (Phase 47)
+
+A reviewer creates a service fiscal profile (`POST /service-profiles`: national tax
+code, NBS, ISS treatment) for a Catalog service item. The municipal registry
+(`POST /nfse-registry/versions`, then `/review`) records the reviewed rows of the official
+adhesion list. `GET /nfse-registry/municipalities/{code}` says whether the national system
+issues there. `POST /service-origins` freezes a service with its competence date; an
+optional `sourceKey` maps one owner fact to one origin. `POST /service-documents` creates
+the NFS-e draft, which follows `/service-documents/{id}/validate`, `/issue`,
+`/status-queries`, `/cancellation-requests` (event 101101) and `/substitutions`
+(event 105102). `src/nfse/` builds and signs the DPS, validates it against
+`FISCAL_NFSE_SCHEMA_PATH` (the pinned XSD 1.01 ZIP), and routes `nfse` commands to
+`DeterministicNfseSimulator`, which consults a DPS before any resend
+([ADR 0054](../docs/adr/0054-national-nfse-is-keyed-by-municipality-and-reconciled-by-dps.md)).
+`npm run phase47:rollout -- --tenant <id> --establishment <id> [--evidence-digest <sha256>]`
+imports and reviews the registry version and the ISS and IBS/CBS rules of the issuer's
+municipality and registers its capability. It prints the `service` block for
+`FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase47-smoke.mjs` runs the local-stack smoke
+through Kong.
+
 ## Verification
 
 `npm run test:e2e` starts PostgreSQL, RabbitMQ and MinIO with Testcontainers. It runs the

@@ -2292,8 +2292,22 @@ unsupported.
 
 ## Phase 47 — National NFS-e
 
-**Planned.** Implement DPS/NFS-e issuance, consultation and supported events for one
-verified national-system issuer/municipality tuple. Service contracts remain Phase K.
+**Delivered for simulation on 2026-09-26.** A reviewed Catalog service becomes a national
+NFS-e through its own origin, with a competence date and an idempotent source key that
+Phase K contract periods will use. A versioned registry of the official adhesion list
+decides, per municipality, whether the national system issues. The capability is keyed by
+municipality, and an unsupported one never reaches the simulated authority. Fiscal:
+- builds, signs and validates the DPS against the pinned layout 1.01;
+- binds its identifier before sending;
+- reconciles a lost response by that identifier before any resend.
+
+The simulated Sefin Nacional generates the NFS-e with its key. Cancellation (101101)
+works inside the municipal window, and substitution (105102) cancels the original once.
+Models 55 and 65 are unchanged. Restricted production stays the activation gate: it
+needs an establishment A1 to read the Swagger contract and the municipal parameters.
+[Evidence](fiscal-phase47-evidence.md).
+[ADR 0054](adr/0054-national-nfse-is-keyed-by-municipality-and-reconciled-by-dps.md).
+[Detailed implementation plan](fiscal-phase47-implementation-plan.md).
 [Detailed work and exit evidence](fiscal-implementation-plan.md#47--national-nfs-e-and-municipal-capability).
 
 ## Phase 48 — Fiscal screens and release evidence

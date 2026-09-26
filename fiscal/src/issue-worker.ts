@@ -9,6 +9,7 @@ import type {
   DeterministicNfe55Simulator,
   SimulatorResult,
 } from './nfe55/simulator'
+import type { NfseDispatchProcessor } from './nfse/processor'
 
 export class FiscalIssueWorker {
   constructor(
@@ -24,6 +25,8 @@ export class FiscalIssueWorker {
       DeterministicNfce65Simulator,
       'submit' | 'consult' | 'submitCancellation' | 'consultCancellation'
     >,
+    /** The national NFS-e steps; without them an NFS-e command is never processed. */
+    private readonly serviceProcessor?: Pick<NfseDispatchProcessor, 'issue' | 'cancel'>,
   ) {}
 
   async processOne(tenantId: string, workerId: string): Promise<boolean> {
@@ -31,6 +34,13 @@ export class FiscalIssueWorker {
     if (!lease) return false
     if (lease.model === '65' && !this.consumerSimulator)
       throw new Error('Fiscal worker has no model 65 simulator')
+    if (lease.model === 'nfse') {
+      if (!this.serviceProcessor) throw new Error('Fiscal worker has no national NFS-e simulator')
+      if (lease.kind === 'cancellation' || lease.kind === 'cancellation_query')
+        await this.serviceProcessor.cancel(lease, workerId)
+      else await this.serviceProcessor.issue(lease, workerId)
+      return true
+    }
     if (lease.kind === 'cancellation' || lease.kind === 'cancellation_query') {
       await this.processCancellation(lease, workerId)
       return true

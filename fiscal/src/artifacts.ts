@@ -27,6 +27,8 @@ const metadataSchema = z.object({
     'correction_request',
     'correction_response',
     'correction_protocol',
+    'nfse_xml',
+    'substitution_event',
   ]),
   commandId: z.uuid().optional(),
   mediaType: z.string().min(3).max(100),

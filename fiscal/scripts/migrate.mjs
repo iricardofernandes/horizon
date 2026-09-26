@@ -59,6 +59,7 @@ try {
     '0046_phase44_inbound_reconciliation.sql',
     '0047_phase45_linked_documents.sql',
     '0048_phase46_nfce.sql',
+    '0049_phase47_nfse.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

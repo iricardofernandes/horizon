@@ -1105,7 +1105,7 @@ function snapshotKey(master: Buffer, tenantId: string): Buffer {
   )
 }
 
-function encryptSnapshot(
+export function encryptSnapshot(
   master: Buffer,
   tenantId: string,
   documentId: string,
@@ -1118,7 +1118,7 @@ function encryptSnapshot(
   return Buffer.concat([Buffer.from([1]), nonce, cipher.getAuthTag(), ciphertext])
 }
 
-function decryptSnapshot(
+export function decryptSnapshot(
   master: Buffer,
   tenantId: string,
   documentId: string,

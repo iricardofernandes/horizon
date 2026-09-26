@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "phase": 47,
+  "retrievedAt": "2026-09-26T17:40:00.000Z",
+  "authority": "Receita Federal do Brasil / Comitê Gestor da NFS-e — Sistema Nacional NFS-e",
+  "selection": {
+    "documentModel": "nfse",
+    "environment": "simulation",
+    "jurisdiction": {
+      "kind": "municipality",
+      "code": "3550308",
+      "name": "São Paulo/SP"
+    },
+    "operation": "service-provision",
+    "adapterVersion": "nfse-national-simulator-v1",
+    "schemaRelease": "nfse-xsd-v1.01-20260209",
+    "layoutVersion": "1.01",
+    "reason": "The national NFS-e XSD 1.01 and Anexo I define the DPS, the NFS-e and their business rules; Anexo II defines the events; Anexos A, B and C are the municipality, service/NBS and IBS/CBS operation tables; the contributor API manual names the operations; the adhering-municipalities list of 2026-09-18 is the registry source. The workspace owner authorized this simulation-only interpretation provisionally and deferred the comprehensive Fiscal review until the Fiscal program is complete.",
+    "fiscalReviewStatus": "workspace-owner-provisionally-approved",
+    "capabilityActivation": "simulation-only-allowed-after-local-executable-gates",
+    "notPinned": [
+      "Sefin Nacional and ADN Swagger contracts (403 without an ICP-Brasil client certificate): JSON envelope field names",
+      "XML-DSig algorithms required by the national system (the pinned xmldsig schema does not fix them)",
+      "Municipal parameters from /parametros_municipais (ISS rate per service, cancellation and substitution deadlines)",
+      "Access-key check-digit algorithm (not defined in Anexo I)"
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "nfse-xsd-v1.01-20260209",
+      "kind": "schema-package",
+      "sourceUrl": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/nfse-esquemas_xsd-v1-01-20260209.zip",
+      "publishedOn": "2026-02-09",
+      "storagePath": ".artifacts/fiscal/nfse/e7935cbd9470527c6cc32984c1b2263e614183bf0139ce2733eaaed2de9a8072/nfse-esquemas_xsd-v1-01-20260209.zip",
+      "byteSize": 65640,
+      "sha256": "e7935cbd9470527c6cc32984c1b2263e614183bf0139ce2733eaaed2de9a8072"
+    },
+    {
+      "id": "nfse-anexo-i-dps-nfse-v1.01-20260209",
+      "kind": "layout-and-rules",
+      "sourceUrl": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/anexo_i-sefin_adn-dps_nfse-snnfse-v1-01-20260209.xlsx",
+      "publishedOn": "2026-02-09",
+      "storagePath": ".artifacts/fiscal/nfse/de5bc492959eadc8bfa7540e16939995924f2188f743648eaf84d3b31e9eeb7c/anexo_i-sefin_adn-dps_nfse-snnfse-v1-01-20260209.xlsx",
+      "byteSize": 215196,
+      "sha256": "de5bc492959eadc8bfa7540e16939995924f2188f743648eaf84d3b31e9eeb7c"
+    },
+    {
+      "id": "nfse-anexo-ii-events-v1.01-20260122",
+      "kind": "layout-and-rules",
+      "sourceUrl": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/anexo_ii-sefin_adn-pedregevt_evt-snnfse-v1-01-20260122.xlsx",
+      "publishedOn": "2026-01-22",
+      "storagePath": ".artifacts/fiscal/nfse/5abe83d7e51023ffa979cc466c628399f3e4bbf03c293b5b1a0817e873eb428e/anexo_ii-sefin_adn-pedregevt_evt-snnfse-v1-01-20260122.xlsx",
+      "byteSize": 51527,
+      "sha256": "5abe83d7e51023ffa979cc466c628399f3e4bbf03c293b5b1a0817e873eb428e"
+    },
+    {
+      "id": "nfse-anexo-a-ibge-v1.00-20251210",
+      "kind": "reference-table",
+      "sourceUrl": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/anexo_a-municipio_ibge-paises_iso2-v1-00-snnfse-20251210.xlsx",
+      "publishedOn": "2025-12-10",
+      "storagePath": ".artifacts/fiscal/nfse/238b715ab2dcc2c9e0857c44d69048e0af806b45ec8499568342de4a37f4419d/anexo_a-municipio_ibge-paises_iso2-v1-00-snnfse-20251210.xlsx",
+      "byteSize": 218140,
+      "sha256": "238b715ab2dcc2c9e0857c44d69048e0af806b45ec8499568342de4a37f4419d"
+    },
+    {
+      "id": "nfse-anexo-b-services-nbs-v1.01-20260122",
+      "kind": "reference-table",
+      "sourceUrl": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/anexo_b-nbs2-lista_servico_nacional-snnfse-v1-01-20260122.xlsx",
+      "publishedOn": "2026-01-22",
+      "storagePath": ".artifacts/fiscal/nfse/e74b0be8ad204e458932efb1716225a3fb5703a84e5475ce5c4c6789d1c61b1a/anexo_b-nbs2-lista_servico_nacional-snnfse-v1-01-20260122.xlsx",
+      "byteSize": 85008,
+      "sha256": "e74b0be8ad204e458932efb1716225a3fb5703a84e5475ce5c4c6789d1c61b1a"
+    },
+    {
+      "id": "nfse-anexo-c-indop-v1.01",
+      "kind": "reference-table",
+      "sourceUrl": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/anexo-c-indop-ibscbs-snnfse-v1-01.xlsx",
+      "storagePath": ".artifacts/fiscal/nfse/f59f066c5c3584ac26cc07d9b23f9fb6713e4bc9212b5e37fededf9244f29d15/anexo-c-indop-ibscbs-snnfse-v1-01.xlsx",
+      "byteSize": 13746,
+      "sha256": "f59f066c5c3584ac26cc07d9b23f9fb6713e4bc9212b5e37fededf9244f29d15"
+    },
+    {
+      "id": "nfse-contributor-api-manual-v1.2",
+      "kind": "manual",
+      "sourceUrl": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/manual-contribuintes-emissor-publico-api-sistema-nacional-nfs-e-v1-2-out2025.pdf",
+      "publishedOn": "2025-10",
+      "storagePath": ".artifacts/fiscal/nfse/ac2f36e34ff565cc36d67c5d67415c33cc09f27b2dea006e8da9bcd2ddce5581/manual-contribuintes-emissor-publico-api-sistema-nacional-nfs-e-v1-2-out2025.pdf",
+      "byteSize": 188158,
+      "sha256": "ac2f36e34ff565cc36d67c5d67415c33cc09f27b2dea006e8da9bcd2ddce5581"
+    },
+    {
+      "id": "nfse-adhering-municipalities-20260918",
+      "kind": "registry-source",
+      "sourceUrl": "https://www.gov.br/nfse/pt-br/municipios/monitoramento-adesoes/municipios-aderentes-20260918.xlsx",
+      "publishedOn": "2026-09-18",
+      "storagePath": ".artifacts/fiscal/nfse/8c3b302f8e99fe7ae5cc71be3a26ac6f919e10c552e371b3412a0f842059cd07/municipios-aderentes-20260918.xlsx",
+      "byteSize": 548064,
+      "sha256": "8c3b302f8e99fe7ae5cc71be3a26ac6f919e10c552e371b3412a0f842059cd07"
+    },
+    {
+      "id": "nfse-xsd-v1.01-20260209-fixture",
+      "kind": "schema-package",
+      "sourceUrl": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/nfse-esquemas_xsd-v1-01-20260209.zip",
+      "storagePath": "fiscal/fixtures/official/nfse-xsd-v1.01-20260209.zip",
+      "byteSize": 65640,
+      "sha256": "e7935cbd9470527c6cc32984c1b2263e614183bf0139ce2733eaaed2de9a8072"
+    },
+    {
+      "id": "nfse-reference-extract-v1.01",
+      "kind": "derived-extract",
+      "derivedFrom": [
+        "nfse-anexo-a-ibge-v1.00-20251210",
+        "nfse-anexo-b-services-nbs-v1.01-20260122",
+        "nfse-anexo-c-indop-v1.01"
+      ],
+      "storagePath": "fiscal/fixtures/official/nfse-reference-v1.01.json",
+      "byteSize": 358290,
+      "sha256": "48029c6373e75228fcc0e51529f9947ed9dfec8c47610477fbb51c808622bd8f"
+    }
+  ]
+}

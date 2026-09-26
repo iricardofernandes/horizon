@@ -36,6 +36,22 @@ export const nfe55IssuanceProfileSchema = z.strictObject({
       cancellationWindowMinutes: z.number().int().min(1).max(10_080),
     })
     .optional(),
+  /** The reviewed national NFS-e facts, bound to one municipality's capability row. */
+  service: z
+    .strictObject({
+      capabilityId: z.uuid(),
+      municipalityCode: z.string().regex(/^\d{7}$/),
+      /** Municipal deadlines (E0822, E0050); counted from the NFS-e `dhProc`. */
+      cancellationWindowDays: z.number().int().min(1).max(3650),
+      substitutionWindowDays: z.number().int().min(1).max(3650),
+      /** `cIndOp` (Anexo C). */
+      operationIndicator: z.string().regex(/^\d{6}$/),
+      ibsCbs: z.strictObject({
+        cst: z.string().regex(/^\d{3}$/),
+        classification: z.string().regex(/^\d{6}$/),
+      }),
+    })
+    .optional(),
   lineFacts: z.record(
     z.uuid(),
     z.strictObject({

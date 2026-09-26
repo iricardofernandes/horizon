@@ -142,7 +142,7 @@ export const DOCUMENT_KINDS: readonly FiscalDocumentKindEntry[] = [
 export const EVENT_FLOWS = [
   { model: '55', flows: ['cancellation', 'correction-letter'] },
   { model: '65', flows: ['cancellation'] },
-  { model: 'nfse', flows: [] },
+  { model: 'nfse', flows: ['cancellation'] },
 ] as const
 
 export class UnsupportedDocumentKind extends Error {

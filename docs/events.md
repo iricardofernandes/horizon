@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.35.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.36.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -378,6 +378,13 @@ A reviewer reconciled a supplier NF-e with Procurement receipts. It links fiscal
 ### `fiscal.linked-document.simulation-outcome` — v1
 
 The deterministic simulator decided an NF-e model 55 that returns or complements an earlier document. It correlates the owners of the stock and money effects (`correlations`) and never creates, repeats or reverses one: those remain the Sales, Procurement, Inventory and Financial facts. It carries no access key, XML or personal data.
+
+**Payload**
+
+_No fields._
+### `fiscal.service-document.simulation-outcome` — v1
+
+The deterministic simulator of the national NFS-e system generated, rejected or cancelled an NFS-e for one reviewed service origin. Issuing an NFS-e creates no stock or money effect. A cancellation by substitution names the substitute document. It carries no access key, recipient data or XML.
 
 **Payload**
 

@@ -90,7 +90,9 @@ describe('Fiscal document kinds', () => {
     })
     for (const kind of ['counter-sale', 'consumer-sale-offline'])
       expect(() => supportedKind(kind)).toThrow(UnsupportedDocumentKind)
-    expect(hasEventFlow('nfse', 'cancellation')).toBe(false)
+    // Phase 47: the national NFS-e has event 101101 and no correction letter.
+    expect(hasEventFlow('nfse', 'cancellation')).toBe(true)
+    expect(hasEventFlow('nfse', 'correction-letter')).toBe(false)
   })
 
   it('reverses tax on a return and computes a complement from its value alone', () => {

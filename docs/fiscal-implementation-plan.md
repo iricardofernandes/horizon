@@ -1,7 +1,7 @@
 # Fiscal implementation plan — Phase J
 
-Status: Phases 39–42 delivered; 43, 44, 45 and 46 delivered for simulation (2026-09-26);
-47–48 planned. Reviewed against the repository and official technical portals on
+Status: Phases 39–42 delivered; 43, 44, 45, 46 and 47 delivered for simulation
+(2026-09-26); 48 planned. Reviewed against the repository and official technical portals on
 2026-09-21. This document is the execution plan for phases 39–48 in
 [plan.md](plan.md); it is not a statement that Horizon can legally issue any document.
 
@@ -337,6 +337,8 @@ fixtures, including duplicate sale, outage and cancellation. The model 55 tests 
 unchanged and green.
 
 ### 47 — National NFS-e and municipal capability
+
+[Detailed Phase 47 execution plan](fiscal-phase47-implementation-plan.md).
 
 **Work**
 

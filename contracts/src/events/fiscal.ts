@@ -272,3 +272,60 @@ export const fiscalConsumerDocumentOutcome = defineEvent({
     }),
   ]),
 })
+
+const serviceOutcomeFact = {
+  documentId: uuidSchema,
+  rootDocumentId: uuidSchema,
+  revision: z.number().int().positive(),
+  serviceOriginId: uuidSchema,
+  /** The owner fact the service origin came from (a Phase K contract period), if any. */
+  sourceKey: z
+    .strictObject({
+      module: z.string().regex(/^[a-z][a-z-]{1,39}$/),
+      documentType: z.string().regex(/^[a-z][a-z-]{1,39}$/),
+      id: uuidSchema,
+      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+    })
+    .nullable(),
+  municipalityCode: z.string().regex(/^\d{7}$/),
+  competence: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  model: z.literal('nfse'),
+  environment: z.literal('simulation'),
+  simulated: z.literal(true),
+  adapterVersion: z.string().min(1).max(80),
+  statusDigest: sha256Schema,
+  observedAt: instantSchema,
+}
+
+export const fiscalServiceDocumentOutcome = defineEvent({
+  type: 'fiscal.service-document.simulation-outcome',
+  version: 1,
+  description:
+    'The deterministic simulator of the national NFS-e system generated, rejected or cancelled an NFS-e for one reviewed service origin. Issuing an NFS-e creates no stock or money effect. A cancellation by substitution names the substitute document. It carries no access key, recipient data or XML.',
+  payload: z.discriminatedUnion('outcome', [
+    z.strictObject({
+      ...serviceOutcomeFact,
+      outcome: z.literal('authorized'),
+      authorityReference: z.string().min(1).max(256),
+      protocolDigest: sha256Schema,
+      substitutesDocumentId: uuidSchema.nullable(),
+    }),
+    z.strictObject({
+      ...serviceOutcomeFact,
+      outcome: z.literal('rejected'),
+      authorityReference: z.string().min(1).max(256).nullable(),
+      rejectionCode: z.string().min(1).max(40),
+      protocolDigest: sha256Schema.nullable(),
+    }),
+    z.strictObject({
+      ...serviceOutcomeFact,
+      outcome: z.literal('cancelled'),
+      authorityReference: z.string().min(1).max(256),
+      protocolDigest: sha256Schema,
+      cancellation: z.discriminatedUnion('kind', [
+        z.strictObject({ kind: z.literal('event-101101') }),
+        z.strictObject({ kind: z.literal('substitution'), substitutedBy: uuidSchema }),
+      ]),
+    }),
+  ]),
+})
