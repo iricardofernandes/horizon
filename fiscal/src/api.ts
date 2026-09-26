@@ -15,15 +15,18 @@ import type { FiscalCancellation } from './cancellation'
 import { canonicalDigest } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
 import type { FiscalDispatch } from './dispatch'
+import { supportedKind } from './document-kinds'
 import type { FiscalDocuments } from './documents'
 import type { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { handleInboundRoute, type InboundDependencies } from './inbound-api'
 import type { FiscalIssuance } from './issuance'
+import { handleLinkedRoute, type LinkedDependencies } from './linked-api'
+import type { FiscalLinkedOrigins } from './linked-origins'
 import type { FiscalManualOrigins } from './manual-origins'
 import type { FiscalReadiness } from './readiness'
 import type { FiscalRuleStore } from './rule-store'
 
-export function createFiscalServer(dependencies: {
+export type FiscalServerDependencies = {
   verifier: Pick<FiscalTokenVerifier, 'verify'>
   documents: Pick<
     FiscalDocuments,
@@ -33,7 +36,8 @@ export function createFiscalServer(dependencies: {
     | 'createManualDraft'
     | 'createSuccessor'
     | 'createManualSuccessor'
-  >
+  > &
+    Partial<Pick<FiscalDocuments, 'createLinkedDraft' | 'createLinkedSuccessor'>>
   manualOrigins: Pick<FiscalManualOrigins, 'create'>
   dispatch?: Pick<FiscalDispatch, 'queueStatusQuery' | 'queueCancellationQuery'>
   artifacts: Pick<FiscalArtifacts, 'get' | 'getV2' | 'list' | 'listV2'>
@@ -45,7 +49,10 @@ export function createFiscalServer(dependencies: {
   rules: Pick<FiscalRuleStore, 'proposeOverride'>
   credentials?: Pick<FiscalEstablishmentCredentials, 'list' | 'upload'>
   inbound?: InboundDependencies
-}): Server {
+  linked?: LinkedDependencies & { origins: Pick<FiscalLinkedOrigins, 'create' | 'kindOf'> }
+}
+
+export function createFiscalServer(dependencies: FiscalServerDependencies): Server {
   return createServer((request, response) => {
     void handle(request, response, dependencies).catch(() =>
       problem(response, 500, 'Internal Server Error', 'Fiscal request failed'),
@@ -56,29 +63,7 @@ export function createFiscalServer(dependencies: {
 async function handle(
   request: IncomingMessage,
   response: ServerResponse,
-  dependencies: {
-    verifier: Pick<FiscalTokenVerifier, 'verify'>
-    documents: Pick<
-      FiscalDocuments,
-      | 'get'
-      | 'timeline'
-      | 'createDraft'
-      | 'createManualDraft'
-      | 'createSuccessor'
-      | 'createManualSuccessor'
-    >
-    manualOrigins: Pick<FiscalManualOrigins, 'create'>
-    dispatch?: Pick<FiscalDispatch, 'queueStatusQuery' | 'queueCancellationQuery'>
-    artifacts: Pick<FiscalArtifacts, 'get' | 'getV2' | 'list' | 'listV2'>
-    calculations: Pick<FiscalCalculations, 'preview' | 'get'>
-    capabilities: Pick<FiscalCapabilities, 'listActive'>
-    readiness: Pick<FiscalReadiness, 'validate'>
-    issuance?: Pick<FiscalIssuance, 'issue'>
-    cancellation?: Pick<FiscalCancellation, 'request'>
-    rules: Pick<FiscalRuleStore, 'proposeOverride'>
-    credentials?: Pick<FiscalEstablishmentCredentials, 'list' | 'upload'>
-    inbound?: InboundDependencies
-  },
+  dependencies: FiscalServerDependencies,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://fiscal.local')
   if (request.method === 'GET' && url.pathname === '/health') {
@@ -96,6 +81,11 @@ async function handle(
   if (
     dependencies.inbound &&
     (await handleInboundRoute(request, response, url, principal, dependencies.inbound))
+  )
+    return
+  if (
+    dependencies.linked &&
+    (await handleLinkedRoute(request, response, url, principal, dependencies.linked))
   )
     return
 
@@ -307,35 +297,53 @@ async function handle(
     }
     try {
       const body = fiscalDocumentCreateRequestSchema.parse(await readJson(request))
+      const origin = body.origin
+      const linkedKind =
+        origin.kind === 'linked'
+          ? await dependencies.linked?.origins.kindOf(principal.tenantId, origin.linkedOriginId)
+          : null
+      if (origin.kind === 'linked' && !linkedKind) throw new Error('Fiscal linked origin not found')
+      const operation = linkedKind ? supportedKind(linkedKind).operation : 'normal-sale'
       const active = (await dependencies.capabilities.listActive(principal.tenantId)).some(
         (capability) =>
           capability.model === '55' &&
           capability.environment === 'simulation' &&
           capability.establishmentId === body.establishmentId &&
           capability.jurisdictionKind === 'uf' &&
-          capability.operation === 'normal-sale',
+          capability.operation === operation,
       )
       if (!active) throw new Error('Fiscal capability is unsupported')
+      if (origin.kind === 'linked' && !dependencies.documents.createLinkedDraft)
+        throw new Error('Fiscal capability is unsupported for linked documents')
       const draft =
-        body.origin.kind === 'sales'
-          ? await dependencies.documents.createDraft({
+        origin.kind === 'linked' && dependencies.documents.createLinkedDraft
+          ? await dependencies.documents.createLinkedDraft({
               tenantId: principal.tenantId,
-              intentId: body.origin.intentId,
-              model: '55',
-              environment: 'simulation',
+              linkedOriginId: origin.linkedOriginId,
               establishmentId: body.establishmentId,
               series: body.series,
               idempotencyKey: key,
               actorId: principal.subject,
             })
-          : await dependencies.documents.createManualDraft({
-              tenantId: principal.tenantId,
-              manualOriginId: body.origin.manualOriginId,
-              establishmentId: body.establishmentId,
-              series: body.series,
-              idempotencyKey: key,
-              actorId: principal.subject,
-            })
+          : origin.kind === 'sales'
+            ? await dependencies.documents.createDraft({
+                tenantId: principal.tenantId,
+                intentId: origin.intentId,
+                model: '55',
+                environment: 'simulation',
+                establishmentId: body.establishmentId,
+                series: body.series,
+                idempotencyKey: key,
+                actorId: principal.subject,
+              })
+            : await dependencies.documents.createManualDraft({
+                tenantId: principal.tenantId,
+                manualOriginId: (origin as { manualOriginId: string }).manualOriginId,
+                establishmentId: body.establishmentId,
+                series: body.series,
+                idempotencyKey: key,
+                actorId: principal.subject,
+              })
       json(response, 201, draft)
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof SyntaxError)
@@ -344,7 +352,11 @@ async function handle(
         problem(response, 409, 'Conflict', error.message)
       else if (error instanceof Error && error.message.includes('capability'))
         lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
-      else if (error instanceof Error && error.message === 'Fiscal manual origin not found')
+      else if (
+        error instanceof Error &&
+        (error.message === 'Fiscal manual origin not found' ||
+          error.message === 'Fiscal linked origin not found')
+      )
         problem(response, 404, 'Not Found', error.message)
       else if (
         error instanceof Error &&
@@ -655,7 +667,10 @@ async function handle(
         problem(response, 409, 'Conflict', error.message)
       else if (error instanceof Error && error.message.includes('capability'))
         lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
-      else if (error instanceof Error && error.message.includes('not allowed'))
+      else if (
+        error instanceof Error &&
+        (error.message.includes('not allowed') || error.message.includes('is blocked by'))
+      )
         lifecycleProblem(response, 409, 'CANCELLATION_NOT_ALLOWED', error.message)
       else throw error
     }
@@ -679,16 +694,19 @@ async function handle(
         actorId: principal.subject,
         reason: body.reason,
       }
+      const corrected = body.correctedOrigin
       const result =
-        body.correctedOrigin.kind === 'sales'
+        corrected.kind === 'sales'
           ? await dependencies.documents.createSuccessor({
               ...shared,
-              correctedIntentId: body.correctedOrigin.intentId,
+              correctedIntentId: corrected.intentId,
             })
-          : await dependencies.documents.createManualSuccessor({
-              ...shared,
-              correctedManualOriginId: body.correctedOrigin.manualOriginId,
-            })
+          : corrected.kind === 'manual'
+            ? await dependencies.documents.createManualSuccessor({
+                ...shared,
+                correctedManualOriginId: corrected.manualOriginId,
+              })
+            : await linkedSuccessor(dependencies, shared, corrected.linkedOriginId)
       json(response, result.existing ? 200 : 201, result)
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof SyntaxError)
@@ -701,7 +719,10 @@ async function handle(
         problem(response, 409, 'Conflict', error.message)
       else if (error instanceof Error && error.message.includes('rejected Fiscal document'))
         lifecycleProblem(response, 409, 'INVALID_STATE_TRANSITION', error.message)
-      else if (error instanceof Error && error.message.includes('manual correction requires'))
+      else if (
+        error instanceof Error &&
+        /(manual|linked|Sales) correction requires/.test(error.message)
+      )
         lifecycleProblem(response, 409, 'INVALID_STATE_TRANSITION', error.message)
       else throw error
     }
@@ -722,6 +743,25 @@ async function handle(
     return
   }
   problem(response, 404, 'Not Found', 'Fiscal route not found')
+}
+
+async function linkedSuccessor(
+  dependencies: FiscalServerDependencies,
+  shared: {
+    tenantId: string
+    documentId: string
+    idempotencyKey: string
+    actorId: string
+    reason: string
+  },
+  linkedOriginId: string,
+) {
+  if (!dependencies.documents.createLinkedSuccessor)
+    throw new Error('Fiscal linked correction requires the linked document flow')
+  return dependencies.documents.createLinkedSuccessor({
+    ...shared,
+    expectedLinkedOriginId: linkedOriginId,
+  })
 }
 
 function lifecycleProblem(

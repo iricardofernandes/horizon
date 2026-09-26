@@ -99,6 +99,7 @@ export const fiscalManualOriginSchema = z.strictObject({
 const fiscalDocumentOriginSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('sales'), intentId: uuidSchema }),
   z.strictObject({ kind: z.literal('manual'), manualOriginId: uuidSchema }),
+  z.strictObject({ kind: z.literal('linked'), linkedOriginId: uuidSchema }),
 ])
 
 export const fiscalDocumentCreateRequestSchema = z.strictObject({
@@ -205,6 +206,9 @@ export const fiscalArtifactKindSchema = z.enum([
   'cancellation_response',
   'cancellation_protocol',
   'danfe',
+  'correction_request',
+  'correction_response',
+  'correction_protocol',
 ])
 
 export const fiscalArtifactKindV2Schema = z.union([

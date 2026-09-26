@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { FiscalCalculations } from './calculations'
 import { canonicalDigest } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
+import { PHASE45_FIXTURES, PHASE45_SCENARIOS, supportedKind } from './document-kinds'
 import type { FiscalDocuments } from './documents'
 import { jurisdictionOfAddress } from './nfe55/jurisdiction'
 import { type FiscalOriginSnapshot, parseFiscalOriginSnapshot } from './origin-snapshot'
@@ -64,10 +65,16 @@ export class FiscalReadiness {
     )
     if (
       (snapshot.originModule === 'sales' && snapshot.purpose !== 'original') ||
-      (snapshot.originModule === 'fiscal' &&
-        (snapshot.purpose !== 'manual' || snapshot.establishmentId !== document.establishmentId))
+      (snapshot.originModule === 'fiscal' && snapshot.establishmentId !== document.establishmentId)
     )
       throw new Error('Fiscal capability is unsupported')
+    const manual =
+      snapshot.originModule === 'fiscal' && snapshot.purpose === 'manual' ? snapshot : null
+    const linked =
+      snapshot.originModule === 'fiscal' && snapshot.purpose === 'linked' ? snapshot : null
+    if (linked && environment !== 'simulation') throw new Error('Fiscal capability is unsupported')
+    const operation = linked ? supportedKind(linked.kind).operation : 'normal-sale'
+    const fixture = linked ? PHASE45_FIXTURES[linked.kind] : PHASE41_FIXTURE_ID
 
     // The establishment's registered address decides the UF; a capability only
     // applies when it was reviewed for that same jurisdiction.
@@ -79,8 +86,8 @@ export class FiscalReadiness {
               candidate.environment === 'simulation' &&
               candidate.establishmentId === document.establishmentId &&
               candidate.jurisdictionKind === 'uf' &&
-              candidate.operation === 'normal-sale' &&
-              candidate.calculationFixtureId === PHASE41_FIXTURE_ID,
+              candidate.operation === operation &&
+              candidate.calculationFixtureId === fixture,
           )
         : drillGrantId
           ? [
@@ -98,16 +105,13 @@ export class FiscalReadiness {
     const utcDate = document.createdAt.slice(0, 10)
     let issuer = await this.projections.resolveIssuer(
       command.tenantId,
-      snapshot.originModule === 'fiscal' ? snapshot.issueDate : utcDate,
+      manual ? manual.issueDate : utcDate,
     )
     if (!issuer) throw new Error('Issuer fiscal projection is unavailable')
-    const issueDate =
-      snapshot.originModule === 'fiscal'
-        ? snapshot.issueDate
-        : localDate(document.createdAt, issuer.timezone)
-    if (snapshot.originModule === 'sales' && issueDate !== utcDate)
+    const issueDate = manual ? manual.issueDate : localDate(document.createdAt, issuer.timezone)
+    if (!manual && issueDate !== utcDate)
       issuer = (await this.projections.resolveIssuer(command.tenantId, issueDate)) ?? issuer
-    if (snapshot.originModule === 'fiscal' && issuer.revision !== snapshot.issuerProfileRevision)
+    if (manual && issuer.revision !== manual.issuerProfileRevision)
       throw new Error('Fiscal manual issuer revision is no longer effective')
     const jurisdiction = jurisdictionOfAddress(issuer.company.address)
     const capability = candidates.find(
@@ -120,10 +124,7 @@ export class FiscalReadiness {
       issueDate,
     )
     if (!recipient) throw new Error('Recipient fiscal projection is unavailable')
-    if (
-      snapshot.originModule === 'fiscal' &&
-      recipient.revision !== snapshot.recipientProfileRevision
-    )
+    if (manual && recipient.revision !== manual.recipientProfileRevision)
       throw new Error('Fiscal manual recipient revision is no longer effective')
 
     const classifications = new Map<
@@ -206,6 +207,20 @@ function deriveCalculationInput(input: {
   if (!issuer || !recipient || issuer.uf !== recipient.uf)
     throw new Error('Fiscal capability is unsupported')
   if (input.snapshot.total.currency !== 'BRL') throw new Error('Fiscal capability is unsupported')
+  const linked =
+    input.snapshot.originModule === 'fiscal' && input.snapshot.purpose === 'linked'
+      ? input.snapshot
+      : null
+  const reference = linked?.references[0]
+  const linkedFacts = linked
+    ? {
+        operation: PHASE45_SCENARIOS[linked.kind],
+        purpose:
+          linked.kind === 'value-complement' ? ('complementary' as const) : ('return' as const),
+        referencedDocumentId:
+          reference?.type === 'document' ? reference.documentId : reference?.importId,
+      }
+    : null
 
   return {
     schemaVersion: 1,
@@ -216,8 +231,11 @@ function deriveCalculationInput(input: {
     recipientProfileRevision: input.recipient.revision,
     model: '55',
     environment: input.environment,
-    operation: PHASE41_SCENARIO_ID,
-    purpose: 'normal',
+    operation: linkedFacts?.operation ?? PHASE41_SCENARIO_ID,
+    purpose: linkedFacts?.purpose ?? 'normal',
+    ...(linkedFacts?.referencedDocumentId
+      ? { referencedDocumentId: linkedFacts.referencedDocumentId }
+      : {}),
     issuer: {
       regime: 'normal',
       stateCode: issuer.ufCode,
@@ -246,12 +264,14 @@ function deriveCalculationInput(input: {
         throw new Error('Fiscal capability is unsupported')
       const classification = input.classifications.get(line.itemId)
       if (!classification?.ncm) throw new Error('Catalog classification is unavailable')
+      const complement = linkedFacts?.purpose === 'complementary'
       return {
         id: line.lineId,
         itemId: line.itemId,
         classificationRevision: classification.revision,
-        quantity: canonicalDecimal(line.quantity),
-        unitPrice: minorUnitsToDecimal(line.unitPrice.amount, 2),
+        quantity: complement ? '0' : canonicalDecimal(line.quantity),
+        unitPrice: complement ? '0' : minorUnitsToDecimal(line.unitPrice.amount, 2),
+        ...(complement ? { complementValue: minorUnitsToDecimal(line.lineTotal.amount, 2) } : {}),
         discount: { amount: '0', currency: 'BRL' },
         charges: { amount: '0', currency: 'BRL' },
         classifications: { ncm: classification.ncm },
@@ -268,15 +288,17 @@ function reconcileCommercial(
   const expectedLines = new Map(snapshot.lines.map((line) => [line.lineId, line.lineTotal.amount]))
   if (result.lines.length !== expectedLines.size)
     throw new Error('Fiscal calculation does not reconcile with the commercial origin')
+  // A return is calculated as a reversal (negative); the commercial origin holds magnitudes.
+  const magnitude = (amount: string) => amount.replace(/^-/, '')
   for (const line of result.lines)
     if (
       line.gross.currency !== snapshot.total.currency ||
-      line.gross.amount !== expectedLines.get(line.lineId)
+      magnitude(line.gross.amount) !== expectedLines.get(line.lineId)
     )
       throw new Error('Fiscal calculation does not reconcile with the commercial origin')
   if (
     result.totals.gross.currency !== snapshot.total.currency ||
-    result.totals.gross.amount !== snapshot.total.amount
+    magnitude(result.totals.gross.amount) !== snapshot.total.amount
   )
     throw new Error('Fiscal calculation does not reconcile with the commercial origin')
   return canonicalDigest({

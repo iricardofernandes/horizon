@@ -1,5 +1,6 @@
 export * from './fiscal-calculation'
 export * from './fiscal-inbound'
 export * from './fiscal-lifecycle'
+export * from './fiscal-linked'
 export * from './pagination'
 export * from './problem'

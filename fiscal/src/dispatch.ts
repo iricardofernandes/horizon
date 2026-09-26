@@ -3,6 +3,7 @@ import {
   fiscalDocumentAuthorized,
   fiscalDocumentCancelled,
   fiscalDocumentRejected,
+  fiscalLinkedDocumentOutcome,
 } from '@horizon/contracts'
 import postgres from 'postgres'
 import { z } from 'zod'
@@ -700,7 +701,8 @@ async function appendSimulationEvent(
   },
 ): Promise<void> {
   const [document] = await tx`select document.root_document_id, document.revision,
-      document.intent_id, document.manual_origin_id, capability.adapter_version
+      document.intent_id, document.manual_origin_id, document.linked_origin_id,
+      capability.adapter_version
     from fiscal_documents document
     join fiscal_document_issuance_bindings binding on binding.tenant_id = document.tenant_id
       and binding.document_id = document.id
@@ -708,6 +710,10 @@ async function appendSimulationEvent(
       and capability.id = binding.capability_id
     where document.tenant_id = ${input.tenantId} and document.id = ${input.documentId}`
   if (!document) throw new Error('Fiscal simulation event facts are unavailable')
+  if (document.linked_origin_id) {
+    await appendLinkedOutcome(tx, input, document)
+    return
+  }
   const observedAt = new Date().toISOString()
   const fact = {
     documentId: input.documentId,
@@ -761,6 +767,70 @@ async function appendSimulationEvent(
   }
   await tx`insert into fiscal_outbox (tenant_id, event_id, event_type, payload)
     values (${input.tenantId}, ${randomUUID()}, ${eventType},
+      ${tx.json(payload as postgres.JSONValue)})`
+}
+
+/** Linked documents publish their own outcome, which names the owners of the effects. */
+async function appendLinkedOutcome(
+  tx: postgres.TransactionSql,
+  input: Parameters<typeof appendSimulationEvent>[1],
+  document: postgres.Row,
+): Promise<void> {
+  const linkedOriginId = String(document.linked_origin_id)
+  const [origin] = await tx`select kind, source_module, correlation_id from fiscal_linked_origins
+    where tenant_id = ${input.tenantId} and id = ${linkedOriginId}`
+  if (!origin) throw new Error('Fiscal linked origin is unavailable')
+  const references = await tx`select referenced_document_id, referenced_import_id
+    from fiscal_linked_references where tenant_id = ${input.tenantId}
+      and linked_origin_id = ${linkedOriginId} order by position`
+  const correlationId = origin.correlation_id ? String(origin.correlation_id) : null
+  const ownerEvent =
+    origin.kind === 'sale-return' ? 'sales.shipment.returned' : 'procurement.receipt.returned'
+  const payload = fiscalLinkedDocumentOutcome.payload.parse({
+    documentId: input.documentId,
+    rootDocumentId: String(document.root_document_id),
+    revision: Number(document.revision),
+    linkedOriginId,
+    kind: origin.kind,
+    references: references.map((row) =>
+      row.referenced_document_id
+        ? { type: 'document', documentId: String(row.referenced_document_id) }
+        : { type: 'supplier-invoice', importId: String(row.referenced_import_id) },
+    ),
+    source: {
+      module: origin.source_module,
+      documentType:
+        origin.source_module === 'sales'
+          ? 'shipment'
+          : origin.source_module === 'procurement'
+            ? 'receipt'
+            : 'review',
+      id: correlationId ?? linkedOriginId,
+    },
+    correlations: correlationId
+      ? (['inventory', 'financial'] as const).map((module) => ({
+          module,
+          sourceEvent: ownerEvent,
+          correlationId,
+        }))
+      : [],
+    model: '55',
+    environment: 'simulation',
+    simulated: true,
+    adapterVersion: String(document.adapter_version),
+    statusDigest: canonicalDigest({
+      documentId: input.documentId,
+      outcome: input.outcome,
+      responseDigest: input.responseDigest,
+      protocolDigest: input.protocolDigest,
+    }),
+    observedAt: new Date().toISOString(),
+    outcome: input.outcome,
+    authorityReference: input.providerCorrelation,
+    protocolDigest: input.protocolDigest,
+  })
+  await tx`insert into fiscal_outbox (tenant_id, event_id, event_type, payload)
+    values (${input.tenantId}, ${randomUUID()}, ${fiscalLinkedDocumentOutcome.type},
       ${tx.json(payload as postgres.JSONValue)})`
 }
 

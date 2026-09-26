@@ -12,7 +12,11 @@ import { z } from 'zod'
 import { appendAudit } from './audit'
 import { canonicalDigest } from './canonical-json'
 import { openOrigin } from './origin-crypto'
-import { manualOriginPayloadSchema } from './origin-snapshot'
+import {
+  type LinkedOriginPayload,
+  linkedOriginPayloadSchema,
+  manualOriginPayloadSchema,
+} from './origin-snapshot'
 
 const draftInputSchema = z.object({
   tenantId: z.uuid(),
@@ -59,7 +63,10 @@ export type DocumentView = Omit<Draft, 'status'> & {
   rootDocumentId: string
   predecessorDocumentId: string | null
   revision: number
-  origin: { kind: 'sales'; intentId: string } | { kind: 'manual'; manualOriginId: string }
+  origin:
+    | { kind: 'sales'; intentId: string }
+    | { kind: 'manual'; manualOriginId: string }
+    | { kind: 'linked'; linkedOriginId: string }
   accessKey: string | null
   calculationDigest: string | null
   signedXmlDigest: string | null
@@ -104,7 +111,8 @@ export class FiscalDocuments {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
       return tx`select d.id, d.status, d.model, d.environment, d.establishment_id,
         d.series, d.snapshot_digest, d.created_at, d.root_document_id,
-        d.predecessor_document_id, d.revision, d.intent_id, d.manual_origin_id, r.number,
+        d.predecessor_document_id, d.revision, d.intent_id, d.manual_origin_id,
+        d.linked_origin_id, r.number,
         issuance.access_key, issuance.signed_xml_digest, calculation.result_digest,
         capability.adapter_version, capability.schema_package_digest
         from fiscal_documents d left join fiscal_number_reservations r
@@ -140,7 +148,9 @@ export class FiscalDocuments {
       revision: Number(row.revision),
       origin: row.intent_id
         ? { kind: 'sales', intentId: String(row.intent_id) }
-        : { kind: 'manual', manualOriginId: String(row.manual_origin_id) },
+        : row.linked_origin_id
+          ? { kind: 'linked', linkedOriginId: String(row.linked_origin_id) }
+          : { kind: 'manual', manualOriginId: String(row.manual_origin_id) },
       accessKey: row.access_key === null ? null : String(row.access_key),
       calculationDigest: row.result_digest === null ? null : String(row.result_digest),
       signedXmlDigest: row.signed_xml_digest === null ? null : String(row.signed_xml_digest),
@@ -421,6 +431,229 @@ export class FiscalDocuments {
     })
   }
 
+  /** A return or complement draft from a frozen linked origin (simulation, model 55). */
+  async createLinkedDraft(input: {
+    tenantId: string
+    linkedOriginId: string
+    establishmentId: string
+    series: number
+    idempotencyKey: string
+    actorId: string
+  }): Promise<Draft> {
+    const value = z
+      .strictObject({
+        tenantId: z.uuid(),
+        linkedOriginId: z.uuid(),
+        establishmentId: z.uuid(),
+        series: z.number().int().min(0).max(999),
+        idempotencyKey: z.string().min(16).max(128),
+        actorId: z.string().min(1).max(200),
+      })
+      .parse(input)
+    const requestDigest = canonicalDigest({
+      linkedOriginId: value.linkedOriginId,
+      establishmentId: value.establishmentId,
+      series: value.series,
+      model: '55',
+      environment: 'simulation',
+    })
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      await tx`select pg_advisory_xact_lock(hashtextextended(${`${value.tenantId}:${value.linkedOriginId}`}, 0))`
+      const { plaintext, digest, payload } = await this.openLinkedOrigin(
+        tx,
+        value.tenantId,
+        value.linkedOriginId,
+      )
+      if (payload.establishmentId !== value.establishmentId)
+        throw new Error('Fiscal linked-origin establishment mismatch')
+      const [priorKey] = await tx`select request_digest, document_id from fiscal_idempotency
+        where tenant_id = ${value.tenantId} and key = ${value.idempotencyKey}`
+      if (priorKey) {
+        if (priorKey.request_digest !== requestDigest)
+          throw new Error('Conflicting fiscal idempotency key')
+        return {
+          id: String(priorKey.document_id),
+          status: 'draft' as const,
+          snapshotDigest: digest,
+        }
+      }
+      const [existing] = await tx`select id, series, establishment_id, snapshot_digest, status
+        from fiscal_documents where tenant_id = ${value.tenantId}
+          and linked_origin_id = ${value.linkedOriginId} order by revision desc limit 1`
+      let documentId: string
+      if (existing) {
+        if (existing.status === 'rejected' || existing.status === 'cancelled')
+          throw new Error('Conflicting fiscal linked origin requires a corrected successor')
+        if (
+          existing.establishment_id !== value.establishmentId ||
+          Number(existing.series) !== value.series ||
+          existing.snapshot_digest !== digest
+        )
+          throw new Error('Conflicting fiscal linked-origin draft')
+        documentId = String(existing.id)
+      } else {
+        documentId = randomUUID()
+        await tx`insert into fiscal_documents (
+          id, tenant_id, linked_origin_id, model, environment, establishment_id,
+          series, snapshot_digest, snapshot_ciphertext
+        ) values (
+          ${documentId}, ${value.tenantId}, ${value.linkedOriginId}, '55', 'simulation',
+          ${value.establishmentId}, ${value.series}, ${digest},
+          ${encryptSnapshot(this.masterKey, value.tenantId, documentId, plaintext)}
+        )`
+        await insertLinkedLines(tx, value.tenantId, documentId, payload)
+        await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind)
+          values (${randomUUID()}, ${value.tenantId}, ${documentId}, 'draft_created')`
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.actorId,
+          action: 'document.linked-draft-created',
+          resourceId: documentId,
+          detail: { linkedOriginId: value.linkedOriginId, kind: payload.kind, digest },
+        })
+      }
+      await tx`insert into fiscal_idempotency (
+        tenant_id, key, command, request_digest, document_id
+      ) values (
+        ${value.tenantId}, ${value.idempotencyKey}, 'document.create-linked',
+        ${requestDigest}, ${documentId}
+      )`
+      return { id: documentId, status: 'draft' as const, snapshotDigest: digest }
+    })
+  }
+
+  /**
+   * A rejected return or complement is corrected from the same frozen owner facts: its
+   * quantities stay held by the linked origin, so a new origin would count them twice.
+   */
+  async createLinkedSuccessor(input: {
+    tenantId: string
+    documentId: string
+    idempotencyKey: string
+    actorId: string
+    reason: string
+    expectedLinkedOriginId?: string
+  }): Promise<CorrectedDraft> {
+    const value = z
+      .strictObject({
+        tenantId: z.uuid(),
+        documentId: z.uuid(),
+        idempotencyKey: z.string().min(16).max(128),
+        actorId: z.string().min(1).max(200),
+        reason: z.string().trim().min(10).max(1000),
+        expectedLinkedOriginId: z.uuid().optional(),
+      })
+      .parse(input)
+    const requestDigest = canonicalDigest({ documentId: value.documentId, reason: value.reason })
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+      const [priorKey] = await tx`select request_digest, document_id from fiscal_idempotency
+        where tenant_id = ${value.tenantId} and key = ${value.idempotencyKey}`
+      if (priorKey) {
+        if (priorKey.request_digest !== requestDigest)
+          throw new Error('Conflicting fiscal idempotency key')
+        const [existing] = await tx`select id, root_document_id, predecessor_document_id,
+          revision, snapshot_digest from fiscal_documents
+          where tenant_id = ${value.tenantId} and id = ${priorKey.document_id}`
+        if (!existing || existing.predecessor_document_id !== value.documentId)
+          throw new Error('Conflicting fiscal correction idempotency key')
+        return correctedDraft(existing, true)
+      }
+      const [predecessor] = await tx`select status, root_document_id, revision,
+          establishment_id, series, linked_origin_id
+        from fiscal_documents where tenant_id = ${value.tenantId}
+          and id = ${value.documentId} for update`
+      if (!predecessor) throw new Error('Fiscal document not found')
+      if (predecessor.status !== 'rejected')
+        throw new Error('Only a rejected Fiscal document can be corrected')
+      if (!predecessor.linked_origin_id)
+        throw new Error('Fiscal linked correction requires a linked predecessor')
+      if (
+        value.expectedLinkedOriginId &&
+        value.expectedLinkedOriginId !== String(predecessor.linked_origin_id)
+      )
+        throw new Error('Conflicting fiscal linked correction must keep its linked origin')
+      const [priorSuccessor] = await tx`select id, root_document_id, predecessor_document_id,
+          revision, snapshot_digest from fiscal_documents
+        where tenant_id = ${value.tenantId} and predecessor_document_id = ${value.documentId}`
+      let result: CorrectedDraft
+      if (priorSuccessor) result = correctedDraft(priorSuccessor, true)
+      else {
+        const linkedOriginId = String(predecessor.linked_origin_id)
+        const { plaintext, digest, payload } = await this.openLinkedOrigin(
+          tx,
+          value.tenantId,
+          linkedOriginId,
+        )
+        const id = randomUUID()
+        const revision = Number(predecessor.revision) + 1
+        await tx`insert into fiscal_documents (
+          id, tenant_id, linked_origin_id, model, environment, establishment_id, series,
+          snapshot_digest, snapshot_ciphertext, root_document_id, predecessor_document_id,
+          revision
+        ) values (
+          ${id}, ${value.tenantId}, ${linkedOriginId}, '55', 'simulation',
+          ${predecessor.establishment_id}, ${predecessor.series}, ${digest},
+          ${encryptSnapshot(this.masterKey, value.tenantId, id, plaintext)},
+          ${predecessor.root_document_id}, ${value.documentId}, ${revision}
+        )`
+        await insertLinkedLines(tx, value.tenantId, id, payload)
+        await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind, detail)
+          values (${randomUUID()}, ${value.tenantId}, ${id}, 'draft_created',
+            ${JSON.stringify({ predecessorDocumentId: value.documentId, reasonDigest: createHash('sha256').update(value.reason).digest('hex') })}::jsonb)`
+        await appendAudit(tx, {
+          tenantId: value.tenantId,
+          actorId: value.actorId,
+          action: 'document.linked-successor-created',
+          resourceId: id,
+          detail: {
+            predecessorDocumentId: value.documentId,
+            linkedOriginId,
+            revision,
+            requestDigest,
+          },
+        })
+        result = {
+          id,
+          status: 'draft',
+          snapshotDigest: digest,
+          rootDocumentId: String(predecessor.root_document_id),
+          predecessorDocumentId: value.documentId,
+          revision,
+          existing: false,
+        }
+      }
+      await tx`insert into fiscal_idempotency
+        (tenant_id, key, command, request_digest, document_id)
+        values (${value.tenantId}, ${value.idempotencyKey}, 'document.correct-linked',
+          ${requestDigest}, ${result.id})`
+      return result
+    })
+  }
+
+  private async openLinkedOrigin(
+    tx: postgres.TransactionSql,
+    tenantId: string,
+    linkedOriginId: string,
+  ) {
+    const [origin] = await tx`select payload_ciphertext, payload_digest from fiscal_linked_origins
+      where tenant_id = ${tenantId} and id = ${linkedOriginId}`
+    if (!origin) throw new Error('Fiscal linked origin not found')
+    const plaintext = openOrigin(
+      this.masterKey,
+      tenantId,
+      linkedOriginId,
+      Buffer.from(origin.payload_ciphertext),
+    )
+    const digest = createHash('sha256').update(plaintext).digest('hex')
+    if (digest !== origin.payload_digest) throw new Error('Fiscal linked-origin digest mismatch')
+    const payload = linkedOriginPayloadSchema.parse(JSON.parse(plaintext))
+    if (payload.originId !== linkedOriginId)
+      throw new Error('Fiscal linked-origin identity mismatch')
+    return { plaintext, digest, payload }
+  }
+
   async readSnapshot(tenantId: string, documentId: string): Promise<unknown> {
     z.uuid().parse(tenantId)
     z.uuid().parse(documentId)
@@ -484,7 +717,7 @@ export class FiscalDocuments {
       }
 
       const [predecessor] = await tx`select status, root_document_id, revision, model,
-          environment, establishment_id, series
+          environment, establishment_id, series, intent_id
         from fiscal_documents where tenant_id = ${value.tenantId}
           and id = ${value.documentId} for update`
       if (!predecessor) throw new Error('Fiscal document not found')
@@ -492,6 +725,8 @@ export class FiscalDocuments {
         throw new Error('Only a rejected Fiscal document can be corrected')
       if (predecessor.model !== '55' || predecessor.environment !== 'simulation')
         throw new Error('Fiscal correction is supported only for simulated model 55')
+      if (!predecessor.intent_id)
+        throw new Error('Fiscal Sales correction requires a Sales predecessor')
       const [priorSuccessor] = await tx`select id, root_document_id, predecessor_document_id,
           revision, snapshot_digest, intent_id from fiscal_documents
         where tenant_id = ${value.tenantId} and predecessor_document_id = ${value.documentId}`
@@ -822,6 +1057,18 @@ export class FiscalDocuments {
       return number
     })
   }
+}
+
+async function insertLinkedLines(
+  tx: postgres.TransactionSql,
+  tenantId: string,
+  documentId: string,
+  payload: LinkedOriginPayload,
+): Promise<void> {
+  for (const [index, line] of payload.lines.entries())
+    await tx`insert into fiscal_document_lines (
+      tenant_id, document_id, line_index, item_id, line_digest
+    ) values (${tenantId}, ${documentId}, ${index}, ${line.itemId}, ${canonicalDigest(line)})`
 }
 
 function correctedDraft(row: Record<string, unknown>, existing: boolean): CorrectedDraft {

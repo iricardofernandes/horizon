@@ -84,7 +84,11 @@ export class FiscalIssuance {
     if (document.model !== '55' || document.environment !== 'simulation')
       throw new Error('Fiscal capability is unsupported')
     const evidence = await this.readReadiness(command.tenantId, command.documentId)
-    if (evidence.capabilityId !== this.#profile.capabilityId)
+    const profileCapabilities = [
+      this.#profile.capabilityId,
+      ...Object.values(this.#profile.linked ?? {}).map((entry) => entry.capabilityId),
+    ]
+    if (!profileCapabilities.includes(evidence.capabilityId))
       throw new Error('Fiscal simulation profile does not match readiness capability')
     const [issuer, recipient, calculation, snapshot, number] = await Promise.all([
       this.projections.readIssuer(command.tenantId, evidence.issuerProfileRevision),
@@ -108,6 +112,7 @@ export class FiscalIssuance {
       calculation,
       origin,
       profile: this.#profile,
+      capabilityId: evidence.capabilityId,
     })
     const unsigned = serializeNfe55(xmlData)
     const signed = signNfe55(unsigned, this.credential)
@@ -238,7 +243,21 @@ export function buildNfe55Data(input: {
   calculation: NonNullable<Awaited<ReturnType<FiscalCalculations['readFrozen']>>>
   origin: FiscalOriginSnapshot
   profile: Nfe55SimulationProfile
+  capabilityId?: string
 }): Nfe55Data {
+  const manual =
+    input.origin.originModule === 'fiscal' && input.origin.purpose === 'manual'
+      ? input.origin
+      : null
+  const linked =
+    input.origin.originModule === 'fiscal' && input.origin.purpose === 'linked'
+      ? input.origin
+      : null
+  const linkedProfile = linked ? input.profile.linked?.[linked.kind] : undefined
+  if (linked && (!linkedProfile || linkedProfile.capabilityId !== input.capabilityId))
+    throw new Error('NF-e linked issuance profile is incomplete for this capability')
+  if (!linked && input.capabilityId && input.capabilityId !== input.profile.capabilityId)
+    throw new Error('NF-e sale issued under a linked capability')
   const issuerAddress = input.issuer.company.address
   const recipientAddress = input.recipient.profile.address
   if (
@@ -285,23 +304,23 @@ export function buildNfe55Data(input: {
       description: originLine.description,
       ncm: input.calculation.input.lines.find((candidate) => candidate.id === originLine.lineId)
         ?.classifications.ncm as string,
-      cfop: facts.cfop,
+      cfop: linkedProfile?.cfop ?? facts.cfop,
       unit: facts.unit,
       quantity: decimal4(originLine.quantity),
       unitPrice: minorToDecimal(originLine.unitPrice.amount),
-      gross: minorToFixed(line.gross.amount),
+      gross: minorToFixed(magnitude(line.gross.amount)),
       discount: '0.00',
       other: '0.00',
       ibsCbs: {
         cst: facts.ibsCbsCst,
         classification: facts.ibsCbsClassification,
-        base: minorToFixed(cbs.base.amount),
+        base: minorToFixed(magnitude(cbs.base.amount)),
         ibsUfRate: percent(ibsUf.rate),
-        ibsUfValue: minorToFixed(ibsUf.amount.amount),
+        ibsUfValue: minorToFixed(magnitude(ibsUf.amount.amount)),
         ibsMunicipalRate: percent(ibsMunicipal.rate),
-        ibsMunicipalValue: minorToFixed(ibsMunicipal.amount.amount),
+        ibsMunicipalValue: minorToFixed(magnitude(ibsMunicipal.amount.amount)),
         cbsRate: percent(cbs.rate),
-        cbsValue: minorToFixed(cbs.amount.amount),
+        cbsValue: minorToFixed(magnitude(cbs.amount.amount)),
       },
     }
   })
@@ -309,16 +328,18 @@ export function buildNfe55Data(input: {
   const ibsUf = sum(lines.map((line) => line.ibsCbs.ibsUfValue.replace('.', '')))
   const ibsMunicipal = sum(lines.map((line) => line.ibsCbs.ibsMunicipalValue.replace('.', '')))
   const cbs = sum(lines.map((line) => line.ibsCbs.cbsValue.replace('.', '')))
-  const invoice = BigInt(input.calculation.result.totals.net.amount)
+  const invoice = BigInt(magnitude(input.calculation.result.totals.net.amount))
   return {
     accessKey,
     processVersion:
       input.document.environment === 'homologation' ? 'horizon-phase43' : 'horizon-phase42',
-    issuedAt:
-      input.origin.originModule === 'fiscal'
-        ? `${input.origin.issueDate}T12:00:00-03:00`
-        : zonedInstant(input.document.createdAt, input.issuer.timezone),
-    natureOperation: 'Venda de mercadoria',
+    issuedAt: manual
+      ? `${manual.issueDate}T12:00:00-03:00`
+      : zonedInstant(input.document.createdAt, input.issuer.timezone),
+    natureOperation: linkedProfile?.natureOperation ?? 'Venda de mercadoria',
+    operationType: linked?.kind === 'sale-return' ? '0' : '1',
+    purpose: !linked ? '1' : linked.kind === 'value-complement' ? '2' : '4',
+    references: linked ? linked.references.map((reference) => reference.accessKey) : [],
     numericCode,
     series: input.document.series,
     number: input.number,
@@ -351,7 +372,7 @@ export function buildNfe55Data(input: {
     },
     lines,
     totals: {
-      products: minorToFixed(input.calculation.result.totals.gross.amount),
+      products: minorToFixed(magnitude(input.calculation.result.totals.gross.amount)),
       discounts: minorToFixed(input.calculation.result.totals.discounts.amount),
       other: minorToFixed(input.calculation.result.totals.charges.amount),
       invoice: minorToFixed(invoice.toString()),
@@ -365,6 +386,11 @@ export function buildNfe55Data(input: {
       invoiceWithIbsCbs: minorToFixed((invoice + ibsUf + ibsMunicipal + cbs).toString()),
     },
   }
+}
+
+/** A return is calculated as a reversal; the NF-e carries magnitudes and `finNFe` = 4. */
+function magnitude(value: string): string {
+  return value.startsWith('-') ? value.slice(1) : value
 }
 
 function deterministicNumericCode(documentId: string): string {

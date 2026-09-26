@@ -70,6 +70,24 @@ homologation supplier NF-e with a throwaway certificate; it requires
 `FISCAL_ALLOW_SUPPLIER_FIXTURE=true`. `scripts/phase44-smoke.mjs` runs the local-stack
 smoke through Kong.
 
+### Returns, complements and correction letters (Phase 45)
+
+`POST /linked-origins` freezes a sale return (`shipmentId`), a purchase return
+(`receiptId`, `establishmentId`) or a reviewed value complement, and conserves the
+returned quantities against the original lines. The draft is created with
+`POST /documents` and `origin.kind = 'linked'` and then follows the usual validate and
+issue commands. `GET /documents/:id/links` shows references, linked documents and the
+ids Inventory and Financial key their effects by. `GET /document-kinds` lists every kind
+and why the unsupported ones are refused. `POST /documents/:id/correction-letters` queues
+a model 55 correction letter; it needs the Phase 42 event schema path and credential.
+Linked documents never create stock or money effects
+([ADR 0052](../docs/adr/0052-returns-and-complements-are-linked-documents.md)).
+`npm run phase45:rollout -- --tenant <id> --establishment <id> [--evidence-digest <sha256>]`
+imports and reviews the Phase 45 rules and registers one capability per kind next to the
+establishment's active sale. It prints the `linked` map for
+`FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase45-smoke.mjs` runs the local-stack smoke
+through Kong.
+
 ## Verification
 
 `npm run test:e2e` starts PostgreSQL, RabbitMQ and MinIO with Testcontainers. It runs the

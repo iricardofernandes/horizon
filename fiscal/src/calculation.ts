@@ -131,7 +131,12 @@ function calculateLine(
   currencyMinorUnitScale: number,
 ): CalculatedLine {
   const scale = integer(10n ** BigInt(currencyMinorUnitScale))
-  const grossRational = multiply(multiply(decimal(line.quantity), decimal(line.unitPrice)), scale)
+  // A value complement carries no quantity: its line value is the complemented amount.
+  const commercial =
+    input.purpose === 'complementary' && line.complementValue !== undefined
+      ? decimal(line.complementValue)
+      : multiply(decimal(line.quantity), decimal(line.unitPrice))
+  const grossRational = multiply(commercial, scale)
   const direction = calculationInputDirection(input)
   const gross = roundHalfAwayFromZero(grossRational) * direction
   const net =

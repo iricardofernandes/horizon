@@ -9,6 +9,17 @@ export const nfe55IssuanceProfileSchema = z.strictObject({
     complement: z.string().min(1).max(60).nullable(),
     district: z.string().min(2).max(60),
   }),
+  /** Reviewed CFOP and nature per linked kind, each bound to its own capability row. */
+  linked: z
+    .partialRecord(
+      z.enum(['sale-return', 'purchase-return', 'value-complement']),
+      z.strictObject({
+        capabilityId: z.uuid(),
+        cfop: z.string().regex(/^[15]\d{3}$/),
+        natureOperation: z.string().min(1).max(60),
+      }),
+    )
+    .optional(),
   lineFacts: z.record(
     z.uuid(),
     z.strictObject({

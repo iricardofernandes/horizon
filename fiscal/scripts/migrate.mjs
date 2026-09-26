@@ -57,6 +57,7 @@ try {
     '0044_phase43_establishment_credentials.sql',
     '0045_phase43_uf_authorizers.sql',
     '0046_phase44_inbound_reconciliation.sql',
+    '0047_phase45_linked_documents.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

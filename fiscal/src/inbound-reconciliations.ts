@@ -132,7 +132,9 @@ export class FiscalInboundReconciliations {
     if (blocking)
       throw new InboundReconciliationError('BLOCKED', 'Supplier NF-e has an open conflict')
 
-    const keys = request.lines.map((line) => `${line.lineNumber}:${line.receiptLineId}`)
+    const keys = request.lines.map(
+      (line) => `${line.lineNumber}:${line.receiptId}:${line.receiptLineId}`,
+    )
     if (new Set(keys).size !== keys.length)
       throw new InboundReconciliationError(
         'ALLOCATION_INVALID',

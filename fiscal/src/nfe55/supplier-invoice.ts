@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { buildNfe55AccessKey } from './access-key'
-import type { Nfe55Data } from './model'
+import type { Nfe55DataInput as Nfe55Data } from './model'
 import { type SimulationCredential, signNfe55 } from './signature'
 import { serializeNfe55 } from './xml'
 

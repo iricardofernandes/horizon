@@ -59,6 +59,15 @@ export const nfe55DataSchema = z
     accessKey: z.string().refine(isValidNfeAccessKey, 'invalid NF-e access key'),
     issuedAt: z.iso.datetime({ offset: true }),
     natureOperation: text(1, 60),
+    /** `tpNF`: 0 inbound (a customer's return entering), 1 outbound. */
+    operationType: z.enum(['0', '1']).default('1'),
+    /** `finNFe`: 1 normal, 2 complement, 4 return. */
+    purpose: z.enum(['1', '2', '4']).default('1'),
+    /** Access keys of the documents a complement or return refers to. */
+    references: z
+      .array(z.string().refine(isValidNfeAccessKey, 'invalid referenced access key'))
+      .max(999)
+      .default([]),
     numericCode: z.string().regex(/^\d{8}$/),
     processVersion: text(1, 20).optional(),
     series: z.number().int().min(0).max(999),
@@ -98,6 +107,25 @@ export const nfe55DataSchema = z
         path: ['numericCode'],
         message: 'does not match access key',
       })
+    if ((value.purpose === '1') !== (value.references.length === 0))
+      context.addIssue({
+        code: 'custom',
+        path: ['references'],
+        message: 'a complement or return references its original, a normal NF-e does not',
+      })
+    if (value.operationType === '0' && value.purpose !== '4')
+      context.addIssue({
+        code: 'custom',
+        path: ['operationType'],
+        message: 'only a return is issued as an inbound NF-e',
+      })
+    for (const [index, line] of value.lines.entries())
+      if (Number(line.cfop[0]) < 5 !== (value.operationType === '0'))
+        context.addIssue({
+          code: 'custom',
+          path: ['lines', index, 'cfop'],
+          message: 'CFOP direction does not match tpNF',
+        })
     const numbers = value.lines.map((line) => line.number)
     if (new Set(numbers).size !== numbers.length)
       context.addIssue({ code: 'custom', path: ['lines'], message: 'line numbers must be unique' })
@@ -105,6 +133,7 @@ export const nfe55DataSchema = z
   })
 
 export type Nfe55Data = z.infer<typeof nfe55DataSchema>
+export type Nfe55DataInput = z.input<typeof nfe55DataSchema>
 
 function reconcile(value: z.infer<typeof nfe55DataSchema>, context: z.RefinementCtx): void {
   const sum = (members: string[]) => members.reduce((total, member) => total + cents(member), 0n)

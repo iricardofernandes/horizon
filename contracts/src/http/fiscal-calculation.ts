@@ -59,6 +59,8 @@ const fiscalCalculationInputBaseSchema = z.object({
         classificationRevision: z.int().positive().optional(),
         quantity: canonicalUnsignedDecimalSchema,
         unitPrice: canonicalUnsignedDecimalSchema,
+        /** Only for purpose `complementary`: the value complemented, with zero quantity and price. */
+        complementValue: canonicalUnsignedDecimalSchema.optional(),
         discount: nonNegativeMoneySchema,
         charges: nonNegativeMoneySchema,
         classifications: z.object({
@@ -88,14 +90,48 @@ function validateCalculationInput(
   input: z.infer<typeof fiscalCalculationInputBaseSchema>,
   context: z.RefinementCtx,
 ) {
-  if (input.purpose === 'return' && !input.referencedDocumentId)
+  if (
+    (input.purpose === 'return' || input.purpose === 'complementary') &&
+    !input.referencedDocumentId
+  )
     context.addIssue({
       code: 'custom',
       path: ['referencedDocumentId'],
-      message: 'is required for a return',
+      message: `is required for purpose ${input.purpose}`,
     })
-  for (const [index, line] of input.lines.entries())
+  for (const [index, line] of input.lines.entries()) {
     validateCalculationLine(line, index, input.currency, context)
+    validateComplementLine(line, index, input.purpose === 'complementary', context)
+  }
+}
+
+function validateComplementLine(
+  line: z.infer<typeof fiscalCalculationInputBaseSchema>['lines'][number],
+  index: number,
+  complementary: boolean,
+  context: z.RefinementCtx,
+) {
+  if (!complementary) {
+    if (line.complementValue !== undefined)
+      context.addIssue({
+        code: 'custom',
+        path: ['lines', index, 'complementValue'],
+        message: 'is allowed only for purpose complementary',
+      })
+    return
+  }
+  if (line.quantity !== '0' || line.unitPrice !== '0')
+    context.addIssue({
+      code: 'custom',
+      path: ['lines', index],
+      message: 'a value complement has zero quantity and unit price',
+    })
+  if (line.complementValue === undefined || line.complementValue === '0')
+    context.addIssue({
+      code: 'custom',
+      path: ['lines', index, 'complementValue'],
+      message: 'must be positive for purpose complementary',
+    })
 }
 
 function validateCalculationLine(

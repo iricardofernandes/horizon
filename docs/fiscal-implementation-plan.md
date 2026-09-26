@@ -1,7 +1,7 @@
 # Fiscal implementation plan — Phase J
 
-Status: Phases 39–42 delivered; 43 and 44 delivered for simulation (2026-09-26); 45–48
-planned. Reviewed against the repository and official technical portals on
+Status: Phases 39–42 delivered; 43, 44 and 45 delivered for simulation (2026-09-26);
+46–48 planned. Reviewed against the repository and official technical portals on
 2026-09-21. This document is the execution plan for phases 39–48 in
 [plan.md](plan.md); it is not a statement that Horizon can legally issue any document.
 
@@ -294,6 +294,8 @@ partially received order can match one of several invoices; two tenants with the
 supplier key never see each other's XML; a conflicting duplicate is visible and blocked.
 
 ### 45 — Returns, remittance and complementary documents
+
+[Detailed Phase 45 execution plan](fiscal-phase45-implementation-plan.md).
 
 **Work**
 

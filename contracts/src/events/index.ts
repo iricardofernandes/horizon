@@ -23,6 +23,7 @@ import {
   fiscalDocumentProductionOutcome,
   fiscalDocumentRejected,
   fiscalInboundMatched,
+  fiscalLinkedDocumentOutcome,
 } from './fiscal'
 import {
   apiKeyRevoked,
@@ -151,6 +152,7 @@ export const EVENTS: readonly EventDefinition[] = [
   fiscalDocumentHomologationObserved,
   fiscalDocumentProductionOutcome,
   fiscalInboundMatched,
+  fiscalLinkedDocumentOutcome,
   treasuryAccountOpened,
   treasuryEntryRecorded,
   treasuryTransferPosted,

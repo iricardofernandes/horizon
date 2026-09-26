@@ -159,3 +159,64 @@ export const fiscalInboundMatched = defineEvent({
     observedAt: instantSchema,
   }),
 })
+
+const linkedOutcomeFact = {
+  documentId: uuidSchema,
+  rootDocumentId: uuidSchema,
+  revision: z.number().int().positive(),
+  linkedOriginId: uuidSchema,
+  kind: z.enum(['sale-return', 'purchase-return', 'value-complement']),
+  references: z
+    .array(
+      z.discriminatedUnion('type', [
+        z.strictObject({ type: z.literal('document'), documentId: uuidSchema }),
+        z.strictObject({ type: z.literal('supplier-invoice'), importId: uuidSchema }),
+      ]),
+    )
+    .min(1),
+  source: z.strictObject({
+    module: z.enum(['sales', 'procurement', 'fiscal']),
+    documentType: z.enum(['shipment', 'receipt', 'review']),
+    id: uuidSchema,
+  }),
+  correlations: z.array(
+    z.strictObject({
+      module: z.enum(['inventory', 'financial']),
+      sourceEvent: z.string().min(1).max(80),
+      correlationId: uuidSchema,
+    }),
+  ),
+  model: z.literal('55'),
+  environment: z.literal('simulation'),
+  simulated: z.literal(true),
+  adapterVersion: z.string().min(1).max(80),
+  statusDigest: sha256Schema,
+  observedAt: instantSchema,
+}
+
+export const fiscalLinkedDocumentOutcome = defineEvent({
+  type: 'fiscal.linked-document.simulation-outcome',
+  version: 1,
+  description:
+    'The deterministic simulator decided an NF-e model 55 that returns or complements an earlier document. It correlates the owners of the stock and money effects (`correlations`) and never creates, repeats or reverses one: those remain the Sales, Procurement, Inventory and Financial facts. It carries no access key, XML or personal data.',
+  payload: z.discriminatedUnion('outcome', [
+    z.strictObject({
+      ...linkedOutcomeFact,
+      outcome: z.literal('authorized'),
+      authorityReference: z.string().min(1).max(256),
+      protocolDigest: sha256Schema,
+    }),
+    z.strictObject({
+      ...linkedOutcomeFact,
+      outcome: z.literal('rejected'),
+      authorityReference: z.string().min(1).max(256).nullable(),
+      protocolDigest: sha256Schema.nullable(),
+    }),
+    z.strictObject({
+      ...linkedOutcomeFact,
+      outcome: z.literal('cancelled'),
+      authorityReference: z.string().min(1).max(256),
+      protocolDigest: sha256Schema,
+    }),
+  ]),
+})

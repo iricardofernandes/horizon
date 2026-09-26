@@ -81,16 +81,16 @@ export function verifyCancellationEventSignature(xml: Buffer, certificate: Buffe
     'http://www.w3.org/2000/09/xmldsig#',
     'Signature',
   )
-  if (signatures.length !== 1) throw new Error('Cancellation event must have one signature')
+  if (signatures.length !== 1) throw new Error('NF-e event must have one signature')
   const verifier = new SignedXml({ publicCert: certificate, getCertFromKeyInfo: () => null })
   const signature = signatures.item(0)
-  if (!signature) throw new Error('Cancellation event signature is missing')
+  if (!signature) throw new Error('NF-e event signature is missing')
   verifier.loadSignature(signature as unknown as Node)
   if (!verifier.checkSignature(xml.toString('utf8')))
-    throw new Error('Cancellation event signature is invalid')
+    throw new Error('NF-e event signature is invalid')
   const references = verifier.getSignedReferences()
   if (references.length !== 1 || !references[0]?.includes('<infEvento'))
-    throw new Error('Cancellation signature did not authenticate infEvento')
+    throw new Error('NF-e event signature did not authenticate infEvento')
 }
 
 export async function validateCancellationEventSchema(input: {
@@ -99,15 +99,15 @@ export async function validateCancellationEventSchema(input: {
   expectedZipDigest: string
 }): Promise<void> {
   if (createHash('sha256').update(input.schemaZip).digest('hex') !== input.expectedZipDigest)
-    throw new Error('Cancellation schema package digest mismatch')
+    throw new Error('NF-e event schema package digest mismatch')
   const archive = unzipSync(input.schemaZip)
   const entries = required.map((path) => {
     const contents = archive[path]
-    if (!contents) throw new Error(`Cancellation schema package is missing ${path}`)
+    if (!contents) throw new Error(`NF-e event schema package is missing ${path}`)
     return { fileName: path, contents }
   })
   const schema = entries.find((entry) => entry.fileName === main)
-  if (!schema) throw new Error('Cancellation main schema is missing')
+  if (!schema) throw new Error('NF-e event main schema is missing')
   const result = await validateXML({
     xml: { fileName: 'cancellation.xml', contents: input.xml },
     schema,
@@ -115,7 +115,7 @@ export async function validateCancellationEventSchema(input: {
   })
   if (!result.valid)
     throw new Error(
-      `Cancellation XML schema validation failed: ${result.errors
+      `NF-e event XML schema validation failed: ${result.errors
         .slice(0, 3)
         .map((error) => error.message)
         .join('; ')}`,
@@ -130,3 +130,8 @@ function escapeXml(value: string): string {
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;')
 }
+
+/** The envelope, signature and schema checks apply to every NF-e event, not only 110111. */
+export const signNfeEvent = signCancellationEvent
+export const verifyNfeEventSignature = verifyCancellationEventSignature
+export const validateNfeEventSchema = validateCancellationEventSchema

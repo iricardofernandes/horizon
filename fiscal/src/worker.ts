@@ -11,7 +11,9 @@ import { FiscalCalculations } from './calculations'
 import { FiscalCancellation } from './cancellation'
 import { FiscalCapabilities } from './capabilities'
 import { FiscalConsumer } from './consumer'
+import { FiscalCorrectionLetters } from './correction-letters'
 import { FiscalDispatch } from './dispatch'
+import { FiscalDocumentLinksReader } from './document-links'
 import { FiscalDocuments } from './documents'
 import { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { FiscalInboundImports } from './inbound-imports'
@@ -19,6 +21,7 @@ import { FiscalInboundReconciliations } from './inbound-reconciliations'
 import { FiscalIngress } from './ingress'
 import { FiscalIssuance } from './issuance'
 import { FiscalIssueWorker } from './issue-worker'
+import { FiscalLinkedOrigins } from './linked-origins'
 import { FiscalManualOrigins } from './manual-origins'
 import { DeterministicNfe55Simulator } from './nfe55/simulator'
 import { FiscalOutboxRelay } from './outbox'
@@ -183,6 +186,28 @@ const inboundReconciliations = inboundImports
       projections,
     )
   : undefined
+const linkedOrigins = new FiscalLinkedOrigins(
+  config.DATABASE_URL,
+  Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
+  documents,
+  (tenantId) => new HttpOwnerFiscalClient(urls, () => tokens.forTenant(tenantId)),
+)
+const documentLinks = new FiscalDocumentLinksReader(config.DATABASE_URL)
+// The correction letter is signed with the same simulation credential and validated with
+// the same PL 010d envelope as the cancellation event.
+const correctionLetters = config.FISCAL_PHASE42_EVENT_SCHEMA_PATH
+  ? new FiscalCorrectionLetters(
+      config.DATABASE_URL,
+      documents,
+      artifacts,
+      {
+        privateKey: readFileSync(config.FISCAL_SIMULATION_PRIVATE_KEY_PATH as string),
+        certificate: readFileSync(config.FISCAL_SIMULATION_CERTIFICATE_PATH as string),
+      },
+      readFileSync(config.FISCAL_PHASE42_EVENT_SCHEMA_PATH),
+      '45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b',
+    )
+  : undefined
 const server = createFiscalServer({
   verifier,
   documents,
@@ -199,14 +224,20 @@ const server = createFiscalServer({
   ...(inboundImports && inboundReconciliations
     ? { inbound: { imports: inboundImports, reconciliations: inboundReconciliations } }
     : {}),
+  linked: {
+    origins: linkedOrigins,
+    links: documentLinks,
+    ...(correctionLetters ? { correctionLetters } : {}),
+  },
 })
 const fixedSimulatorScenario = config.FISCAL_SIMULATOR_SCENARIO
+const simulator = new DeterministicNfe55Simulator(
+  fixedSimulatorScenario ? () => fixedSimulatorScenario : undefined,
+)
 const issueWorker = new FiscalIssueWorker(
   dispatch,
   artifacts,
-  new DeterministicNfe55Simulator(
-    fixedSimulatorScenario ? () => fixedSimulatorScenario : undefined,
-  ),
+  simulator,
   config.FISCAL_SIMULATOR_RETRY_DELAY_MS,
 )
 const outbox = new FiscalOutboxRelay(config.DATABASE_URL, config.RABBITMQ_URL)
@@ -218,6 +249,12 @@ const issueWorkerTimer = setInterval(() => {
   void Promise.all(
     Object.keys(keys).map(async (tenantId) => {
       await issueWorker.processOne(tenantId, 'fiscal:issue-worker')
+      await correctionLetters?.processOne(
+        tenantId,
+        'fiscal:correction-worker',
+        simulator,
+        config.FISCAL_SIMULATOR_RETRY_DELAY_MS,
+      )
       await phase43Runtime?.worker.processOne(tenantId, 'fiscal:phase43-worker')
       await outbox.flush(tenantId)
     }),
@@ -259,6 +296,9 @@ async function stop(): Promise<void> {
     credentials.close(),
     inboundImports?.close(),
     inboundReconciliations?.close(),
+    linkedOrigins.close(),
+    documentLinks.close(),
+    correctionLetters?.close(),
     denylist.close(),
     phase43Runtime?.close(),
   ])

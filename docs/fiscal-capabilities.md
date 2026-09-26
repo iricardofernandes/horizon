@@ -12,6 +12,9 @@ and release approval. An issuer, UF or municipality never inherits another's sta
 | NF-e 55 | homologation (emulated authorizer) | per tenant establishment with its own A1 | issuer's UF (SP and RJ exercised) | normal-sale issue/query/cancel | `nfe55-<authorizer>-homologation-v1` | drill only, never activated | [Phase 43 simulation evidence](fiscal-phase43-evidence.md#ensaio-emulado-multi-uf-2026-09-26) |
 | NF-e 55 | homologation (official authorizer) | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
 | NF-e 55 | production | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
+| NF-e 55 | simulation | one locally configured establishment | SP | sale-return, purchase-return, value-complement (`finNFe` 4/2 with `NFref`) | `nfe55-simulator-v1` | simulated locally | [Phase 45 evidence](fiscal-phase45-evidence.md) |
+| NF-e 55 | simulation | any authorized simulated NF-e | SP | correction letter (event 110110) | `nfe55-simulator-v1` | simulated locally | [Phase 45 evidence](fiscal-phase45-evidence.md) |
+| NF-e 55 | any | none configured | any | remittance, adjustment, quantity/tax complement, credit/debit note | none | unsupported (no owner fact or reviewed rule) | [ADR 0052](adr/0052-returns-and-complements-are-linked-documents.md) |
 | NF-e 55 inbound (supplier XML) | any `tpAmb` (kept on the import) | tenant as recipient | any issuer UF | import, verify signature, reconcile with receipts | `nfe55/inbound.ts` (PL 010f) | simulated locally; authority status and ICP-Brasil chain unverified | [Phase 44 evidence](fiscal-phase44-evidence.md) |
 | NFC-e 65 | homologation | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
 | NFC-e 65 | production | none configured | no UF configured | issue/query/cancel | none | unsupported | none |

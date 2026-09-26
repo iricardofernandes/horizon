@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Nfe55Data } from './model'
+import type { Nfe55DataInput as Nfe55Data } from './model'
 import { validateNfe55Schema } from './schema'
 import { type SimulationCredential, signNfe55, verifyNfe55Signature } from './signature'
 import { serializeNfe55 } from './xml'
@@ -104,6 +104,64 @@ describe('NF-e 4.00 XML and simulation signature', () => {
         totals: { ...fixture().totals, products: '99.99' },
       }),
     ).toThrow('does not reconcile with frozen lines')
+  })
+
+  it('issues a return as an inbound finNFe 4 that references its original', async () => {
+    const original = fixture().accessKey
+    const line = fixture().lines[0]
+    if (!line) throw new Error('fixture line missing')
+    const unsigned = serializeNfe55({
+      ...fixture(),
+      natureOperation: 'Devolução de venda de mercadoria',
+      operationType: '0',
+      purpose: '4',
+      references: [original],
+      lines: [{ ...line, cfop: '1202' }],
+    })
+    const xml = unsigned.toString()
+    expect(xml).toContain('<tpNF>0</tpNF>')
+    expect(xml).toContain('<finNFe>4</finNFe>')
+    expect(xml).toContain(`<NFref><refNFe>${original}</refNFe></NFref></ide>`)
+    await validateNfe55Schema({
+      xml: signNfe55(unsigned, credential),
+      schemaZip: await readFile(SCHEMA_PATH),
+      expectedZipDigest: SCHEMA_DIGEST,
+    })
+  })
+
+  it('issues a value complement with zero quantity and the complemented value', async () => {
+    const line = fixture().lines[0]
+    if (!line) throw new Error('fixture line missing')
+    const unsigned = serializeNfe55({
+      ...fixture(),
+      natureOperation: 'Complemento de valor',
+      purpose: '2',
+      references: [fixture().accessKey],
+      lines: [{ ...line, quantity: '0.0000', unitPrice: '0' }],
+    })
+    expect(unsigned.toString()).toContain(
+      '<qCom>0.0000</qCom><vUnCom>0</vUnCom><vProd>100.00</vProd>',
+    )
+    await validateNfe55Schema({
+      xml: signNfe55(unsigned, credential),
+      schemaZip: await readFile(SCHEMA_PATH),
+      expectedZipDigest: SCHEMA_DIGEST,
+    })
+  })
+
+  it('refuses a linked purpose without a reference and a CFOP against the direction', () => {
+    expect(() => serializeNfe55({ ...fixture(), purpose: '4' })).toThrow('references')
+    expect(() => serializeNfe55({ ...fixture(), references: [fixture().accessKey] })).toThrow(
+      'references',
+    )
+    expect(() =>
+      serializeNfe55({
+        ...fixture(),
+        operationType: '0',
+        purpose: '4',
+        references: [fixture().accessKey],
+      }),
+    ).toThrow('CFOP direction')
   })
 
   it('marks the separately prepared homologation process version', () => {

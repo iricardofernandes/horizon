@@ -22,6 +22,13 @@ export type CancellationSimulatorResult = {
   protocol: Buffer | null
 }
 
+export type CorrectionLetterSimulatorResult = {
+  outcome: 'registered' | 'rejected' | 'unknown' | 'not_found'
+  providerCorrelation: string | null
+  response: Buffer
+  protocol: Buffer | null
+}
+
 const requestSchema = z.strictObject({
   commandId: z.uuid(),
   requestDigest: z.string().regex(/^[0-9a-f]{64}$/),
@@ -95,6 +102,41 @@ export class DeterministicNfe55Simulator {
     if (scenario === 'delayed-consultation' && request.attemptCount < 3)
       return cancellationResult(request, scenario, 'unknown')
     return finalCancellationResult(request, scenario)
+  }
+}
+
+/** Correction letters follow the same deterministic outcomes as cancellations. */
+export async function simulateCorrectionLetter(
+  simulator: Pick<DeterministicNfe55Simulator, 'submitCancellation' | 'consultCancellation'>,
+  input: z.input<typeof cancellationRequestSchema> & { eventXml?: Buffer },
+  mode: 'submit' | 'consult',
+): Promise<CorrectionLetterSimulatorResult> {
+  const { eventXml, ...candidate } = input
+  const result =
+    mode === 'submit'
+      ? await simulator.submitCancellation({ ...candidate, eventXml: eventXml ?? Buffer.alloc(0) })
+      : await simulator.consultCancellation(candidate)
+  const outcome = result.outcome === 'cancelled' ? 'registered' : result.outcome
+  const providerCorrelation =
+    result.providerCorrelation?.replace('simulation:cancellation:', 'simulation:correction:') ??
+    null
+  const rewrite = (bytes: Buffer) => {
+    const parsed = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>
+    return Buffer.from(
+      JSON.stringify({
+        ...parsed,
+        event: 'correction-letter',
+        ...('outcome' in parsed ? { outcome } : {}),
+        ...('status' in parsed ? { status: outcome } : {}),
+        providerCorrelation,
+      }),
+    )
+  }
+  return {
+    outcome,
+    providerCorrelation,
+    response: rewrite(result.response),
+    protocol: result.protocol ? rewrite(result.protocol) : null,
   }
 }
 

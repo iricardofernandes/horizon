@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.33.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.34.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -368,6 +368,13 @@ A reviewer reconciled a supplier NF-e with Procurement receipts. It links fiscal
 | `comparisonDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `reviewedBy` | string | yes | min length 1. max length 255 |
 | `observedAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
+### `fiscal.linked-document.simulation-outcome` — v1
+
+The deterministic simulator decided an NF-e model 55 that returns or complements an earlier document. It correlates the owners of the stock and money effects (`correlations`) and never creates, repeats or reverses one: those remain the Sales, Procurement, Inventory and Financial facts. It carries no access key, XML or personal data.
+
+**Payload**
+
+_No fields._
 
 ## `identity`
 

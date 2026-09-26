@@ -2251,9 +2251,22 @@ remain unverified and are labelled so.
 
 ## Phase 45 — Returns, remittance and complements
 
-**Planned.** Create linked fiscal documents and authority events for supported returns,
-remittances, complements and corrections, with conservation and idempotency tests.
-Original documents and operational effects remain traceable.
+**Delivered for simulation on 2026-09-26.** Fiscal issues three linked NF-e kinds from
+frozen owner facts:
+- a return of a Sales shipment;
+- a return of a Procurement receipt, referencing the reconciled supplier NF-e;
+- a reviewed value complement of an authorized sale.
+
+Returned quantities never exceed the original line, which is checked by the service and
+by a trigger. The original cannot be cancelled while a linked document or a pending
+correction letter points at it. The model 55 correction letter (event 110110) is its own
+event flow and never changes the document. Remittance, adjustment, and credit and debit
+notes are catalogued as unsupported. Stock and money stay with Inventory and Financial:
+the local stack through Kong showed one effect per owner fact. Fiscal only correlated
+them.
+[Evidence](fiscal-phase45-evidence.md).
+[ADR 0052](adr/0052-returns-and-complements-are-linked-documents.md).
+[Detailed implementation plan](fiscal-phase45-implementation-plan.md).
 [Detailed work and exit evidence](fiscal-implementation-plan.md#45--returns-remittance-and-complementary-documents).
 
 ## Phase 46 — NFC-e model 65

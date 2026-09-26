@@ -78,6 +78,20 @@ export class FiscalCancellation {
     if (document.status !== 'authorized') throw new Error('Fiscal cancellation is not allowed')
     if (document.model !== '55' || document.environment !== 'simulation')
       throw new Error('Unsupported Fiscal cancellation tuple')
+    // The same rule is enforced by a trigger on the cancellation command.
+    const [blocker] = await tx`select
+        exists (select 1 from fiscal_linked_references reference
+          where reference.tenant_id = ${command.tenantId}
+            and reference.referenced_document_id = ${command.documentId}
+            and not fiscal_linked_origin_void(reference.tenant_id, reference.linked_origin_id)
+        ) as linked,
+        exists (select 1 from fiscal_correction_letters letter
+          where letter.tenant_id = ${command.tenantId}
+            and letter.document_id = ${command.documentId} and letter.state <> 'done'
+        ) as letter`
+    if (blocker?.linked) throw new Error('Fiscal cancellation is blocked by linked documents')
+    if (blocker?.letter)
+      throw new Error('Fiscal cancellation is blocked by an unresolved correction letter')
     const [evidence] = await tx`select binding.access_key, artifact.digest as protocol_digest
         from fiscal_document_issuance_bindings binding
         join lateral (
