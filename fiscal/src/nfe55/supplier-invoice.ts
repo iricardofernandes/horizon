@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { buildNfe55AccessKey } from './access-key'
@@ -177,32 +177,74 @@ function money(value: bigint): string {
   return `${value / 100n}.${(value % 100n).toString().padStart(2, '0')}`
 }
 
-/** A self-signed test A1 carrying the ICP-Brasil CNPJ otherName, valid since yesterday. */
+/**
+ * A self-signed test A1 carrying the ICP-Brasil CNPJ otherName, valid since yesterday.
+ *
+ * `openssl ca -selfsign` sets the start date on every OpenSSL 3 release; `req -not_before`
+ * exists only from 3.4, which CI runners do not have.
+ */
 export async function supplierCredential(
   directory: string,
   taxId: string,
 ): Promise<SimulationCredential> {
   const keyPath = join(directory, `${taxId}.key.pem`)
+  const requestPath = join(directory, `${taxId}.csr.pem`)
   const certificatePath = join(directory, `${taxId}.cert.pem`)
+  const authority = join(directory, `${taxId}-ca`)
   const stamp = (offsetDays: number) =>
     `${new Date(Date.now() + offsetDays * 86_400_000).toISOString().replace(/[-:T]/g, '').slice(0, 14)}Z`
-  await promisify(execFile)('openssl', [
+  const openssl = (args: string[]) => promisify(execFile)('openssl', args)
+  await mkdir(authority, { recursive: true })
+  await writeFile(join(authority, 'index.txt'), '')
+  await writeFile(
+    join(authority, 'openssl.cnf'),
+    [
+      '[ca]',
+      'default_ca = test',
+      '[test]',
+      `dir = ${authority}`,
+      'database = $dir/index.txt',
+      'new_certs_dir = $dir',
+      'default_md = sha256',
+      'policy = anything',
+      'copy_extensions = copy',
+      'unique_subject = no',
+      'rand_serial = yes',
+      '[anything]',
+      'commonName = supplied',
+      '',
+    ].join('\n'),
+  )
+  await openssl([
     'req',
-    '-x509',
+    '-new',
     '-newkey',
     'rsa:2048',
     '-nodes',
-    '-sha256',
-    '-not_before',
-    stamp(-1),
-    '-not_after',
-    stamp(2),
     '-subj',
     '/CN=Horizon Supplier Test Only',
     '-addext',
     `subjectAltName=otherName:2.16.76.1.3.3;PRINTABLE:${taxId}`,
     '-keyout',
     keyPath,
+    '-out',
+    requestPath,
+  ])
+  await openssl([
+    'ca',
+    '-batch',
+    '-selfsign',
+    '-notext',
+    '-config',
+    join(authority, 'openssl.cnf'),
+    '-keyfile',
+    keyPath,
+    '-in',
+    requestPath,
+    '-startdate',
+    stamp(-1),
+    '-enddate',
+    stamp(2),
     '-out',
     certificatePath,
   ])

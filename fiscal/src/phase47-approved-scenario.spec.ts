@@ -14,7 +14,9 @@ const root = join(__dirname, '..', '..')
 
 describe('Phase 47 approved scenario', () => {
   it('pins the source manifest, schema and reference extract it names', async () => {
-    const manifestBytes = await readFile(join(root, 'docs', 'fiscal-phase47-source-manifest.json'))
+    const manifestBytes = await readFile(
+      join(root, 'fiscal', 'fixtures', 'official', 'phase47-source-manifest.json'),
+    )
     expect(createHash('sha256').update(manifestBytes).digest('hex')).toBe(
       PHASE47_SOURCE_MANIFEST_DIGEST,
     )

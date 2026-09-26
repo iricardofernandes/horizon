@@ -17,7 +17,10 @@ let client: S3Client
 beforeAll(async () => {
   const accessKeyId = `fiscal${randomBytes(8).toString('hex')}`
   const secretAccessKey = randomBytes(24).toString('base64url')
-  container = await new GenericContainer('quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z')
+  container = await new GenericContainer(
+    // MinIO no longer publishes public images; this is a pinned community build from source.
+    'pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372',
+  )
     .withEnvironment({
       MINIO_ROOT_USER: accessKeyId,
       MINIO_ROOT_PASSWORD: secretAccessKey,

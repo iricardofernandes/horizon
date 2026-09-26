@@ -48,7 +48,7 @@ docker run --rm -v horizon_fiscal-artifacts:/from:ro -v "$PREFIX-artifacts":/to 
   sh -c 'cp -a /from/. /to/'
 docker run -d --name "$PREFIX-minio" --network "$NETWORK" -v "$PREFIX-artifacts":/data \
   -e MINIO_ROOT_USER=horizon-fiscal-local -e MINIO_ROOT_PASSWORD=horizon-fiscal-local-secret \
-  quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data >/dev/null
+  pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372 server /data >/dev/null
 # A vhost of its own on the local broker: the restored Fiscal shares no queue or exchange
 # with the live one.
 docker exec horizon-rabbitmq rabbitmqctl -q delete_vhost phase48-restore >/dev/null 2>&1 || true

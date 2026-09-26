@@ -15,7 +15,7 @@ export function phase47Scenario(municipalityCode: string): string {
   return `rtc-v0057-nfse-service-${municipalityCode}`
 }
 
-/** The adhering-municipalities list of 2026-09-18 (docs/fiscal-phase47-source-manifest.json). */
+/** The adhering-municipalities list of 2026-09-18 (fiscal/fixtures/official/phase47-source-manifest.json). */
 export const PHASE47_REGISTRY_SOURCE = {
   uri: 'https://www.gov.br/nfse/pt-br/municipios/monitoramento-adesoes/municipios-aderentes-20260918.xlsx',
   sha256: '8c3b302f8e99fe7ae5cc71be3a26ac6f919e10c552e371b3412a0f842059cd07',
@@ -204,6 +204,6 @@ function serviceEntry() {
   }
 }
 
-/** SHA-256 of `docs/fiscal-phase47-source-manifest.json`, the capability's source manifest. */
+/** SHA-256 of `fiscal/fixtures/official/phase47-source-manifest.json`, the capability's source manifest. */
 export const PHASE47_SOURCE_MANIFEST_DIGEST =
   '03f40ff13a576f5849888c421f58a8ee1eda0ec75f166aa09cb2e1801a17b7d9'

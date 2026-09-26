@@ -51,7 +51,7 @@ jobs:
         run: npm run build
       - name: Verify retained candidate source bytes
         working-directory: fiscal
-        run: npm run phase43:verify-sources
+        run: npm run phase43:verify-sources -- --require-retained
       - name: Execute one grant-bound homologation exchange
         env:
           PHASE43_ACTION: ${{ inputs.action }}

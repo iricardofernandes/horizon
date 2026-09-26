@@ -45,7 +45,7 @@ All retrieved on 2026-09-26 from the [national NFS-e technical library](https://
 | Contributor API manual (public issuer) v1.2, Oct 2025 | `ac2f36e3…a2` | Operations: `POST /nfse`, `GET /nfse/{key}`, `GET`/`HEAD /dps/{id}`, `POST /nfse/{key}/eventos` |
 | [Adhering municipalities](https://www.gov.br/nfse/pt-br/municipios/monitoramento-adesoes) list of 2026-09-18 | `8c3b302f…d07` | Municipal registry version |
 
-The machine-readable list is `docs/fiscal-phase47-source-manifest.json`. The Swagger of
+The machine-readable list is `fiscal/fixtures/official/phase47-source-manifest.json`. The Swagger of
 the national APIs (`sefin.producaorestrita.nfse.gov.br`, `adn.producaorestrita.nfse.gov.br`)
 answers 403 without an ICP-Brasil client certificate, so the JSON envelope field names
 and the XML-DSig algorithms are **not** pinned. The municipal parameters (ISS rate per

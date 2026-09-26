@@ -9,7 +9,7 @@ Status: **concluída em simulação em 2026-09-26**.
 
 Plano: [fiscal-phase47-implementation-plan.md](fiscal-phase47-implementation-plan.md).
 Decisão: [ADR 0054](adr/0054-national-nfse-is-keyed-by-municipality-and-reconciled-by-dps.md).
-Fontes: [manifesto da fase 47](fiscal-phase47-source-manifest.json) (XSD 1.01, Anexos I, II,
+Fontes: [manifesto da fase 47](../fiscal/fixtures/official/phase47-source-manifest.json) (XSD 1.01, Anexos I, II,
 A, B e C, manual das APIs e lista de municípios aderentes de 18/09/2026, com SHA-256).
 
 ## O que foi entregue

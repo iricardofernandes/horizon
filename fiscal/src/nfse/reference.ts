@@ -3,7 +3,7 @@ import reference from '../../fixtures/official/nfse-reference-v1.01.json'
 
 /**
  * The national NFS-e reference tables Phase 47 checks against, extracted from the pinned
- * annexes (see `docs/fiscal-phase47-source-manifest.json`): the national service list
+ * annexes (see `fiscal/fixtures/official/phase47-source-manifest.json`): the national service list
  * (Anexo B), NBS 2.0 (Anexo B), IBGE municipalities (Anexo A) and the IBS/CBS operation
  * indicators (Anexo C).
  */
