@@ -12,6 +12,7 @@ and release approval. An issuer, UF or municipality never inherits another's sta
 | NF-e 55 | homologation (emulated authorizer) | per tenant establishment with its own A1 | issuer's UF (SP and RJ exercised) | normal-sale issue/query/cancel | `nfe55-<authorizer>-homologation-v1` | drill only, never activated | [Phase 43 simulation evidence](fiscal-phase43-evidence.md#ensaio-emulado-multi-uf-2026-09-26) |
 | NF-e 55 | homologation (official authorizer) | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
 | NF-e 55 | production | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
+| NF-e 55 inbound (supplier XML) | any `tpAmb` (kept on the import) | tenant as recipient | any issuer UF | import, verify signature, reconcile with receipts | `nfe55/inbound.ts` (PL 010f) | simulated locally; authority status and ICP-Brasil chain unverified | [Phase 44 evidence](fiscal-phase44-evidence.md) |
 | NFC-e 65 | homologation | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
 | NFC-e 65 | production | none configured | no UF configured | issue/query/cancel | none | unsupported | none |
 | National NFS-e | restricted production | none configured | no municipality configured | issue/query/cancel | none | unsupported | none |
@@ -19,7 +20,8 @@ and release approval. An issuer, UF or municipality never inherits another's sta
 
 This matrix is configuration and release evidence, not a guess from a service URL.
 The Fiscal read API returns `unsupported` by default and exposes only the locally
-activated Phase 42 simulation tuple. An emulated drill cannot activate a homologation
+activated Phase 42 simulation tuple. Supplier XML import verifies the signed bytes but never
+claims authority status ([ADR 0051](adr/0051-supplier-xml-is-evidence-not-an-operational-fact.md)). An emulated drill cannot activate a homologation
 row ([ADR 0050](adr/0050-fiscal-authorizer-follows-issuer-jurisdiction.md)). Homologation and production routes remain
 disabled. Source artifacts and checksums are tracked in
 [fiscal-source-register.md](fiscal-source-register.md).

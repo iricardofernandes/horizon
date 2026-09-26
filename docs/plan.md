@@ -2234,9 +2234,19 @@ disabled.
 
 ## Phase 44 — Inbound XML and purchase reconciliation
 
-**Planned.** Import and verify supplier XML, match it to Parties, Catalog, Procurement
-receipts and Financial payables, and expose conflicts for review. Reimporting must never
-create a second stock movement or payable.
+**Delivered for simulation on 2026-09-26.** A reviewer imports a supplier's NF-e model 55.
+Fiscal verifies the bytes, the schema, the access key, the recipient and the XML
+signature, and keeps the original encrypted. It finds the supplier through a blind
+tax-id index and proposes the Procurement receipt lines the invoice covers. A reviewer
+commits one reconciliation per import. Any difference is kept only with a reason, and
+allocations can never exceed what arrived. The reconciliation publishes
+`fiscal.inbound.matched`; stock and payables stay with Procurement and Financial.
+Reimport, broker replay and commit retries created nothing twice, in the tests and in
+the local stack through Kong. Authority status and the ICP-Brasil chain of inbound XML
+remain unverified and are labelled so.
+[Evidence](fiscal-phase44-evidence.md).
+[ADR 0051](adr/0051-supplier-xml-is-evidence-not-an-operational-fact.md).
+[Detailed implementation plan](fiscal-phase44-implementation-plan.md).
 [Detailed work and exit evidence](fiscal-implementation-plan.md#44--inbound-xml-and-three-way-reconciliation).
 
 ## Phase 45 — Returns, remittance and complements

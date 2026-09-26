@@ -133,3 +133,29 @@ export const fiscalDocumentProductionOutcome = defineEvent({
     }),
   ]),
 })
+
+export const fiscalInboundMatched = defineEvent({
+  type: 'fiscal.inbound.matched',
+  version: 1,
+  description:
+    "A reviewer reconciled a supplier NF-e with Procurement receipts. It links fiscal evidence to operational facts and never creates a receipt, stock movement or payable: those remain `procurement.receipt.recorded` and Financial's. `decision` is `overridden` when a difference was kept with a reason. `authorityStatus` stays `unverified` until an inbound consultation capability exists. `accessKey` is null for a natural-person issuer, whose key embeds a CPF.",
+  payload: z.strictObject({
+    importId: uuidSchema,
+    reconciliationId: uuidSchema,
+    /** Null when the issuer is a natural person: that key embeds the CPF. */
+    accessKey: z
+      .string()
+      .regex(/^[0-9]{6}[0-9A-Z]{12}[0-9]{26}$/)
+      .nullable(),
+    supplierPartyId: uuidSchema,
+    decision: z.enum(['matched', 'overridden']),
+    receipts: z.array(z.strictObject({ receiptId: uuidSchema, orderId: uuidSchema })).min(1),
+    payableTitleIds: z.array(uuidSchema),
+    authorityEnvironment: z.enum(['production', 'homologation']),
+    signature: z.literal('valid-unanchored'),
+    authorityStatus: z.literal('unverified'),
+    comparisonDigest: sha256Schema,
+    reviewedBy: z.string().min(1).max(255),
+    observedAt: instantSchema,
+  }),
+})

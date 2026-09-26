@@ -17,6 +17,7 @@ import type { FiscalCapabilities } from './capabilities'
 import type { FiscalDispatch } from './dispatch'
 import type { FiscalDocuments } from './documents'
 import type { FiscalEstablishmentCredentials } from './establishment-credentials'
+import { handleInboundRoute, type InboundDependencies } from './inbound-api'
 import type { FiscalIssuance } from './issuance'
 import type { FiscalManualOrigins } from './manual-origins'
 import type { FiscalReadiness } from './readiness'
@@ -43,6 +44,7 @@ export function createFiscalServer(dependencies: {
   cancellation?: Pick<FiscalCancellation, 'request'>
   rules: Pick<FiscalRuleStore, 'proposeOverride'>
   credentials?: Pick<FiscalEstablishmentCredentials, 'list' | 'upload'>
+  inbound?: InboundDependencies
 }): Server {
   return createServer((request, response) => {
     void handle(request, response, dependencies).catch(() =>
@@ -75,6 +77,7 @@ async function handle(
     cancellation?: Pick<FiscalCancellation, 'request'>
     rules: Pick<FiscalRuleStore, 'proposeOverride'>
     credentials?: Pick<FiscalEstablishmentCredentials, 'list' | 'upload'>
+    inbound?: InboundDependencies
   },
 ): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://fiscal.local')
@@ -90,6 +93,11 @@ async function handle(
     return
   }
   if (!requirePermission(principal, 'read', response)) return
+  if (
+    dependencies.inbound &&
+    (await handleInboundRoute(request, response, url, principal, dependencies.inbound))
+  )
+    return
 
   if (url.pathname === '/establishment-credentials' && dependencies.credentials) {
     response.setHeader('cache-control', 'private, no-store')

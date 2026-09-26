@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto'
 import postgres from 'postgres'
 import { z } from 'zod'
+import { partyTaxIdDigest } from './party-tax-index'
 
 const uuid = z.uuid()
 const date = z.iso.date()
@@ -80,8 +81,66 @@ type Sql = ReturnType<typeof postgres>
 export class FiscalProjections {
   readonly #db: Sql
 
-  constructor(url: string) {
+  readonly #indexKey: Buffer | null
+
+  /** With `indexKey`, party revisions also maintain the blind tax-id index (Phase 44). */
+  constructor(url: string, indexKey?: Buffer) {
     this.#db = postgres(url, { max: 10, connection: { statement_timeout: 5000 } })
+    if (indexKey && indexKey.length !== 32)
+      throw new Error('Fiscal party index key must be 32 bytes')
+    this.#indexKey = indexKey ?? null
+  }
+
+  /** Party ids whose latest projected revision carries this tax id. */
+  async findPartiesByTaxId(tenantId: string, taxId: string): Promise<string[]> {
+    z.uuid().parse(tenantId)
+    if (!this.#indexKey) throw new Error('Fiscal party index key is not configured')
+    const digest = partyTaxIdDigest(this.#indexKey, tenantId, taxId)
+    const rows = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select party_id from fiscal_party_tax_index
+        where tenant_id = ${tenantId} and tax_id_digest = ${digest} order by party_id`
+    })
+    return rows.map((row) => String(row.party_id))
+  }
+
+  /** Rebuilds the index from every projected, unerased party's latest revision. */
+  async reindexParties(tenantId: string): Promise<number> {
+    z.uuid().parse(tenantId)
+    if (!this.#indexKey) throw new Error('Fiscal party index key is not configured')
+    const latest = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select distinct on (r.subject_id) r.subject_id, r.revision
+        from profile_revisions r join profile_keys k on k.tenant_id = r.tenant_id
+          and k.source_module = r.source_module and k.subject_id = r.subject_id
+        where r.tenant_id = ${tenantId} and r.source_module = 'parties' and k.erased_at is null
+        order by r.subject_id, r.revision desc`
+    })
+    let indexed = 0
+    for (const row of latest) {
+      const party = await this.readParty(tenantId, String(row.subject_id), Number(row.revision))
+      if (!party) continue
+      await this.#db.begin(async (tx) => {
+        await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+        await this.index(tx, tenantId, party)
+      })
+      indexed += 1
+    }
+    return indexed
+  }
+
+  private async index(
+    tx: postgres.TransactionSql,
+    tenantId: string,
+    party: PartyFiscalExport,
+  ): Promise<void> {
+    if (!this.#indexKey) return
+    const digest = partyTaxIdDigest(this.#indexKey, tenantId, party.taxId)
+    await tx`insert into fiscal_party_tax_index (tenant_id, party_id, revision, tax_id_digest)
+      values (${tenantId}, ${party.partyId}, ${party.revision}, ${digest})
+      on conflict (tenant_id, party_id) do update
+        set revision = excluded.revision, tax_id_digest = excluded.tax_id_digest
+        where fiscal_party_tax_index.revision < excluded.revision`
   }
 
   async close(): Promise<void> {
@@ -263,6 +322,7 @@ export class FiscalProjections {
           ${tenantId}, ${source}, ${subjectId}, ${revision}, ${effectiveFrom},
           ${seal(key.material, aad(tenantId, source, subjectId, revision), plaintext)}, ${digest}
         ) on conflict on constraint profile_revisions_key do nothing returning revision`
+      if (source === 'parties') await this.index(tx, tenantId, record as PartyFiscalExport)
       if (inserted.length > 0) return 'inserted'
       const [existing] = await tx`
         select digest from profile_revisions where tenant_id = ${tenantId}

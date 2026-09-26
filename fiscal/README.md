@@ -41,7 +41,7 @@ the same ID raises a conflict for review. Existing Parties or Catalog rows at re
 zero remain incomplete until their owners verify and classify them. No city name,
 address or tax code is guessed from legacy free text.
 
-The RabbitMQ queue is durable and binds only the five Phase 39 event types. Parsing
+The RabbitMQ queue is durable and binds only the event types Fiscal consumes: the five Phase 39 types plus the Phase 44 Procurement order, receipt and return events and the Financial payable posted and reversed events. Parsing
 failures are dead-lettered; handler failures get one broker redelivery. The inbox and
 origin constraint protect separate retry paths. A missing or stale owner profile cannot
 authorize an intent. Party erasure destroys Fiscal's subject key, including when the
@@ -55,6 +55,20 @@ Old Phase 39 intents without an encrypted origin payload need the owner event re
 with a new event ID before draft creation. The request cannot supply replacement
 commercial facts. Simulation submission and cancellation are internal persistence
 operations used to prove crash recovery; they are not public authority operations.
+
+### Supplier NF-e imports (Phase 44)
+
+Set `FISCAL_INBOUND_SCHEMA_PATH` to the pinned PL 010f zip to enable `/imports`
+(the local compose file mounts it). A `reviewer` or `admin` posts the raw XML. Fiscal
+verifies it, keeps the bytes encrypted, and proposes the Procurement receipt lines it
+covers. One reconciliation per import is committed with an `Idempotency-Key`. Imports
+never create stock or payables ([ADR 0051](../docs/adr/0051-supplier-xml-is-evidence-not-an-operational-fact.md)).
+For parties projected before Phase 44, run `npm run phase44:reindex-parties` with
+`DATABASE_URL`, `FISCAL_ARTIFACT_KEY_HEX` and `TENANT_ID` to build the supplier tax-id
+index. For simulation drills, `npm run phase44:supplier-invoice` writes a signed
+homologation supplier NF-e with a throwaway certificate; it requires
+`FISCAL_ALLOW_SUPPLIER_FIXTURE=true`. `scripts/phase44-smoke.mjs` runs the local-stack
+smoke through Kong.
 
 ## Verification
 

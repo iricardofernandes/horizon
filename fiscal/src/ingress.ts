@@ -11,6 +11,7 @@ import {
 import postgres from 'postgres'
 import { canonicalJson } from './canonical-json'
 import { sealOrigin } from './origin-crypto'
+import { PURCHASE_EVENT_TYPES, projectPurchaseEvent } from './purchase-projections'
 
 type Sql = ReturnType<typeof postgres>
 type Transaction = postgres.TransactionSql
@@ -21,6 +22,7 @@ export const FISCAL_EVENT_TYPES = [
   'identity.company.fiscal-profile-changed',
   'catalog.item.classification-changed',
   'parties.party.erased',
+  ...PURCHASE_EVENT_TYPES,
 ] as const
 
 /**
@@ -107,8 +109,17 @@ export class FiscalIngress {
             values (${envelope.tenantId}, 'parties', ${payload.partyId}, null, now())
             on conflict (tenant_id, source_module, subject_id) do update
               set material = null, erased_at = now()`
+          await tx`delete from fiscal_party_tax_index
+            where tenant_id = ${envelope.tenantId} and party_id = ${payload.partyId}`
           break
         }
+        case 'procurement.order.approved':
+        case 'procurement.receipt.recorded':
+        case 'procurement.receipt.returned':
+        case 'financial.payable.posted':
+        case 'financial.payable.reversed':
+          await projectPurchaseEvent(tx, envelope.tenantId, envelope.eventType, envelope.payload)
+          break
       }
       return 'applied'
     })

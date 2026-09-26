@@ -14,6 +14,8 @@ import { FiscalConsumer } from './consumer'
 import { FiscalDispatch } from './dispatch'
 import { FiscalDocuments } from './documents'
 import { FiscalEstablishmentCredentials } from './establishment-credentials'
+import { FiscalInboundImports } from './inbound-imports'
+import { FiscalInboundReconciliations } from './inbound-reconciliations'
 import { FiscalIngress } from './ingress'
 import { FiscalIssuance } from './issuance'
 import { FiscalIssueWorker } from './issue-worker'
@@ -63,6 +65,7 @@ const config = z
     ),
     FISCAL_SIMULATOR_RETRY_DELAY_MS: z.coerce.number().int().min(0).max(300_000).default(1_000),
     FISCAL_PHASE43_WORKER_CONFIG_PATH: optionalSetting(z.string().min(1)),
+    FISCAL_INBOUND_SCHEMA_PATH: optionalSetting(z.string().min(1)),
   })
   .parse(process.env)
 
@@ -70,7 +73,10 @@ const ingress = new FiscalIngress(
   config.DATABASE_URL,
   Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
 )
-const projections = new FiscalProjections(config.DATABASE_URL)
+const projections = new FiscalProjections(
+  config.DATABASE_URL,
+  Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
+)
 const documents = new FiscalDocuments(
   config.DATABASE_URL,
   Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
@@ -159,6 +165,24 @@ const cancellation = config.FISCAL_PHASE42_EVENT_SCHEMA_PATH
       '45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b',
     )
   : undefined
+// PL 010f is the same pinned package the Phase 42 issuance validates against.
+const inboundSchemaDigest = 'b8589490a58a09a993a80e6ac4d7ed10f20892061ecfc56719337098d4b95998'
+const inboundImports = config.FISCAL_INBOUND_SCHEMA_PATH
+  ? new FiscalInboundImports(
+      config.DATABASE_URL,
+      Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
+      artifactStore,
+      projections,
+      { zip: readFileSync(config.FISCAL_INBOUND_SCHEMA_PATH), digest: inboundSchemaDigest },
+    )
+  : undefined
+const inboundReconciliations = inboundImports
+  ? new FiscalInboundReconciliations(
+      config.DATABASE_URL,
+      Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
+      projections,
+    )
+  : undefined
 const server = createFiscalServer({
   verifier,
   documents,
@@ -172,6 +196,9 @@ const server = createFiscalServer({
   ...(cancellation ? { cancellation } : {}),
   rules: ruleStore,
   credentials,
+  ...(inboundImports && inboundReconciliations
+    ? { inbound: { imports: inboundImports, reconciliations: inboundReconciliations } }
+    : {}),
 })
 const fixedSimulatorScenario = config.FISCAL_SIMULATOR_SCENARIO
 const issueWorker = new FiscalIssueWorker(
@@ -230,6 +257,8 @@ async function stop(): Promise<void> {
     outbox.close(),
     ruleStore.close(),
     credentials.close(),
+    inboundImports?.close(),
+    inboundReconciliations?.close(),
     denylist.close(),
     phase43Runtime?.close(),
   ])

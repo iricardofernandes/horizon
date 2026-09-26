@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.32.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.33.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -347,6 +347,27 @@ The deterministic simulator rejected an NF-e model 55; the immutable document ma
 | `rejectionCode` | string | yes | min length 1. max length 40 |
 | `rejectionReason` | string | yes | min length 1. max length 1000 |
 | `responseDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+### `fiscal.inbound.matched` — v1
+
+A reviewer reconciled a supplier NF-e with Procurement receipts. It links fiscal evidence to operational facts and never creates a receipt, stock movement or payable: those remain `procurement.receipt.recorded` and Financial's. `decision` is `overridden` when a difference was kept with a reason. `authorityStatus` stays `unverified` until an inbound consultation capability exists. `accessKey` is null for a natural-person issuer, whose key embeds a CPF.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `importId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `reconciliationId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `accessKey` | any | yes | — |
+| `supplierPartyId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `decision` | `matched` \| `overridden` | yes | — |
+| `receipts` | array | yes | — |
+| `payableTitleIds` | array | yes | — |
+| `authorityEnvironment` | `production` \| `homologation` | yes | — |
+| `signature` | string | yes | — |
+| `authorityStatus` | string | yes | — |
+| `comparisonDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `reviewedBy` | string | yes | min length 1. max length 255 |
+| `observedAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
 
 ## `identity`
 

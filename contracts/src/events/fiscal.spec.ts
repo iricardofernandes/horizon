@@ -7,6 +7,7 @@ import {
   fiscalDocumentHomologationObserved,
   fiscalDocumentProductionOutcome,
   fiscalDocumentRejected,
+  fiscalInboundMatched,
 } from './fiscal'
 
 const base = {
@@ -138,5 +139,37 @@ describe('future production release event', () => {
     expect(
       fiscalDocumentProductionOutcome.payload.safeParse({ ...payload, originDigest: null }).success,
     ).toBe(false)
+  })
+})
+
+describe('Fiscal inbound reconciliation event', () => {
+  const payload = {
+    importId: randomUUID(),
+    reconciliationId: randomUUID(),
+    accessKey: '35260912345678000195550010000001011000001015',
+    supplierPartyId: randomUUID(),
+    decision: 'matched',
+    receipts: [{ receiptId: randomUUID(), orderId: randomUUID() }],
+    payableTitleIds: [],
+    authorityEnvironment: 'homologation',
+    signature: 'valid-unanchored',
+    authorityStatus: 'unverified',
+    comparisonDigest: 'c'.repeat(64),
+    reviewedBy: 'user:reviewer',
+    observedAt: '2026-09-26T15:00:00.000Z',
+  } as const
+
+  it('links a reviewed supplier NF-e to receipts without XML or personal data', () => {
+    expect(fiscalInboundMatched.type).toBe('fiscal.inbound.matched')
+    expect(fiscalInboundMatched.payload.parse(payload)).toEqual(payload)
+    expect(fiscalInboundMatched.payload.parse({ ...payload, accessKey: null }).accessKey).toBeNull()
+  })
+
+  it('rejects raw XML, missing receipts and a verified authority claim', () => {
+    expect(() => fiscalInboundMatched.payload.parse({ ...payload, xml: '<NFe/>' })).toThrow()
+    expect(() => fiscalInboundMatched.payload.parse({ ...payload, receipts: [] })).toThrow()
+    expect(() =>
+      fiscalInboundMatched.payload.parse({ ...payload, authorityStatus: 'verified' }),
+    ).toThrow()
   })
 })

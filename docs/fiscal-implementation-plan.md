@@ -1,6 +1,7 @@
 # Fiscal implementation plan — Phase J
 
-Status: Phases 39 and 40 delivered; later phases planned. Reviewed against the repository and official technical portals on
+Status: Phases 39–42 delivered; 43 and 44 delivered for simulation (2026-09-26); 45–48
+planned. Reviewed against the repository and official technical portals on
 2026-09-21. This document is the execution plan for phases 39–48 in
 [plan.md](plan.md); it is not a statement that Horizon can legally issue any document.
 

@@ -11,10 +11,17 @@ const config = z
     CATALOG_URL: z.url(),
     FISCAL_SERVICE_API_KEY: z.string().min(20),
     TENANT_ID: z.uuid(),
+    FISCAL_ARTIFACT_KEY_HEX: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/i)
+      .optional(),
   })
   .parse(process.env)
 
-const projections = new FiscalProjections(config.DATABASE_URL)
+const projections = new FiscalProjections(
+  config.DATABASE_URL,
+  config.FISCAL_ARTIFACT_KEY_HEX ? Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex') : undefined,
+)
 const tokens = new FiscalServiceTokens(config.IDENTITY_URL, {
   [config.TENANT_ID]: config.FISCAL_SERVICE_API_KEY,
 })
