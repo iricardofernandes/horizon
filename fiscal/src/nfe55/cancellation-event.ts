@@ -5,6 +5,7 @@ import { SignedXml } from 'xml-crypto'
 import { validateXML } from 'xmllint-wasm'
 import { z } from 'zod'
 import { isValidNfeAccessKey } from './access-key'
+import { ufOfCode } from './jurisdiction'
 import type { SimulationCredential } from './signature'
 
 const namespace = 'http://www.portalfiscal.inf.br/nfe'
@@ -32,14 +33,19 @@ export function serializeCancellationEvent(input: z.input<typeof eventSchema>): 
   const value = eventSchema.parse(input)
   if (!Number.isFinite(Date.parse(value.occurredAt)))
     throw new Error('Invalid cancellation instant')
-  if (value.accessKey.slice(0, 2) !== '35') throw new Error('Unsupported cancellation jurisdiction')
+  const ufCode = value.accessKey.slice(0, 2)
+  try {
+    ufOfCode(ufCode)
+  } catch {
+    throw new Error('Unsupported cancellation jurisdiction')
+  }
   if (!isValidNfeAccessKey(value.accessKey)) throw new Error('Invalid cancellation access key')
   const issuerTaxId = value.accessKey.slice(6, 20)
   const eventId = `ID110111${value.accessKey}01`
   return Buffer.from(
     `<?xml version="1.0" encoding="UTF-8"?><envEvento xmlns="${namespace}" versao="1.00">` +
       `<idLote>${value.lotId}</idLote><evento versao="1.00"><infEvento Id="${eventId}">` +
-      `<cOrgao>35</cOrgao><tpAmb>2</tpAmb><CNPJ>${issuerTaxId}</CNPJ>` +
+      `<cOrgao>${ufCode}</cOrgao><tpAmb>2</tpAmb><CNPJ>${issuerTaxId}</CNPJ>` +
       `<chNFe>${value.accessKey}</chNFe><dhEvento>${value.occurredAt}</dhEvento>` +
       '<tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento><verEvento>1.00</verEvento>' +
       `<detEvento versao="1.00"><descEvento>Cancelamento</descEvento>` +

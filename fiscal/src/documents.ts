@@ -753,7 +753,7 @@ export class FiscalDocuments {
     })
   }
 
-  /** Reserves inside a separately reviewed SP homologation range and active drill. */
+  /** Reserves inside a separately reviewed homologation range and active drill. */
   async reserveHomologationNumber(
     tenantId: string,
     documentId: string,

@@ -4,6 +4,7 @@ import postgres from 'postgres'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
 import { appendAudit } from './audit'
+import { type BrazilianUf, isBrazilianUf } from './nfe55/jurisdiction'
 import type {
   PreparedSefazExchange,
   SefazExchangeInput,
@@ -36,9 +37,13 @@ const grantSchema = z.strictObject({
   certificateFingerprint: digest,
   issuedBy: z.string().min(1).max(200),
   expiresAt: z.iso.datetime({ offset: true }),
+  /** `emulated` grants run against a local authorizer and can never activate a tuple. */
+  authority: z.enum(['official', 'emulated']).default('official'),
 })
 
-/** Append-only evidence for internal SP homologation exchanges; no network I/O occurs here. */
+export type HomologationAuthority = 'official' | 'emulated'
+
+/** Append-only evidence for internal homologation exchanges; no network I/O occurs here. */
 export class HomologationExchangeLedger {
   readonly #db: ReturnType<typeof postgres>
 
@@ -108,7 +113,6 @@ export class HomologationExchangeLedger {
           and definition.environment = 'homologation'
           and definition.model = '55'
           and definition.jurisdiction_kind = 'uf'
-          and definition.jurisdiction_code = 'SP'
           and definition.operation = 'normal-sale'
           and exchange.prepared_at >= latest.created_at
           and transmission.exchange_id is null
@@ -216,14 +220,14 @@ export class HomologationExchangeLedger {
       await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
       const inserted = await tx`insert into fiscal_homologation_drill_grants (
         id, tenant_id, capability_id, document_id, endpoint_digest, wsdl_digest,
-        certificate_fingerprint, issued_by, expires_at
+        certificate_fingerprint, issued_by, expires_at, authority
       ) values (
         ${value.grantId}, ${value.tenantId}, ${value.capabilityId}, ${value.documentId},
         ${value.endpointDigest}, ${value.wsdlDigest}, ${value.certificateFingerprint},
-        ${value.issuedBy}, ${value.expiresAt}
+        ${value.issuedBy}, ${value.expiresAt}, ${value.authority}
       ) on conflict do nothing returning id`
       const [stored] = await tx`select capability_id, document_id, endpoint_digest,
-          wsdl_digest, certificate_fingerprint, issued_by, expires_at
+          wsdl_digest, certificate_fingerprint, issued_by, expires_at, authority
         from fiscal_homologation_drill_grants
         where tenant_id = ${value.tenantId} and id = ${value.grantId}`
       if (
@@ -234,6 +238,7 @@ export class HomologationExchangeLedger {
         stored.wsdl_digest !== value.wsdlDigest ||
         stored.certificate_fingerprint !== value.certificateFingerprint ||
         stored.issued_by !== value.issuedBy ||
+        stored.authority !== value.authority ||
         new Date(stored.expires_at).toISOString() !== new Date(value.expiresAt).toISOString()
       )
         throw new Error('Conflicting immutable homologation drill grant')
@@ -249,6 +254,7 @@ export class HomologationExchangeLedger {
             endpointDigest: value.endpointDigest,
             certificateFingerprint: value.certificateFingerprint,
             expiresAt: value.expiresAt,
+            authority: value.authority,
           },
         })
     })
@@ -265,13 +271,36 @@ export class HomologationExchangeLedger {
     certificateFingerprint: string
     adapterVersion: string
   }> {
+    const {
+      jurisdiction: _jurisdiction,
+      authority: _authority,
+      ...context
+    } = await this.drillScope(tenantId, documentId, grantId)
+    return context
+  }
+
+  /** The drill's UF and authority decide which adapter and transport may run it. */
+  async drillScope(
+    tenantId: string,
+    documentId: string,
+    grantId: string,
+  ): Promise<{
+    drillGrantId: string
+    endpointDigest: string
+    wsdlDigest: string
+    certificateFingerprint: string
+    adapterVersion: string
+    jurisdiction: BrazilianUf
+    authority: HomologationAuthority
+  }> {
     z.uuid().parse(tenantId)
     z.uuid().parse(documentId)
     z.uuid().parse(grantId)
     const [row] = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
       return tx`select grant_row.endpoint_digest, grant_row.wsdl_digest,
-          grant_row.certificate_fingerprint, definition.adapter_version
+          grant_row.certificate_fingerprint, grant_row.authority,
+          definition.adapter_version, definition.jurisdiction_code
         from fiscal_homologation_drill_grants grant_row
         join fiscal_capability_definitions definition
           on definition.tenant_id = grant_row.tenant_id
@@ -279,17 +308,62 @@ export class HomologationExchangeLedger {
         where grant_row.tenant_id = ${tenantId} and grant_row.id = ${grantId}
           and grant_row.document_id = ${documentId} and grant_row.expires_at > now()
           and definition.environment = 'homologation' and definition.model = '55'
-          and definition.jurisdiction_kind = 'uf' and definition.jurisdiction_code = 'SP'
+          and definition.jurisdiction_kind = 'uf'
           and definition.operation = 'normal-sale'`
     })
-    if (!row) throw new Error('Approved SP homologation drill is unavailable')
+    if (!row) throw new Error('Approved homologation drill is unavailable')
     return {
       drillGrantId: grantId,
       endpointDigest: String(row.endpoint_digest),
       wsdlDigest: String(row.wsdl_digest),
       certificateFingerprint: String(row.certificate_fingerprint),
       adapterVersion: String(row.adapter_version),
+      jurisdiction: brazilianUf(String(row.jurisdiction_code)),
+      authority: row.authority as HomologationAuthority,
     }
+  }
+
+  /** Resolves the UF and authority of an existing exchange through its drill grant. */
+  async exchangeScope(
+    tenantId: string,
+    exchangeId: string,
+  ): Promise<{ jurisdiction: BrazilianUf; authority: HomologationAuthority }> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(exchangeId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select definition.jurisdiction_code, grant_row.authority
+        from fiscal_homologation_exchanges exchange
+        join fiscal_homologation_drill_grants grant_row
+          on grant_row.tenant_id = exchange.tenant_id
+          and grant_row.id = exchange.drill_grant_id
+        join fiscal_capability_definitions definition
+          on definition.tenant_id = grant_row.tenant_id
+          and definition.id = grant_row.capability_id
+        where exchange.tenant_id = ${tenantId} and exchange.id = ${exchangeId}`
+    })
+    if (!row) throw new Error('SEFAZ exchange not found')
+    return {
+      jurisdiction: brazilianUf(String(row.jurisdiction_code)),
+      authority: row.authority as HomologationAuthority,
+    }
+  }
+
+  /** An official grant never runs over an emulated route, and vice versa. */
+  async assertGrantAuthority(
+    tenantId: string,
+    drillGrantId: string,
+    authority: HomologationAuthority,
+  ): Promise<void> {
+    z.uuid().parse(tenantId)
+    z.uuid().parse(drillGrantId)
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select authority from fiscal_homologation_drill_grants
+        where tenant_id = ${tenantId} and id = ${drillGrantId}`
+    })
+    if (!row || row.authority !== authority)
+      throw new Error('SEFAZ transport authority differs from the drill grant')
   }
 
   /** Validates through the adapter, then freezes the exact signed NF-e and SOAP envelope. */
@@ -729,4 +803,9 @@ export class HomologationExchangeLedger {
 
 export function newHomologationExchangeId(): string {
   return randomUUID()
+}
+
+function brazilianUf(value: string): BrazilianUf {
+  if (!isBrazilianUf(value)) throw new Error('Homologation capability names an unknown UF')
+  return value
 }

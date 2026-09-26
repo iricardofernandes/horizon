@@ -1,12 +1,22 @@
-# Fase 43 — runbook da NF-e 55 em homologação SP
+# Fase 43 — runbook da NF-e 55 em homologação por UF
 
-**Estado:** preparação operacional. A [evidência de homologação](fiscal-phase43-evidence.md)
-ainda está pendente. Nenhum resultado de simulação autoriza a ativação `homologated`.
+**Estado:** ensaio completo verificado contra autorizador emulado. O ensaio no
+autorizador oficial está pendente
+([evidência](fiscal-phase43-evidence.md)). Nenhum resultado emulado ou simulado
+autoriza a ativação `homologated`.
+
+A UF e o município vêm do endereço cadastrado do emitente de cada tenant. A UF
+escolhe o autorizador (SEFAZ própria, SVRS ou SVAN) e suas URLs oficiais de
+homologação, registradas em `fiscal/src/nfe55/sefaz-authorizers.ts`
+([ADR 0050](adr/0050-fiscal-authorizer-follows-issuer-jurisdiction.md)). Os comandos
+abaixo resolvem a UF pelo grant e pela capability; `--endpoints` é opcional e, se
+informado, só confirma o autorizador.
 
 ## Escopo e responsáveis
 
-Executar somente para o tenant, estabelecimento, série, operação de venda normal e
-emissor SP aprovados no [manifesto da fase](fiscal-phase43-source-manifest.json).
+Executar somente para o tenant, estabelecimento, UF, série e operação de venda normal
+aprovados para aquele emitente. O [manifesto da fase](fiscal-phase43-source-manifest.json)
+registra o primeiro candidato, SP.
 O operador executa os comandos internos. O revisor Fiscal, distinto do autor/importador,
 aprova fontes, regras, perfil, numeração, resultados do portal e o pacote final.
 Sales mantém a expedição configurada bloqueada: homologação não produz autorização
@@ -17,8 +27,8 @@ de produção nem libera estoque ou financeiro.
 1. Confirmar CNPJ/credenciamento, custódia e validade do certificado, cinco URLs de
    homologação, WSDL, operações SOAP e raiz TLS. Registrar seus digests revisados.
    Depois que o A1 for cadastrado no app, executar `npm run phase43:fetch-wsdl --
-   --tenant <uuid> --establishment <uuid> --trust-anchor <pem>
-   --trust-anchor-fingerprint <sha256> --endpoints <json>
+   --tenant <uuid> --establishment <uuid> --uf <UF> --trust-anchor <pem>
+   --trust-anchor-fingerprint <sha256>
    --output-directory </caminho/fora/do/repositorio>` em `fiscal`. O comando usa
    mTLS, baixa os cinco WSDLs em diretório novo fora do repositório e emite digests
    individuais e `wsdlSetDigest`. O GET sem certificado retornou HTTP 403 em
@@ -174,20 +184,47 @@ um envio já iniciado.
 
 Para habilitar esse worker, montar fora do repositório um JSON e apontar
 `FISCAL_PHASE43_WORKER_CONFIG_PATH` para ele. O arquivo contém apenas caminhos e
-identificadores, nunca bytes de chave privada:
+identificadores, nunca bytes de chave privada. `authorizers` lista as operações SOAP
+revisadas de cada autorizador. Um tenant cuja UF usa um autorizador ausente continua
+bloqueado. Uma raiz TLS própria por autorizador é opcional:
 
 ```json
 {
   "trustAnchorPath": "/run/secrets/icp-brasil-root.pem",
   "trustAnchorFingerprint": "<sha256 da raiz>",
-  "operationsPath": "/run/secrets/phase43-operations.json",
-  "endpointsPath": "/run/secrets/phase43-endpoints.json",
   "documentResponseSchemaPath": "/run/secrets/phase43-document-response.zip",
-  "consultationResponseSchemaPath": "/run/secrets/phase43-consultation-response.zip"
+  "consultationResponseSchemaPath": "/run/secrets/phase43-consultation-response.zip",
+  "authorizers": {
+    "SP": { "operationsPath": "/run/secrets/sp-operations.json" },
+    "SVRS": {
+      "operationsPath": "/run/secrets/svrs-operations.json",
+      "trustAnchorPath": "/run/secrets/svrs-root.pem",
+      "trustAnchorFingerprint": "<sha256 da raiz do SVRS>"
+    }
+  }
 }
 ```
 
-Montar cada arquivo listado no contêiner. O startup valida raiz TLS, endpoints e
-arquivos XSD. Cada envio carrega e valida a credencial cifrada do estabelecimento
+Montar cada arquivo listado no contêiner. O startup valida as raízes TLS, as operações
+de cada autorizador e os arquivos XSD. Os endpoints vêm do registro oficial da UF de
+cada troca. Cada envio carrega e valida a credencial cifrada do estabelecimento
 do documento. O envio ainda exige grant válido, adapter,
 WSDL, endpoint, certificado e XSDs iguais aos vínculos revisados no banco.
+
+## Ensaio em ambiente de simulação (autorizador emulado)
+
+Sem emitente credenciado, o mesmo fluxo roda contra um autorizador local. O
+emulador responde nos caminhos oficiais, exige mTLS com o CNPJ do A1 do tenant e
+marca o grant como `emulated`. Nenhuma troca emulada pode ativar a capability.
+
+1. Gerar uma raiz de teste e um certificado de servidor com o hostname oficial do
+   autorizador no SAN (ver `fiscal/test/phase43-drill.e2e-spec.ts`).
+2. Com `FISCAL_ALLOW_SEFAZ_EMULATOR=true`, executar `npm run phase43:emulator --
+   --authorizer <SP|SVRS|...> --certificate <pem> --private-key <pem> [--port <n>]
+   [--scenario authorize|reject|unreviewed|lose-response|unavailable]` em `fiscal`.
+3. O emulador imprime `endpointSetDigest` da rota. Criar o grant com
+   `"authority": "emulated"` e esse `endpointDigest`. O digest muda com a porta, então
+   um grant emulado não serve para outra rota nem para o autorizador oficial.
+4. Usar `phase43:exchange-resume`, `phase43:consult` e `phase43:status` com
+   `--emulator 127.0.0.1:<porta>` e `--trust-anchor` apontando para a raiz de teste.
+   Sem a variável de ambiente, `--emulator` é recusado.

@@ -9,6 +9,7 @@ import { connect, createServer, type TLSSocket } from 'node:tls'
 import { promisify } from 'node:util'
 import { afterAll, expect, it } from 'vitest'
 import { loadHomologationCredential } from './homologation-credential'
+import { SEFAZ_HOMOLOGATION_ENDPOINTS } from './sefaz-authorizers'
 import {
   type SefazEndpoints,
   SefazHomologationTransport,
@@ -150,6 +151,44 @@ it('permits only the pinned SP homologation service paths', async () => {
         trust,
       ),
   ).toThrow('Unapproved')
+})
+
+it('selects the authorizer from the endpoint set and separates emulated routes', async () => {
+  const input = await credential()
+  const loaded = await loadHomologationCredential(input)
+  const trust = await loadSefazTrustAnchor(input)
+  const sp = new SefazHomologationTransport(SEFAZ_HOMOLOGATION_ENDPOINTS.SP, loaded, trust)
+  // The SP digest keeps the formula bound to grants issued before other UFs existed.
+  expect(sp.endpointSetDigest).toBe(
+    createHash('sha256')
+      .update('sefaz-sp-homologation-endpoints-v1\n')
+      .update(
+        (['authorization', 'receipt', 'protocol', 'status', 'event'] as const)
+          .map((service) => `${service}=${SEFAZ_HOMOLOGATION_ENDPOINTS.SP[service]}`)
+          .join('\n'),
+      )
+      .digest('hex'),
+  )
+  expect(sp).toMatchObject({ authorizer: 'SP', authority: 'official' })
+  const svrs = new SefazHomologationTransport(SEFAZ_HOMOLOGATION_ENDPOINTS.SVRS, loaded, trust)
+  expect(svrs.authorizer).toBe('SVRS')
+  expect(svrs.endpointSetDigest).not.toBe(sp.endpointSetDigest)
+  const emulated = new SefazHomologationTransport(
+    SEFAZ_HOMOLOGATION_ENDPOINTS.SVRS,
+    loaded,
+    trust,
+    {
+      emulatorRoute: { host: '127.0.0.1', port: 9443 },
+    },
+  )
+  expect(emulated.authority).toBe('emulated')
+  expect(emulated.endpointSetDigest).not.toBe(svrs.endpointSetDigest)
+  expect(
+    () =>
+      new SefazHomologationTransport(SEFAZ_HOMOLOGATION_ENDPOINTS.SVRS, loaded, trust, {
+        emulatorRoute: { host: '10.0.0.1' as '127.0.0.1', port: 9443 },
+      }),
+  ).toThrow()
 })
 
 it('authenticates both peers with the mounted trust root and client certificate', async () => {

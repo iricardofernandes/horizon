@@ -2,36 +2,62 @@ import { createHash } from 'node:crypto'
 import { request } from 'node:https'
 import { z } from 'zod'
 import type { HomologationCredential } from './homologation-credential'
+import {
+  authorizerOfEndpoints,
+  SEFAZ_HOMOLOGATION_ENDPOINTS,
+  SEFAZ_SERVICES,
+  type SefazAuthorizer,
+  type SefazEndpoints,
+  type SefazService,
+} from './sefaz-authorizers'
 import { SefazServiceGate } from './sefaz-service-gate'
 import type { SefazTrustAnchor } from './sefaz-trust-anchor'
 
-export type SefazService = 'authorization' | 'receipt' | 'protocol' | 'status' | 'event'
+export type { SefazEndpoints, SefazService } from './sefaz-authorizers'
 
-const endpointNames: Record<SefazService, string> = {
-  authorization: 'nfeautorizacao4.asmx',
-  receipt: 'nferetautorizacao4.asmx',
-  protocol: 'nfeconsultaprotocolo4.asmx',
-  status: 'nfestatusservico4.asmx',
-  event: 'nferecepcaoevento4.asmx',
-}
-
-export type SefazEndpoints = Record<SefazService, string>
-
+/** Accepts only a URL published for that service by one reviewed authorizer. */
 export function approvedSefazHomologationEndpoint(service: SefazService, value: string): URL {
   const endpoint = new URL(value)
-  if (
-    endpoint.protocol !== 'https:' ||
-    endpoint.hostname !== 'homologacao.nfe.fazenda.sp.gov.br' ||
-    endpoint.port ||
-    endpoint.username ||
-    endpoint.password ||
-    endpoint.search ||
-    endpoint.hash ||
-    endpoint.pathname.toLowerCase() !== `/ws/${endpointNames[service]}`
-  )
-    throw new Error(`Unapproved SEFAZ homologation endpoint for ${service}`)
+  const approved = Object.values(SEFAZ_HOMOLOGATION_ENDPOINTS).some((set) => {
+    const candidate = new URL(set[service])
+    return (
+      endpoint.protocol === 'https:' &&
+      endpoint.hostname === candidate.hostname &&
+      !endpoint.port &&
+      !endpoint.username &&
+      !endpoint.password &&
+      !endpoint.search &&
+      !endpoint.hash &&
+      endpoint.pathname.toLowerCase() === candidate.pathname.toLowerCase()
+    )
+  })
+  if (!approved) throw new Error(`Unapproved SEFAZ homologation endpoint for ${service}`)
   return endpoint
 }
+
+/** Digest bound into drill grants; an emulated route can never equal an official set. */
+export function sefazEndpointSetDigest(
+  endpoints: SefazEndpoints,
+  route?: { host: string; port: number },
+): string {
+  const authorizer = authorizerOfEndpoints(endpoints)
+  const urls = SEFAZ_SERVICES.map(
+    (service) =>
+      `${service}=${approvedSefazHomologationEndpoint(service, endpoints[service]).href}`,
+  )
+  return createHash('sha256')
+    .update(
+      `${route ? 'emulated-' : ''}sefaz-${authorizer.toLowerCase()}-homologation-endpoints-v1\n`,
+    )
+    .update(urls.join('\n'))
+    .update(route ? `\nroute=${route.host}:${route.port}` : '')
+    .digest('hex')
+}
+
+const loopbackRoute = z.strictObject({
+  host: z.enum(['127.0.0.1', '::1']),
+  port: z.number().int().min(1).max(65_535),
+})
 
 const settingsSchema = z.strictObject({
   timeoutMilliseconds: z.number().int().min(1_000).max(60_000).default(15_000),
@@ -39,6 +65,13 @@ const settingsSchema = z.strictObject({
   maximumConcurrentPerService: z.number().int().min(1).max(20).default(2),
   failureThreshold: z.number().int().min(1).max(20).default(3),
   cooldownMilliseconds: z.number().int().min(1_000).max(300_000).default(30_000),
+  /**
+   * Sends the official request bytes to a local SEFAZ emulator. TLS still verifies the
+   * official hostname against the supplied trust anchor. The route changes the
+   * endpoint digest and authority, so emulated exchanges can never be presented as
+   * evidence from the official authorizer.
+   */
+  emulatorRoute: loopbackRoute.optional(),
 })
 
 /** A transport error leaves the authority outcome unknown, even if no bytes were received. */
@@ -50,6 +83,8 @@ export class SefazTransportError extends Error {
 }
 
 export class SefazHomologationTransport {
+  readonly authorizer: SefazAuthorizer
+  readonly authority: 'official' | 'emulated'
   readonly endpointSetDigest: string
   readonly certificateFingerprint: string
   readonly trustAnchorFingerprint: string
@@ -69,19 +104,14 @@ export class SefazHomologationTransport {
       failureThreshold: this.#settings.failureThreshold,
       cooldownMilliseconds: this.#settings.cooldownMilliseconds,
     })
+    this.authorizer = authorizerOfEndpoints(endpoints)
+    this.authority = this.#settings.emulatorRoute ? 'emulated' : 'official'
     this.#endpoints = Object.fromEntries(
-      (Object.keys(endpointNames) as SefazService[]).map((service) => {
+      SEFAZ_SERVICES.map((service) => {
         return [service, approvedSefazHomologationEndpoint(service, endpoints[service])]
       }),
     ) as Record<SefazService, URL>
-    this.endpointSetDigest = createHash('sha256')
-      .update('sefaz-sp-homologation-endpoints-v1\n')
-      .update(
-        (Object.keys(endpointNames) as SefazService[])
-          .map((service) => `${service}=${this.#endpoints[service].href}`)
-          .join('\n'),
-      )
-      .digest('hex')
+    this.endpointSetDigest = sefazEndpointSetDigest(endpoints, this.#settings.emulatorRoute)
     this.certificateFingerprint = credential.fingerprint
     this.trustAnchorFingerprint = trustAnchor.fingerprint
   }
@@ -103,6 +133,7 @@ export class SefazHomologationTransport {
       this.credential,
       this.trustAnchor,
       this.#settings,
+      this.#settings.emulatorRoute,
     )
   }
 }
@@ -114,12 +145,23 @@ export function sendSefazHttpsRequest(
   credential: Pick<HomologationCredential, 'certificate' | 'privateKey'>,
   trustAnchor: Pick<SefazTrustAnchor, 'certificate'>,
   settings: Pick<z.infer<typeof settingsSchema>, 'timeoutMilliseconds' | 'maximumResponseBytes'>,
+  route?: z.infer<typeof loopbackRoute>,
 ): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     const call = request(
       endpoint,
       {
         method: 'POST',
+        // `hostname` from the URL outranks `host`; both must name the loopback route, or
+        // the request would leave for the official authorizer's address.
+        ...(route
+          ? {
+              host: route.host,
+              hostname: route.host,
+              port: route.port,
+              servername: endpoint.hostname,
+            }
+          : {}),
         cert: credential.certificate,
         key: credential.privateKey,
         ca: trustAnchor.certificate,
@@ -129,6 +171,7 @@ export function sendSefazHttpsRequest(
           'content-type': 'application/soap+xml; charset=utf-8',
           'content-length': soapEnvelope.length,
           accept: 'application/soap+xml',
+          ...(route ? { host: endpoint.hostname } : {}),
         },
       },
       (response) => {

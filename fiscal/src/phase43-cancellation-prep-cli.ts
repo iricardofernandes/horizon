@@ -7,6 +7,7 @@ import { FiscalCapabilities } from './capabilities'
 import { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { HomologationCancellation } from './homologation-cancellation'
 import { HomologationExchangeLedger } from './homologation-exchange-ledger'
+import { ufOfCode } from './nfe55/jurisdiction'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from './nfe55/sefaz-adapter'
 import { digestSchema, operationsSchema } from './phase43-runtime-input'
 
@@ -56,7 +57,11 @@ async function main(): Promise<void> {
     documentId,
     target.certificateFingerprint,
   )
-  const adapter = new SefazNfe55HomologationAdapter(credential, operations)
+  const adapter = new SefazNfe55HomologationAdapter(
+    credential,
+    operations,
+    ufOfCode(target.accessKey.slice(0, 2)),
+  )
   const cancellation = new HomologationCancellation(
     ledger,
     capabilities,

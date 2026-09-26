@@ -7,7 +7,13 @@ import {
   verifyCancellationEventSignature,
 } from './cancellation-event'
 import type { HomologationCredential } from './homologation-credential'
+import { type BrazilianUf, ufCodeOf } from './jurisdiction'
 import { validateNfe55Schema } from './schema'
+import {
+  authorizerForUf,
+  homologationAdapterVersion,
+  type SefazAuthorizer,
+} from './sefaz-authorizers'
 import {
   parseSefazSoapResponse,
   type SefazResponse,
@@ -21,7 +27,7 @@ const accessKeySchema = z.string().length(44).refine(isValidNfeAccessKey)
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/)
 const protocolSchema = z.string().regex(/^[0-9]{15}$/)
 const nfeNamespace = 'http://www.portalfiscal.inf.br/nfe'
-export const SEFAZ_SP_HOMOLOGATION_ADAPTER_VERSION = 'nfe55-sp-homologation-v1'
+export const SEFAZ_SP_HOMOLOGATION_ADAPTER_VERSION = homologationAdapterVersion('SP')
 
 export type SefazOperationMap = Record<
   SefazService,
@@ -58,16 +64,26 @@ export type PreparedSefazExchange = {
   expectedAuthorizationProtocol?: string
 }
 
-/** Prepares and parses one exchange; the durable runner owns every network send. */
+/**
+ * Prepares and parses one exchange for the issuer's UF; the durable runner owns every
+ * network send. The UF selects the authorizer, the adapter version and every `cUF`
+ * or `cOrgao` the exchange may carry.
+ */
 export class SefazNfe55HomologationAdapter {
-  readonly adapterVersion: string = SEFAZ_SP_HOMOLOGATION_ADAPTER_VERSION
+  readonly adapterVersion: string
+  readonly authorizer: SefazAuthorizer
+  readonly ufCode: string
   readonly wsdlDigest: string
   readonly certificateFingerprint: string | null
 
   constructor(
     private readonly credential: Pick<HomologationCredential, 'certificate' | 'issuerTaxId'>,
     private readonly operations: SefazOperationMap,
+    readonly uf: BrazilianUf,
   ) {
+    this.ufCode = ufCodeOf(uf)
+    this.authorizer = authorizerForUf(uf)
+    this.adapterVersion = homologationAdapterVersion(this.authorizer)
     this.wsdlDigest = digestSchema.parse(operations.wsdlDigest)
     this.certificateFingerprint = credential.certificate.length
       ? createHash('sha256').update(new X509Certificate(credential.certificate).raw).digest('hex')
@@ -77,8 +93,8 @@ export class SefazNfe55HomologationAdapter {
   async prepare(input: SefazExchangeInput): Promise<PreparedSefazExchange> {
     if (input.service !== 'status') {
       accessKeySchema.parse(input.accessKey)
-      if (input.accessKey.slice(0, 2) !== '35')
-        throw new Error('SEFAZ adapter requires an SP access key')
+      if (input.accessKey.slice(0, 2) !== this.ufCode)
+        throw new Error('SEFAZ access key belongs to another UF')
       if (input.accessKey.slice(6, 20) !== this.credential.issuerTaxId)
         throw new Error('SEFAZ access key issuer differs from the certificate')
     }
@@ -102,7 +118,9 @@ export class SefazNfe55HomologationAdapter {
         expectedZipDigest: input.schemaDigest,
       })
     }
-    const requestPayload = serializeSefazRequest(input)
+    const requestPayload = serializeSefazRequest(
+      input.service === 'status' ? { service: 'status', ufCode: this.ufCode } : input,
+    )
     const operation = this.operations[input.service]
     if (!operation) throw new Error('SEFAZ SOAP operation is not configured')
     const request = wrapSefazSoap12({ ...operation, request: requestPayload })
@@ -131,6 +149,7 @@ export class SefazNfe55HomologationAdapter {
       ...(prepared.expectedReceipt ? { expectedReceipt: prepared.expectedReceipt } : {}),
       expectedOperation: prepared.operation,
       expectedOperationNamespace: prepared.operationNamespace,
+      expectedUfCode: this.ufCode,
     })
   }
 }

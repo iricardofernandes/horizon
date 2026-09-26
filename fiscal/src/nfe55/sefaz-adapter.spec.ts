@@ -34,6 +34,7 @@ it('prepares a status request and parses the exact response bytes', async () => 
   const adapter = new SefazNfe55HomologationAdapter(
     { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
     operations,
+    'SP',
   )
   const prepared = await adapter.prepare({ service: 'status' })
   expect(prepared.request.toString()).toContain('<cUF>35</cUF><xServ>STATUS</xServ>')
@@ -49,6 +50,7 @@ it('rejects a response bound to a different prepared service', async () => {
   const adapter = new SefazNfe55HomologationAdapter(
     { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
     operations,
+    'SP',
   )
   const prepared = await adapter.prepare({ service: 'status' })
   const wrong = Buffer.from(
@@ -72,6 +74,7 @@ it('refuses an unsigned authorization before preparing an envelope', async () =>
   const adapter = new SefazNfe55HomologationAdapter(
     { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
     operations,
+    'SP',
   )
   await expect(
     adapter.prepare({
@@ -89,8 +92,50 @@ it('refuses a request for an issuer other than the certificate holder', async ()
   const adapter = new SefazNfe55HomologationAdapter(
     { certificate: Buffer.alloc(0), issuerTaxId: '12345678000195' },
     operations,
+    'SP',
   )
   await expect(adapter.prepare({ service: 'protocol', accessKey: key })).rejects.toThrow(
     'issuer differs from the certificate',
   )
+})
+
+it('binds status, keys and responses to the issuer UF and its authorizer', async () => {
+  const rioKey = buildNfe55AccessKey({
+    issuerUfCode: '33',
+    issuedOn: '2026-09-23',
+    issuerTaxId: '00000000E08G12',
+    model: '55',
+    series: 1,
+    number: 1,
+    emissionType: 1,
+    numericCode: '12345678',
+  })
+  const adapter = new SefazNfe55HomologationAdapter(
+    { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
+    operations,
+    'RJ',
+  )
+  expect(adapter).toMatchObject({
+    authorizer: 'SVRS',
+    ufCode: '33',
+    adapterVersion: 'nfe55-svrs-homologation-v1',
+  })
+  const status = await adapter.prepare({ service: 'status' })
+  expect(status.request.toString()).toContain('<cUF>33</cUF>')
+  await expect(adapter.prepare({ service: 'protocol', accessKey: key })).rejects.toThrow(
+    'another UF',
+  )
+  expect(
+    (await adapter.prepare({ service: 'protocol', accessKey: rioKey })).request.toString(),
+  ).toContain(rioKey)
+  const response = (uf: string) =>
+    Buffer.from(
+      `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>` +
+        `<nfeStatusServicoNFResponse xmlns="${operationNamespace}"><nfeResultMsg>` +
+        `<retConsStatServ xmlns="${namespace}" versao="4.00"><tpAmb>2</tpAmb><cUF>${uf}</cUF>` +
+        '<cStat>107</cStat><xMotivo>Servico em operacao</xMotivo></retConsStatServ>' +
+        '</nfeResultMsg></nfeStatusServicoNFResponse></s:Body></s:Envelope>',
+    )
+  expect(adapter.parseResponse(status, response('33')).statusCode).toBe('107')
+  expect(() => adapter.parseResponse(status, response('35'))).toThrow('wrong jurisdiction')
 })

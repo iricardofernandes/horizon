@@ -82,6 +82,7 @@ one means writing a new ADR that supersedes it.
 | [0047](0047-reporting-projections-never-write-back.md) | Reporting projections never write back |
 | [0048](0048-fiscal-origin-and-operational-ownership.md) | Fiscal origin and operational ownership |
 | [0049](0049-restricted-fiscal-profile-projections.md) | Restricted fiscal profile projections |
+| [0050](0050-fiscal-authorizer-follows-issuer-jurisdiction.md) | The NF-e authorizer follows the issuer's jurisdiction |
 
 ## Frontend
 

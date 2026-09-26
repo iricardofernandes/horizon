@@ -9,7 +9,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts src/phase43-issuance-prep-cli.ts src/phase43-exchange-resume-cli.ts src/phase43-cancellation-prep-cli.ts src/phase43-restore-verify-cli.ts src/phase43-reparse-cli.ts src/phase43-activation-cli.ts src/phase43-grant-cli.ts src/phase43-danfe-cli.ts src/phase43-wsdl-cli.ts --format cjs --platform node --out-dir dist --clean",
+    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts src/phase43-issuance-prep-cli.ts src/phase43-exchange-resume-cli.ts src/phase43-cancellation-prep-cli.ts src/phase43-restore-verify-cli.ts src/phase43-reparse-cli.ts src/phase43-activation-cli.ts src/phase43-grant-cli.ts src/phase43-danfe-cli.ts src/phase43-wsdl-cli.ts src/phase43-emulator-cli.ts --format cjs --platform node --out-dir dist --clean",
     "start": "node dist/worker.js",
     "backfill": "node dist/backfill-cli.js",
     "phase41:rollout": "node dist/phase41-rollout-cli.js",
@@ -30,6 +30,7 @@
     "phase43:restore-verify": "node dist/phase43-restore-verify-cli.js",
     "phase43:danfe": "node dist/phase43-danfe-cli.js",
     "phase43:fetch-wsdl": "node dist/phase43-wsdl-cli.js",
+    "phase43:emulator": "node dist/phase43-emulator-cli.js",
     "phase43:reparse": "node dist/phase43-reparse-cli.js",
     "phase43:activation": "node dist/phase43-activation-cli.js",
     "phase43:grant": "node dist/phase43-grant-cli.js",

@@ -317,6 +317,7 @@ function scenario(
           ? {
               id: capabilityId,
               establishmentId,
+              jurisdictionCode: 'SP',
               calculationFixtureId: 'reviewed-sp-v1',
               sourceManifestDigest: '1'.repeat(64),
             }

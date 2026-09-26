@@ -13,6 +13,7 @@ const xmlDeclaration = /^\s*<\?xml\s+[^?]*\?>\s*/i
 const accessKeySchema = z.string().regex(/^[0-9]{6}[0-9A-Z]{12}[0-9]{26}$/)
 const receiptSchema = z.string().regex(/^\d{15}$/)
 const lotSchema = z.string().regex(/^\d{1,15}$/)
+const ufCodeSchema = z.string().regex(/^[1-5][0-9]$/)
 
 export type SefazResponse = {
   service: 'authorization' | 'receipt' | 'protocol' | 'status' | 'event'
@@ -102,7 +103,7 @@ export function serializeSefazRequest(
     | { service: 'authorization'; lotId: string; signedXml: Buffer }
     | { service: 'receipt'; receipt: string }
     | { service: 'protocol'; accessKey: string }
-    | { service: 'status' }
+    | { service: 'status'; ufCode: string }
     | { service: 'event'; signedEvent: Buffer },
 ): Buffer {
   if (input.service === 'authorization') {
@@ -131,7 +132,7 @@ export function serializeSefazRequest(
   if (input.service === 'status')
     return Buffer.from(
       `<consStatServ xmlns="${nfeNamespace}" versao="4.00"><tpAmb>2</tpAmb>` +
-        '<cUF>35</cUF><xServ>STATUS</xServ></consStatServ>',
+        `<cUF>${ufCodeSchema.parse(input.ufCode)}</cUF><xServ>STATUS</xServ></consStatServ>`,
     )
   const event = parseXml(input.signedEvent).documentElement
   if (event.localName !== 'envEvento' || event.namespaceURI !== nfeNamespace)
@@ -169,7 +170,10 @@ export function parseSefazSoapResponse(input: {
   expectedReceipt?: string
   expectedOperation?: string
   expectedOperationNamespace?: string
+  /** IBGE code of the issuer UF; the authorizer answers in that jurisdiction. */
+  expectedUfCode: string
 }): SefazResponse {
+  const ufCode = ufCodeSchema.parse(input.expectedUfCode)
   const document = parseXml(input.soap)
   const envelope = document.documentElement
   if (envelope.localName !== 'Envelope' || envelope.namespaceURI !== soapNamespace)
@@ -229,8 +233,8 @@ export function parseSefazSoapResponse(input: {
   if (required(payload, 'tpAmb') !== '2')
     throw new Error('SEFAZ response has the wrong environment')
   if (
-    (input.service === 'event' && required(payload, 'cOrgao') !== '35') ||
-    (input.service !== 'event' && required(payload, 'cUF') !== '35')
+    (input.service === 'event' && required(payload, 'cOrgao') !== ufCode) ||
+    (input.service !== 'event' && required(payload, 'cUF') !== ufCode)
   )
     throw new Error('SEFAZ response has the wrong jurisdiction')
   const statusCode = required(payload, 'cStat')
@@ -265,7 +269,7 @@ export function parseSefazSoapResponse(input: {
   if (eventInfo && input.service === 'event') {
     if (
       required(eventInfo, 'tpAmb') !== '2' ||
-      required(eventInfo, 'cOrgao') !== '35' ||
+      required(eventInfo, 'cOrgao') !== ufCode ||
       required(eventInfo, 'tpEvento') !== '110111' ||
       required(eventInfo, 'nSeqEvento') !== '1'
     )

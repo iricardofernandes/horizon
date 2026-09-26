@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, it } from 'vitest'
+import { buildNfe55AccessKey } from './access-key'
 import {
   serializeCancellationEvent,
   signCancellationEvent,
@@ -79,6 +80,7 @@ it('signs an alphanumeric-key cancellation and validates the pinned event envelo
   const adapter = new SefazNfe55HomologationAdapter(
     { certificate: credential.certificate, issuerTaxId: '00000000E08G12' },
     operations,
+    'SP',
   )
   expect(
     await adapter.prepare({
@@ -105,8 +107,20 @@ it('checks cancellation-specific fields before the generic schema skips them', (
   expect(() => serializeCancellationEvent({ ...event, authorizationProtocol: 'x' })).toThrow()
   expect(() => serializeCancellationEvent({ ...event, reason: 'curta' })).toThrow()
   expect(() =>
-    serializeCancellationEvent({ ...event, accessKey: `33${event.accessKey.slice(2)}` }),
+    serializeCancellationEvent({ ...event, accessKey: `99${event.accessKey.slice(2)}` }),
   ).toThrow('jurisdiction')
+  const rioKey = buildNfe55AccessKey({
+    issuerUfCode: '33',
+    issuedOn: '2026-09-22',
+    issuerTaxId: '00000000E08G12',
+    model: '55',
+    series: 1,
+    number: 1,
+    numericCode: '12345678',
+  })
+  expect(serializeCancellationEvent({ ...event, accessKey: rioKey }).toString()).toContain(
+    '<cOrgao>33</cOrgao>',
+  )
   expect(serializeCancellationEvent({ ...event, reason: 'Erro & correção' }).toString()).toContain(
     '<xJust>Erro &amp; correção</xJust>',
   )

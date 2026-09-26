@@ -9,17 +9,40 @@ import { HomologationExchangeLedger } from './homologation-exchange-ledger'
 import { HomologationExchangeRunner } from './homologation-exchange-runner'
 import { HomologationRecovery } from './homologation-recovery'
 import { SefazNfe55HomologationAdapter, type SefazOperationMap } from './nfe55/sefaz-adapter'
+import { authorizerOfEndpoints, SEFAZ_HOMOLOGATION_ENDPOINTS } from './nfe55/sefaz-authorizers'
 import { SefazResponseSchemaValidator } from './nfe55/sefaz-response-schema'
 import type { SefazResponse } from './nfe55/sefaz-soap'
 import { SefazHomologationTransport } from './nfe55/sefaz-transport'
 import { loadSefazTrustAnchor } from './nfe55/sefaz-trust-anchor'
-import { digestSchema, endpointsSchema, operationsSchema } from './phase43-runtime-input'
+import {
+  digestSchema,
+  emulatorRouteSchema,
+  endpointsSchema,
+  operationsSchema,
+} from './phase43-runtime-input'
 
 function flag(name: string): string {
-  const index = process.argv.indexOf(`--${name}`)
-  const value = index < 0 ? undefined : process.argv[index + 1]
+  const value = optionalFlag(name)
   if (!value) throw new Error(`--${name} is required`)
   return value
+}
+
+function optionalFlag(name: string): string | undefined {
+  const index = process.argv.indexOf(`--${name}`)
+  return index < 0 ? undefined : process.argv[index + 1]
+}
+
+/** `--emulator 127.0.0.1:port` routes official bytes to a local authorizer emulator. */
+function emulatorRoute() {
+  const value = optionalFlag('emulator')
+  if (!value) return undefined
+  if (process.env.FISCAL_ALLOW_SEFAZ_EMULATOR !== 'true')
+    throw new Error('--emulator requires FISCAL_ALLOW_SEFAZ_EMULATOR=true')
+  const separator = value.lastIndexOf(':')
+  return emulatorRouteSchema.parse({
+    host: value.slice(0, separator),
+    port: Number(value.slice(separator + 1)),
+  })
 }
 
 async function schemaSource(path: string) {
@@ -48,7 +71,8 @@ async function main(): Promise<void> {
     action === 'consult' || action === 'status' ? z.uuid().parse(flag('document')) : null
   const drillGrantId = action === 'status' ? z.uuid().parse(flag('grant')) : null
   const credentials = new FiscalEstablishmentCredentials(databaseUrl, key)
-  const [trustAnchor, operations, endpoints, documentSchemas, consultationSchemas] =
+  const endpointsPath = optionalFlag('endpoints')
+  const [trustAnchor, operations, mountedEndpoints, documentSchemas, consultationSchemas] =
     await Promise.all([
       loadSefazTrustAnchor({
         certificatePath: flag('trust-anchor'),
@@ -57,7 +81,9 @@ async function main(): Promise<void> {
       readFile(flag('operations'), 'utf8').then(
         (bytes) => operationsSchema.parse(JSON.parse(bytes)) as SefazOperationMap,
       ),
-      readFile(flag('endpoints'), 'utf8').then((bytes) => endpointsSchema.parse(JSON.parse(bytes))),
+      endpointsPath
+        ? readFile(endpointsPath, 'utf8').then((bytes) => endpointsSchema.parse(JSON.parse(bytes)))
+        : null,
       schemaSource(flag('document-response-schema')),
       schemaSource(flag('consultation-response-schema')),
     ])
@@ -84,8 +110,27 @@ async function main(): Promise<void> {
             (await ledger.recoveryTarget(tenantId, documentId)).parentExchangeId,
           )
         : await credentials.forExchange(tenantId, exchangeId)
-  const adapter = new SefazNfe55HomologationAdapter(credential, operations)
-  const transport = new SefazHomologationTransport(endpoints, credential, trustAnchor)
+  const scope =
+    documentId && drillGrantId
+      ? await ledger.drillScope(tenantId, documentId, drillGrantId)
+      : await ledger.exchangeScope(
+          tenantId,
+          documentId
+            ? (await ledger.recoveryTarget(tenantId, documentId)).parentExchangeId
+            : exchangeId,
+        )
+  const adapter = new SefazNfe55HomologationAdapter(credential, operations, scope.jurisdiction)
+  // Endpoints follow the issuer UF's authorizer; a mounted file may only confirm them.
+  const endpoints = SEFAZ_HOMOLOGATION_ENDPOINTS[adapter.authorizer]
+  if (mountedEndpoints && authorizerOfEndpoints(mountedEndpoints) !== adapter.authorizer)
+    throw new Error('Mounted SEFAZ endpoints belong to another authorizer')
+  const route = emulatorRoute()
+  const transport = new SefazHomologationTransport(
+    endpoints,
+    credential,
+    trustAnchor,
+    route ? { emulatorRoute: route } : {},
+  )
   const responseSchemas = new SefazResponseSchemaValidator(documentSchemas, consultationSchemas)
   const runner = new HomologationExchangeRunner(ledger, transport, adapter, responseSchemas)
   try {

@@ -109,6 +109,7 @@ export type ActiveFiscalCapability = Omit<FiscalCapabilityDefinition, 'createdBy
 export type HomologationDrillCapability = {
   id: string
   establishmentId: string
+  jurisdictionCode: string
   calculationFixtureId: string
   sourceManifestDigest: string
 }
@@ -322,6 +323,7 @@ export class FiscalCapabilities {
     const [row] = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
       return tx`select definition.id, definition.establishment_id,
+          definition.jurisdiction_code,
           definition.calculation_fixture_id, definition.source_manifest_digest
         from fiscal_homologation_drill_grants grant_row
         join fiscal_capability_definitions definition
@@ -333,13 +335,14 @@ export class FiscalCapabilities {
         where grant_row.tenant_id = ${tenantId} and grant_row.id = ${grantId}
           and grant_row.document_id = ${documentId} and grant_row.expires_at > now()
           and definition.environment = 'homologation' and definition.model = '55'
-          and definition.jurisdiction_kind = 'uf' and definition.jurisdiction_code = 'SP'
+          and definition.jurisdiction_kind = 'uf'
           and definition.operation = 'normal-sale'`
     })
     if (!row) return null
     return {
       id: String(row.id),
       establishmentId: String(row.establishment_id),
+      jurisdictionCode: String(row.jurisdiction_code),
       calculationFixtureId: String(row.calculation_fixture_id),
       sourceManifestDigest: String(row.source_manifest_digest),
     }

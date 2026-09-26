@@ -3,6 +3,12 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
 import { FiscalEstablishmentCredentials } from './establishment-credentials'
+import { isBrazilianUf } from './nfe55/jurisdiction'
+import {
+  authorizerForUf,
+  authorizerOfEndpoints,
+  SEFAZ_HOMOLOGATION_ENDPOINTS,
+} from './nfe55/sefaz-authorizers'
 import { approvedSefazHomologationEndpoint, type SefazService } from './nfe55/sefaz-transport'
 import { loadSefazTrustAnchor } from './nfe55/sefaz-trust-anchor'
 import { fetchSefazWsdl } from './nfe55/sefaz-wsdl'
@@ -13,6 +19,11 @@ function flag(name: string): string {
   const value = index < 0 ? undefined : process.argv[index + 1]
   if (!value) throw new Error(`--${name} is required`)
   return value
+}
+
+function optionalFlag(name: string): string | undefined {
+  const index = process.argv.indexOf(`--${name}`)
+  return index < 0 ? undefined : process.argv[index + 1]
 }
 
 async function main(): Promise<void> {
@@ -29,13 +40,23 @@ async function main(): Promise<void> {
   const credentials = new FiscalEstablishmentCredentials(databaseUrl, key)
   const credential = await credentials.active(tenantId, establishmentId)
   await credentials.close()
-  const [trustAnchor, endpoints] = await Promise.all([
+  // The establishment's UF selects the authorizer; a mounted endpoint file may only confirm it.
+  const uf = z.string().parse(flag('uf'))
+  if (!isBrazilianUf(uf)) throw new Error('--uf must be a Brazilian UF')
+  const authorizer = authorizerForUf(uf)
+  const endpointsPath = optionalFlag('endpoints')
+  const [trustAnchor, mountedEndpoints] = await Promise.all([
     loadSefazTrustAnchor({
       certificatePath: flag('trust-anchor'),
       expectedFingerprint: flag('trust-anchor-fingerprint'),
     }),
-    readFile(flag('endpoints'), 'utf8').then((bytes) => endpointsSchema.parse(JSON.parse(bytes))),
+    endpointsPath
+      ? readFile(endpointsPath, 'utf8').then((bytes) => endpointsSchema.parse(JSON.parse(bytes)))
+      : null,
   ])
+  if (mountedEndpoints && authorizerOfEndpoints(mountedEndpoints) !== authorizer)
+    throw new Error('Mounted SEFAZ endpoints belong to another authorizer')
+  const endpoints = SEFAZ_HOMOLOGATION_ENDPOINTS[authorizer]
   if (Date.now() + credential.minimumRemainingMilliseconds >= credential.validUntil)
     throw new Error('Homologation certificate is no longer valid for WSDL retrieval')
   const services: SefazService[] = ['authorization', 'receipt', 'protocol', 'status', 'event']
@@ -62,7 +83,7 @@ async function main(): Promise<void> {
   try {
     const fetchedAt = new Date().toISOString()
     const wsdlSetDigest = createHash('sha256')
-      .update('sefaz-sp-homologation-wsdl-v1\n')
+      .update(`sefaz-${authorizer.toLowerCase()}-homologation-wsdl-v1\n`)
       .update(fetched.map(({ service, sha256 }) => `${service}=${sha256}`).join('\n'))
       .digest('hex')
     for (const item of fetched)
@@ -70,7 +91,8 @@ async function main(): Promise<void> {
     const manifest = {
       fetchedAt,
       environment: 'homologation',
-      jurisdiction: 'SP',
+      jurisdiction: uf,
+      authorizer,
       certificateFingerprint: credential.fingerprint,
       trustAnchorFingerprint: trustAnchor.fingerprint,
       wsdlSetDigest,

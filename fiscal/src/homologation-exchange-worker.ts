@@ -5,28 +5,34 @@ import {
 } from './homologation-exchange-runner'
 import type { SefazOperationMap } from './nfe55/sefaz-adapter'
 
+export type ExchangeRuntime = {
+  runner: Pick<HomologationExchangeRunner, 'resume'>
+  operations: SefazOperationMap
+}
+
 /** Processes one prepared exchange only after its capability is homologated. */
 export class HomologationExchangeWorker {
   constructor(
     private readonly ledger: Pick<HomologationExchangeLedger, 'nextPreparedForActive'>,
     private readonly runner:
       | Pick<HomologationExchangeRunner, 'resume'>
-      | ((
-          tenantId: string,
-          exchangeId: string,
-        ) => Promise<Pick<HomologationExchangeRunner, 'resume'>>),
-    private readonly operations: SefazOperationMap,
+      | ((tenantId: string, exchangeId: string) => Promise<ExchangeRuntime>),
+    private readonly operations?: SefazOperationMap,
   ) {}
 
   async processOne(tenantId: string, workerId: string): Promise<boolean> {
     const exchangeId = await this.ledger.nextPreparedForActive(tenantId)
     if (!exchangeId) return false
     try {
-      const runner =
-        typeof this.runner === 'function' ? await this.runner(tenantId, exchangeId) : this.runner
-      await runner.resume(
+      // Each exchange resolves its own UF, authorizer, SOAP operations and credential.
+      const runtime =
+        typeof this.runner === 'function'
+          ? await this.runner(tenantId, exchangeId)
+          : { runner: this.runner, operations: this.operations }
+      if (!runtime.operations) throw new Error('SEFAZ SOAP operations are not configured')
+      await runtime.runner.resume(
         { tenantId, exchangeId, workerId, actorId: `worker:${workerId}` },
-        this.operations,
+        runtime.operations,
       )
     } catch (error) {
       // Another worker may have inserted the one-send marker first. Its outcome

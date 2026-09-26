@@ -58,7 +58,8 @@ async function main(): Promise<void> {
     new EncryptedFiscalArtifactStore(new S3ObjectStore(s3, bucket), key),
   )
   const ledger = new HomologationExchangeLedger(databaseUrl, artifacts)
-  const adapter = new SefazNfe55HomologationAdapter(certificate, operations)
+  const scope = await ledger.drillScope(tenantId, documentId, drillGrantId)
+  const adapter = new SefazNfe55HomologationAdapter(certificate, operations, scope.jurisdiction)
   const issuance = new HomologationIssuance(
     databaseUrl,
     documents,

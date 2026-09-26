@@ -4,6 +4,7 @@ import type { FiscalCalculations } from './calculations'
 import { canonicalDigest } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
 import type { FiscalDocuments } from './documents'
+import { jurisdictionOfAddress } from './nfe55/jurisdiction'
 import { type FiscalOriginSnapshot, parseFiscalOriginSnapshot } from './origin-snapshot'
 import { PHASE41_FIXTURE_ID, PHASE41_SCENARIO_ID } from './phase41-approved-scenario'
 import type { FiscalProjections } from './projections'
@@ -68,27 +69,30 @@ export class FiscalReadiness {
     )
       throw new Error('Fiscal capability is unsupported')
 
-    const capability =
+    // The establishment's registered address decides the UF; a capability only
+    // applies when it was reviewed for that same jurisdiction.
+    const candidates =
       environment === 'simulation'
-        ? (await this.capabilities.listActive(command.tenantId)).find(
+        ? (await this.capabilities.listActive(command.tenantId)).filter(
             (candidate) =>
               candidate.model === '55' &&
               candidate.environment === 'simulation' &&
               candidate.establishmentId === document.establishmentId &&
               candidate.jurisdictionKind === 'uf' &&
-              candidate.jurisdictionCode === 'SP' &&
               candidate.operation === 'normal-sale' &&
               candidate.calculationFixtureId === PHASE41_FIXTURE_ID,
           )
         : drillGrantId
-          ? await this.capabilities.getHomologationDrill?.(
-              command.tenantId,
-              command.documentId,
-              drillGrantId,
-            )
-          : null
-    if (!capability) throw new Error('Fiscal capability is unsupported')
-    if (capability.establishmentId !== document.establishmentId)
+          ? [
+              await this.capabilities.getHomologationDrill?.(
+                command.tenantId,
+                command.documentId,
+                drillGrantId,
+              ),
+            ].filter((candidate) => candidate != null)
+          : []
+    if (candidates.length === 0) throw new Error('Fiscal capability is unsupported')
+    if (candidates.some((candidate) => candidate.establishmentId !== document.establishmentId))
       throw new Error('Fiscal capability establishment differs from document')
 
     const utcDate = document.createdAt.slice(0, 10)
@@ -105,6 +109,11 @@ export class FiscalReadiness {
       issuer = (await this.projections.resolveIssuer(command.tenantId, issueDate)) ?? issuer
     if (snapshot.originModule === 'fiscal' && issuer.revision !== snapshot.issuerProfileRevision)
       throw new Error('Fiscal manual issuer revision is no longer effective')
+    const jurisdiction = jurisdictionOfAddress(issuer.company.address)
+    const capability = candidates.find(
+      (candidate) => candidate.jurisdictionCode === jurisdiction?.uf,
+    )
+    if (!jurisdiction || !capability) throw new Error('Fiscal capability is unsupported')
     const recipient = await this.projections.resolveParty(
       command.tenantId,
       snapshot.customerId,
@@ -190,12 +199,11 @@ function deriveCalculationInput(input: {
     input.issuer.company.fiscalRegime !== 'lucro-presumido'
   )
     throw new Error('Fiscal capability is unsupported')
-  if (
-    issuerAddress.state !== 'SP' ||
-    recipientAddress.state !== 'SP' ||
-    !issuerAddress.municipalityCode ||
-    !recipientAddress.municipalityCode
-  )
+  const issuer = jurisdictionOfAddress(issuerAddress)
+  const recipient = jurisdictionOfAddress(recipientAddress)
+  // The normal-sale operation is intrastate (`idDest` 1); interstate sales need their
+  // own reviewed operation.
+  if (!issuer || !recipient || issuer.uf !== recipient.uf)
     throw new Error('Fiscal capability is unsupported')
   if (input.snapshot.total.currency !== 'BRL') throw new Error('Fiscal capability is unsupported')
 
@@ -210,22 +218,26 @@ function deriveCalculationInput(input: {
     environment: input.environment,
     operation: PHASE41_SCENARIO_ID,
     purpose: 'normal',
-    issuer: { regime: 'normal', stateCode: '35', municipalityCode: issuerAddress.municipalityCode },
+    issuer: {
+      regime: 'normal',
+      stateCode: issuer.ufCode,
+      municipalityCode: issuer.municipalityCode,
+    },
     recipient: {
       regime: 'normal',
-      stateCode: '35',
-      municipalityCode: recipientAddress.municipalityCode,
+      stateCode: recipient.ufCode,
+      municipalityCode: recipient.municipalityCode,
       taxpayer: input.recipient.profile.taxpayerIndicator === 'contributor',
     },
     origin: {
       countryCode: '1058',
-      stateCode: '35',
-      municipalityCode: issuerAddress.municipalityCode,
+      stateCode: issuer.ufCode,
+      municipalityCode: issuer.municipalityCode,
     },
     destination: {
       countryCode: '1058',
-      stateCode: '35',
-      municipalityCode: recipientAddress.municipalityCode,
+      stateCode: recipient.ufCode,
+      municipalityCode: recipient.municipalityCode,
     },
     issueDate: input.issueDate,
     currency: 'BRL',

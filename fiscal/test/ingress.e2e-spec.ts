@@ -685,6 +685,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
     const adapter = new SefazNfe55HomologationAdapter(
       { certificate: Buffer.alloc(0), issuerTaxId: '00000000E08G12' },
       operations,
+      'SP',
     )
     const prepared = await adapter.prepare({ service: 'status' })
     const [document] = await administrator`select establishment_id from fiscal_documents
@@ -1020,7 +1021,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       adapterVersion: 'nfe55-sp-homologation-v1',
     })
     await expect(ledger.drillContext(randomUUID(), documentId, grantId)).rejects.toThrow(
-      'Approved SP homologation drill is unavailable',
+      'Approved homologation drill is unavailable',
     )
     expect(await capabilities.getHomologationDrill(tenantId, documentId, grantId)).toMatchObject({
       id: capability.id,
@@ -1788,7 +1789,7 @@ async function verifyHomologationLedger(tenantId: string, documentId: string): P
       validUntil: Date.now() + 86_400_000,
       minimumRemainingMilliseconds: 0,
     }
-    const signingAdapter = new SefazNfe55HomologationAdapter(signingCredential, operations)
+    const signingAdapter = new SefazNfe55HomologationAdapter(signingCredential, operations, 'SP')
     const cancellation = new HomologationCancellation(
       ledger,
       capabilities,

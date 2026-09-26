@@ -1,6 +1,12 @@
-# Phase 43 — NF-e model 55 homologation for one issuer and UF
+# Phase 43 — NF-e model 55 homologation for each issuer's UF
 
-Status: **in progress; local implementation is partial, and no homologation credential
+Status: **delivered for simulation on 2026-09-26.** The complete drill passed against
+emulated SP and SVRS authorizers, and the path now follows each tenant's UF,
+municipality and A1 ([ADR 0050](adr/0050-fiscal-authorizer-follows-issuer-jurisdiction.md),
+[evidence](fiscal-phase43-evidence.md#ensaio-emulado-multi-uf-2026-09-26)). No
+homologation credential or approved issuer tuple is recorded, so the official round
+trip remains the activation gate. The earlier status follows:
+**in progress; local implementation is partial, and no homologation credential
 or approved issuer tuple is recorded**. Progress reviewed on 2026-09-25 from the
 repository and working tree. The adapter-version and response-schema bindings
 described below passed typechecking and Fiscal integration tests.

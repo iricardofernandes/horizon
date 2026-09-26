@@ -305,7 +305,6 @@ async function handle(
           capability.environment === 'simulation' &&
           capability.establishmentId === body.establishmentId &&
           capability.jurisdictionKind === 'uf' &&
-          capability.jurisdictionCode === 'SP' &&
           capability.operation === 'normal-sale',
       )
       if (!active) throw new Error('Fiscal capability is unsupported')

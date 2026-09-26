@@ -1,8 +1,74 @@
-# Fase 43 — evidências de homologação NF-e 55/SP
+# Fase 43 — evidências de homologação NF-e 55 por UF
 
-Status: **pendente**. Este registro não atesta emissão real. Preencher somente com
-evidências do emissor credenciado e revisão Fiscal independente. Não incluir XML
-integral, certificado, chave privada, dados pessoais do destinatário ou segredos.
+Status: **concluída em simulação em 2026-09-26**. O ensaio completo rodou contra um
+autorizador emulado para SP (SEFAZ-SP) e para RJ (SVRS). As seções do autorizador
+oficial continuam **pendentes**: dependem de um emitente credenciado, do A1 real e de
+revisão Fiscal independente, e o ambiente atual é só de simulação. Este registro não
+atesta emissão real. Não incluir XML integral, certificado, chave privada, dados
+pessoais do destinatário ou segredos.
+
+## Ensaio emulado multi-UF (2026-09-26)
+
+Decisão do dono do workspace em 2026-09-26: o ambiente é só de simulação, e a fase
+43 fecha com o ensaio completo contra um autorizador emulado. A ativação
+`homologated` fica para quando houver emitente credenciado. A arquitetura passou a
+seguir a UF e o município do emitente de cada tenant
+([ADR 0050](adr/0050-fiscal-authorizer-follows-issuer-jurisdiction.md)).
+
+- **Jurisdição pelo cadastro.** A UF e o código IBGE do município vêm do endereço do
+  emitente. Um município que não pertence à UF é recusado. `cUF`, `cMunFG`, `cOrgao`
+  e o prefixo da chave saem desse endereço. Venda normal continua intraestadual.
+- **Autorizador por UF.** A relação oficial UF→autorizador e as URLs de homologação
+  dos 12 autorizadores (10 SEFAZ próprias, SVRS e SVAN) foram lidas do Portal Nacional
+  da NF-e em 2026-09-26. A página de serviços tinha SHA-256 `cbc90bbc…6aec`; como é
+  HTML dinâmico, o digest identifica a leitura e não fixa a fonte. O transporte só
+  aceita um conjunto publicado completo. O digest do conjunto SP é o mesmo de antes.
+- **A1 por tenant e estabelecimento.** O worker e os CLIs resolvem a UF pelo grant e
+  pela capability de cada troca. Carregam o A1 cifrado do estabelecimento e as
+  operações SOAP revisadas do autorizador daquela UF. Um único worker atende tenants
+  de estados diferentes.
+- **Banco.** A migração `0045_phase43_uf_authorizers.sql` troca os oito gatilhos
+  fixos em SP por `fiscal_nfe_uf_code()`. Exige UF válida em capability 55/65 e chave
+  de acesso com o código da UF da capability. Acrescenta `authority` (`official` |
+  `emulated`) ao grant e recusa troca emulada como evidência de ativação.
+- **Emulador.** `SefazHomologationEmulator` (CLI `phase43:emulator`, que exige
+  `FISCAL_ALLOW_SEFAZ_EMULATOR=true`) responde aos cinco serviços nos caminhos
+  oficiais e exige mTLS com o CNPJ ICP-Brasil do emitente. O transporte envia os
+  mesmos bytes a uma rota de loopback e verifica o hostname oficial no TLS. A rota
+  muda o digest dos endpoints e a autoridade do grant.
+
+`test/phase43-drill.e2e-spec.ts` (PostgreSQL isolado, adapter e transporte reais,
+PL 010f/009p/010d oficiais) passou nos três casos:
+
+| Caso | Resultado no ensaio emulado |
+|---|---|
+| Estado do serviço | `107` para SP (`cUF` 35) e RJ via SVRS (`cUF` 33), decisão `available` |
+| Autorização normal | `103` com recibo, consulta de recibo `104`/`100`, decisão `authorized`; um único envio por chave |
+| NF-e por UF e município | XML assinado com `cUF` 35/`cMunFG` 3550308 (São Paulo) e `cUF` 33/`cMunFG` 3304557 (Rio de Janeiro); chave com o CNPJ do A1 de cada tenant |
+| A1 por tenant | Cada emulador só viu o CNPJ do certificado do próprio tenant no mTLS |
+| Rejeição de negócio | `104` com `225`, decisão `rejected`; nova consulta recusada por decisão terminal |
+| Código não revisado | `104` com `539`, decisão `unknown` para reconciliação do operador |
+| Resposta perdida | Conexão encerrada após autorizar; duas retomadas recusadas como incertas; um envio; consulta por protocolo `100` → `authorized` |
+| Falha temporária | HTTP 503; retomada recusada; consulta `217` → `unknown`; nenhum reenvio |
+| Cancelamento `110111` | `128`/`135` com protocolo, decisão `cancelled`, para os dois tenants |
+| DANFE de homologação | Gerado a partir do XML assinado e do protocolo retidos |
+| Verificação de artefatos | `HomologationRestoreVerifier` conferiu as quatro trocas de cada documento |
+| Isolamento | Adapter RJ com transporte SP recusado; UF inválida recusada; transporte oficial com grant emulado recusado; evidência emulada recusada na ativação; nada selecionado pelo worker |
+
+Também passaram, em 2026-09-26: `make check` (todos os projetos), 102 testes
+unitários e 29 testes de integração do Fiscal. Os 29 incluem os ensaios de
+restauração com `pg_dump`/`pg_restore` do registro de 2026-09-25.
+
+Achados do ensaio:
+
+- **Rota de loopback.** Em `https.request(url, options)`, o `hostname` da URL
+  oficial prevalece sobre `host`. A primeira versão da rota tentou sair para o IP
+  real da SEFAZ-SP e só falhou porque a porta do emulador não existe lá. A correção
+  fixa `hostname` e `servername`, e o e2e prova que o tráfego chega ao emulador.
+- **Envelope SOAP.** O adapter envolve `nfeDadosMsg` num elemento com o nome da
+  operação, e o emulador reproduz esse formato. A WSDL oficial ainda não foi revisada
+  (HTTP 403 sem A1). Se ela publicar `nfeDadosMsg` direto no `Body`, adapter e
+  emulador mudam juntos antes do primeiro envio real.
 
 ## Verificação local (2026-09-25)
 
@@ -61,12 +127,16 @@ integral, certificado, chave privada, dados pessoais do destinatário ou segredo
   protocolo e XML; a checagem local de 21 testes de scripts passou. O workflow
   ainda não foi executado com credencial real nem aprovado por revisor Fiscal.
 
-## Tupla aprovada
+## Tupla aprovada para o autorizador oficial
+
+Pendente até existir um emitente credenciado; nada nesta seção vem do emulador. A
+tupla é uma por tenant, estabelecimento e UF: a UF do endereço do emitente escolhe o
+autorizador.
 
 | Campo | Evidência |
 |---|---|
 | Tenant e estabelecimento | Pendente |
-| CNPJ do emitente (mascarado) e credenciamento SP | Pendente |
+| CNPJ do emitente (mascarado), UF e credenciamento no autorizador | Pendente |
 | Operação normal de venda, série e faixa de números | Pendente |
 | Manifesto de fontes e interpretação revisada | Pendente |
 | Pacotes de regras e fixture aprovados | Pendente |

@@ -2213,12 +2213,22 @@ comprehensive Fiscal review remains deferred. No SEFAZ or production credential 
 [Detailed work and exit evidence](fiscal-implementation-plan.md#42--nf-e-model-55-lifecycle-with-a-simulator).
 [Detailed implementation plan](fiscal-phase42-implementation-plan.md).
 
-## Phase 43 — NF-e homologation for one issuer and UF
+## Phase 43 — NF-e homologation for each issuer's UF
 
-**In progress.** The scoped Sales dispatch gate and local Fiscal homologation drill
-components are implemented. The issuer tuple, independent source/WSDL review, real
-SEFAZ round trip and restore evidence remain pending; no homologation capability is
-activated. Production transmission remains disabled.
+**Delivered for simulation on 2026-09-26.** The environment is simulation-only, so the
+owner closed the phase against an emulated authorizer. The homologation path now
+follows each tenant's registered address. The UF and IBGE municipality set `cUF`,
+`cMunFG`, the access key and the authorizer (own SEFAZ, SVRS or SVAN), and each
+establishment signs with its own encrypted A1. One worker serves tenants in different
+states. The full drill passed against local SP and SVRS emulators, using the real
+adapter, mTLS transport, ledger, DANFE and cancellation: authorization, business
+rejection, an unreviewed code, a lost response, an outage without resend, and event
+`110111`. Emulated grants are marked and can never activate `homologated`. The
+official round trip for a credentialed issuer, the WSDL review and the independent
+Fiscal signoff stay open as the activation gate. Production transmission remains
+disabled.
+[Simulation evidence](fiscal-phase43-evidence.md#ensaio-emulado-multi-uf-2026-09-26).
+[ADR 0050](adr/0050-fiscal-authorizer-follows-issuer-jurisdiction.md).
 [Detailed implementation plan](fiscal-phase43-implementation-plan.md).
 [Detailed work and exit evidence](fiscal-implementation-plan.md#43--one-nf-e-sefaz-homologation-path).
 

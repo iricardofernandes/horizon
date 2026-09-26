@@ -39,7 +39,9 @@ it('serializes stable, homologation-only service requests', () => {
   expect(serializeSefazRequest({ service: 'protocol', accessKey: key }).toString()).toContain(
     `<tpAmb>2</tpAmb><xServ>CONSULTAR</xServ><chNFe>${key}</chNFe>`,
   )
-  expect(serializeSefazRequest({ service: 'status' }).toString()).toContain('<cUF>35</cUF>')
+  expect(serializeSefazRequest({ service: 'status', ufCode: '35' }).toString()).toContain(
+    '<cUF>35</cUF>',
+  )
   expect(
     wrapSefazSoap12({
       operation: 'nfeAutorizacaoLote',
@@ -56,6 +58,7 @@ it('extracts only the correlated SP homologation protocol', () => {
     `<protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>${key}</chNFe><nProt>123456789012345</nProt>` +
     '<cStat>100</cStat><xMotivo>Autorizado</xMotivo></infProt></protNFe></retEnviNFe>'
   const result = parseSefazSoapResponse({
+    expectedUfCode: '35',
     service: 'authorization',
     soap: soap(payload),
     expectedAccessKey: key,
@@ -70,6 +73,7 @@ it('extracts only the correlated SP homologation protocol', () => {
   expect(result.response.equals(soap(payload))).toBe(true)
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: soap(payload),
       expectedAccessKey: '0'.repeat(44),
@@ -78,6 +82,7 @@ it('extracts only the correlated SP homologation protocol', () => {
   const badCheckDigit = `${key.slice(0, -1)}${key.endsWith('0') ? '1' : '0'}`
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: soap(payload.replace(key, badCheckDigit)),
       expectedAccessKey: key,
@@ -85,6 +90,7 @@ it('extracts only the correlated SP homologation protocol', () => {
   ).toThrow('invalid access key check digit')
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: soap(payload.replace('<nProt>123456789012345</nProt>', '<nProt>invalid</nProt>')),
       expectedAccessKey: key,
@@ -92,6 +98,7 @@ it('extracts only the correlated SP homologation protocol', () => {
   ).toThrow('invalid protocol number')
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: soap(payload.replace(`<chNFe>${key}</chNFe>`, '')),
       expectedAccessKey: key,
@@ -99,6 +106,7 @@ it('extracts only the correlated SP homologation protocol', () => {
   ).toThrow('missing chNFe')
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: soap(
         payload.replace('<cStat>104</cStat>', `<chNFe>${'0'.repeat(44)}</chNFe><cStat>104</cStat>`),
@@ -115,9 +123,9 @@ it('reports a SOAP fault without turning it into a fiscal outcome', () => {
       '<s:Reason><s:Text xml:lang="pt-BR">Rejeitado pelo serviço</s:Text></s:Reason>' +
       '</s:Fault></s:Body></s:Envelope>',
   )
-  expect(() => parseSefazSoapResponse({ service: 'authorization', soap: response })).toThrow(
-    SefazSoapFault,
-  )
+  expect(() =>
+    parseSefazSoapResponse({ expectedUfCode: '35', service: 'authorization', soap: response }),
+  ).toThrow(SefazSoapFault)
 })
 
 it('correlates a cancellation event to its key, environment and event type', () => {
@@ -129,10 +137,16 @@ it('correlates a cancellation event to its key, environment and event type', () 
     '<cStat>135</cStat><xMotivo>Evento registrado</xMotivo>' +
     '<nProt>123456789012345</nProt></infEvento></retEvento></retEnvEvento>'
   expect(
-    parseSefazSoapResponse({ service: 'event', soap: soap(payload), expectedAccessKey: key }),
+    parseSefazSoapResponse({
+      expectedUfCode: '35',
+      service: 'event',
+      soap: soap(payload),
+      expectedAccessKey: key,
+    }),
   ).toMatchObject({ statusCode: '128', eventStatusCode: '135', accessKey: key })
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'event',
       soap: soap(payload.replace('<tpEvento>110111', '<tpEvento>110110')),
       expectedAccessKey: key,
@@ -140,6 +154,7 @@ it('correlates a cancellation event to its key, environment and event type', () 
   ).toThrow('does not match')
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'event',
       soap: soap(payload),
       expectedAccessKey: '0'.repeat(44),
@@ -153,17 +168,20 @@ it('retains receipts and rejects wrong environments or hostile XML', () => {
       '<cStat>103</cStat><xMotivo>Lote recebido</xMotivo>' +
       '<infRec><nRec>123456789012345</nRec><tMed>1</tMed></infRec></retEnviNFe>',
   )
-  expect(parseSefazSoapResponse({ service: 'authorization', soap: receipt }).receipt).toBe(
-    '123456789012345',
-  )
+  expect(
+    parseSefazSoapResponse({ expectedUfCode: '35', service: 'authorization', soap: receipt })
+      .receipt,
+  ).toBe('123456789012345')
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: Buffer.from(receipt.toString().replace('<tpAmb>2', '<tpAmb>1')),
     }),
   ).toThrow()
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: Buffer.from(`<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>${receipt}`),
     }),
@@ -177,21 +195,28 @@ it('rejects duplicate status fields, mismatched versions and extra SOAP payloads
     '<infRec><nRec>123456789012345</nRec><tMed>1</tMed></infRec></retEnviNFe>'
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: soap(payload.replace('<cStat>103</cStat>', '<cStat>103</cStat><cStat>100</cStat>')),
     }),
   ).toThrow('duplicate cStat')
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: soap(payload.replace('versao="4.00"', 'versao="3.10"')),
     }),
   ).toThrow('version')
   expect(() =>
-    parseSefazSoapResponse({ service: 'authorization', soap: soap(payload + payload) }),
+    parseSefazSoapResponse({
+      expectedUfCode: '35',
+      service: 'authorization',
+      soap: soap(payload + payload),
+    }),
   ).toThrow('unique NF-e payload')
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'authorization',
       soap: Buffer.from(
         soap(payload).toString().replace('</soap12:Body>', '<unexpected/></soap12:Body>'),
@@ -206,10 +231,16 @@ it('correlates protocol consultations even when no protocol was returned', () =>
     `<cStat>217</cStat><xMotivo>Sem protocolo</xMotivo><chNFe>${key}</chNFe>` +
     '</retConsSitNFe>'
   expect(
-    parseSefazSoapResponse({ service: 'protocol', soap: soap(payload), expectedAccessKey: key }),
+    parseSefazSoapResponse({
+      expectedUfCode: '35',
+      service: 'protocol',
+      soap: soap(payload),
+      expectedAccessKey: key,
+    }),
   ).toMatchObject({ statusCode: '217', accessKey: key })
   expect(() =>
     parseSefazSoapResponse({
+      expectedUfCode: '35',
       service: 'protocol',
       soap: soap(payload.replace(key, '0'.repeat(44))),
       expectedAccessKey: key,

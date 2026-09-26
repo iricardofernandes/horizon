@@ -1,9 +1,13 @@
-import type { HomologationExchangeLedger } from './homologation-exchange-ledger'
+import type {
+  HomologationAuthority,
+  HomologationExchangeLedger,
+} from './homologation-exchange-ledger'
 import type {
   PreparedSefazExchange,
   SefazNfe55HomologationAdapter,
   SefazOperationMap,
 } from './nfe55/sefaz-adapter'
+import type { SefazAuthorizer } from './nfe55/sefaz-authorizers'
 import type { SefazResponseSchemaValidator } from './nfe55/sefaz-response-schema'
 import type { SefazResponse } from './nfe55/sefaz-soap'
 import type { SefazService } from './nfe55/sefaz-transport'
@@ -28,21 +32,42 @@ export class HomologationExchangeRunner {
       | 'recordParsedResponse'
       | 'loadPrepared'
       | 'assertResponseSchemas'
+      | 'assertGrantAuthority'
     >,
     private readonly transport: {
       endpointSetDigest: string
       certificateFingerprint: string
+      authorizer?: SefazAuthorizer
+      authority?: HomologationAuthority
       send(service: SefazService, envelope: Buffer): Promise<Buffer>
     },
     private readonly parser: Pick<
       SefazNfe55HomologationAdapter,
       'parseResponse' | 'wsdlDigest' | 'adapterVersion'
-    >,
+    > &
+      Partial<Pick<SefazNfe55HomologationAdapter, 'authorizer'>>,
     private readonly responseSchemas: Pick<
       SefazResponseSchemaValidator,
       'validate' | 'documentDigest' | 'consultationDigest'
     >,
-  ) {}
+  ) {
+    if (transport.authorizer && parser.authorizer && transport.authorizer !== parser.authorizer)
+      throw new Error('SEFAZ transport authorizer differs from the issuer UF')
+  }
+
+  private async assertBinding(tenantId: string, drillGrantId: string): Promise<void> {
+    await this.ledger.assertGrantAuthority(
+      tenantId,
+      drillGrantId,
+      this.transport.authority ?? 'official',
+    )
+    await this.ledger.assertResponseSchemas(
+      tenantId,
+      drillGrantId,
+      this.responseSchemas.documentDigest,
+      this.responseSchemas.consultationDigest,
+    )
+  }
 
   /** Starts only a prepared exchange or parses already stored response bytes. */
   async resume(
@@ -62,12 +87,7 @@ export class HomologationExchangeRunner {
       loaded.input.adapterVersion !== this.parser.adapterVersion
     )
       throw new Error('SEFAZ runtime binding differs from the approved drill grant')
-    await this.ledger.assertResponseSchemas(
-      loaded.input.tenantId,
-      loaded.input.drillGrantId,
-      this.responseSchemas.documentDigest,
-      this.responseSchemas.consultationDigest,
-    )
+    await this.assertBinding(loaded.input.tenantId, loaded.input.drillGrantId)
     if (loaded.stage === 'observed')
       throw new Error('SEFAZ exchange already has an observed response')
     if (loaded.stage === 'send_started') throw new UncertainSefazOutcomeError()
@@ -98,12 +118,7 @@ export class HomologationExchangeRunner {
     )
       throw new Error('SEFAZ runtime binding differs from the approved drill grant')
     const { workerId, ...evidence } = input
-    await this.ledger.assertResponseSchemas(
-      input.tenantId,
-      input.drillGrantId,
-      this.responseSchemas.documentDigest,
-      this.responseSchemas.consultationDigest,
-    )
+    await this.assertBinding(input.tenantId, input.drillGrantId)
     await this.ledger.prepare(evidence, prepared)
     if (!(await this.ledger.markStarted(input.tenantId, input.exchangeId, workerId)))
       throw new UncertainSefazOutcomeError()

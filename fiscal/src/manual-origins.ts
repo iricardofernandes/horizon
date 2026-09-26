@@ -7,6 +7,7 @@ import type { OwnerFiscalClient } from './backfill'
 import { canonicalDigest, canonicalJson } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
 import { decimal, integer, multiply, roundHalfAwayFromZero } from './exact-decimal'
+import { jurisdictionOfAddress } from './nfe55/jurisdiction'
 import { sealOrigin } from './origin-crypto'
 import { type ManualOriginPayload, manualOriginPayloadSchema } from './origin-snapshot'
 import { PHASE41_FIXTURE_ID } from './phase41-approved-scenario'
@@ -65,17 +66,16 @@ export class FiscalManualOrigins {
 
     if (command.issueDate < '2026-01-01' || command.issueDate >= '2027-01-01')
       throw new Error('Fiscal manual-origin date is unsupported')
-    const capability = (await this.capabilities.listActive(command.tenantId)).find(
+    const capabilities = (await this.capabilities.listActive(command.tenantId)).filter(
       (row) =>
         row.model === '55' &&
         row.environment === 'simulation' &&
         row.establishmentId === command.establishmentId &&
         row.jurisdictionKind === 'uf' &&
-        row.jurisdictionCode === 'SP' &&
         row.operation === 'normal-sale' &&
         row.calculationFixtureId === PHASE41_FIXTURE_ID,
     )
-    if (!capability) throw new Error('Fiscal capability is unsupported')
+    if (capabilities.length === 0) throw new Error('Fiscal capability is unsupported')
     const [issuer, recipient] = await Promise.all([
       this.projections.readIssuer(command.tenantId, command.issuerProfileRevision),
       this.projections.readParty(
@@ -89,11 +89,18 @@ export class FiscalManualOrigins {
       !recipient ||
       issuer.effectiveFrom > command.issueDate ||
       recipient.profile.effectiveFrom > command.issueDate ||
-      issuer.company.address.state !== 'SP' ||
-      recipient.profile.address.state !== 'SP' ||
       issuer.company.baseCurrency !== 'BRL' ||
       !['lucro-real', 'lucro-presumido'].includes(issuer.company.fiscalRegime)
     )
+      throw new Error('Fiscal manual-origin owner revisions are unavailable or unsupported')
+    // Intrastate normal sale in the UF where the issuer's registered municipality lies.
+    const issuerUf = jurisdictionOfAddress(issuer.company.address)?.uf
+    const capability = capabilities.find(
+      (row) =>
+        row.jurisdictionCode === issuerUf &&
+        jurisdictionOfAddress(recipient.profile.address)?.uf === issuerUf,
+    )
+    if (!capability)
       throw new Error('Fiscal manual-origin owner revisions are unavailable or unsupported')
 
     const itemNames = new Map<string, string>()
