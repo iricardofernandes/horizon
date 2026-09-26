@@ -124,6 +124,34 @@ municipality and registers its capability. It prints the `service` block for
 `FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase47-smoke.mjs` runs the local-stack smoke
 through Kong.
 
+### Operator reads, metrics and support (Phase 48)
+
+- `GET /documents` is the operator worklist:
+  - every model, newest first;
+  - filters `status` and `model`, and a keyset `cursor`;
+  - the pending command and the last rejection code of each document.
+- `GET /support/overview` is the tenant's support snapshot:
+  - queue, statuses and unknown outcomes;
+  - rejection codes, certificates and imports;
+  - undelivered events;
+  - active capabilities of every model;
+  - source-package age.
+- `src/metrics.ts` exports gauges from those snapshots, summed over the tenants the
+  worker serves. It also records authority outcomes, authorization latency, XML
+  validation failures and object-store failures. No label names a tenant, document, key
+  or party ([ADR 0055](../docs/adr/0055-fiscal-support-reads-metrics-and-bounded-replay.md)).
+- The alert rules are in `infra/observability/rules/fiscal.rules.yml`; `make test-alerts`
+  tests them.
+- `npm run support -- <command>` (`dist/support-cli.js`) runs the bounded, audited
+  support commands:
+  - `overview`;
+  - `reconcile-unknown`;
+  - `retry-due`;
+  - `replay-outbox`, which goes through `fiscal_outbox_replays`, so a delivered event is
+    republished under its own id.
+
+  See the [operations runbook](../docs/fiscal-operations-runbook.md).
+
 ## Verification
 
 `npm run test:e2e` starts PostgreSQL, RabbitMQ and MinIO with Testcontainers. It runs the

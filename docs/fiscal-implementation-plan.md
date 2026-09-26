@@ -1,7 +1,7 @@
 # Fiscal implementation plan — Phase J
 
-Status: Phases 39–42 delivered; 43, 44, 45, 46 and 47 delivered for simulation
-(2026-09-26); 48 planned. Reviewed against the repository and official technical portals on
+Status: Phases 39–42 delivered; 43 to 48 delivered for simulation (2026-09-26). Phase J
+is closed for simulation only: no homologation or production row is enabled. Reviewed against the repository and official technical portals on
 2026-09-21. This document is the execution plan for phases 39–48 in
 [plan.md](plan.md); it is not a statement that Horizon can legally issue any document.
 
@@ -362,6 +362,8 @@ municipality cannot reach the transmission endpoint; duplicate contract-period e
 in Phase K will map to one fiscal origin.
 
 ### 48 — Operator screens, rollout and support evidence
+
+[Detailed Phase 48 execution plan](fiscal-phase48-implementation-plan.md).
 
 **Work**
 

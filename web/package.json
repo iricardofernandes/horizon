@@ -16,6 +16,7 @@
     "lint:fix": "biome check --write .",
     "test": "vitest run",
     "test:browser": "node scripts/golden-path.e2e.mjs",
+    "test:browser:fiscal": "node scripts/fiscal-workflow.e2e.mjs",
     "test:watch": "vitest",
     "seed:hosted": "node scripts/seed-hosted-demo.mjs"
   },

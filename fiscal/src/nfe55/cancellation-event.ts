@@ -4,6 +4,7 @@ import { unzipSync } from 'fflate'
 import { SignedXml } from 'xml-crypto'
 import { validateXML } from 'xmllint-wasm'
 import { z } from 'zod'
+import { recordXmlValidationFailure } from '../metrics'
 import { isValidNfeAccessKey } from './access-key'
 import { ufOfCode } from './jurisdiction'
 import type { SimulationCredential } from './signature'
@@ -113,13 +114,15 @@ export async function validateCancellationEventSchema(input: {
     schema,
     preload: entries.filter((entry) => entry.fileName !== main),
   })
-  if (!result.valid)
+  if (!result.valid) {
+    recordXmlValidationFailure('nfe-event')
     throw new Error(
       `NF-e event XML schema validation failed: ${result.errors
         .slice(0, 3)
         .map((error) => error.message)
         .join('; ')}`,
     )
+  }
 }
 
 function escapeXml(value: string): string {

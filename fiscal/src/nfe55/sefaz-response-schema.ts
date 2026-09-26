@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { unzipSync } from 'fflate'
 import { validateXML } from 'xmllint-wasm'
+import { recordXmlValidationFailure } from '../metrics'
 import type { SefazService } from './sefaz-transport'
 
 const packageByService: Record<SefazService, { root: string; schema: string }> = {
@@ -102,11 +103,13 @@ export async function validateSefazResponseSchema(input: {
     schema: { fileName: schemaPath, contents: schema },
     preload,
   })
-  if (!result.valid)
+  if (!result.valid) {
+    recordXmlValidationFailure('sefaz-response')
     throw new Error(
       `SEFAZ response XML schema validation failed: ${result.errors
         .slice(0, 3)
         .map((error) => error.message)
         .join('; ')}`,
     )
+  }
 }

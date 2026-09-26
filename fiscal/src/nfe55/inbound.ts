@@ -145,6 +145,7 @@ export async function verifyInboundNfe55(input: {
       xml: Buffer.from(new XMLSerializer().serializeToString(nfe), 'utf8'),
       schemaZip: input.schemaZip,
       expectedZipDigest: input.expectedZipDigest,
+      family: 'inbound',
     })
   } catch (error) {
     if (error instanceof Error && error.message.includes('digest mismatch')) throw error

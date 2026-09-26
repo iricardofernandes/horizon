@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:
 import { link, mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { GetObjectCommand, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3'
+import { recordObjectStoreFailure } from './metrics'
 
 export interface ObjectStore {
   writeOnce(key: string, bytes: Buffer): Promise<void>
@@ -64,15 +65,23 @@ export class S3ObjectStore implements ObjectStore {
     } catch (error) {
       const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata
         ?.httpStatusCode
-      if (status !== 409 && status !== 412) throw error
+      if (status !== 409 && status !== 412) {
+        recordObjectStoreFailure('write')
+        throw error
+      }
     }
   }
 
   async read(key: string): Promise<Buffer> {
     assertObjectKey(key)
-    const object = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }))
-    if (!object.Body) throw new Error('Fiscal artifact has no object body')
-    return Buffer.from(await object.Body.transformToByteArray())
+    try {
+      const object = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }))
+      if (!object.Body) throw new Error('Fiscal artifact has no object body')
+      return Buffer.from(await object.Body.transformToByteArray())
+    } catch (error) {
+      recordObjectStoreFailure('read')
+      throw error
+    }
   }
 }
 

@@ -25,7 +25,7 @@ export type InboundImportOutcome = {
   conflictId: string | null
 }
 
-const STATUS_SQL = `case
+export const INBOUND_STATUS_SQL = `case
   when exists (select 1 from fiscal_inbound_reconciliations x
     where x.tenant_id = d.tenant_id and x.import_id = d.id) then 'reconciled'
   when exists (select 1 from fiscal_inbound_conflicts c
@@ -122,7 +122,7 @@ export class FiscalInboundImports {
     const rows = await this.#db.begin(async (tx) => {
       await scope(tx, tenantId)
       return tx`select * from (
-          select d.*, ${tx.unsafe(STATUS_SQL)} as status from fiscal_inbound_documents d
+          select d.*, ${tx.unsafe(INBOUND_STATUS_SQL)} as status from fiscal_inbound_documents d
           where d.tenant_id = ${tenantId}
         ) d
         where (${query.status ?? null}::text is null or d.status = ${query.status ?? null})
@@ -274,7 +274,7 @@ export class FiscalInboundImports {
   private async row(tenantId: string, importId: string): Promise<postgres.Row | null> {
     const [row] = await this.#db.begin(async (tx) => {
       await scope(tx, tenantId)
-      return tx`select d.*, ${tx.unsafe(STATUS_SQL)} as status from fiscal_inbound_documents d
+      return tx`select d.*, ${tx.unsafe(INBOUND_STATUS_SQL)} as status from fiscal_inbound_documents d
         where d.tenant_id = ${tenantId} and d.id = ${importId}`
     })
     return row ?? null

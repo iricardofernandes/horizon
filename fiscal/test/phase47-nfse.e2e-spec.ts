@@ -14,6 +14,7 @@ import { type AuditRow, verifyAuditRows } from '../src/audit'
 import { FiscalCalculations } from '../src/calculations'
 import { FiscalCapabilities } from '../src/capabilities'
 import { FiscalDispatch } from '../src/dispatch'
+import { FiscalDocumentList } from '../src/document-list'
 import { FiscalDocuments } from '../src/documents'
 import { FiscalIssueWorker } from '../src/issue-worker'
 import type { SimulationCredential } from '../src/nfe55/signature'
@@ -47,6 +48,7 @@ import {
 } from '../src/phase47-approved-scenario'
 import { FiscalProjections } from '../src/projections'
 import { FiscalRuleStore } from '../src/rule-store'
+import { FiscalSupport } from '../src/support'
 
 const run = promisify(execFile)
 const SAO_PAULO = '3550308'
@@ -73,6 +75,8 @@ let profiles: FiscalServiceProfiles
 let origins: FiscalServiceOrigins
 let serviceDocuments: FiscalServiceDocuments
 let readiness: FiscalServiceReadiness
+let documentList: FiscalDocumentList
+let support: FiscalSupport
 const services: Array<{ close(): Promise<void> }> = []
 const catalogServices = new Set<string>()
 
@@ -174,6 +178,9 @@ beforeAll(async () => {
     origins,
     serviceDocuments,
   )
+  documentList = new FiscalDocumentList(url)
+  support = new FiscalSupport(url)
+  services.push(documentList, support)
 }, 180_000)
 
 afterAll(async () => {
@@ -480,6 +487,127 @@ describe('Phase 47 national NFS-e', () => {
       }),
     ).rejects.toBeInstanceOf(ServiceCancellationWindowElapsed)
     expect((await documents.get(tenant.tenantId, late.id))?.status).toBe('authorized')
+  })
+})
+
+// Phase 48 reads and support commands over a real NFS-e flow: this file already drives
+// every step (lost response, retry, consultation) against PostgreSQL.
+describe('Phase 48 worklist and support commands', () => {
+  it('lists documents newest first, per tenant, with what is still pending', async () => {
+    const tenant = await seedTenant()
+    const other = await seedTenant()
+    const first = await authorizeNew(tenant, (await serviceOrigin(tenant)).id)
+    const waiting = await createDraft(tenant, (await serviceOrigin(tenant)).id)
+    await validate(tenant, waiting.id)
+    await issue(tenant, waiting.id)
+    await work(tenant, 'timeout-after-accept')
+    await authorizeNew(other, (await serviceOrigin(other)).id)
+
+    const page = await documentList.list(tenant.tenantId, { limit: 1 })
+    expect(page.data).toHaveLength(1)
+    expect(page.data[0]).toMatchObject({
+      id: waiting.id,
+      model: 'nfse',
+      status: 'unknown',
+      simulated: true,
+      fiscalValue: false,
+      originKind: 'service',
+      statusUrl: `/fiscal/service-documents/${waiting.id}`,
+      pending: { kind: 'issuance', state: 'pending' },
+    })
+    expect(page.page).toMatchObject({ hasMore: true })
+    const next = await documentList.list(tenant.tenantId, {
+      limit: 1,
+      cursor: String(page.page.nextCursor),
+    })
+    expect(next.data.map((row) => [row.id, row.status, row.number, row.pending])).toEqual([
+      [first.id, 'authorized', 1, null],
+    ])
+    expect(next.page.hasMore).toBe(false)
+    expect(
+      (await documentList.list(tenant.tenantId, { status: 'authorized', limit: 25 })).data.map(
+        (row) => row.id,
+      ),
+    ).toEqual([first.id])
+    expect((await documentList.list(tenant.tenantId, { model: '55', limit: 25 })).data).toEqual([])
+    // The other tenant sees only its own document.
+    const theirs = await documentList.list(other.tenantId, { limit: 25 })
+    expect(theirs.data.map((row) => row.id)).not.toContain(first.id)
+    expect(theirs.data).toHaveLength(1)
+    await expect(
+      documentList.list(tenant.tenantId, { limit: 1, cursor: 'not-a-cursor' }),
+    ).rejects.toBeInstanceOf(SyntaxError)
+
+    const overview = await support.overview(tenant.tenantId)
+    expect(overview).toMatchObject({
+      simulationOnly: true,
+      documents: { authorized: 1, unknown: 1 },
+      unknownOutcomes: 1,
+      queue: { pending: 1, leased: 0 },
+      imports: { open: 0, blocked: 0, reconciled: 0 },
+    })
+    expect(overview.outbox.undelivered).toBe(1)
+    expect(overview.capabilities).toEqual([
+      expect.objectContaining({
+        id: tenant.capabilityId,
+        model: 'nfse',
+        environment: 'simulation',
+        jurisdiction: { kind: 'municipality', code: SAO_PAULO },
+        status: 'simulated',
+      }),
+    ])
+    expect((await support.overview(other.tenantId)).documents).toEqual({ authorized: 1 })
+    const totals = await support.totals([tenant.tenantId, other.tenantId])
+    expect(totals).toMatchObject({ unknownOutcomes: 1, queuePending: 1, outboxUndelivered: 2 })
+  })
+
+  it('brings a delayed retry forward and reconciles a stuck unknown by consultation', async () => {
+    const tenant = await seedTenant()
+    const document = await createDraft(tenant, (await serviceOrigin(tenant)).id)
+    await validate(tenant, document.id)
+    await issue(tenant, document.id)
+    await work(tenant, 'timeout-after-accept')
+    await scoped(
+      tenant.tenantId,
+      (tx) => tx`update fiscal_dispatch_jobs set next_attempt_at = now() + interval '1 hour'
+        where state = 'pending'`,
+    )
+    // Not due: the worker leaves it alone until an operator brings it forward.
+    await work(tenant, 'timeout-after-accept')
+    expect(tenant.calls).toEqual({ submit: 1, consult: 0 })
+    const moved = await support.retryDue(tenant.tenantId, 'support:operator', 10)
+    expect(moved.changed).toHaveLength(1)
+    expect((await support.retryDue(tenant.tenantId, 'support:operator', 10)).changed).toEqual([])
+    // A document with a pending command is not reconciled a second time.
+    expect(
+      (await support.reconcileUnknown(tenant.tenantId, 'support:operator', 10)).skipped,
+    ).toEqual([{ id: document.id, reason: 'a command is already pending' }])
+
+    // A crash lost the job: nothing is pending and the outcome is still unknown.
+    await scoped(
+      tenant.tenantId,
+      (tx) => tx`update fiscal_dispatch_jobs set state = 'done', next_attempt_at = now()
+        where state = 'pending'`,
+    )
+    const reconciled = await support.reconcileUnknown(tenant.tenantId, 'support:operator', 10)
+    expect(reconciled.changed.map((row) => row.id)).toEqual([document.id])
+    expect(reconciled.changed[0]?.detail).toMatch(/^status_query /)
+    const again = await support.reconcileUnknown(tenant.tenantId, 'support:operator', 10)
+    expect(again.changed).toEqual([])
+    await work(tenant, 'authorized')
+    // The DPS was consulted, never sent twice (E0014).
+    expect(tenant.calls).toEqual({ submit: 1, consult: 1 })
+    expect((await serviceDocuments.get(tenant.tenantId, document.id))?.status).toBe('authorized')
+    const audit = await scoped(
+      tenant.tenantId,
+      (tx) => tx`select action from fiscal_audit_entries where action like 'support.%'
+        order by sequence`,
+    )
+    expect(audit.map((row) => row.action)).toEqual([
+      'support.retry-due',
+      'support.reconcile-unknown',
+    ])
+    await expect(support.retryDue(tenant.tenantId, 'support:operator', 101)).rejects.toThrow()
   })
 })
 

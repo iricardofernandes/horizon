@@ -20,7 +20,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     ...(hasBody ? { body: await request.arrayBuffer() } : {}),
   })
   const responseHeaders = new Headers()
-  for (const name of ['content-type', 'x-request-id']) {
+  // Artifact downloads keep their file name and digest so a reader can verify the bytes.
+  for (const name of ['content-type', 'x-request-id', 'content-disposition', 'digest']) {
     const value = response.headers.get(name)
     if (value) responseHeaders.set(name, value)
   }

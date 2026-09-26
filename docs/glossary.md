@@ -94,6 +94,36 @@ availability.
 so the module is fully testable and demonstrable with no external dependency and no
 digital certificate.
 
+### `nfce`
+*Nota Fiscal de Consumidor Eletrônica*, model 65. The **consumer receipt** version of the
+NF-e, for a sale to a final consumer. It has its own layout rules, a QR code for the
+buyer and a narrow printed receipt (DANFE NFC-e). In Horizon it documents the same Sales
+shipment an NF-e would, and one shipment gets one model (ADR 0053).
+
+### `nfse` and `dps`
+*Nota Fiscal de Serviço Eletrônica.* The **fiscal document for services**. It is
+municipal in origin, and the national system (Sefin Nacional) issues it for the
+municipalities that joined.
+- The taxpayer sends a *DPS* (*Declaração de Prestação de Serviço*), and the national
+  system generates the NFS-e and its 50-digit key.
+- Whether a municipality issues through the national system is a per-municipality fact,
+  kept in a versioned registry (ADR 0054).
+
+### `danfe`
+*Documento Auxiliar da NF-e.* The **printed companion** of an electronic document: a PDF
+a person can read, which is not itself the legal document. Horizon renders it only from
+authority evidence, and every simulated DANFE says it has no fiscal value.
+
+### `cc-e`
+*Carta de Correção Eletrônica.* An **NF-e correction letter** (event 110110). It corrects
+text of an authorized NF-e, but never values, parties, dates or taxes; those need a
+linked document (ADR 0052).
+
+### homologation
+The authority's **test environment** (*homologação*). Documents issued there have no
+fiscal value. A capability counts as homologated only with evidence from the official
+authority; an emulated drill never qualifies (ADR 0050).
+
 ### `lgpd`
 *Lei Geral de Proteção de Dados.* Brazil's **general data protection law**, closely
 modelled on the GDPR. Its Art. 18 erasure right is what makes crypto-shredding
@@ -635,3 +665,35 @@ ruined, so `issued + conversion = produced + scrapped`, always. The finished uni
 follows from it and cannot be stated by anybody — an order that let somebody name a
 different figure would be an order that could create money between two shelves of the same
 building.
+
+## Fiscal
+
+### fiscal origin
+The **one owner fact a fiscal document describes**: a Sales shipment, a reviewed manual
+sale, a linked return or complement, or a service provision. A document has exactly one
+origin, and Fiscal never creates the stock or money effect of that fact; the owner module
+does (ADR 0048).
+
+### capability tuple
+The **unit of support**: model, environment, establishment, jurisdiction (UF or
+municipality), operation and adapter version. A tuple is `unsupported` until evidence
+activates it. The support page and the published matrix list only activated tuples.
+
+### unknown outcome
+A document whose **authority answer was lost** (`unknown`, `cancellation_unknown`). It is
+never read as authorized or rejected. Fiscal consults the authority by key or DPS before
+any resend.
+
+### competence date
+The **month a service belongs to** for tax purposes (*competência*), distinct from the
+issue date. It selects the ISS and IBS/CBS rules of an NFS-e.
+
+### support snapshot
+The **per-tenant summary an operator reads first**: queue, uncertain outcomes, rejection
+codes, certificates, imports, undelivered events, active tuples and source age. Metrics
+sum the same numbers across tenants, with no tenant label (ADR 0055).
+
+### outbox replay
+An **audited request to publish a delivered event again**, under the same event id. The
+outbox row stays immutable, and consumers deduplicate by event id, so a replay can
+refresh a projection but cannot repeat an effect.

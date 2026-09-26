@@ -33,35 +33,26 @@ export class FiscalOutboxRelay {
         from fiscal_outbox where tenant_id = ${tenantId} and delivered_at is null
         order by created_at, event_id limit 50`
       for (const row of rows) {
-        const definition = findEvent(String(row.event_type), 1)
-        if (!definition) throw new Error('Unknown Fiscal outbox event contract')
-        const payload = definition.payload.parse(row.payload)
-        const envelope = eventEnvelopeSchema.parse({
-          eventId: String(row.event_id),
-          eventType: String(row.event_type),
-          eventVersion: 1,
-          occurredAt: z.iso.datetime().parse((payload as { observedAt: string }).observedAt),
-          tenantId,
-          traceId: createHash('sha256').update(String(row.event_id)).digest('hex').slice(0, 32),
-          payload,
-        })
-        channel.publish(
-          'horizon.events',
-          envelope.eventType,
-          Buffer.from(JSON.stringify(envelope)),
-          {
-            persistent: true,
-            contentType: 'application/json',
-            messageId: envelope.eventId,
-            headers: { 'x-trace-id': envelope.traceId },
-          },
-        )
-        await channel.waitForConfirms()
+        await publish(channel, tenantId, row)
         await tx`update fiscal_outbox set delivered_at = now()
           where tenant_id = ${tenantId} and event_id = ${row.event_id}
             and delivered_at is null`
       }
-      return rows.length
+      // An audited replay republishes a delivered event under its own id (Phase 48).
+      const replays = await tx`select replay.id, outbox.event_id, outbox.event_type,
+          outbox.payload
+        from fiscal_outbox_replays replay
+        join fiscal_outbox outbox on outbox.tenant_id = replay.tenant_id
+          and outbox.event_id = replay.event_id
+        where replay.tenant_id = ${tenantId} and replay.delivered_at is null
+          and outbox.delivered_at is not null
+        order by replay.requested_at, replay.id limit 50`
+      for (const replay of replays) {
+        await publish(channel, tenantId, replay)
+        await tx`update fiscal_outbox_replays set delivered_at = now()
+          where tenant_id = ${tenantId} and id = ${replay.id} and delivered_at is null`
+      }
+      return rows.length + replays.length
     })
   }
 
@@ -83,4 +74,30 @@ export class FiscalOutboxRelay {
     await this.#channel.assertExchange('horizon.events', 'topic', { durable: true })
     return this.#channel
   }
+}
+
+async function publish(
+  channel: ConfirmChannel,
+  tenantId: string,
+  row: postgres.Row,
+): Promise<void> {
+  const definition = findEvent(String(row.event_type), 1)
+  if (!definition) throw new Error('Unknown Fiscal outbox event contract')
+  const payload = definition.payload.parse(row.payload)
+  const envelope = eventEnvelopeSchema.parse({
+    eventId: String(row.event_id),
+    eventType: String(row.event_type),
+    eventVersion: 1,
+    occurredAt: z.iso.datetime().parse((payload as { observedAt: string }).observedAt),
+    tenantId,
+    traceId: createHash('sha256').update(String(row.event_id)).digest('hex').slice(0, 32),
+    payload,
+  })
+  channel.publish('horizon.events', envelope.eventType, Buffer.from(JSON.stringify(envelope)), {
+    persistent: true,
+    contentType: 'application/json',
+    messageId: envelope.eventId,
+    headers: { 'x-trace-id': envelope.traceId },
+  })
+  await channel.waitForConfirms()
 }

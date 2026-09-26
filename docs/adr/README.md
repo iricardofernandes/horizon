@@ -87,6 +87,7 @@ one means writing a new ADR that supersedes it.
 | [0052](0052-returns-and-complements-are-linked-documents.md) | Returns and complements are linked documents over owner facts |
 | [0053](0053-nfce-is-a-separate-model-over-the-sales-shipment.md) | NFC-e is a separate model over the same Sales shipment |
 | [0054](0054-national-nfse-is-keyed-by-municipality-and-reconciled-by-dps.md) | The national NFS-e is keyed by municipality and reconciled by its DPS |
+| [0055](0055-fiscal-support-reads-metrics-and-bounded-replay.md) | Fiscal support reads the API, measures without tenants and replays within bounds |
 
 ## Frontend
 

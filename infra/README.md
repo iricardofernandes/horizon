@@ -76,8 +76,9 @@ service name and container port.
 - **The application overlay** — `docker-compose.apps.yml`, adding Horizon's own services.
   Separate so the platform can run alone while a service is worked on from source, which
   is the normal development loop.
-- **Observability configuration** — the Collector pipeline, Prometheus scrape config,
-  Loki, Alloy, and Grafana's provisioned datasources and dashboards.
+- **Observability configuration** — the Collector pipeline, Prometheus scrape config and
+  alert rules (`observability/rules/*.rules.yml`, tested by `make test-alerts`), Loki,
+  Alloy, and Grafana's provisioned datasources and dashboards.
 - **Database bootstrap** — `postgres/init/`: five databases and three roles.
 - **Operational scripts** — key generation, Kong config rendering, token minting, smoke.
 - **Terraform** *(phase 13)*.

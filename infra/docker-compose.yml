@@ -202,6 +202,7 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:9090/-/healthy']

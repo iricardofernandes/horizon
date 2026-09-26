@@ -14,6 +14,7 @@ import { FiscalConsumer } from './consumer'
 import { FiscalCorrectionLetters } from './correction-letters'
 import { FiscalDispatch } from './dispatch'
 import { FiscalDocumentLinksReader } from './document-links'
+import { FiscalDocumentList } from './document-list'
 import { FiscalDocuments } from './documents'
 import { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { FiscalInboundImports } from './inbound-imports'
@@ -23,6 +24,7 @@ import { FiscalIssuance } from './issuance'
 import { FiscalIssueWorker } from './issue-worker'
 import { FiscalLinkedOrigins } from './linked-origins'
 import { FiscalManualOrigins } from './manual-origins'
+import { startSupportGauges } from './metrics'
 import { DeterministicNfce65Simulator } from './nfce65/simulator'
 import { nfe55IssuanceProfileSchema } from './nfe55/issuance-profile'
 import { DeterministicNfe55Simulator } from './nfe55/simulator'
@@ -33,6 +35,7 @@ import { FiscalProjections } from './projections'
 import { FiscalReadiness } from './readiness'
 import { FiscalRuleStore } from './rule-store'
 import { FiscalServiceTokens } from './service-tokens'
+import { FiscalSupport } from './support'
 import { stopTelemetry } from './telemetry'
 
 const optionalSetting = (schema: z.ZodString) =>
@@ -253,6 +256,10 @@ const serviceRuntime = createServiceRuntime({
       }
     : {}),
 })
+const documentList = new FiscalDocumentList(config.DATABASE_URL)
+const support = new FiscalSupport(config.DATABASE_URL)
+// Gauges sum the tenants this worker serves; no metric names a tenant (ADR 0055).
+const stopSupportGauges = startSupportGauges(support, Object.keys(keys))
 const server = createFiscalServer({
   verifier,
   documents,
@@ -275,6 +282,8 @@ const server = createFiscalServer({
     ...(correctionLetters ? { correctionLetters } : {}),
   },
   service: serviceRuntime.dependencies,
+  documentList,
+  support,
 })
 const fixedSimulatorScenario = config.FISCAL_SIMULATOR_SCENARIO
 const simulator = new DeterministicNfe55Simulator(
@@ -328,6 +337,7 @@ const consumer = new FiscalConsumer(
 
 async function stop(): Promise<void> {
   clearInterval(issueWorkerTimer)
+  stopSupportGauges()
   await new Promise<void>((resolve) => server.close(() => resolve()))
   await consumer.close()
   await Promise.all([
@@ -350,6 +360,8 @@ async function stop(): Promise<void> {
     documentLinks.close(),
     correctionLetters?.close(),
     serviceRuntime.close(),
+    documentList.close(),
+    support.close(),
     denylist.close(),
     phase43Runtime?.close(),
   ])
@@ -376,6 +388,7 @@ void consumer
     console.error('Fiscal consumer startup failed', {
       errorType: error instanceof Error ? error.name : 'UnknownError',
     })
+    stopSupportGauges()
     await Promise.allSettled([
       ingress.close(),
       projections.close(),
@@ -391,6 +404,8 @@ void consumer
       ruleStore.close(),
       credentials.close(),
       serviceRuntime.close(),
+      documentList.close(),
+      support.close(),
       denylist.close(),
       phase43Runtime?.close(),
     ])

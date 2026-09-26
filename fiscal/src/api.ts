@@ -16,6 +16,7 @@ import { canonicalDigest } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
 import type { FiscalDispatch } from './dispatch'
 import { supportedKind } from './document-kinds'
+import { documentListQuerySchema, type FiscalDocumentList } from './document-list'
 import { type FiscalDocuments, FiscalModelConflict } from './documents'
 import type { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { handleInboundRoute, type InboundDependencies } from './inbound-api'
@@ -27,6 +28,7 @@ import { ReadinessStale } from './nfce65/build'
 import { handleServiceRoute, type ServiceDependencies } from './nfse/api'
 import { ConsumerNotEligible, type FiscalReadiness } from './readiness'
 import type { FiscalRuleStore } from './rule-store'
+import type { FiscalSupport } from './support'
 
 export type FiscalServerDependencies = {
   verifier: Pick<FiscalTokenVerifier, 'verify'>
@@ -53,6 +55,8 @@ export type FiscalServerDependencies = {
   inbound?: InboundDependencies
   linked?: LinkedDependencies & { origins: Pick<FiscalLinkedOrigins, 'create' | 'kindOf'> }
   service?: ServiceDependencies
+  documentList?: Pick<FiscalDocumentList, 'list'>
+  support?: Pick<FiscalSupport, 'overview'>
 }
 
 export function createFiscalServer(dependencies: FiscalServerDependencies): Server {
@@ -293,6 +297,27 @@ async function handle(
         problem(response, 422, 'Unprocessable Content', error.message)
       else throw error
     }
+    return
+  }
+
+  if (request.method === 'GET' && url.pathname === '/documents' && dependencies.documentList) {
+    if (!requirePermission(principal, 'read', response)) return
+    response.setHeader('cache-control', 'private, no-store')
+    try {
+      const query = documentListQuerySchema.parse(Object.fromEntries(url.searchParams))
+      json(response, 200, await dependencies.documentList.list(principal.tenantId, query))
+    } catch (error) {
+      if (error instanceof z.ZodError || error instanceof SyntaxError)
+        problem(response, 400, 'Bad Request', 'Invalid Fiscal document list query')
+      else throw error
+    }
+    return
+  }
+
+  if (request.method === 'GET' && url.pathname === '/support/overview' && dependencies.support) {
+    if (!requirePermission(principal, 'read', response)) return
+    response.setHeader('cache-control', 'private, no-store')
+    json(response, 200, await dependencies.support.overview(principal.tenantId))
     return
   }
 

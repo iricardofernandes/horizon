@@ -2677,3 +2677,190 @@ tbody tr.reconciliation-selected td {
   font-weight: 600;
   margin: 1rem 0;
 }
+
+/* Fiscal (Phase 48). A simulated document always carries its label, in amber, so it never
+   reads as a document with fiscal value. */
+.fiscal-simulation {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px dashed var(--amber-8);
+  border-radius: 8px;
+  background: var(--amber-2);
+  color: var(--amber-11);
+  font-size: 12px;
+  font-weight: 650;
+}
+.fiscal-simulation-compact {
+  padding: 3px 7px;
+  font-size: 11px;
+}
+.fiscal-simulation-note {
+  margin: 0 0 18px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--amber-9);
+  border-radius: 8px;
+  background: var(--amber-2);
+  color: var(--amber-11);
+  font-weight: 600;
+}
+.fiscal-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 260px));
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.fiscal-code {
+  margin-left: 8px;
+}
+.fiscal-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px;
+}
+.fiscal-dialog {
+  width: min(920px, calc(100vw - 32px));
+}
+.fiscal-dialog-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 4px 0 14px;
+}
+.fiscal-tab {
+  padding: 16px 2px 6px;
+}
+.fiscal-timeline,
+.fiscal-artifacts,
+.fiscal-list,
+.fiscal-kinds {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fiscal-timeline li {
+  display: grid;
+  grid-template-columns: minmax(170px, auto) 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding-left: 14px;
+  border-left: 2px solid var(--sage-6);
+}
+.fiscal-timeline small,
+.fiscal-artifacts small,
+.fiscal-list small {
+  color: var(--color-text-muted);
+}
+.fiscal-artifacts li,
+.fiscal-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+.fiscal-artifacts li > span {
+  display: grid;
+  gap: 3px;
+}
+.fiscal-explanation pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0 0 14px;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--sage-2);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.fiscal-explanation h3,
+.fiscal-links h3,
+.fiscal-lookup h3,
+.panel h3 {
+  margin: 16px 0 8px;
+  font-size: 14px;
+}
+.fiscal-explanation ul,
+.fiscal-links ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.fiscal-actions {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+.fiscal-attestation {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12px;
+}
+.fiscal-upload {
+  margin-bottom: 18px;
+}
+.fiscal-upload form {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+.fiscal-conflict {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--red-6);
+  border-radius: 10px;
+  background: var(--red-2);
+}
+.fiscal-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.fiscal-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fiscal-counts strong {
+  font-size: 22px;
+}
+.fiscal-kinds li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.fiscal-lookup {
+  margin-top: 18px;
+  max-width: 560px;
+}
+@media (max-width: 720px) {
+  .fiscal-filters,
+  .fiscal-form-row {
+    grid-template-columns: 1fr;
+  }
+  .fiscal-timeline li {
+    grid-template-columns: 1fr;
+  }
+}
+.fiscal-page > .panel,
+.fiscal-page > .split-grid {
+  margin-bottom: 18px;
+}
+.fiscal-timeline li > .badge {
+  justify-self: start;
+}

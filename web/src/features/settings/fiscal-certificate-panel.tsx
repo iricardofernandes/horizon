@@ -2,9 +2,11 @@
 
 import { useLocale, useTranslations } from 'next-intl'
 import { type FormEvent, useEffect, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PanelHeading } from '@/components/ui/headings'
 import { TextField } from '@/components/ui/text-field'
+import { certificateStateOf } from '@/features/fiscal/types'
 import { apiError } from '@/lib/api'
 import { jsonHeaders } from '@/lib/http'
 import { tracedFetch } from '@/lib/telemetry'
@@ -15,6 +17,8 @@ type CertificateSummary = {
   fingerprint: string
   valid_until: string
 }
+
+const STATE_TONE = { valid: 'approved', expiring: 'pending', expired: 'rejected' } as const
 
 function base64(file: File, readFailed: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -123,6 +127,10 @@ export function FiscalCertificatePanel({ canManage }: { canManage: boolean }) {
             <ul>
               {certificates.map((item) => (
                 <li key={item.establishment_id}>
+                  <Badge
+                    label={t(`state.${certificateStateOf(item.valid_until, new Date())}`)}
+                    status={STATE_TONE[certificateStateOf(item.valid_until, new Date())]}
+                  />{' '}
                   <strong>{t('establishment', { id: item.establishment_id })}</strong> ·{' '}
                   {t('taxId', { value: item.issuer_tax_id })} ·{' '}
                   {t('validUntil', { date: new Date(item.valid_until).toLocaleDateString(locale) })}{' '}

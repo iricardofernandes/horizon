@@ -129,6 +129,13 @@ up-fiscal: infra/.env infra/keys/public kong-config ## Start the optional Fiscal
 		$(COMPOSE) -f infra/docker-compose.apps.yml --profile fiscal up -d --build --wait fiscal
 	@$(COMPOSE) -f infra/docker-compose.apps.yml restart kong
 
+.PHONY: test-alerts
+test-alerts: ## Check and unit-test the Prometheus alert rules with promtool
+	@docker run --rm -v "$(CURDIR)/infra/observability/rules":/rules -w /rules \
+		--entrypoint promtool prom/prometheus:v3.7.3 check rules fiscal.rules.yml
+	@docker run --rm -v "$(CURDIR)/infra/observability/rules":/rules -w /rules \
+		--entrypoint promtool prom/prometheus:v3.7.3 test rules fiscal.rules.test.yml
+
 .PHONY: down
 down: ## Stop the platform, keeping data
 	@$(COMPOSE) -f infra/docker-compose.apps.yml down

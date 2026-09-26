@@ -44,6 +44,7 @@ import { parseFiscalOriginSnapshot } from '../src/origin-snapshot'
 import { FiscalOutboxRelay } from '../src/outbox'
 import { DeterministicAuthorityGateway } from '../src/ports'
 import { FiscalProjections } from '../src/projections'
+import { FiscalSupport } from '../src/support'
 
 let container: StartedPostgreSqlContainer
 let rabbitmq: StartedRabbitMQContainer
@@ -248,6 +249,7 @@ it('publishes tenant-scoped simulation outbox events with confirms and marks del
   const connection = await connect(rabbitmq.getAmqpUrl())
   const channel = await connection.createChannel()
   const relay = new FiscalOutboxRelay(appUrl, rabbitmq.getAmqpUrl())
+  const support = new FiscalSupport(appUrl)
   try {
     await channel.assertExchange('horizon.events', 'topic', { durable: true })
     await channel.assertQueue('phase42.fiscal-outbox.test', { durable: true })
@@ -296,7 +298,38 @@ it('publishes tenant-scoped simulation outbox events with confirms and marks del
       administrator`update fiscal_outbox set payload = ${administrator.json({ altered: true })}
         where tenant_id = ${tenantId} and event_id = ${eventId}`,
     ).rejects.toMatchObject({ code: '23514' })
+
+    // Phase 48: an audited replay republishes a delivered event under its own id, once.
+    const replay = {
+      reason: 'Projeção do consumidor reconstruída após incidente',
+      limit: 10,
+      eventIds: [eventId, otherEventId],
+    }
+    const requested = await support.replayOutbox(tenantId, 'support:operator', replay)
+    expect(requested.changed.map((row) => row.id)).toEqual([eventId])
+    // The other tenant's event is invisible, and a second request waits on the first.
+    expect((await support.replayOutbox(tenantId, 'support:operator', replay)).skipped).toEqual([
+      { id: eventId, reason: 'a replay is already pending' },
+    ])
+    await expect(
+      support.replayOutbox(tenantId, 'support:operator', { ...replay, eventIds: [] }),
+    ).rejects.toThrow(/document or explicit event ids/)
+    expect(await relay.flush(tenantId)).toBe(1)
+    expect(await relay.flush(tenantId)).toBe(0)
+    const replayed = await channel.get('phase42.fiscal-outbox.test', { noAck: true })
+    if (!replayed) throw new Error('Replayed Fiscal event was not published')
+    expect(JSON.parse(replayed.content.toString())).toMatchObject({ eventId, tenantId })
+    expect(replayed.properties.messageId).toBe(eventId)
+    expect(await channel.get('phase42.fiscal-outbox.test', { noAck: true })).toBe(false)
+    await expect(
+      administrator`update fiscal_outbox_replays set reason = 'altered replay reason'
+        where tenant_id = ${tenantId}`,
+    ).rejects.toMatchObject({ code: '23514' })
+    const audit = await administrator`select action from fiscal_audit_entries
+      where tenant_id = ${tenantId} and action = 'support.replay-outbox'`
+    expect(audit).toHaveLength(1)
   } finally {
+    await support.close()
     await relay.close()
     await channel.deleteQueue('phase42.fiscal-outbox.test')
     await channel.deleteQueue('phase43.homologation-outbox.test')
@@ -318,6 +351,7 @@ it('forces tenant RLS on every Fiscal business table', async () => {
       'fiscal_tax_rules',
       'fiscal_rule_activation_events',
       'fiscal_source_payloads',
+      'fiscal_outbox_replays',
     ]),
   )
   expect(

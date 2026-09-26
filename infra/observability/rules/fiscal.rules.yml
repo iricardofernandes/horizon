@@ -1,0 +1,99 @@
+# Fiscal alerts (Phase 48). Each alert describes a symptom; the runbook anchor names the
+# action. Thresholds are local defaults: the deployment owner sets production values.
+# Series are aggregated with max/sum because resource labels (host, pid) change on restart.
+# Tested by `promtool test rules infra/observability/rules/fiscal.rules.test.yml`.
+groups:
+  - name: fiscal
+    rules:
+      - alert: FiscalMetricsAbsent
+        expr: absent(fiscal_queue_pending)
+        for: 10m
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: Fiscal is not reporting its support metrics
+          runbook: docs/fiscal-operations-runbook.md#fiscalmetricsabsent
+
+      - alert: FiscalQueueLag
+        expr: max(fiscal_queue_oldest_due_seconds) > 300
+        for: 5m
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: A due Fiscal dispatch command has waited more than 5 minutes
+          runbook: docs/fiscal-operations-runbook.md#fiscalqueuelag
+
+      - alert: FiscalUnknownOutcomes
+        expr: max(fiscal_unknown_outcomes) > 0
+        for: 15m
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: Fiscal documents have had an unknown authority outcome for 15 minutes
+          runbook: docs/fiscal-operations-runbook.md#fiscalunknownoutcomes
+
+      - alert: FiscalAuthorizationSlow
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le) (rate(fiscal_authorization_latency_seconds_bucket{family="issuance"}[15m])))
+          > 60
+        for: 10m
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: The 95th percentile of Fiscal authorization latency is above 60 seconds
+          runbook: docs/fiscal-operations-runbook.md#fiscalauthorizationslow
+
+      - alert: FiscalRejections
+        expr: sum by (rejection_code) (increase(fiscal_authority_outcomes_total{outcome="rejected"}[30m])) >= 5
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: 'The authority rejected 5 or more documents with code {{ $labels.rejection_code }} in 30 minutes'
+          runbook: docs/fiscal-operations-runbook.md#fiscalrejections
+
+      - alert: FiscalCertificateExpiring
+        expr: min(fiscal_certificate_min_days_remaining) < 30
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: 'An establishment certificate expires in {{ $value }} days'
+          runbook: docs/fiscal-operations-runbook.md#fiscalcertificateexpiring
+
+      - alert: FiscalCertificateExpired
+        expr: max(fiscal_certificates_expired) > 0
+        labels: { severity: critical, module: fiscal }
+        annotations:
+          summary: An active establishment certificate has expired
+          runbook: docs/fiscal-operations-runbook.md#fiscalcertificateexpiring
+
+      - alert: FiscalXmlValidationFailures
+        expr: sum by (schema) (increase(fiscal_xml_validation_failures_total[15m])) > 0
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: 'XML was refused by the pinned {{ $labels.schema }} schema'
+          runbook: docs/fiscal-operations-runbook.md#fiscalxmlvalidationfailures
+
+      - alert: FiscalImportsUnmatched
+        expr: max(fiscal_imports_unmatched) > 0
+        for: 24h
+        labels: { severity: info, module: fiscal }
+        annotations:
+          summary: Supplier NF-e imports have waited a day for reconciliation
+          runbook: docs/fiscal-operations-runbook.md#fiscalimportsunmatched
+
+      - alert: FiscalObjectStoreFailures
+        expr: sum by (operation) (increase(fiscal_object_store_failures_total[10m])) > 0
+        labels: { severity: critical, module: fiscal }
+        annotations:
+          summary: 'Fiscal artifact {{ $labels.operation }} failed in the object store'
+          runbook: docs/fiscal-operations-runbook.md#fiscalobjectstorefailures
+
+      - alert: FiscalOutboxStuck
+        expr: max(fiscal_outbox_oldest_seconds) > 600
+        for: 5m
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: A committed Fiscal event has waited more than 10 minutes to be published
+          runbook: docs/fiscal-operations-runbook.md#fiscaloutboxstuck
+
+      - alert: FiscalSourcePackageStale
+        expr: max(fiscal_source_package_max_age_days) > 180
+        labels: { severity: info, module: fiscal }
+        annotations:
+          summary: 'A Fiscal source package was imported {{ $value }} days ago'
+          runbook: docs/fiscal-operations-runbook.md#fiscalsourcepackagestale

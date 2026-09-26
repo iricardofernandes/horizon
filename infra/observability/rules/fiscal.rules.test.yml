@@ -1,0 +1,168 @@
+# promtool test rules infra/observability/rules/fiscal.rules.test.yml
+rule_files:
+  - fiscal.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: queue lag and unknown outcomes fire only after their hold time
+    interval: 1m
+    input_series:
+      - series: 'fiscal_queue_pending{host_name="a"}'
+        values: '1x30'
+      - series: 'fiscal_queue_oldest_due_seconds{host_name="a"}'
+        values: '0 400x30'
+      - series: 'fiscal_unknown_outcomes{host_name="a"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FiscalQueueLag
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: FiscalQueueLag
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal }
+            exp_annotations:
+              summary: A due Fiscal dispatch command has waited more than 5 minutes
+              runbook: docs/fiscal-operations-runbook.md#fiscalqueuelag
+      - eval_time: 10m
+        alertname: FiscalUnknownOutcomes
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: FiscalUnknownOutcomes
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal }
+            exp_annotations:
+              summary: Fiscal documents have had an unknown authority outcome for 15 minutes
+              runbook: docs/fiscal-operations-runbook.md#fiscalunknownoutcomes
+      - eval_time: 16m
+        alertname: FiscalMetricsAbsent
+        exp_alerts: []
+
+  - name: a silent worker is reported
+    interval: 1m
+    input_series:
+      - series: 'fiscal_unknown_outcomes{host_name="a"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: FiscalMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal }
+            exp_annotations:
+              summary: Fiscal is not reporting its support metrics
+              runbook: docs/fiscal-operations-runbook.md#fiscalmetricsabsent
+
+  - name: a restart does not duplicate or hide a series
+    interval: 1m
+    input_series:
+      # The old process stops reporting and the new one starts under another host label.
+      - series: 'fiscal_outbox_oldest_seconds{host_name="old"}'
+        values: '700x5 _x20'
+      - series: 'fiscal_outbox_oldest_seconds{host_name="new"}'
+        values: '_x5 700x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: FiscalOutboxStuck
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal }
+            exp_annotations:
+              summary: A committed Fiscal event has waited more than 10 minutes to be published
+              runbook: docs/fiscal-operations-runbook.md#fiscaloutboxstuck
+
+  - name: rejections are counted per code
+    interval: 1m
+    input_series:
+      - series: 'fiscal_authority_outcomes_total{outcome="rejected",rejection_code="E0014",model="nfse",family="issuance"}'
+        values: '0 1 2 3 4 5 6'
+      - series: 'fiscal_authority_outcomes_total{outcome="rejected",rejection_code="539",model="55",family="issuance"}'
+        values: '0 0 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: FiscalRejections
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal, rejection_code: E0014 }
+            exp_annotations:
+              summary: The authority rejected 5 or more documents with code E0014 in 30 minutes
+              runbook: docs/fiscal-operations-runbook.md#fiscalrejections
+
+  - name: certificates warn before and page after expiry
+    interval: 1m
+    input_series:
+      - series: 'fiscal_certificate_min_days_remaining{host_name="a"}'
+        values: '12'
+      - series: 'fiscal_certificates_expired{host_name="a"}'
+        values: '1'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FiscalCertificateExpiring
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal }
+            exp_annotations:
+              summary: An establishment certificate expires in 12 days
+              runbook: docs/fiscal-operations-runbook.md#fiscalcertificateexpiring
+      - eval_time: 0m
+        alertname: FiscalCertificateExpired
+        exp_alerts:
+          - exp_labels: { severity: critical, module: fiscal }
+            exp_annotations:
+              summary: An active establishment certificate has expired
+              runbook: docs/fiscal-operations-runbook.md#fiscalcertificateexpiring
+
+  - name: validation and object-store failures fire on any increase
+    interval: 1m
+    input_series:
+      - series: 'fiscal_xml_validation_failures_total{schema="inbound"}'
+        values: '0 0 1'
+      - series: 'fiscal_object_store_failures_total{operation="read"}'
+        values: '0 0 0 2'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: FiscalXmlValidationFailures
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: FiscalXmlValidationFailures
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal, schema: inbound }
+            exp_annotations:
+              summary: XML was refused by the pinned inbound schema
+              runbook: docs/fiscal-operations-runbook.md#fiscalxmlvalidationfailures
+      - eval_time: 3m
+        alertname: FiscalObjectStoreFailures
+        exp_alerts:
+          - exp_labels: { severity: critical, module: fiscal, operation: read }
+            exp_annotations:
+              summary: Fiscal artifact read failed in the object store
+              runbook: docs/fiscal-operations-runbook.md#fiscalobjectstorefailures
+
+  - name: slow authorizations and stale sources
+    interval: 1m
+    input_series:
+      - series: 'fiscal_authorization_latency_seconds_bucket{family="issuance",le="60"}'
+        values: '0+1x30'
+      - series: 'fiscal_authorization_latency_seconds_bucket{family="issuance",le="120"}'
+        values: '0+10x30'
+      - series: 'fiscal_authorization_latency_seconds_bucket{family="issuance",le="+Inf"}'
+        values: '0+10x30'
+      - series: 'fiscal_source_package_max_age_days{host_name="a"}'
+        values: '200'
+      - series: 'fiscal_imports_unmatched{host_name="a"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 26m
+        alertname: FiscalAuthorizationSlow
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal }
+            exp_annotations:
+              summary: The 95th percentile of Fiscal authorization latency is above 60 seconds
+              runbook: docs/fiscal-operations-runbook.md#fiscalauthorizationslow
+      - eval_time: 0m
+        alertname: FiscalSourcePackageStale
+        exp_alerts:
+          - exp_labels: { severity: info, module: fiscal }
+            exp_annotations:
+              summary: A Fiscal source package was imported 200 days ago
+              runbook: docs/fiscal-operations-runbook.md#fiscalsourcepackagestale
+      - eval_time: 5m
+        alertname: FiscalImportsUnmatched
+        exp_alerts: []

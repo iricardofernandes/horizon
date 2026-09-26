@@ -9,7 +9,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts src/phase43-issuance-prep-cli.ts src/phase43-exchange-resume-cli.ts src/phase43-cancellation-prep-cli.ts src/phase43-restore-verify-cli.ts src/phase43-reparse-cli.ts src/phase43-activation-cli.ts src/phase43-grant-cli.ts src/phase43-danfe-cli.ts src/phase43-wsdl-cli.ts src/phase43-emulator-cli.ts src/phase44-reindex-parties-cli.ts src/phase44-supplier-invoice-cli.ts src/phase45-rollout-cli.ts src/phase46-rollout-cli.ts src/phase47-rollout-cli.ts --format cjs --platform node --out-dir dist --clean",
+    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts src/phase43-issuance-prep-cli.ts src/phase43-exchange-resume-cli.ts src/phase43-cancellation-prep-cli.ts src/phase43-restore-verify-cli.ts src/phase43-reparse-cli.ts src/phase43-activation-cli.ts src/phase43-grant-cli.ts src/phase43-danfe-cli.ts src/phase43-wsdl-cli.ts src/phase43-emulator-cli.ts src/phase44-reindex-parties-cli.ts src/phase44-supplier-invoice-cli.ts src/phase45-rollout-cli.ts src/phase46-rollout-cli.ts src/phase47-rollout-cli.ts src/support-cli.ts --format cjs --platform node --out-dir dist --clean",
     "start": "node dist/worker.js",
     "backfill": "node dist/backfill-cli.js",
     "phase41:rollout": "node dist/phase41-rollout-cli.js",
@@ -39,6 +39,7 @@
     "phase45:rollout": "node dist/phase45-rollout-cli.js",
     "phase46:rollout": "node dist/phase46-rollout-cli.js",
     "phase47:rollout": "node dist/phase47-rollout-cli.js",
+    "support": "node dist/support-cli.js",
     "phase42:verify-sources": "node scripts/verify-phase42-sources.mjs",
     "phase43:verify-sources": "node scripts/verify-phase43-sources.mjs",
     "db:migrate": "node scripts/migrate.mjs",
@@ -49,7 +50,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1137.0",
-    "@horizon/contracts": "0.36.0",
+    "@horizon/contracts": "0.37.0",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/auto-instrumentations-node": "0.80.0",
     "@opentelemetry/exporter-logs-otlp-http": "0.222.0",

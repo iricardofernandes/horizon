@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { unzipSync } from 'fflate'
 import { validateXML } from 'xmllint-wasm'
+import { recordXmlValidationFailure } from '../metrics'
 
 const ROOT = 'PL_010f_v1.04/'
 const MAIN = `${ROOT}nfe_v4.00.xsd`
@@ -16,6 +17,8 @@ export async function validateNfe55Schema(input: {
   xml: Buffer
   schemaZip: Buffer
   expectedZipDigest: string
+  /** Which flow the refusal is counted under (Phase 48 metrics). */
+  family?: 'nfe' | 'inbound'
 }): Promise<void> {
   const digest = createHash('sha256').update(input.schemaZip).digest('hex')
   if (digest !== input.expectedZipDigest) throw new Error('NF-e schema package digest mismatch')
@@ -41,6 +44,7 @@ export async function validateNfe55Schema(input: {
       .slice(0, 3)
       .map((error) => error.message)
       .join('; ')
+    recordXmlValidationFailure(input.family ?? 'nfe')
     throw new Error(`NF-e XML schema validation failed: ${detail}`)
   }
 }

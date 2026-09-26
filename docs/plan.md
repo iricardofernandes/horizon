@@ -2312,9 +2312,27 @@ needs an establishment A1 to read the Swagger contract and the municipal paramet
 
 ## Phase 48 — Fiscal screens and release evidence
 
-**Planned.** Complete the operator screens, observability, recovery tools, browser flows,
-artifact restore and per-tuple support matrix. Close Phase J only for capabilities
-backed by executable tests and homologation evidence.
+**Delivered for simulation on 2026-09-26.** The web shell has a Fiscal group:
+- issued documents of every model, with the timeline, calculation explanation, files,
+  links and permitted actions;
+- a rule preview;
+- supplier XML import and review;
+- a support page with the capability matrix.
+
+Every simulated document carries its "no fiscal value" label in pt-BR and en.
+
+Operations and evidence:
+- Fiscal exports queue, outcome, latency, certificate, validation, import, object-store,
+  outbox and source-age metrics without tenant labels, with tested Prometheus alerts.
+- Bounded, audited support commands reconcile unknown outcomes, bring retries forward
+  and replay events without repeating an effect.
+- A golden path, a browser workflow and an artifact restore drill over all three models
+  pass on the local stack.
+
+No homologation or production row is enabled, so Phase J is closed for simulation only.
+[Evidence](fiscal-phase48-evidence.md).
+[ADR 0055](adr/0055-fiscal-support-reads-metrics-and-bounded-replay.md).
+[Detailed implementation plan](fiscal-phase48-implementation-plan.md).
 [Detailed work and exit evidence](fiscal-implementation-plan.md#48--operator-screens-rollout-and-support-evidence).
 
 ---

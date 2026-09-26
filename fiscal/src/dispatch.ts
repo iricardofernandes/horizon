@@ -10,6 +10,7 @@ import postgres from 'postgres'
 import { z } from 'zod'
 import { appendAudit } from './audit'
 import { canonicalDigest } from './canonical-json'
+import { recordAuthorityOutcome } from './metrics'
 import { appendServiceOutcome, recordNfseGeneration } from './nfse/outcome'
 
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/)
@@ -529,7 +530,8 @@ export class FiscalDispatch {
     input: z.input<typeof observationSchema>,
   ): Promise<{ id: string; existing: boolean }> {
     const value = observationSchema.parse(input)
-    return this.#db.begin(async (tx) => {
+    let outcomeMetric: Parameters<typeof recordAuthorityOutcome>[0] | null = null
+    const recorded = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
       const [lease] = await tx`select command.document_id, command.kind, job.lease_owner,
           job.lease_until, document.status, document.model
@@ -654,7 +656,7 @@ export class FiscalDispatch {
         (value.outcome === 'authorized' ||
           (!isCancellation && value.outcome === 'rejected') ||
           value.outcome === 'cancelled')
-      )
+      ) {
         await appendSimulationEvent(tx, {
           tenantId: value.tenantId,
           documentId: String(lease.document_id),
@@ -665,6 +667,22 @@ export class FiscalDispatch {
           rejectionCode: value.rejectionCode ?? null,
           substitutionEventDigest: value.nfse?.substitutionEventDigest ?? null,
         })
+        const [first] = await tx`select min(created_at) as at from fiscal_dispatch_commands
+          where tenant_id = ${value.tenantId} and document_id = ${lease.document_id}
+            and kind in ${tx(
+              isCancellation
+                ? ['cancellation', 'cancellation_query']
+                : ['issuance', 'status_query'],
+            )}`
+        outcomeMetric = {
+          model: String(lease.model ?? '55'),
+          family: isCancellation ? 'cancellation' : 'issuance',
+          outcome: value.outcome as 'authorized' | 'rejected' | 'cancelled',
+          rejectionCode:
+            value.rejectionCode ?? (value.outcome === 'rejected' ? 'SIMULATED_REJECTION' : null),
+          latencySeconds: first?.at ? (Date.now() - new Date(first.at).getTime()) / 1000 : null,
+        }
+      }
       if (nextStatus !== 'unknown' && nextStatus !== 'cancellation_unknown')
         await tx`update fiscal_dispatch_jobs set state = 'done', lease_owner = null,
             lease_until = null, updated_at = now()
@@ -696,6 +714,8 @@ export class FiscalDispatch {
         existing,
       }
     })
+    if (outcomeMetric) recordAuthorityOutcome(outcomeMetric)
+    return recorded
   }
 
   private async finishLease(

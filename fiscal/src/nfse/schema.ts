@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { unzipSync } from 'fflate'
 import { validateXML } from 'xmllint-wasm'
+import { recordXmlValidationFailure } from '../metrics'
 
 /** The pinned national NFS-e schema package (layout 1.01). */
 export const NFSE_SCHEMA_DIGEST = 'e7935cbd9470527c6cc32984c1b2263e614183bf0139ce2733eaaed2de9a8072'
@@ -62,6 +63,7 @@ export async function validateNfseSchema(input: {
       .slice(0, 3)
       .map((error) => error.message)
       .join('; ')
+    recordXmlValidationFailure('nfse')
     throw new Error(`NFS-e ${input.root} schema validation failed: ${detail}`)
   }
 }

@@ -4,6 +4,10 @@ global:
   external_labels:
     environment: local
 
+# Alert rules live next to their promtool tests; only *.rules.yml files are loaded.
+rule_files:
+  - /etc/prometheus/rules/*.rules.yml
+
 scrape_configs:
   # Application metrics arrive through the Collector, which re-exposes them here.
   # Services are never scraped directly (ADR 0033).
