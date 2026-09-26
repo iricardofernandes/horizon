@@ -2271,8 +2271,23 @@ them.
 
 ## Phase 46 — NFC-e model 65
 
-**Planned.** Add model-specific XML, auxiliary rendering, QR code, lifecycle and an
-independently tested homologation tuple. Do not infer model 65 support from NF-e tests.
+**Delivered for simulation on 2026-09-26.** A Sales shipment to a final consumer who is
+not an ICMS contributor, in the issuer's UF, becomes an NFC-e model 65 with its own
+capability row, series and calculation fixture. It has its own builder:
+- XML with presence, payment and the `infNFeSupl` group outside the signature;
+- the version 3 online QR code, with no CSC;
+- an 80 mm DANFE NFC-e whose QR image decodes to the XML;
+- a synchronous simulated authority that rejects an emission first received more than 5
+  minutes late.
+
+A sale keeps one model and one live document, whether commands are retried or events
+replayed. An outage is consulted before any resend and corrected by a successor.
+Cancellation works only inside the reviewed window. The model 55 tests are unchanged and
+pass. The counter sale, offline contingency, and homologation of model 65 stay
+unsupported.
+[Evidence](fiscal-phase46-evidence.md).
+[ADR 0053](adr/0053-nfce-is-a-separate-model-over-the-sales-shipment.md).
+[Detailed implementation plan](fiscal-phase46-implementation-plan.md).
 [Detailed work and exit evidence](fiscal-implementation-plan.md#46--nfc-e-model-65-as-a-separate-capability).
 
 ## Phase 47 — National NFS-e

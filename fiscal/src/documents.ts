@@ -88,6 +88,14 @@ export type DocumentTransition = {
   occurredAt: string
 }
 
+/** A Sales intent already has a document of the other model. */
+export class FiscalModelConflict extends Error {
+  readonly code = 'MODEL_CONFLICT'
+  constructor(readonly existingModel: string) {
+    super(`Conflicting fiscal draft: the sale already has a model ${existingModel} document`)
+  }
+}
+
 /** Internal Phase 40 persistence. Public issuance remains unavailable. */
 export class FiscalDocuments {
   readonly #db: ReturnType<typeof postgres>
@@ -264,6 +272,11 @@ export class FiscalDocuments {
           return { id: String(prior.document_id), status: 'draft' as const, snapshotDigest: digest }
         }
       }
+      // One sale, one model: the first document of an intent fixes it (a trigger agrees).
+      const [otherModel] = await tx`select model from fiscal_documents
+        where tenant_id = ${value.tenantId} and intent_id = ${value.intentId}
+          and model <> ${value.model} limit 1`
+      if (otherModel) throw new FiscalModelConflict(String(otherModel.model))
       const id = randomUUID()
       const ciphertext = encryptSnapshot(this.masterKey, value.tenantId, id, snapshot)
       const inserted = await tx`
@@ -723,8 +736,11 @@ export class FiscalDocuments {
       if (!predecessor) throw new Error('Fiscal document not found')
       if (predecessor.status !== 'rejected')
         throw new Error('Only a rejected Fiscal document can be corrected')
-      if (predecessor.model !== '55' || predecessor.environment !== 'simulation')
-        throw new Error('Fiscal correction is supported only for simulated model 55')
+      if (
+        (predecessor.model !== '55' && predecessor.model !== '65') ||
+        predecessor.environment !== 'simulation'
+      )
+        throw new Error('Fiscal correction is supported only for simulated models 55 and 65')
       if (!predecessor.intent_id)
         throw new Error('Fiscal Sales correction requires a Sales predecessor')
       const [priorSuccessor] = await tx`select id, root_document_id, predecessor_document_id,

@@ -11,7 +11,8 @@ const inputSchema = z.object({
     .trim()
     .transform((value) => value.toUpperCase().replace(/[.\-/\s]/g, ''))
     .pipe(z.string().regex(/^[0-9A-Z]{12}[0-9]{2}$/)),
-  model: z.literal('55'),
+  /** NF-e 55 or NFC-e 65: the key layout is the same (MOC 7.0). */
+  model: z.enum(['55', '65']),
   series: z.number().int().min(0).max(999),
   number: z.number().int().min(1).max(999_999_999),
   emissionType: z.number().int().min(1).max(9).default(1),
@@ -20,7 +21,7 @@ const inputSchema = z.object({
 
 export type Nfe55AccessKeyInput = z.input<typeof inputSchema>
 
-/** Builds the PL 010f 44-character key, including alphanumeric CNPJ positions. */
+/** Builds the PL 010f 44-character key, including alphanumeric CNPJ positions, for model 55 or 65. */
 export function buildNfe55AccessKey(input: Nfe55AccessKeyInput): string {
   const value = inputSchema.parse(input)
   const yearMonth = `${value.issuedOn.slice(2, 4)}${value.issuedOn.slice(5, 7)}`

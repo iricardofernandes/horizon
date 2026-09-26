@@ -469,12 +469,18 @@ async function freezeComplement(
 /** Serializes with cancellation: both lock the original row before deciding. */
 async function lockAuthorizedOriginal(tx: Transaction, tenantId: string, documentId: string) {
   const [row] = await tx`select document.status, document.establishment_id,
-      document.linked_origin_id, binding.access_key
+      document.linked_origin_id, document.model, binding.access_key
     from fiscal_documents document
     left join fiscal_document_issuance_bindings binding on binding.tenant_id = document.tenant_id
       and binding.document_id = document.id
     where document.tenant_id = ${tenantId} and document.id = ${documentId}
     for update of document`
+  // A consumer's return or complement of an NFC-e has no reviewed flow yet.
+  if (row?.model === '65')
+    throw new LinkedOriginError(
+      'KIND_UNSUPPORTED',
+      'Returns and complements of an NFC-e model 65 are not supported',
+    )
   if (row?.status !== 'authorized' || row.linked_origin_id !== null || !row.access_key)
     throw new LinkedOriginError(
       'REFERENCE_NOT_AUTHORIZED',

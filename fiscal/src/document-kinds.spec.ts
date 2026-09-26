@@ -83,6 +83,13 @@ describe('Fiscal document kinds', () => {
   it('offers correction letters only to model 55', () => {
     expect(hasEventFlow('55', 'correction-letter')).toBe(true)
     expect(hasEventFlow('65', 'correction-letter')).toBe(false)
+    expect(hasEventFlow('65', 'cancellation')).toBe(true)
+    expect(supportedKind('consumer-sale')).toMatchObject({
+      model: '65',
+      operation: 'consumer-sale',
+    })
+    for (const kind of ['counter-sale', 'consumer-sale-offline'])
+      expect(() => supportedKind(kind)).toThrow(UnsupportedDocumentKind)
     expect(hasEventFlow('nfse', 'cancellation')).toBe(false)
   })
 

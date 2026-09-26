@@ -17,7 +17,15 @@ export const PHASE45_FIXTURES = {
   'value-complement': 'rtc-v0057-model55-value-complement-sp-2026-01',
 } as const satisfies Record<FiscalLinkedKind, string>
 
+/** The reviewed model 65 consumer-sale scenario and fixture (simulation only). */
+export const PHASE46_SCENARIO = 'rtc-v0057-model65-consumer-sale'
+export const PHASE46_FIXTURE = 'rtc-v0057-model65-consumer-sale-sp-2026-01'
+
 const none = { module: 'none', sourceEvent: null } as const
+const dispatchOwners = {
+  stockOwner: { module: 'inventory', sourceEvent: 'sales.shipment.dispatched' },
+  moneyOwner: { module: 'financial', sourceEvent: 'sales.shipment.dispatched' },
+} as const
 
 /**
  * What each NF-e kind means, what it must reference and who owns its effects. A kind
@@ -104,12 +112,36 @@ export const DOCUMENT_KINDS: readonly FiscalDocumentKindEntry[] = [
     '6',
     'The reform debit note has no reviewed rule, capability or owner fact yet.',
   ),
+  {
+    kind: 'consumer-sale',
+    model: '65',
+    supported: true,
+    purpose: '1',
+    direction: 'outbound',
+    operation: 'consumer-sale',
+    reference: 'none',
+    source: 'sales.fiscal-origin.recorded (original) to a final consumer in the issuer UF',
+    ...dispatchOwners,
+    reason: null,
+  },
+  unsupported(
+    'counter-sale',
+    '1',
+    'Sales records no counter (cashier) sale with its payment, and Inventory has no handoff for one.',
+    '65',
+  ),
+  unsupported(
+    'consumer-sale-offline',
+    '1',
+    'Offline contingency (tpEmis 9) needs the NFC-e contingency manual and a recovery test, which are not pinned.',
+    '65',
+  ),
 ]
 
 /** Post-authorization event flows with an approved specification, per model. */
 export const EVENT_FLOWS = [
   { model: '55', flows: ['cancellation', 'correction-letter'] },
-  { model: '65', flows: [] },
+  { model: '65', flows: ['cancellation'] },
   { model: 'nfse', flows: [] },
 ] as const
 
@@ -140,10 +172,11 @@ function unsupported(
   kind: FiscalDocumentKind,
   purpose: FiscalDocumentKindEntry['purpose'],
   reason: string,
+  model: FiscalDocumentKindEntry['model'] = '55',
 ): FiscalDocumentKindEntry {
   return {
     kind,
-    model: '55',
+    model,
     supported: false,
     purpose,
     direction: null,

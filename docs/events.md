@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.34.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.35.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -246,6 +246,13 @@ A recorded settlement was undone — a bounced payment, a wrong installment. The
 
 ## `fiscal`
 
+### `fiscal.consumer-document.simulation-outcome` — v1
+
+The deterministic simulator decided an NFC-e model 65 for one Sales shipment to a final consumer. The sale keeps one stock and one money effect, both from `sales.shipment.dispatched` (`correlations`); this fact never creates, repeats or reverses one. It carries no access key, QR code, XML or consumer data.
+
+**Payload**
+
+_No fields._
 ### `fiscal.document.homologation-observed` — v1
 
 One parsed SP NF-e homologation exchange was retained. This observation has no fiscal value and never releases a shipment, stock or money effect.

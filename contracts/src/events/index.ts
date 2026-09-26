@@ -17,6 +17,7 @@ import {
   financialSettlementReversed,
 } from './financial'
 import {
+  fiscalConsumerDocumentOutcome,
   fiscalDocumentAuthorized,
   fiscalDocumentCancelled,
   fiscalDocumentHomologationObserved,
@@ -153,6 +154,7 @@ export const EVENTS: readonly EventDefinition[] = [
   fiscalDocumentProductionOutcome,
   fiscalInboundMatched,
   fiscalLinkedDocumentOutcome,
+  fiscalConsumerDocumentOutcome,
   treasuryAccountOpened,
   treasuryEntryRecorded,
   treasuryTransferPosted,

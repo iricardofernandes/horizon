@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
+  fiscalConsumerDocumentOutcome,
   fiscalDocumentAuthorized,
   fiscalDocumentCancelled,
   fiscalDocumentRejected,
@@ -34,6 +35,8 @@ const observationSchema = z.strictObject({
   providerCorrelation: z.string().min(1).max(256).nullable(),
   responseDigest: digestSchema,
   protocolDigest: digestSchema.nullable(),
+  /** Model 65 names why the simulated authority rejected it (for example a late emission). */
+  rejectionCode: z.string().min(1).max(40).optional(),
 })
 
 export type DispatchCommand = {
@@ -55,6 +58,8 @@ export type DispatchLease = {
   cancellationCommandId?: string | null
   attemptCount: number
   leaseUntil: string
+  /** Absent in leases built before Phase 46; model 55 then. */
+  model?: '55' | '65'
 }
 
 /** Durable Phase 42 command queue. Adapter I/O is deliberately outside its transactions. */
@@ -164,7 +169,7 @@ export class FiscalDispatch {
       const committed = await findCommand(tx, value.tenantId, value.idempotencyKey)
       if (committed) return verifyExisting(committed, value, 'issuance')
       if (document.status !== 'ready') throw new Error('Fiscal document is not ready')
-      if (document.model !== '55' || document.environment !== 'simulation')
+      if (!['55', '65'].includes(document.model) || document.environment !== 'simulation')
         throw new Error('Unsupported Fiscal issuance tuple')
       const [binding] = await tx`select binding.signed_xml_digest
         from fiscal_document_issuance_bindings binding
@@ -294,7 +299,7 @@ export class FiscalDispatch {
       if (committed)
         return verifyExisting(committed, { ...value, artifactDigest: undefined }, 'cancellation')
       if (document.status !== 'authorized') throw new Error('Fiscal cancellation is not allowed')
-      if (document.model !== '55' || document.environment !== 'simulation')
+      if (!['55', '65'].includes(document.model) || document.environment !== 'simulation')
         throw new Error('Unsupported Fiscal cancellation tuple')
       const [binding] = await tx`select binding.access_key
         from fiscal_document_issuance_bindings binding
@@ -395,7 +400,7 @@ export class FiscalDispatch {
     return this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
       const [job] = await tx`select job.command_id, command.document_id, command.kind,
-          command.request_digest, command.artifact_digest,
+          command.request_digest, command.artifact_digest, document.model,
           issuance.id as issuance_command_id,
           issuance.request_digest as issuance_request_digest,
           issuance.artifact_digest as issuance_artifact_digest,
@@ -486,6 +491,7 @@ export class FiscalDispatch {
           : null,
         attemptCount: Number(leased.attempt_count),
         leaseUntil: new Date(leased.lease_until).toISOString(),
+        model: job.model === '65' ? '65' : '55',
       }
     })
   }
@@ -628,6 +634,7 @@ export class FiscalDispatch {
           providerCorrelation: value.providerCorrelation,
           responseDigest: value.responseDigest,
           protocolDigest: value.protocolDigest,
+          rejectionCode: value.rejectionCode ?? null,
         })
       if (nextStatus !== 'unknown' && nextStatus !== 'cancellation_unknown')
         await tx`update fiscal_dispatch_jobs set state = 'done', lease_owner = null,
@@ -698,11 +705,12 @@ async function appendSimulationEvent(
     providerCorrelation: string | null
     responseDigest: string
     protocolDigest: string | null
+    rejectionCode?: string | null
   },
 ): Promise<void> {
   const [document] = await tx`select document.root_document_id, document.revision,
       document.intent_id, document.manual_origin_id, document.linked_origin_id,
-      capability.adapter_version
+      document.model, capability.adapter_version
     from fiscal_documents document
     join fiscal_document_issuance_bindings binding on binding.tenant_id = document.tenant_id
       and binding.document_id = document.id
@@ -712,6 +720,10 @@ async function appendSimulationEvent(
   if (!document) throw new Error('Fiscal simulation event facts are unavailable')
   if (document.linked_origin_id) {
     await appendLinkedOutcome(tx, input, document)
+    return
+  }
+  if (document.model === '65') {
+    await appendConsumerOutcome(tx, input, document)
     return
   }
   const observedAt = new Date().toISOString()
@@ -831,6 +843,59 @@ async function appendLinkedOutcome(
   })
   await tx`insert into fiscal_outbox (tenant_id, event_id, event_type, payload)
     values (${input.tenantId}, ${randomUUID()}, ${fiscalLinkedDocumentOutcome.type},
+      ${tx.json(payload as postgres.JSONValue)})`
+}
+
+/** Model 65 outcomes name the shipment whose dispatch owns the stock and money effects. */
+async function appendConsumerOutcome(
+  tx: postgres.TransactionSql,
+  input: Parameters<typeof appendSimulationEvent>[1],
+  document: postgres.Row,
+): Promise<void> {
+  const [intent] = await tx`select origin_id from fiscal_intents
+    where tenant_id = ${input.tenantId} and id = ${document.intent_id}`
+  if (!intent) throw new Error('Fiscal consumer-sale origin is unavailable')
+  const shipmentId = String(intent.origin_id)
+  const fact = {
+    documentId: input.documentId,
+    rootDocumentId: String(document.root_document_id),
+    revision: Number(document.revision),
+    source: { module: 'sales', documentType: 'shipment', id: shipmentId },
+    correlations: (['inventory', 'financial'] as const).map((module) => ({
+      module,
+      sourceEvent: 'sales.shipment.dispatched',
+      correlationId: shipmentId,
+    })),
+    model: '65',
+    environment: 'simulation',
+    simulated: true,
+    adapterVersion: String(document.adapter_version),
+    statusDigest: canonicalDigest({
+      documentId: input.documentId,
+      outcome: input.outcome,
+      responseDigest: input.responseDigest,
+      protocolDigest: input.protocolDigest,
+    }),
+    observedAt: new Date().toISOString(),
+  }
+  const payload = fiscalConsumerDocumentOutcome.payload.parse(
+    input.outcome === 'rejected'
+      ? {
+          ...fact,
+          outcome: 'rejected',
+          authorityReference: input.providerCorrelation,
+          rejectionCode: input.rejectionCode ?? 'SIMULATED_REJECTION',
+          protocolDigest: input.protocolDigest,
+        }
+      : {
+          ...fact,
+          outcome: input.outcome,
+          authorityReference: input.providerCorrelation,
+          protocolDigest: input.protocolDigest,
+        },
+  )
+  await tx`insert into fiscal_outbox (tenant_id, event_id, event_type, payload)
+    values (${input.tenantId}, ${randomUUID()}, ${fiscalConsumerDocumentOutcome.type},
       ${tx.json(payload as postgres.JSONValue)})`
 }
 

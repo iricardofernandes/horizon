@@ -85,6 +85,7 @@ one means writing a new ADR that supersedes it.
 | [0050](0050-fiscal-authorizer-follows-issuer-jurisdiction.md) | The NF-e authorizer follows the issuer's jurisdiction |
 | [0051](0051-supplier-xml-is-evidence-not-an-operational-fact.md) | A supplier NF-e is evidence, not an operational fact |
 | [0052](0052-returns-and-complements-are-linked-documents.md) | Returns and complements are linked documents over owner facts |
+| [0053](0053-nfce-is-a-separate-model-over-the-sales-shipment.md) | NFC-e is a separate model over the same Sales shipment |
 
 ## Frontend
 

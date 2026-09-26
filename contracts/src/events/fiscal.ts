@@ -220,3 +220,55 @@ export const fiscalLinkedDocumentOutcome = defineEvent({
     }),
   ]),
 })
+
+const consumerOutcomeFact = {
+  documentId: uuidSchema,
+  rootDocumentId: uuidSchema,
+  revision: z.number().int().positive(),
+  source: z.strictObject({
+    module: z.literal('sales'),
+    documentType: z.literal('shipment'),
+    id: uuidSchema,
+  }),
+  correlations: z.array(
+    z.strictObject({
+      module: z.enum(['inventory', 'financial']),
+      sourceEvent: z.literal('sales.shipment.dispatched'),
+      correlationId: uuidSchema,
+    }),
+  ),
+  model: z.literal('65'),
+  environment: z.literal('simulation'),
+  simulated: z.literal(true),
+  adapterVersion: z.string().min(1).max(80),
+  statusDigest: sha256Schema,
+  observedAt: instantSchema,
+}
+
+export const fiscalConsumerDocumentOutcome = defineEvent({
+  type: 'fiscal.consumer-document.simulation-outcome',
+  version: 1,
+  description:
+    'The deterministic simulator decided an NFC-e model 65 for one Sales shipment to a final consumer. The sale keeps one stock and one money effect, both from `sales.shipment.dispatched` (`correlations`); this fact never creates, repeats or reverses one. It carries no access key, QR code, XML or consumer data.',
+  payload: z.discriminatedUnion('outcome', [
+    z.strictObject({
+      ...consumerOutcomeFact,
+      outcome: z.literal('authorized'),
+      authorityReference: z.string().min(1).max(256),
+      protocolDigest: sha256Schema,
+    }),
+    z.strictObject({
+      ...consumerOutcomeFact,
+      outcome: z.literal('rejected'),
+      authorityReference: z.string().min(1).max(256).nullable(),
+      rejectionCode: z.string().min(1).max(40),
+      protocolDigest: sha256Schema.nullable(),
+    }),
+    z.strictObject({
+      ...consumerOutcomeFact,
+      outcome: z.literal('cancelled'),
+      authorityReference: z.string().min(1).max(256),
+      protocolDigest: sha256Schema,
+    }),
+  ]),
+})

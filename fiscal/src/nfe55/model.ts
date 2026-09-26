@@ -1,17 +1,18 @@
 import { z } from 'zod'
 import { isValidNfeAccessKey } from './access-key'
 
-const text = (minimum: number, maximum: number) => z.string().trim().min(minimum).max(maximum)
-const taxId = z
+export const text = (minimum: number, maximum: number) =>
+  z.string().trim().min(minimum).max(maximum)
+export const taxId = z
   .string()
   .trim()
   .transform((value) => value.toUpperCase().replace(/[.\-/\s]/g, ''))
   .pipe(z.string().regex(/^[0-9A-Z]{12}[0-9]{2}$/))
-const decimal2 = z.string().regex(/^(?:0|[1-9]\d{0,12})\.\d{2}$/)
+export const decimal2 = z.string().regex(/^(?:0|[1-9]\d{0,12})\.\d{2}$/)
 const decimal4 = z.string().regex(/^(?:0|[1-9]\d{0,10})(?:\.\d{1,4})?$/)
 const rate = z.string().regex(/^(?:0|[1-9]\d{0,2})\.\d{2,4}$/)
 
-const addressSchema = z.strictObject({
+export const addressSchema = z.strictObject({
   street: text(2, 60),
   number: text(1, 60),
   complement: text(1, 60).nullable().default(null),
@@ -22,14 +23,14 @@ const addressSchema = z.strictObject({
   postalCode: z.string().regex(/^\d{8}$/),
 })
 
-const partySchema = z.strictObject({
+export const partySchema = z.strictObject({
   taxId,
   legalName: text(2, 60),
   stateRegistration: text(2, 14),
   address: addressSchema,
 })
 
-const lineSchema = z.strictObject({
+export const lineSchema = z.strictObject({
   number: z.number().int().min(1).max(990),
   productCode: text(1, 60),
   description: text(1, 120),
@@ -54,6 +55,19 @@ const lineSchema = z.strictObject({
   }),
 })
 
+export const totalsSchema = z.strictObject({
+  products: decimal2,
+  discounts: decimal2,
+  other: decimal2,
+  invoice: decimal2,
+  ibsUf: decimal2,
+  ibsMunicipal: decimal2,
+  ibs: decimal2,
+  cbs: decimal2,
+  ibsCbsBase: decimal2,
+  invoiceWithIbsCbs: decimal2,
+})
+
 export const nfe55DataSchema = z
   .strictObject({
     accessKey: z.string().refine(isValidNfeAccessKey, 'invalid NF-e access key'),
@@ -75,18 +89,7 @@ export const nfe55DataSchema = z
     issuer: partySchema,
     recipient: partySchema,
     lines: z.array(lineSchema).min(1).max(990),
-    totals: z.strictObject({
-      products: decimal2,
-      discounts: decimal2,
-      other: decimal2,
-      invoice: decimal2,
-      ibsUf: decimal2,
-      ibsMunicipal: decimal2,
-      ibs: decimal2,
-      cbs: decimal2,
-      ibsCbsBase: decimal2,
-      invoiceWithIbsCbs: decimal2,
-    }),
+    totals: totalsSchema,
   })
   .superRefine((value, context) => {
     if (value.accessKey.slice(20, 22) !== '55')
@@ -135,7 +138,10 @@ export const nfe55DataSchema = z
 export type Nfe55Data = z.infer<typeof nfe55DataSchema>
 export type Nfe55DataInput = z.input<typeof nfe55DataSchema>
 
-function reconcile(value: z.infer<typeof nfe55DataSchema>, context: z.RefinementCtx): void {
+type TotalsFacts = Pick<z.infer<typeof nfe55DataSchema>, 'lines' | 'totals'>
+
+/** Checks that the frozen totals add up from the lines; shared by models 55 and 65. */
+export function reconcile(value: TotalsFacts, context: z.RefinementCtx): void {
   const sum = (members: string[]) => members.reduce((total, member) => total + cents(member), 0n)
   const checks: Array<[path: string, actual: string, expected: bigint]> = [
     ['products', value.totals.products, sum(value.lines.map((line) => line.gross))],
@@ -172,6 +178,6 @@ function reconcile(value: z.infer<typeof nfe55DataSchema>, context: z.Refinement
       })
 }
 
-function cents(value: string): bigint {
+export function cents(value: string): bigint {
   return BigInt(value.replace('.', ''))
 }

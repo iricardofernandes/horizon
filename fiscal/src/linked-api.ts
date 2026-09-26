@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
   fiscalCorrectionLetterRequestSchema,
-  fiscalDocumentKindCatalogueSchema,
+  fiscalDocumentKindCatalogueV2Schema,
   fiscalLinkedOriginRequestSchema,
 } from '@horizon/contracts'
 import { z } from 'zod'
@@ -33,7 +33,7 @@ export async function handleLinkedRoute(
     json(
       response,
       200,
-      fiscalDocumentKindCatalogueSchema.parse({ kinds: DOCUMENT_KINDS, eventFlows: EVENT_FLOWS }),
+      fiscalDocumentKindCatalogueV2Schema.parse({ kinds: DOCUMENT_KINDS, eventFlows: EVENT_FLOWS }),
     )
     return true
   }

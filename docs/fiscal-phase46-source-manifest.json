@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "phase": 46,
+  "retrievedAt": "2026-09-26T16:20:00.000Z",
+  "authority": "Portal Nacional da Nota Fiscal Eletrônica",
+  "selection": {
+    "documentModel": "65",
+    "environment": "simulation",
+    "jurisdiction": "SP",
+    "operation": "consumer-sale",
+    "adapterVersion": "nfce65-simulator-v1",
+    "schemaRelease": "PL_010f_v1.04",
+    "layoutVersion": "4.00",
+    "qrCodeVersion": "3",
+    "reason": "PL 010f v1.04 (pinned in Phase 42) carries the model-65 document schema and the QR code v3 patterns. NT 2025.001 v1.02 defines the QR code v3 layout, the synchronous single-document authorization and the NFC-e emission delay. The DANFE NFC-e manual v6.0 defines the auxiliary document. The workspace owner authorized this simulation-only interpretation provisionally and deferred the comprehensive Fiscal review until the Fiscal program is complete.",
+    "fiscalReviewStatus": "workspace-owner-provisionally-approved",
+    "capabilityActivation": "simulation-only-allowed-after-local-executable-gates",
+    "notPinned": [
+      "ENCAT per-UF QR code and key-query URLs (http://nfce.encat.org/desenvolvedor/qrcode/)",
+      "NFC-e authorizer endpoints per UF",
+      "MOC Anexo IV - Manual de Contingência NFC-e",
+      "UF legislation on the NFC-e cancellation window"
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "nfe-nt-2025.001-v1.02",
+      "kind": "technical-note",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=3NLMgy80wTE%3D",
+      "publishedOn": "2025-09-02",
+      "storagePath": ".artifacts/fiscal/nfe/44b71f16bf1196f35efe0f8645d7992305b37506ffd2e44fe7fb3350616a930d/nt-2025.001-v1.02.pdf",
+      "byteSize": 1027385,
+      "sha256": "44b71f16bf1196f35efe0f8645d7992305b37506ffd2e44fe7fb3350616a930d"
+    },
+    {
+      "id": "nfce-danfe-qrcode-manual-v6.0",
+      "kind": "manual",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=k%2FIuuaW4YiY%3D",
+      "publishedOn": "2025-03",
+      "storagePath": ".artifacts/fiscal/nfe/bf906cc212f1edd19b1df7d1cdf4fbf5e73c3fec77567b6e69fa74453c95db5e/danfe-nfce-qrcode-v6.0.pdf",
+      "byteSize": 1887904,
+      "sha256": "bf906cc212f1edd19b1df7d1cdf4fbf5e73c3fec77567b6e69fa74453c95db5e"
+    },
+    {
+      "id": "nfe-pl-010f-v1.04",
+      "kind": "schema-package",
+      "sourceUrl": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=8ITFuBLltXs%3D",
+      "storagePath": "fiscal/fixtures/official/pl-010f-v1.04.zip",
+      "byteSize": 41682,
+      "sha256": "b8589490a58a09a993a80e6ac4d7ed10f20892061ecfc56719337098d4b95998"
+    }
+  ]
+}

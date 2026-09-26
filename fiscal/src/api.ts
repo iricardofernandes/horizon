@@ -3,27 +3,28 @@ import {
   fiscalArtifactListV2Schema,
   fiscalCapabilityListV2Schema,
   fiscalCorrectionRequestSchema,
-  fiscalDocumentCreateRequestSchema,
-  fiscalDocumentV2Schema,
+  fiscalDocumentCreateRequestV2Schema,
+  fiscalDocumentV3Schema,
   fiscalManualOriginRequestSchema,
 } from '@horizon/contracts'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
 import { type FiscalPermission, type FiscalPrincipal, type FiscalTokenVerifier, may } from './auth'
 import type { FiscalCalculations } from './calculations'
-import type { FiscalCancellation } from './cancellation'
+import { CancellationWindowElapsed, type FiscalCancellation } from './cancellation'
 import { canonicalDigest } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
 import type { FiscalDispatch } from './dispatch'
 import { supportedKind } from './document-kinds'
-import type { FiscalDocuments } from './documents'
+import { type FiscalDocuments, FiscalModelConflict } from './documents'
 import type { FiscalEstablishmentCredentials } from './establishment-credentials'
 import { handleInboundRoute, type InboundDependencies } from './inbound-api'
 import type { FiscalIssuance } from './issuance'
 import { handleLinkedRoute, type LinkedDependencies } from './linked-api'
 import type { FiscalLinkedOrigins } from './linked-origins'
 import type { FiscalManualOrigins } from './manual-origins'
-import type { FiscalReadiness } from './readiness'
+import { ReadinessStale } from './nfce65/build'
+import { ConsumerNotEligible, type FiscalReadiness } from './readiness'
 import type { FiscalRuleStore } from './rule-store'
 
 export type FiscalServerDependencies = {
@@ -296,17 +297,25 @@ async function handle(
       return
     }
     try {
-      const body = fiscalDocumentCreateRequestSchema.parse(await readJson(request))
+      const body = fiscalDocumentCreateRequestV2Schema.parse(await readJson(request))
       const origin = body.origin
+      // An NFC-e is a consumer sale: only a Sales intent can become one.
+      if (body.model === '65' && origin.kind !== 'sales')
+        throw new Error('Fiscal capability is unsupported for model 65 without a Sales origin')
       const linkedKind =
         origin.kind === 'linked'
           ? await dependencies.linked?.origins.kindOf(principal.tenantId, origin.linkedOriginId)
           : null
       if (origin.kind === 'linked' && !linkedKind) throw new Error('Fiscal linked origin not found')
-      const operation = linkedKind ? supportedKind(linkedKind).operation : 'normal-sale'
+      const operation =
+        body.model === '65'
+          ? supportedKind('consumer-sale').operation
+          : linkedKind
+            ? supportedKind(linkedKind).operation
+            : 'normal-sale'
       const active = (await dependencies.capabilities.listActive(principal.tenantId)).some(
         (capability) =>
-          capability.model === '55' &&
+          capability.model === body.model &&
           capability.environment === 'simulation' &&
           capability.establishmentId === body.establishmentId &&
           capability.jurisdictionKind === 'uf' &&
@@ -329,7 +338,7 @@ async function handle(
             ? await dependencies.documents.createDraft({
                 tenantId: principal.tenantId,
                 intentId: origin.intentId,
-                model: '55',
+                model: body.model,
                 environment: 'simulation',
                 establishmentId: body.establishmentId,
                 series: body.series,
@@ -348,6 +357,19 @@ async function handle(
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof SyntaxError)
         problem(response, 400, 'Bad Request', 'Invalid fiscal draft request')
+      else if (
+        error instanceof FiscalModelConflict ||
+        ((error as { code?: string }).code === '23514' &&
+          String((error as Error).message).includes('keeps the model'))
+      )
+        lifecycleProblem(
+          response,
+          409,
+          'MODEL_CONFLICT',
+          error instanceof FiscalModelConflict
+            ? error.message
+            : 'Fiscal sale already has a document of the other model',
+        )
       else if (error instanceof Error && error.message.startsWith('Conflicting fiscal'))
         problem(response, 409, 'Conflict', error.message)
       else if (error instanceof Error && error.message.includes('capability'))
@@ -432,7 +454,7 @@ async function handle(
       json(
         response,
         200,
-        fiscalDocumentV2Schema.parse({
+        fiscalDocumentV3Schema.parse({
           ...found,
           fiscalValue: false,
           statusUrl: `/fiscal/documents/${found.id}/v2`,
@@ -507,6 +529,8 @@ async function handle(
     } catch (error) {
       if (error instanceof Error && error.message === 'Fiscal document not found')
         problem(response, 404, 'Not Found', error.message)
+      else if (error instanceof ConsumerNotEligible)
+        lifecycleProblem(response, 422, error.code, error.message)
       else if (error instanceof Error && error.message === 'Fiscal capability is unsupported')
         lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
       else if (error instanceof Error && error.message.includes('does not reconcile'))
@@ -547,6 +571,8 @@ async function handle(
         problem(response, 404, 'Not Found', error.message)
       else if (error instanceof Error && error.message === 'Fiscal document is not ready')
         lifecycleProblem(response, 409, 'DOCUMENT_NOT_READY', error.message)
+      else if (error instanceof ReadinessStale)
+        lifecycleProblem(response, 409, error.code, error.message)
       else if (error instanceof Error && error.message.includes('capability'))
         lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
       else if (error instanceof Error && error.message.startsWith('Conflicting'))
@@ -661,6 +687,8 @@ async function handle(
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof SyntaxError)
         problem(response, 422, 'Unprocessable Content', 'Invalid cancellation request')
+      else if (error instanceof CancellationWindowElapsed)
+        lifecycleProblem(response, 409, error.code, error.message)
       else if (error instanceof Error && error.message === 'Fiscal document not found')
         problem(response, 404, 'Not Found', error.message)
       else if (error instanceof Error && error.message.startsWith('Conflicting'))

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { NFCE_PAYMENT_METHODS } from '../nfce65/model'
 
 /** Reviewed mapping of frozen commercial items to NF-e issuance fields. */
 export const nfe55IssuanceProfileSchema = z.strictObject({
@@ -19,6 +20,21 @@ export const nfe55IssuanceProfileSchema = z.strictObject({
         natureOperation: z.string().min(1).max(60),
       }),
     )
+    .optional(),
+  /** The reviewed NFC-e model 65 facts, bound to its own capability row. */
+  consumer: z
+    .strictObject({
+      capabilityId: z.uuid(),
+      natureOperation: z.string().min(1).max(60),
+      /** `indPres`: 1 in person, 4 home delivery. */
+      presence: z.enum(['1', '4']),
+      payment: z.strictObject({
+        indicator: z.enum(['0', '1']),
+        method: z.enum(NFCE_PAYMENT_METHODS),
+      }),
+      /** Counted from the authorization protocol; a legal window is part of the review. */
+      cancellationWindowMinutes: z.number().int().min(1).max(10_080),
+    })
     .optional(),
   lineFacts: z.record(
     z.uuid(),

@@ -154,12 +154,39 @@ export const fiscalDocumentV2Schema = z.discriminatedUnion('environment', [
   }),
 ])
 
+/** The document model: NF-e 55, or NFC-e 65 for a consumer sale from a Sales intent. */
+export const fiscalDocumentModelSchema = z.enum(['55', '65'])
+
+/** Version 2 lets a Sales intent become an NFC-e model 65; version 1 stays model 55. */
+export const fiscalDocumentCreateRequestV2Schema = fiscalDocumentCreateRequestSchema.extend({
+  model: fiscalDocumentModelSchema,
+})
+
+/** Version 3 reads documents of either model; a model 55 document still satisfies v2. */
+export const fiscalDocumentV3Schema = z.discriminatedUnion('environment', [
+  fiscalDocumentV2Base.extend({
+    model: fiscalDocumentModelSchema,
+    environment: z.literal('simulation'),
+    simulated: z.literal(true),
+  }),
+  fiscalDocumentV2Base.extend({
+    model: z.literal('55'),
+    environment: z.literal('homologation'),
+    simulated: z.literal(false),
+  }),
+])
+
 export const fiscalReadyDocumentSchema = z.strictObject({
   document: fiscalDocumentSchema,
   inputDigest: sha256Schema,
   rulesDigest: sha256Schema,
   resultDigest: sha256Schema,
   reconciliationDigest: sha256Schema,
+})
+
+/** Version 2 carries a ready document of either model. */
+export const fiscalReadyDocumentV2Schema = fiscalReadyDocumentSchema.extend({
+  document: fiscalDocumentSchema.extend({ model: fiscalDocumentModelSchema }),
 })
 
 export const fiscalCommandAcceptedSchema = z.strictObject({

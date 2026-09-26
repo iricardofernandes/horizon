@@ -3,7 +3,13 @@ import { z } from 'zod'
 import type { FiscalCalculations } from './calculations'
 import { canonicalDigest } from './canonical-json'
 import type { FiscalCapabilities } from './capabilities'
-import { PHASE45_FIXTURES, PHASE45_SCENARIOS, supportedKind } from './document-kinds'
+import {
+  PHASE45_FIXTURES,
+  PHASE45_SCENARIOS,
+  PHASE46_FIXTURE,
+  PHASE46_SCENARIO,
+  supportedKind,
+} from './document-kinds'
 import type { FiscalDocuments } from './documents'
 import { jurisdictionOfAddress } from './nfe55/jurisdiction'
 import { type FiscalOriginSnapshot, parseFiscalOriginSnapshot } from './origin-snapshot'
@@ -22,6 +28,11 @@ type ReadyResult = Extract<FiscalCalculationOutcome, { supported: true }> & {
   reconciliationDigest: string
 }
 type ReadyOutcome = ReadyResult | Exclude<FiscalCalculationOutcome, { supported: true }>
+
+/** The recipient cannot receive an NFC-e: it is not a final, non-contributor consumer. */
+export class ConsumerNotEligible extends Error {
+  readonly code = 'CONSUMER_NOT_ELIGIBLE'
+}
 
 /** Derives readiness exclusively from the frozen Sales origin and historical projections. */
 export class FiscalReadiness {
@@ -57,7 +68,12 @@ export class FiscalReadiness {
     if (!document) throw new Error('Fiscal document not found')
     if (document.status !== 'draft' && document.status !== 'ready')
       throw new Error('Fiscal document is not a draft')
-    if (document.model !== '55' || document.environment !== environment)
+    const nfce = document.model === '65'
+    if (
+      (document.model !== '55' && !nfce) ||
+      document.environment !== environment ||
+      (nfce && environment !== 'simulation')
+    )
       throw new Error('Fiscal capability is unsupported')
 
     const snapshot = parseFiscalOriginSnapshot(
@@ -73,8 +89,19 @@ export class FiscalReadiness {
     const linked =
       snapshot.originModule === 'fiscal' && snapshot.purpose === 'linked' ? snapshot : null
     if (linked && environment !== 'simulation') throw new Error('Fiscal capability is unsupported')
-    const operation = linked ? supportedKind(linked.kind).operation : 'normal-sale'
-    const fixture = linked ? PHASE45_FIXTURES[linked.kind] : PHASE41_FIXTURE_ID
+    // An NFC-e is only ever a Sales consumer sale.
+    if (nfce && snapshot.originModule !== 'sales')
+      throw new Error('Fiscal capability is unsupported')
+    const operation = nfce
+      ? supportedKind('consumer-sale').operation
+      : linked
+        ? supportedKind(linked.kind).operation
+        : 'normal-sale'
+    const fixture = nfce
+      ? PHASE46_FIXTURE
+      : linked
+        ? PHASE45_FIXTURES[linked.kind]
+        : PHASE41_FIXTURE_ID
 
     // The establishment's registered address decides the UF; a capability only
     // applies when it was reviewed for that same jurisdiction.
@@ -82,7 +109,7 @@ export class FiscalReadiness {
       environment === 'simulation'
         ? (await this.capabilities.listActive(command.tenantId)).filter(
             (candidate) =>
-              candidate.model === '55' &&
+              candidate.model === document.model &&
               candidate.environment === 'simulation' &&
               candidate.establishmentId === document.establishmentId &&
               candidate.jurisdictionKind === 'uf' &&
@@ -126,6 +153,14 @@ export class FiscalReadiness {
     if (!recipient) throw new Error('Recipient fiscal projection is unavailable')
     if (manual && recipient.revision !== manual.recipientProfileRevision)
       throw new Error('Fiscal manual recipient revision is no longer effective')
+    if (
+      nfce &&
+      (!recipient.profile.finalConsumer ||
+        recipient.profile.taxpayerIndicator !== 'non-contributor')
+    )
+      throw new ConsumerNotEligible(
+        'An NFC-e needs a final consumer who is not an ICMS contributor; issue an NF-e instead',
+      )
 
     const classifications = new Map<
       string,
@@ -153,6 +188,7 @@ export class FiscalReadiness {
       snapshot,
       classifications,
       environment,
+      model: nfce ? '65' : '55',
     })
     const preview = await this.calculations.preview(calculationInput)
     if (!preview.supported) return preview
@@ -192,6 +228,7 @@ function deriveCalculationInput(input: {
     NonNullable<Awaited<ReturnType<FiscalProjections['resolveClassification']>>>
   >
   environment: 'simulation' | 'homologation'
+  model: '55' | '65'
 }): FiscalCalculationInput {
   const issuerAddress = input.issuer.company.address
   const recipientAddress = input.recipient.profile.address
@@ -229,9 +266,10 @@ function deriveCalculationInput(input: {
     issuerProfileRevision: input.issuer.revision,
     recipientPartyId: input.recipient.partyId,
     recipientProfileRevision: input.recipient.revision,
-    model: '55',
+    model: input.model,
     environment: input.environment,
-    operation: linkedFacts?.operation ?? PHASE41_SCENARIO_ID,
+    operation:
+      linkedFacts?.operation ?? (input.model === '65' ? PHASE46_SCENARIO : PHASE41_SCENARIO_ID),
     purpose: linkedFacts?.purpose ?? 'normal',
     ...(linkedFacts?.referencedDocumentId
       ? { referencedDocumentId: linkedFacts.referencedDocumentId }
@@ -242,7 +280,7 @@ function deriveCalculationInput(input: {
       municipalityCode: issuer.municipalityCode,
     },
     recipient: {
-      regime: 'normal',
+      regime: input.model === '65' ? 'final-consumer' : 'normal',
       stateCode: recipient.ufCode,
       municipalityCode: recipient.municipalityCode,
       taxpayer: input.recipient.profile.taxpayerIndicator === 'contributor',

@@ -18,6 +18,9 @@ export const fiscalDocumentKindSchema = z.enum([
   'adjustment',
   'credit-note',
   'debit-note',
+  'consumer-sale',
+  'counter-sale',
+  'consumer-sale-offline',
 ])
 
 /** The kinds a linked origin can be created for. */
@@ -50,6 +53,15 @@ export const fiscalDocumentKindCatalogueSchema = z.strictObject({
       flows: z.array(z.enum(['cancellation', 'correction-letter'])),
     }),
   ),
+})
+
+/** Version 2 catalogues the kinds of every model, NFC-e 65 included. */
+export const fiscalDocumentKindEntryV2Schema = fiscalDocumentKindEntrySchema.extend({
+  model: z.enum(['55', '65']),
+})
+
+export const fiscalDocumentKindCatalogueV2Schema = fiscalDocumentKindCatalogueSchema.extend({
+  kinds: z.array(fiscalDocumentKindEntryV2Schema),
 })
 
 export const fiscalLinkedOriginRequestSchema = z.discriminatedUnion('kind', [
@@ -87,6 +99,14 @@ export const fiscalLinkedProblemCodeSchema = z.enum([
   'REFERENCE_INCOMPLETE',
   'QUANTITY_EXCEEDED',
   'LINKED_ORIGIN_CONFLICT',
+])
+
+/** Stable codes for model 65 refusals. */
+export const fiscalConsumerProblemCodeSchema = z.enum([
+  'MODEL_CONFLICT',
+  'CONSUMER_NOT_ELIGIBLE',
+  'CANCELLATION_WINDOW_ELAPSED',
+  'READINESS_STALE',
 ])
 
 const correlationSchema = z.strictObject({
@@ -161,8 +181,9 @@ export const fiscalCorrectionLetterListSchema = z.strictObject({
 
 export type FiscalDocumentKind = z.infer<typeof fiscalDocumentKindSchema>
 export type FiscalLinkedKind = z.infer<typeof fiscalLinkedKindSchema>
-export type FiscalDocumentKindEntry = z.infer<typeof fiscalDocumentKindEntrySchema>
+export type FiscalDocumentKindEntry = z.infer<typeof fiscalDocumentKindEntryV2Schema>
 export type FiscalLinkedOriginRequest = z.infer<typeof fiscalLinkedOriginRequestSchema>
 export type FiscalDocumentLinks = z.infer<typeof fiscalDocumentLinksSchema>
 export type FiscalCorrectionLetter = z.infer<typeof fiscalCorrectionLetterSchema>
 export type FiscalLinkedProblemCode = z.infer<typeof fiscalLinkedProblemCodeSchema>
+export type FiscalConsumerProblemCode = z.infer<typeof fiscalConsumerProblemCodeSchema>

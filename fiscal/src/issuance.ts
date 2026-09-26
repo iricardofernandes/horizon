@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import postgres from 'postgres'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
@@ -6,6 +5,12 @@ import type { FiscalCalculations } from './calculations'
 import { canonicalDigest } from './canonical-json'
 import type { FiscalDispatch } from './dispatch'
 import type { FiscalDocuments } from './documents'
+import { buildNfce65Data } from './nfce65/build'
+import { renderSimulatedDanfeNfce } from './nfce65/danfe'
+import { signNfce65 } from './nfce65/signature'
+import { serializeNfce65 } from './nfce65/xml'
+import { nfeLines, nfeTotals } from './nfe-lines'
+import { deterministicNumericCode, digits, zonedInstant } from './nfe-values'
 import { buildNfe55AccessKey } from './nfe55/access-key'
 import { renderSimulatedDanfe } from './nfe55/danfe'
 import { type Nfe55IssuanceProfile, nfe55IssuanceProfileSchema } from './nfe55/issuance-profile'
@@ -25,6 +30,23 @@ const commandSchema = z.strictObject({
 })
 export type Nfe55SimulationProfile = Nfe55IssuanceProfile
 
+type IssuanceFacts = {
+  document: NonNullable<Awaited<ReturnType<FiscalDocuments['get']>>>
+  number: number
+  issuer: NonNullable<Awaited<ReturnType<FiscalProjections['readIssuer']>>>
+  recipient: NonNullable<Awaited<ReturnType<FiscalProjections['readParty']>>>
+  calculation: NonNullable<Awaited<ReturnType<FiscalCalculations['readFrozen']>>>
+  origin: FiscalOriginSnapshot
+}
+
+type Prepared = {
+  accessKey: string
+  unsigned: Buffer
+  signed: Buffer
+  danfe: Buffer
+  danfeSchema: string
+}
+
 /** Prepares exact signed bytes and only then crosses the durable dispatch boundary. */
 export class FiscalIssuance {
   readonly #db: ReturnType<typeof postgres>
@@ -41,6 +63,7 @@ export class FiscalIssuance {
     private readonly credential: SimulationCredential,
     private readonly schemaZip: Buffer,
     private readonly schemaDigest: string,
+    private readonly now: () => Date = () => new Date(),
   ) {
     this.#db = postgres(databaseUrl, { max: 5, connection: { statement_timeout: 10_000 } })
     this.#profile = nfe55IssuanceProfileSchema.parse(profile)
@@ -81,15 +104,24 @@ export class FiscalIssuance {
     const document = await this.documents.get(command.tenantId, command.documentId)
     if (!document) throw new Error('Fiscal document not found')
     if (document.status !== 'ready') throw new Error('Fiscal document is not ready')
-    if (document.model !== '55' || document.environment !== 'simulation')
+    if (
+      (document.model !== '55' && document.model !== '65') ||
+      document.environment !== 'simulation'
+    )
       throw new Error('Fiscal capability is unsupported')
     const evidence = await this.readReadiness(command.tenantId, command.documentId)
-    const profileCapabilities = [
-      this.#profile.capabilityId,
-      ...Object.values(this.#profile.linked ?? {}).map((entry) => entry.capabilityId),
-    ]
+    const profileCapabilities =
+      document.model === '65'
+        ? [this.#profile.consumer?.capabilityId]
+        : [
+            this.#profile.capabilityId,
+            ...Object.values(this.#profile.linked ?? {}).map((entry) => entry.capabilityId),
+          ]
     if (!profileCapabilities.includes(evidence.capabilityId))
       throw new Error('Fiscal simulation profile does not match readiness capability')
+    // A retry after a crash reuses the bytes already bound: an NFC-e is dated when signed.
+    const bound = await this.readBoundArtifacts(command.tenantId, command.documentId)
+    if (bound) return this.queue(command, bound)
     const [issuer, recipient, calculation, snapshot, number] = await Promise.all([
       this.projections.readIssuer(command.tenantId, evidence.issuerProfileRevision),
       this.projections.readParty(
@@ -104,21 +136,13 @@ export class FiscalIssuance {
     if (!issuer || !recipient || !calculation)
       throw new Error('Frozen Fiscal issuance evidence is unavailable')
     const origin = parseFiscalOriginSnapshot(snapshot)
-    const xmlData = buildNfe55Data({
-      document,
-      number,
-      issuer,
-      recipient,
-      calculation,
-      origin,
-      profile: this.#profile,
-      capabilityId: evidence.capabilityId,
-    })
-    const unsigned = serializeNfe55(xmlData)
-    const signed = signNfe55(unsigned, this.credential)
-    verifyNfe55Signature(signed, this.credential.certificate)
+    const facts = { document, number, issuer, recipient, calculation, origin }
+    const prepared =
+      document.model === '65'
+        ? await this.prepareConsumerSale(facts, evidence.capabilityId)
+        : await this.prepareNfe(facts, evidence.capabilityId)
     await validateNfe55Schema({
-      xml: signed,
+      xml: prepared.signed,
       schemaZip: this.schemaZip,
       expectedZipDigest: this.schemaDigest,
     })
@@ -130,7 +154,7 @@ export class FiscalIssuance {
         mediaType: 'application/xml',
         sourceSchema: `PL_010f:${this.schemaDigest}`,
       },
-      unsigned,
+      prepared.unsigned,
     )
     const signedArtifact = await this.artifacts.put(
       {
@@ -140,7 +164,7 @@ export class FiscalIssuance {
         mediaType: 'application/xml',
         sourceSchema: `PL_010f:${this.schemaDigest}`,
       },
-      signed,
+      prepared.signed,
     )
     await this.artifacts.put(
       {
@@ -148,33 +172,94 @@ export class FiscalIssuance {
         documentId: command.documentId,
         kind: 'danfe',
         mediaType: 'application/pdf',
-        sourceSchema: 'horizon-danfe-preview-v1',
+        sourceSchema: prepared.danfeSchema,
       },
-      await renderSimulatedDanfe({ signedXml: signed, state: 'preview' }),
+      prepared.danfe,
     )
     await this.bindIssuance({
       ...command,
       capabilityId: evidence.capabilityId,
-      accessKey: xmlData.accessKey,
+      accessKey: prepared.accessKey,
       reconciliationDigest: evidence.reconciliationDigest,
       signedXmlDigest: signedArtifact.digest,
     })
+    return this.queue(command, {
+      accessKey: prepared.accessKey,
+      unsignedXmlDigest: unsignedArtifact.digest,
+      signedXmlDigest: signedArtifact.digest,
+    })
+  }
+
+  private async prepareNfe(facts: IssuanceFacts, capabilityId: string): Promise<Prepared> {
+    const xmlData = buildNfe55Data({ ...facts, profile: this.#profile, capabilityId })
+    const unsigned = serializeNfe55(xmlData)
+    const signed = signNfe55(unsigned, this.credential)
+    verifyNfe55Signature(signed, this.credential.certificate)
+    return {
+      accessKey: xmlData.accessKey,
+      unsigned,
+      signed,
+      danfe: await renderSimulatedDanfe({ signedXml: signed, state: 'preview' }),
+      danfeSchema: 'horizon-danfe-preview-v1',
+    }
+  }
+
+  /** NFC-e model 65: its own builder, QR code, signature placement and DANFE NFC-e. */
+  private async prepareConsumerSale(facts: IssuanceFacts, capabilityId: string): Promise<Prepared> {
+    const xmlData = buildNfce65Data({
+      ...facts,
+      profile: this.#profile,
+      capabilityId,
+      issuedAt: zonedInstant(this.now().toISOString(), facts.issuer.timezone),
+    })
+    const unsigned = serializeNfce65(xmlData)
+    const signed = signNfce65(unsigned, this.credential)
+    verifyNfe55Signature(signed, this.credential.certificate)
+    return {
+      accessKey: xmlData.accessKey,
+      unsigned,
+      signed,
+      danfe: await renderSimulatedDanfeNfce({ signedXml: signed, state: 'preview' }),
+      danfeSchema: 'horizon-danfe-nfce-preview-v1',
+    }
+  }
+
+  private async queue(
+    command: z.infer<typeof commandSchema>,
+    bound: { accessKey: string; unsignedXmlDigest: string; signedXmlDigest: string },
+  ) {
     const requestDigest = canonicalDigest({
       documentId: command.documentId,
-      accessKey: xmlData.accessKey,
-      signedXmlDigest: signedArtifact.digest,
+      accessKey: bound.accessKey,
+      signedXmlDigest: bound.signedXmlDigest,
     })
     const queued = await this.dispatch.queueIssuance({
       ...command,
       requestDigest,
-      artifactDigest: signedArtifact.digest,
+      artifactDigest: bound.signedXmlDigest,
     })
+    return { ...queued, ...bound, simulated: true as const }
+  }
+
+  private async readBoundArtifacts(tenantId: string, documentId: string) {
+    const rows = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select binding.access_key, binding.signed_xml_digest, unsigned.digest as unsigned_digest
+        from fiscal_document_issuance_bindings binding
+        join lateral (
+          select artifact.digest from fiscal_artifacts artifact
+          where artifact.tenant_id = binding.tenant_id and artifact.document_id = binding.document_id
+            and artifact.kind = 'unsigned_xml'
+          order by artifact.created_at desc, artifact.id desc limit 1
+        ) unsigned on true
+        where binding.tenant_id = ${tenantId} and binding.document_id = ${documentId}`
+    })
+    const [row] = rows
+    if (!row) return null
     return {
-      ...queued,
-      accessKey: xmlData.accessKey,
-      unsignedXmlDigest: unsignedArtifact.digest,
-      signedXmlDigest: signedArtifact.digest,
-      simulated: true as const,
+      accessKey: String(row.access_key),
+      unsignedXmlDigest: String(row.unsigned_digest),
+      signedXmlDigest: String(row.signed_xml_digest),
     }
   }
 
@@ -283,52 +368,12 @@ export function buildNfe55Data(input: {
     number: input.number,
     numericCode,
   })
-  const calculated = new Map(input.calculation.result.lines.map((line) => [line.lineId, line]))
-  const lines = input.origin.lines.map((originLine, index) => {
-    const facts = input.profile.lineFacts[originLine.itemId]
-    const line = calculated.get(originLine.lineId)
-    if (!facts || !line) throw new Error('NF-e line facts are incomplete')
-    const components = new Map(
-      line.components.ibsCbs.map((component) => [component.code, component]),
-    )
-    const cbs = components.get('CBS')
-    const ibsUf = components.get('IBS_UF')
-    const ibsMunicipal = components.get('IBS_MUN')
-    if (!cbs || !ibsUf || !ibsMunicipal)
-      throw new Error('NF-e IBS/CBS calculation components are incomplete')
-    if (cbs.base.amount !== ibsUf.base.amount || cbs.base.amount !== ibsMunicipal.base.amount)
-      throw new Error('NF-e IBS/CBS bases do not reconcile')
-    return {
-      number: index + 1,
-      productCode: facts.productCode,
-      description: originLine.description,
-      ncm: input.calculation.input.lines.find((candidate) => candidate.id === originLine.lineId)
-        ?.classifications.ncm as string,
-      cfop: linkedProfile?.cfop ?? facts.cfop,
-      unit: facts.unit,
-      quantity: decimal4(originLine.quantity),
-      unitPrice: minorToDecimal(originLine.unitPrice.amount),
-      gross: minorToFixed(magnitude(line.gross.amount)),
-      discount: '0.00',
-      other: '0.00',
-      ibsCbs: {
-        cst: facts.ibsCbsCst,
-        classification: facts.ibsCbsClassification,
-        base: minorToFixed(magnitude(cbs.base.amount)),
-        ibsUfRate: percent(ibsUf.rate),
-        ibsUfValue: minorToFixed(magnitude(ibsUf.amount.amount)),
-        ibsMunicipalRate: percent(ibsMunicipal.rate),
-        ibsMunicipalValue: minorToFixed(magnitude(ibsMunicipal.amount.amount)),
-        cbsRate: percent(cbs.rate),
-        cbsValue: minorToFixed(magnitude(cbs.amount.amount)),
-      },
-    }
+  const lines = nfeLines({
+    origin: input.origin,
+    calculation: input.calculation,
+    lineFacts: input.profile.lineFacts,
+    cfop: linkedProfile?.cfop,
   })
-  const sum = (members: string[]) => members.reduce((total, value) => total + BigInt(value), 0n)
-  const ibsUf = sum(lines.map((line) => line.ibsCbs.ibsUfValue.replace('.', '')))
-  const ibsMunicipal = sum(lines.map((line) => line.ibsCbs.ibsMunicipalValue.replace('.', '')))
-  const cbs = sum(lines.map((line) => line.ibsCbs.cbsValue.replace('.', '')))
-  const invoice = BigInt(magnitude(input.calculation.result.totals.net.amount))
   return {
     accessKey,
     processVersion:
@@ -371,78 +416,6 @@ export function buildNfe55Data(input: {
       },
     },
     lines,
-    totals: {
-      products: minorToFixed(magnitude(input.calculation.result.totals.gross.amount)),
-      discounts: minorToFixed(input.calculation.result.totals.discounts.amount),
-      other: minorToFixed(input.calculation.result.totals.charges.amount),
-      invoice: minorToFixed(invoice.toString()),
-      ibsUf: minorToFixed(ibsUf.toString()),
-      ibsMunicipal: minorToFixed(ibsMunicipal.toString()),
-      ibs: minorToFixed((ibsUf + ibsMunicipal).toString()),
-      cbs: minorToFixed(cbs.toString()),
-      ibsCbsBase: minorToFixed(
-        sum(lines.map((line) => line.ibsCbs.base.replace('.', ''))).toString(),
-      ),
-      invoiceWithIbsCbs: minorToFixed((invoice + ibsUf + ibsMunicipal + cbs).toString()),
-    },
+    totals: nfeTotals(lines, input.calculation),
   }
-}
-
-/** A return is calculated as a reversal; the NF-e carries magnitudes and `finNFe` = 4. */
-function magnitude(value: string): string {
-  return value.startsWith('-') ? value.slice(1) : value
-}
-
-function deterministicNumericCode(documentId: string): string {
-  const value = createHash('sha256').update(documentId).digest().readUInt32BE(0) % 100_000_000
-  return String(value).padStart(8, '0')
-}
-
-function minorToDecimal(value: string): string {
-  const fixed = minorToFixed(value)
-  return fixed.replace(/\.00$/, '')
-}
-
-function minorToFixed(value: string): string {
-  if (!/^\d+$/.test(value)) throw new Error('NF-e supports non-negative BRL amounts only')
-  const padded = value.padStart(3, '0')
-  return `${padded.slice(0, -2).replace(/^0+(?=\d)/, '')}.${padded.slice(-2)}`
-}
-
-function decimal4(value: string): string {
-  if (!/^\d+(?:\.\d{1,4})?$/.test(value)) throw new Error('NF-e quantity exceeds four decimals')
-  const [integer, fraction = ''] = value.split('.')
-  return `${integer}.${fraction.padEnd(4, '0')}`
-}
-
-function percent(rate: { numerator: string; denominator: string }): string {
-  const scaled = (BigInt(rate.numerator) * 1_000_000n) / BigInt(rate.denominator)
-  return `${scaled / 10_000n}.${(scaled % 10_000n).toString().padStart(4, '0')}`
-}
-
-function digits(value: string, length: number): string {
-  const normalized = value.replace(/\D/g, '')
-  if (normalized.length !== length) throw new Error('NF-e address code is invalid')
-  return normalized
-}
-
-function zonedInstant(instant: string, timezone: string): string {
-  const date = new Date(instant)
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-    timeZoneName: 'longOffset',
-  })
-  const parts = formatter.formatToParts(date)
-  const member = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value
-  const offset = member('timeZoneName')?.replace('GMT', '')
-  if (!offset || !/^[+-]\d{2}:\d{2}$/.test(offset)) throw new Error('NF-e timezone is invalid')
-  return `${member('year')}-${member('month')}-${member('day')}T${member('hour')}:${member('minute')}:${member('second')}${offset}`
 }

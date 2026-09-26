@@ -88,6 +88,22 @@ establishment's active sale. It prints the `linked` map for
 `FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase45-smoke.mjs` runs the local-stack smoke
 through Kong.
 
+### NFC-e model 65 (Phase 46)
+
+`POST /documents` with `model: '65'` (request version 2) turns a Sales intent into an
+NFC-e draft. The first document of an intent fixes its model (`MODEL_CONFLICT`
+otherwise). Readiness requires a final, non-contributor recipient in the issuer's UF and
+an active `consumer-sale` capability. `src/nfce65/` builds the model 65 XML, the version 3
+QR code, the signature placed after `infNFeSupl` and the 80 mm DANFE NFC-e. The worker
+routes model 65 commands to `DeterministicNfce65Simulator`. Cancellation needs the
+profile's `consumer.cancellationWindowMinutes`
+([ADR 0053](../docs/adr/0053-nfce-is-a-separate-model-over-the-sales-shipment.md)).
+`npm run phase46:rollout -- --tenant <id> --establishment <id> [--evidence-digest <sha256>]`
+imports and reviews the model 65 rules and registers its capability next to the
+establishment's active sale. It prints the `consumer` block for
+`FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase46-smoke.mjs` runs the local-stack smoke
+through Kong.
+
 ## Verification
 
 `npm run test:e2e` starts PostgreSQL, RabbitMQ and MinIO with Testcontainers. It runs the

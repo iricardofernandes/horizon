@@ -1,7 +1,7 @@
 # Fiscal implementation plan — Phase J
 
-Status: Phases 39–42 delivered; 43, 44 and 45 delivered for simulation (2026-09-26);
-46–48 planned. Reviewed against the repository and official technical portals on
+Status: Phases 39–42 delivered; 43, 44, 45 and 46 delivered for simulation (2026-09-26);
+47–48 planned. Reviewed against the repository and official technical portals on
 2026-09-21. This document is the execution plan for phases 39–48 in
 [plan.md](plan.md); it is not a statement that Horizon can legally issue any document.
 
@@ -316,6 +316,8 @@ a reason, and replaying the complete event history yields the same quantities an
 financial links. Unsupported document kinds cannot be issued.
 
 ### 46 — NFC-e model 65 as a separate capability
+
+[Detailed Phase 46 execution plan](fiscal-phase46-implementation-plan.md).
 
 **Work**
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
-import { fiscalDocumentKindCatalogueSchema } from '@horizon/contracts'
+import { fiscalDocumentKindCatalogueV2Schema } from '@horizon/contracts'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { createFiscalServer } from './api'
 import type { FiscalPrincipal } from './auth'
@@ -79,11 +79,21 @@ it('lists every document kind with its support status and the model event flows'
   role = 'viewer'
   const response = await send('GET', '/document-kinds')
   expect(response.status).toBe(200)
-  const catalogue = fiscalDocumentKindCatalogueSchema.parse(await response.json())
+  const catalogue = fiscalDocumentKindCatalogueV2Schema.parse(await response.json())
   expect(catalogue.kinds.find((entry) => entry.kind === 'remittance')).toMatchObject({
     supported: false,
   })
-  expect(catalogue.eventFlows).toContainEqual({ model: '65', flows: [] })
+  // Model 65 has its own cancellation flow and no correction letter.
+  expect(catalogue.eventFlows).toContainEqual({ model: '65', flows: ['cancellation'] })
+  expect(catalogue.kinds.find((entry) => entry.kind === 'consumer-sale')).toMatchObject({
+    model: '65',
+    supported: true,
+    operation: 'consumer-sale',
+  })
+  expect(catalogue.kinds.find((entry) => entry.kind === 'counter-sale')).toMatchObject({
+    model: '65',
+    supported: false,
+  })
 })
 
 it('creates linked origins only with draft permission, a key and a known kind', async () => {

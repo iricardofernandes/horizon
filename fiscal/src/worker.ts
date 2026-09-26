@@ -23,6 +23,8 @@ import { FiscalIssuance } from './issuance'
 import { FiscalIssueWorker } from './issue-worker'
 import { FiscalLinkedOrigins } from './linked-origins'
 import { FiscalManualOrigins } from './manual-origins'
+import { DeterministicNfce65Simulator } from './nfce65/simulator'
+import { nfe55IssuanceProfileSchema } from './nfe55/issuance-profile'
 import { DeterministicNfe55Simulator } from './nfe55/simulator'
 import { FiscalOutboxRelay } from './outbox'
 import { loadPhase43WorkerRuntime } from './phase43-worker-runtime'
@@ -154,6 +156,11 @@ if (config.FISCAL_PHASE42_EVENT_SCHEMA_PATH && !issuance)
   throw new Error('Phase 42 cancellation requires the complete issuance configuration')
 if (config.FISCAL_SIMULATOR_SCENARIO && !issuance)
   throw new Error('A fixed Fiscal simulator scenario requires the complete issuance configuration')
+// The reviewed NFC-e facts travel in the same issuance profile (Phase 46).
+const consumerProfile = issuance
+  ? nfe55IssuanceProfileSchema.parse(JSON.parse(config.FISCAL_SIMULATION_PROFILE_JSON as string))
+      .consumer
+  : undefined
 const cancellation = config.FISCAL_PHASE42_EVENT_SCHEMA_PATH
   ? new FiscalCancellation(
       config.DATABASE_URL,
@@ -166,6 +173,9 @@ const cancellation = config.FISCAL_PHASE42_EVENT_SCHEMA_PATH
       },
       readFileSync(config.FISCAL_PHASE42_EVENT_SCHEMA_PATH),
       '45ceefe4dfbbfec93958283b650a2f1e1734784f4770d070b9907754de081d9b',
+      consumerProfile
+        ? { cancellationWindowMinutes: consumerProfile.cancellationWindowMinutes }
+        : undefined,
     )
   : undefined
 // PL 010f is the same pinned package the Phase 42 issuance validates against.
@@ -239,6 +249,9 @@ const issueWorker = new FiscalIssueWorker(
   artifacts,
   simulator,
   config.FISCAL_SIMULATOR_RETRY_DELAY_MS,
+  new DeterministicNfce65Simulator(
+    fixedSimulatorScenario ? () => fixedSimulatorScenario : undefined,
+  ),
 )
 const outbox = new FiscalOutboxRelay(config.DATABASE_URL, config.RABBITMQ_URL)
 let phase43Runtime: Awaited<ReturnType<typeof loadPhase43WorkerRuntime>> | null = null

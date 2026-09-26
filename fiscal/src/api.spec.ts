@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { createFiscalServer } from './api'
 import type { FiscalPrincipal } from './auth'
+import { CancellationWindowElapsed } from './cancellation'
+import { FiscalModelConflict } from './documents'
 
 const tenantId = randomUUID()
 const documentId = randomUUID()
@@ -19,6 +21,9 @@ let certificateUploadInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
 let activeCapability = false
 let activeHomologationCapability = false
+let activeConsumerCapability = false
+let draftFailure: Error | null = null
+let cancellationFailure: Error | null = null
 let documentEnvironment: 'simulation' | 'homologation' = 'simulation'
 const server = createFiscalServer({
   verifier: {
@@ -73,6 +78,7 @@ const server = createFiscalServer({
     },
     async createDraft(input) {
       if (input.tenantId !== tenantId || !input.actorId) throw new Error('Wrong tenant or actor')
+      if (draftFailure) throw draftFailure
       return { id: documentId, status: 'draft', snapshotDigest: 'a'.repeat(64) }
     },
     async createManualDraft(input) {
@@ -215,6 +221,26 @@ const server = createFiscalServer({
             evidenceDigest: 'c'.repeat(64),
           },
         ]
+      if (activeConsumerCapability)
+        return [
+          {
+            id: randomUUID(),
+            tenantId,
+            model: '65',
+            environment: 'simulation',
+            establishmentId,
+            jurisdictionKind: 'uf',
+            jurisdictionCode: 'SP',
+            operation: 'consumer-sale',
+            adapterVersion: 'nfce65-simulator-v1',
+            sourceManifestDigest: 'a'.repeat(64),
+            schemaPackageDigest: 'b'.repeat(64),
+            calculationFixtureId: 'rtc-v0057-model65-consumer-sale-sp-2026-01',
+            status: 'simulated',
+            activatedAt: '2026-09-26T00:00:00.000Z',
+            evidenceDigest: 'c'.repeat(64),
+          },
+        ]
       return activeCapability
         ? [
             {
@@ -274,6 +300,7 @@ const server = createFiscalServer({
   },
   cancellation: {
     async request(input) {
+      if (cancellationFailure) throw cancellationFailure
       cancellationInput = input
       return {
         commandId: randomUUID(),
@@ -798,3 +825,70 @@ function calculationResult() {
     explanation: { templateVersion: 'fiscal-explanation-v1', text: 'Illustrative explanation' },
   }
 }
+
+it('creates an NFC-e draft only from a Sales intent under its own model 65 capability', async () => {
+  role = 'issuer'
+  const post = (body: unknown) =>
+    fetch(`${base}/documents`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer test',
+        'content-type': 'application/json',
+        'idempotency-key': randomUUID(),
+      },
+      body: JSON.stringify(body),
+    })
+  const sale = {
+    origin: { kind: 'sales', intentId: randomUUID() },
+    model: '65',
+    environment: 'simulation',
+    establishmentId,
+    series: 1,
+  }
+  try {
+    // A model 55 capability does not cover model 65.
+    activeCapability = true
+    expect((await post(sale)).status).toBe(409)
+    activeCapability = false
+    activeConsumerCapability = true
+    expect((await post(sale)).status).toBe(201)
+    const manual = await post({ ...sale, origin: { kind: 'manual', manualOriginId } })
+    expect(manual.status).toBe(409)
+    expect(await manual.json()).toMatchObject({ code: 'CAPABILITY_UNSUPPORTED' })
+    draftFailure = new FiscalModelConflict('55')
+    const conflict = await post(sale)
+    expect(conflict.status).toBe(409)
+    expect(await conflict.json()).toMatchObject({ code: 'MODEL_CONFLICT' })
+    draftFailure = Object.assign(
+      new Error('A Sales intent keeps the model of its first fiscal document'),
+      { code: '23514' },
+    )
+    expect(await (await post(sale)).json()).toMatchObject({ code: 'MODEL_CONFLICT' })
+  } finally {
+    draftFailure = null
+    activeCapability = false
+    activeConsumerCapability = false
+    role = 'viewer'
+  }
+})
+
+it('reports an elapsed NFC-e cancellation window with a stable code', async () => {
+  role = 'issuer'
+  cancellationFailure = new CancellationWindowElapsed(30)
+  try {
+    const response = await fetch(`${base}/documents/${documentId}/cancellation-requests`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer test',
+        'content-type': 'application/json',
+        'idempotency-key': randomUUID(),
+      },
+      body: JSON.stringify({ reason: 'Consumidor desistiu da compra no caixa' }),
+    })
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ code: 'CANCELLATION_WINDOW_ELAPSED' })
+  } finally {
+    cancellationFailure = null
+    role = 'viewer'
+  }
+})

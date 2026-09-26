@@ -21,6 +21,30 @@ const commandSchema = z.strictObject({
   reason: z.string().trim().min(15).max(255),
 })
 
+const nfeProtocolSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  simulated: z.literal(true),
+  commandId: z.uuid(),
+  statusCode: z.literal('100'),
+  status: z.literal('authorized'),
+  protocolNumber: z.string().regex(/^[0-9]{15}$/),
+  providerCorrelation: z.string(),
+})
+
+/** The model 65 simulator also records when it authorized, for the window. */
+const nfceProtocolSchema = nfeProtocolSchema.extend({
+  model: z.literal('65'),
+  authorizedAt: z.iso.datetime(),
+})
+
+/** An NFC-e can be cancelled only inside the reviewed window after its authorization. */
+export class CancellationWindowElapsed extends Error {
+  readonly code = 'CANCELLATION_WINDOW_ELAPSED'
+  constructor(readonly windowMinutes: number) {
+    super(`The NFC-e cancellation window of ${windowMinutes} minutes has elapsed`)
+  }
+}
+
 /** Freezes a signed cancellation event before crossing the durable worker boundary. */
 export class FiscalCancellation {
   readonly #db: ReturnType<typeof postgres>
@@ -33,6 +57,9 @@ export class FiscalCancellation {
     private readonly credential: SimulationCredential,
     private readonly schemaZip: Buffer,
     private readonly schemaDigest: string,
+    /** The reviewed NFC-e model 65 window; without it an NFC-e cannot be cancelled. */
+    private readonly consumer?: { cancellationWindowMinutes: number },
+    private readonly now: () => Date = () => new Date(),
   ) {
     this.#db = postgres(databaseUrl, { max: 5, connection: { statement_timeout: 5000 } })
   }
@@ -76,7 +103,12 @@ export class FiscalCancellation {
     const document = await this.documents.get(command.tenantId, command.documentId)
     if (!document) throw new Error('Fiscal document not found')
     if (document.status !== 'authorized') throw new Error('Fiscal cancellation is not allowed')
-    if (document.model !== '55' || document.environment !== 'simulation')
+    const nfce = document.model === '65'
+    if (
+      (document.model !== '55' && !nfce) ||
+      document.environment !== 'simulation' ||
+      (nfce && !this.consumer)
+    )
       throw new Error('Unsupported Fiscal cancellation tuple')
     // The same rule is enforced by a trigger on the cancellation command.
     const [blocker] = await tx`select
@@ -119,17 +151,14 @@ export class FiscalCancellation {
       'authorization_protocol',
       String(evidence.protocol_digest),
     )
-    const parsedProtocol = z
-      .strictObject({
-        schemaVersion: z.literal(1),
-        simulated: z.literal(true),
-        commandId: z.uuid(),
-        statusCode: z.literal('100'),
-        status: z.literal('authorized'),
-        protocolNumber: z.string().regex(/^[0-9]{15}$/),
-        providerCorrelation: z.string(),
-      })
-      .parse(JSON.parse(protocol.bytes.toString('utf8')))
+    const recorded: unknown = JSON.parse(protocol.bytes.toString('utf8'))
+    const parsedProtocol = nfeProtocolSchema.passthrough().parse(recorded)
+    if (nfce && this.consumer) {
+      const { authorizedAt } = nfceProtocolSchema.parse(recorded)
+      const elapsed = this.now().getTime() - Date.parse(authorizedAt)
+      if (elapsed > this.consumer.cancellationWindowMinutes * 60_000)
+        throw new CancellationWindowElapsed(this.consumer.cancellationWindowMinutes)
+    } else nfeProtocolSchema.parse(recorded)
     const lotId = createHash('sha256')
       .update(command.documentId)
       .digest('hex')

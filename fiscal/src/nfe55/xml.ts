@@ -57,7 +57,8 @@ export function serializeNfe55(candidate: unknown): Buffer {
   return Buffer.from(body, 'utf8')
 }
 
-function line(value: Nfe55Data['lines'][number]): string {
+/** One `det` group; the item and IBS/CBS layout is the same in models 55 and 65. */
+export function line(value: Nfe55Data['lines'][number]): string {
   return [
     `<det nItem="${value.number}">`,
     '<prod>',
@@ -102,7 +103,8 @@ function line(value: Nfe55Data['lines'][number]): string {
   ].join('')
 }
 
-function totals(value: Nfe55Data): string {
+/** The `total` group; shared by models 55 and 65. */
+export function totals(value: Pick<Nfe55Data, 'totals'>): string {
   const t = value.totals
   return [
     '<total><ICMSTot>',
@@ -153,7 +155,7 @@ function totals(value: Nfe55Data): string {
   ].join('')
 }
 
-function address(name: string, value: Nfe55Data['issuer']['address']): string {
+export function address(name: string, value: Nfe55Data['issuer']['address']): string {
   return [
     `<${name}>`,
     tag('xLgr', value.street),
@@ -170,7 +172,7 @@ function address(name: string, value: Nfe55Data['issuer']['address']): string {
   ].join('')
 }
 
-function tag(name: string, value: string): string {
+export function tag(name: string, value: string): string {
   return `<${name}>${escapeXml(value)}</${name}>`
 }
 
