@@ -1,6 +1,6 @@
 # CRM implementation plan — Phase L
 
-Status: **in progress** — Phases 54 to 58 delivered on 2026-09-27. This is the execution plan for Phase L of the
+Status: **in progress** — Phases 54 to 59 delivered on 2026-09-27. This is the execution plan for Phase L of the
 [ERP expansion plan](erp-expansion-plan.md#phase-l--crm), split into phases 54–60 of
 [plan.md](plan.md). Each numbered phase gets its own detailed plan before implementation,
 one local commit and an evidence record, as in Phases J and K.
@@ -229,6 +229,9 @@ Gaps:
 - CRM writes nothing to Sales, and Sales takes no attribution from the request body.
 
 ### 59 — Forecast and pipeline metrics rebuilt from history
+
+[Detailed Phase 59 plan](crm-phase59-implementation-plan.md) ·
+[evidence](crm-phase59-evidence.md).
 
 **Work**
 1. Forecast by expected close month: open value, weighted value (value × stage

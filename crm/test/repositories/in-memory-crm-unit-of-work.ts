@@ -18,6 +18,7 @@ import type { Opportunity, RecordedFact } from '@/domain/entities/opportunity'
 import type { Pipeline } from '@/domain/entities/pipeline'
 import type { Task } from '@/domain/entities/task'
 import type { Owner, QuoteLink } from '@/domain/repositories/crm-repositories'
+import { type MetricRows, metricRowsOf } from '@/domain/services/opportunity-metrics'
 
 /**
  * Tenant-scoped in-memory CRM (ADR 0014). Keys stand in for the contact data keys: an
@@ -37,6 +38,8 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
   readonly notes = new Map<string, Note>()
   /** Every revision each note had written, as the append-only table would hold it. */
   readonly noteRevisions = new Map<string, NoteRevision[]>()
+  /** The metric rows of each opportunity, replaced with its history as the store does. */
+  readonly metricRows = new Map<string, MetricRows>()
   /** One link per offer, keyed by opportunity and quote root, as the table holds them. */
   readonly quoteLinks = new Map<string, QuoteLink>()
   /** Accounts whose record key exists and was not destroyed. */
@@ -107,6 +110,17 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
         history: async (id) => [...(this.history.get(id) ?? [])],
         create: async (opportunity) => this.keepOpportunity(opportunity),
         save: async (opportunity) => this.keepOpportunity(opportunity),
+        idsAfter: async (after, limit) =>
+          [...this.opportunities.values()]
+            .filter((opportunity) => opportunity.belongsTo(tenantId))
+            .map((opportunity) => opportunity.id.toString())
+            .sort()
+            .filter((id) => after === null || id > after)
+            .slice(0, limit),
+      },
+      metrics: {
+        stored: async (id) => this.metricRows.get(id) ?? { states: [], visits: [], closures: [] },
+        replace: async (id, rows) => void this.metricRows.set(id, rows),
       },
       activities: {
         findById: async (id) => mine(this.activities.get(id)),
@@ -173,6 +187,7 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
     const id = opportunity.id.toString()
     this.opportunities.set(id, opportunity)
     this.history.set(id, [...(this.history.get(id) ?? []), ...opportunity.pullRecordedFacts()])
+    this.metricRows.set(id, metricRowsOf(this.history.get(id) ?? []))
     this.published.push(...opportunity.pullDomainEvents())
   }
 

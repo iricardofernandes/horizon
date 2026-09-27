@@ -3,6 +3,7 @@ import { APP_GUARD, Reflector } from '@nestjs/core'
 import { FireDueRemindersUseCase } from '@/application/use-cases/fire-due-reminders'
 import { CrmAuthGuard } from '@/infrastructure/http/authorization'
 import { CrmController } from '@/infrastructure/http/crm.controller'
+import { MetricsController } from '@/infrastructure/http/metrics.controller'
 import { OpportunitiesController } from '@/infrastructure/http/opportunities.controller'
 import { RecordsController } from '@/infrastructure/http/records.controller'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
@@ -70,7 +71,7 @@ export class AppModule {
       )
     return {
       module: AppModule,
-      controllers: [CrmController, OpportunitiesController, RecordsController],
+      controllers: [CrmController, OpportunitiesController, RecordsController, MetricsController],
       providers,
       exports: [CrmRuntime],
     }

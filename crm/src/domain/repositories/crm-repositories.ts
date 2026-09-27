@@ -6,6 +6,7 @@ import type { Note } from '../entities/note'
 import type { Opportunity, RecordedFact } from '../entities/opportunity'
 import type { Pipeline } from '../entities/pipeline'
 import type { Task } from '../entities/task'
+import type { MetricRows } from '../services/opportunity-metrics'
 import type { ListKind } from '../value-objects/crm-values'
 
 export abstract class AccountsRepository {
@@ -61,6 +62,17 @@ export abstract class OpportunitiesRepository {
   /** Appends the pending facts to the history and writes their fold, in one transaction. */
   abstract create(opportunity: Opportunity): Promise<void>
   abstract save(opportunity: Opportunity): Promise<void>
+  /** Ids after `after`, in id order: one batch of a walk through every opportunity. */
+  abstract idsAfter(after: string | null, limit: number): Promise<readonly string[]>
+}
+
+/**
+ * The forecast and pipeline-metric rows of each opportunity (Phase 59). Saving an
+ * opportunity replaces them with its history; a rebuild compares and replaces them.
+ */
+export abstract class MetricsRepository {
+  abstract stored(opportunityId: string): Promise<MetricRows>
+  abstract replace(opportunityId: string, rows: MetricRows): Promise<void>
 }
 
 /**

@@ -26,6 +26,7 @@ import {
   pipelineDetail,
 } from './crm-reads'
 import { ContactSealer, makeScope, type Sealers, type Transaction } from './crm-store'
+import { type ForecastQuery, forecast, type MetricsQuery, pipelineMetrics } from './metric-reads'
 import {
   activityDetail,
   listTasks,
@@ -191,6 +192,42 @@ export class CrmDatabase extends CrmUnitOfWork {
     return this.read(tenantId, (tx) =>
       timeline(tx, this.#sealers.accounts, tenantId, scope, page, now),
     )
+  }
+
+  forecast(tenantId: string, query: ForecastQuery) {
+    return this.read(tenantId, (tx) => forecast(tx, query))
+  }
+
+  pipelineMetrics(tenantId: string, query: MetricsQuery) {
+    return this.read(tenantId, (tx) => pipelineMetrics(tx, query))
+  }
+
+  /**
+   * Every number the forecast and the pipeline metrics give at one cutoff, in one
+   * transaction: what a rebuild must leave unchanged (Phase 59).
+   */
+  metricNumbers(tenantId: string, cutoff: Date) {
+    return this.read(tenantId, async (tx) => {
+      const groupings = ['pipeline', 'owner', 'source'] as const
+      const forecasts: Record<string, unknown> = {}
+      for (const groupBy of groupings)
+        forecasts[groupBy] = await forecast(tx, {
+          cutoff,
+          groupBy,
+          pipelineId: null,
+          ownerId: null,
+          sourceId: null,
+        })
+      const pipelines: Record<string, unknown> = {}
+      for (const pipeline of await listPipelines(tx, true))
+        pipelines[pipeline.id] = await pipelineMetrics(tx, {
+          pipelineId: pipeline.id,
+          from: new Date(0),
+          to: cutoff,
+          cutoff,
+        })
+      return { forecasts, pipelines }
+    })
   }
 
   listOwners(tenantId: string) {

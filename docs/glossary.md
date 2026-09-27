@@ -242,6 +242,13 @@ Every later version keeps them, and no request can set them. When such a quote i
 CRM **converts** the opportunity: won at the quote's total, with the quote recorded, and
 never reopened after that.
 
+### forecast, cutoff and settled
+The forecast sums each opportunity as it stood at a **cutoff** instant: open value by
+expected close month, weighted by the stage's probability, and won value by the month it
+was won. Pipeline metrics count what was recorded up to the cutoff. A cutoff is
+**settled** once it is ten minutes old: the history refuses facts recorded away from the
+clock, so nothing can arrive for it any more and its numbers can be reproduced.
+
 ### activity
 A call, meeting, email or visit that happened with an account, attached to the account,
 one of its contacts or one of its opportunities, and naming the contacts who took part.

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, asc, desc, eq, isNotNull, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, isNotNull, ne, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { AuditRecord, AuditTrail, CrmScope } from '@/application/ports/unit-of-work'
 import { canonicalJson } from '@/core/audit/canonical-json'
@@ -17,6 +17,7 @@ import {
   type RecordedFact,
 } from '@/domain/entities/opportunity'
 import { Pipeline } from '@/domain/entities/pipeline'
+import { metricRowsOf } from '@/domain/services/opportunity-metrics'
 import type { SecretBox } from '@/domain/services/secret-box'
 import {
   ContactEmail,
@@ -32,6 +33,7 @@ import {
   Segment,
   Tags,
 } from '@/domain/value-objects/crm-values'
+import { metricsRepository, replaceMetrics } from './metrics-store'
 import { opportunityQuotesRepository } from './quote-links-store'
 import { type AccountSealer, KeyRing, recordRepositories } from './record-store'
 import * as schema from './schema'
@@ -343,7 +345,7 @@ export function makeScope(tx: Transaction, tenantId: string, sealers: Sealers): 
   /** The history first, then what it publishes: both in the command's transaction. */
   const appendHistory = async (opportunity: Opportunity) => {
     const facts = opportunity.pullRecordedFacts()
-    if (facts.length)
+    if (facts.length) {
       await tx.insert(schema.opportunityEvents).values(
         facts.map((recorded) => ({
           tenantId,
@@ -355,6 +357,14 @@ export function makeScope(tx: Transaction, tenantId: string, sealers: Sealers): 
           occurredAt: recorded.occurredAt,
         })),
       )
+      // The metric rows are a function of the whole history, replaced with it (Phase 59).
+      const id = opportunity.id.toString()
+      const history = await tx
+        .select()
+        .from(schema.opportunityEvents)
+        .where(eq(schema.opportunityEvents.opportunityId, id))
+      await replaceMetrics(tx, tenantId, id, metricRowsOf(history.map(mapFact)))
+    }
     await flush(opportunity)
   }
   return {
@@ -585,6 +595,15 @@ export function makeScope(tx: Transaction, tenantId: string, sealers: Sealers): 
           .for('update')
         return row ? mapOpportunity(row) : null
       },
+      idsAfter: async (after, limit) => {
+        const rows = await tx
+          .select({ id: schema.opportunities.id })
+          .from(schema.opportunities)
+          .where(after ? gt(schema.opportunities.id, after) : undefined)
+          .orderBy(asc(schema.opportunities.id))
+          .limit(limit)
+        return rows.map((row) => row.id)
+      },
       history: async (id) => {
         const rows = await tx
           .select()
@@ -616,6 +635,7 @@ export function makeScope(tx: Transaction, tenantId: string, sealers: Sealers): 
       },
     },
     quotes: opportunityQuotesRepository(tx, tenantId),
+    metrics: metricsRepository(tx, tenantId),
     ...recordRepositories(
       tx,
       tenantId,

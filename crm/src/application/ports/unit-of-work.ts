@@ -5,6 +5,7 @@ import type {
   ActivitiesRepository,
   ContactsRepository,
   ListEntriesRepository,
+  MetricsRepository,
   NotesRepository,
   OpportunitiesRepository,
   OpportunityQuotesRepository,
@@ -48,6 +49,7 @@ export interface CrmScope {
   readonly tasks: TasksRepository
   readonly notes: NotesRepository
   readonly quotes: OpportunityQuotesRepository
+  readonly metrics: MetricsRepository
   readonly audit: AuditTrail
 }
 

@@ -2486,9 +2486,15 @@ destroyed with its party.
 
 ## Phase 59 — Forecast and pipeline metrics rebuilt from history
 
-**Planned.** Weighted forecast and conversion metrics, rebuilt from opportunity events and
-compared against the live projection at a declared cutoff.
-[Detailed work](crm-implementation-plan.md#59--forecast-and-pipeline-metrics-rebuilt-from-history).
+**Delivered on 2026-09-27.** The forecast (open, weighted and won value per month) and the
+pipeline metrics (conversion, time in stage, win rate, loss reasons) are read as of a
+declared cutoff.
+- They come from projections that are a function of each opportunity's history.
+- `npm run rebuild:metrics` rebuilds them in batches and gives the same numbers.
+- The history refuses back-dated facts, so a settled cutoff never changes.
+
+[Evidence](crm-phase59-evidence.md).
+[Detailed plan](crm-phase59-implementation-plan.md). [Detailed work](crm-implementation-plan.md#59--forecast-and-pipeline-metrics-rebuilt-from-history).
 
 ## Phase 60 — CRM screens, golden path and release evidence
 

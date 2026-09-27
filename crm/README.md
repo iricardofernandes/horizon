@@ -7,9 +7,9 @@ An independently deployable NestJS service with its own database, its own contai
 its own lifecycle. It is reached through Kong at `/crm`, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 58 — accounts, contacts, owners, pipelines, opportunities, activities,
-tasks, notes, reminders and the conversion to a Sales quote.** Forecast and metrics arrive
-in phase 59 ([CRM plan](../docs/crm-implementation-plan.md)).
+**Status: phase 59 — accounts, contacts, owners, pipelines, opportunities, activities,
+tasks, notes, reminders, the conversion to a Sales quote, and the forecast and pipeline
+metrics.** The screens arrive in phase 60 ([CRM plan](../docs/crm-implementation-plan.md)).
 
 ---
 
@@ -43,6 +43,11 @@ in phase 59 ([CRM plan](../docs/crm-implementation-plan.md)).
   the opportunity once: won at the quote's total, with the quote recorded, even if it was
   lost or won by hand. A converted opportunity is never reopened. CRM never calls or writes
   Sales.
+- **Forecast and pipeline metrics** — read as of a cutoff instant from projections that
+  are a function of each opportunity's history (`metric_states`, `metric_stage_visits`,
+  `metric_closures`), replaced with it in the same transaction. The history refuses a fact
+  recorded more than two minutes from the database clock, so a cutoff older than ten
+  minutes is *settled*: its numbers can be reproduced later.
 - **Reminders** — a scheduler in this service sends each armed reminder once as
   `crm.task.due`, even across restarts or with several instances; rescheduling a task
   arms it again.
@@ -93,6 +98,8 @@ reminder instants — never the title.
 | `POST /notes` (requires `Idempotency-Key`), `POST /notes/{id}/revisions` | write |
 | `GET /agenda?until=` — the caller's open tasks due by `until` (default: 24 hours) | read |
 | `GET /accounts/{id}/timeline`, `GET /opportunities/{id}/timeline` (`limit`, `offset`) | read |
+| `GET /forecast?cutoff=&groupBy=pipeline\|owner\|source&pipelineId=&ownerId=&sourceId=` — open, weighted and won value per month and currency | read |
+| `GET /pipelines/{id}/metrics?cutoff=&from=&to=` — entries, exits, conversion and time per stage, win rate, loss reasons | read |
 
 ## Authorization
 
@@ -119,6 +126,12 @@ With `DATABASE_RELAY_URL` set, the service also runs the outbox relay and the re
 scheduler (`REMINDER_POLL_INTERVAL_MS`, default 15 s; `REMINDER_BATCH_SIZE`, default 100).
 The scheduler reads, as `horizon_relay`, only which tenants have a reminder due; it sends
 them per tenant as `horizon_app`, under RLS.
+
+`npm run rebuild:metrics -- --tenant <uuid> [--batch 200] [--verify-only]` rebuilds the
+metric rows from the history in batches, printing progress and any drift, and compares
+every number at one cutoff before and after. It fails if the numbers changed without
+drift, or if drift remains after the rebuild. Run it once after the Phase 59 migration to
+fill the rows of older opportunities.
 
 Two one-off commands bring an existing workspace into CRM:
 
