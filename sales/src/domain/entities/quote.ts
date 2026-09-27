@@ -81,6 +81,8 @@ interface QuoteProps {
   supersededBy: string | null
   closure: Reason | null
   orderId: string | null
+  /** The service order its service lines became (ADR 0056). */
+  serviceOrderId: string | null
   sentAt: Date | null
   createdAt: Date
   updatedAt: Date
@@ -132,6 +134,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
           supersededBy: null,
           closure: null,
           orderId: null,
+          serviceOrderId: null,
           sentAt: null,
           createdAt: input.now,
           updatedAt: input.now,
@@ -347,12 +350,22 @@ export class Quote extends AggregateRoot<QuoteProps> {
     return right(undefined)
   }
 
-  /** The order this offer turned into. One accepted quote becomes at most one order. */
-  markOrdered(orderId: string, now: Date): Either<ConflictError, void> {
+  /**
+   * The documents this offer turned into: a sales order for its goods, a service order for
+   * its services, or both (ADR 0056). One accepted quote converts once.
+   */
+  markConverted(
+    documents: { orderId: string | null; serviceOrderId: string | null },
+    now: Date,
+  ): Either<ConflictError, void> {
     if (this.props.status !== 'accepted')
       return left(new ConflictError('only an accepted quote becomes an order'))
-    if (this.props.orderId) return left(new ConflictError('this quote has already become an order'))
-    this.props.orderId = orderId
+    if (this.props.orderId || this.props.serviceOrderId)
+      return left(new ConflictError('this quote has already become an order'))
+    if (!documents.orderId && !documents.serviceOrderId)
+      return left(new ConflictError('a conversion creates at least one document'))
+    this.props.orderId = documents.orderId
+    this.props.serviceOrderId = documents.serviceOrderId
     this.props.updatedAt = now
     return right(undefined)
   }
@@ -391,6 +404,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
           supersededBy: null,
           closure: null,
           orderId: null,
+          serviceOrderId: null,
           sentAt: null,
           createdAt: now,
           updatedAt: now,
@@ -427,6 +441,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
     supersededBy: string | null
     closureReason: string | null
     orderId: string | null
+    serviceOrderId: string | null
     sentAt: Date | null
     createdAt: Date
     updatedAt: Date
@@ -467,6 +482,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
       supersededBy: this.props.supersededBy,
       closureReason: this.props.closure?.value ?? null,
       orderId: this.props.orderId,
+      serviceOrderId: this.props.serviceOrderId,
       sentAt: this.props.sentAt,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,

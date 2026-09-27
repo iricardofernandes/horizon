@@ -228,3 +228,53 @@ export const salesShipmentReturned = defineEvent({
     remainingInstallments: z.array(installmentSchema),
   }),
 })
+
+const competenceSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+
+/** One delivered service line, priced at what the service order agreed. */
+const deliveredServiceLineSchema = z.object({
+  entryId: uuidSchema.describe('This line of this delivery: the unit an NFS-e is issued for'),
+  lineId: uuidSchema,
+  itemId: uuidSchema,
+  description: z.string().min(1).max(160),
+  quantity: quantitySchema,
+  unitPrice: moneySchema,
+  /** What this line bills, after its share of the order discount. */
+  amount: moneySchema,
+})
+
+export const salesServiceDelivered = defineEvent({
+  type: 'sales.service.delivered',
+  version: 1,
+  description:
+    'Work of a service order was delivered to the customer, in part or in full, on the day it was performed. Each delivery is published once and billed once: Financial raises one receivable keyed by `deliveryId`, and Fiscal issues one NFS-e per line keyed by `entryId` and the competence month. Nothing moves stock.',
+  payload: z.object({
+    serviceOrderId: uuidSchema,
+    deliveryId: uuidSchema,
+    customerId: uuidSchema,
+    performedOn: dateSchema,
+    competence: competenceSchema.describe('YYYY-MM of the performed date'),
+    deliveredBy: z.string().min(1).max(255),
+    lines: z.array(deliveredServiceLineSchema).min(1),
+    /** What this delivery made owed: the sum of its lines' amounts. */
+    value: moneySchema,
+    installments: z.array(installmentSchema).min(1),
+    complete: z.boolean().describe('Whether this delivery completed the service order'),
+  }),
+})
+
+export const salesServiceDeliveryCancelled = defineEvent({
+  type: 'sales.service.delivery-cancelled',
+  version: 1,
+  description:
+    'A delivered service was not provided after all, and its delivery is cancelled with a reason. The delivery is kept in the record; Financial withdraws or reverses its receivable and Fiscal cancels the NFS-e of each line, or shows why it cannot.',
+  payload: z.object({
+    serviceOrderId: uuidSchema,
+    deliveryId: uuidSchema,
+    customerId: uuidSchema,
+    competence: competenceSchema,
+    entryIds: z.array(uuidSchema).min(1),
+    cancelledOn: dateSchema,
+    reason: z.string().trim().min(1).max(500),
+  }),
+})

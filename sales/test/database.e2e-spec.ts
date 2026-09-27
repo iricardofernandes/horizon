@@ -15,6 +15,11 @@ import {
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
 import { ForgetPartyUseCase, ProjectPartyUseCase } from '@/application/use-cases/project-parties'
 import {
+  DecideServiceOrderUseCase,
+  DeliverServiceUseCase,
+  OpenServiceOrderUseCase,
+} from '@/application/use-cases/service-orders'
+import {
   DispatchShipmentUseCase,
   PackShipmentUseCase,
   PickShipmentUseCase,
@@ -395,12 +400,14 @@ it('negotiates an offer in versions and makes the accepted one binding', async (
   const retried = await convert.execute(conversion)
   if (retried.isLeft()) throw retried.value
   expect(retried.value).toEqual(converted.value)
+  const orderId = converted.value.orderId
+  if (!orderId) throw new Error('the goods of the proposal became no order')
 
   const orders = await administrator`select id, quote_id, discount, freight, payment_term_days,
       status from sales_orders where tenant_id = ${tenantId}`
   expect(orders).toMatchObject([
     {
-      id: converted.value.orderId,
+      id: orderId,
       quote_id: second.value.quoteId,
       discount: '250',
       freight: '500',
@@ -414,13 +421,13 @@ it('negotiates an offer in versions and makes the accepted one binding', async (
     where tenant_id = ${tenantId} and item_id = ${fixture.itemId}`
   const confirmed = await new ApplyStockReservedUseCase(database, clock).execute({
     tenantId,
-    orderId: converted.value.orderId,
+    orderId,
     orderVersion: 1,
     reservationId: randomUUID(),
   })
   expect(confirmed.isRight()).toBe(true)
   const [order] = await administrator`select status, total from sales_orders
-    where id = ${converted.value.orderId}`
+    where id = ${orderId}`
   // Two at 1250, plus 500 of freight, less the 250 that was agreed off.
   expect(order).toMatchObject({ status: 'confirmed', total: '2750' })
 
@@ -928,7 +935,7 @@ it('refuses a service in a sales order before Inventory is asked for anything', 
   expect(order?.requestedLines.map((line) => line.kind).sort()).toEqual([null, 'product'])
 })
 
-it('keeps an accepted proposal with services unconverted and readable with its kinds', async () => {
+it('converts a mixed proposal into a sales order for its goods and a service order for its services', async () => {
   const tenantId = randomUUID()
   await database.provisionTenant(tenantId)
   const service = await projectItem(tenantId, 'service', 150000n)
@@ -970,19 +977,42 @@ it('keeps an accepted proposal with services unconverted and readable with its k
   )
   expect(read?.total).toBe('160000')
 
-  const converted = await new ConvertQuoteUseCase(database, clock).execute({
+  const conversion = {
     context: commandOf(tenantId),
     quoteId: quote.value.quoteId,
     fulfillmentWarehouseId: randomUUID(),
-  })
-  expect(converted.isLeft()).toBe(true)
-  expect(converted.value).toMatchObject({
-    message: expect.stringMatching(/^service lines of a proposal are delivered by a service order/),
-  })
-  // The refusal rolled back: the proposal is still accepted and can convert once Phase 50 exists.
-  const [after] = await administrator`select status, order_id from quotes
+  }
+  const converted = await new ConvertQuoteUseCase(database, clock).execute(conversion)
+  if (converted.isLeft()) throw converted.value
+  const { orderId, serviceOrderId } = converted.value
+  if (!orderId || !serviceOrderId) throw new Error('the proposal did not become both documents')
+  const retried = await new ConvertQuoteUseCase(database, clock).execute(conversion)
+  if (retried.isLeft()) throw retried.value
+  expect(retried.value).toEqual(converted.value)
+
+  const [after] = await administrator`select status, order_id, service_order_id from quotes
     where tenant_id = ${tenantId} and id = ${quote.value.quoteId}`
-  expect(after).toMatchObject({ status: 'accepted', order_id: null })
+  expect(after).toEqual({ status: 'accepted', order_id: orderId, service_order_id: serviceOrderId })
+  // The goods reach Inventory; the service never does.
+  const placed = await administrator`select payload from outbox where tenant_id = ${tenantId}
+    and event_type = 'sales.order.placed'`
+  expect(placed).toHaveLength(1)
+  expect(placed[0]?.payload.lines.map((line: { itemId: string }) => line.itemId)).toEqual([good])
+  const serviceOrder = await database.findServiceOrderSnapshot(tenantId, serviceOrderId)
+  expect(serviceOrder).toMatchObject({
+    quoteId: quote.value.quoteId,
+    status: 'scheduled',
+    total: '150000',
+    lines: [{ itemId: service, quantity: '1', delivered: '0' }],
+  })
+  // One proposal has one service order, whatever writes to the table.
+  await expect(
+    administrator`insert into service_orders (id, tenant_id, customer_id, quote_id, status,
+        currency, net, discount, total, billed, payment_term_days, opened_on, created_by,
+        version, created_at, updated_at)
+      values (${randomUUID()}, ${tenantId}, ${customerId}, ${quote.value.quoteId}, 'scheduled',
+        'BRL', 1, 0, 1, 0, '[0]', current_date, 'ana', 1, now(), now())`,
+  ).rejects.toThrow(/service_orders_one_per_quote/)
 })
 
 it('backfills unknown kinds once and never overwrites a recorded one', async () => {
@@ -1046,4 +1076,160 @@ it('keeps a price that arrives before its item', async () => {
   expect(item).toMatchObject({ kind: 'service', active: true })
   expect(item?.description.value).toBe('Suporte mensal')
   expect(item?.unitPrice.amount).toBe(150000n)
+})
+
+async function serviceCustomer(tenantId: string) {
+  const customerId = randomUUID()
+  const projected = await database.inTenant(tenantId, (scope) =>
+    new ProjectPartyUseCase(clock).executeInScope(scope, {
+      tenantId,
+      partyId: customerId,
+      legalName: 'Cliente Serviços',
+      email: 'servicos@example.com',
+      phone: '+55 11 99999-9999',
+      address: 'Rua Um, 42, São Paulo',
+      roles: ['customer'],
+      active: true,
+    }),
+  )
+  if (projected.isLeft()) throw projected.value
+  return customerId
+}
+
+it('delivers a service order in parts, publishes each delivery once and keeps a cancelled one', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service', 30000n)
+  const customerId = await serviceCustomer(tenantId)
+  const lineId = randomUUID()
+  const opened = await new OpenServiceOrderUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId,
+    lines: [{ lineId, itemId: service, quantity: '3' }],
+    terms: { discount: '1000', paymentTermDays: [0, 30] },
+  })
+  if (opened.isLeft()) throw opened.value
+  const { serviceOrderId } = opened.value
+  const decide = new DecideServiceOrderUseCase(database, clock)
+  expect((await decide.start(commandOf(tenantId), serviceOrderId)).isRight()).toBe(true)
+
+  const deliver = new DeliverServiceUseCase(database, clock)
+  const partial = {
+    context: commandOf(tenantId),
+    serviceOrderId,
+    lines: [{ lineId, quantity: '1' }],
+    performedOn: today(),
+  }
+  const first = await deliver.execute(partial)
+  if (first.isLeft()) throw first.value
+  // A retried request answers with the delivery it made, and bills nothing twice.
+  const retried = await deliver.execute(partial)
+  if (retried.isLeft()) throw retried.value
+  expect(retried.value).toEqual(first.value)
+  const rest = await deliver.execute({ context: commandOf(tenantId), serviceOrderId })
+  if (rest.isLeft()) throw rest.value
+  expect(rest.value.status).toBe('completed')
+
+  const delivered = await administrator`select payload from outbox where tenant_id = ${tenantId}
+    and event_type = 'sales.service.delivered' order by created_at`
+  expect(delivered).toHaveLength(2)
+  const values = delivered.map((row) => BigInt(row.payload.value.amount))
+  // 90000 less 1000 of discount: the first third carries 29666, the rest what is left.
+  expect(values).toEqual([29666n, 59334n])
+  expect(delivered[0]?.payload).toMatchObject({
+    serviceOrderId,
+    deliveryId: first.value.deliveryId,
+    competence: today().slice(0, 7),
+    lines: [{ lineId, itemId: service, quantity: '1', amount: { amount: '29666' } }],
+    installments: [{ number: 1 }, { number: 2 }],
+    complete: false,
+  })
+
+  expect(
+    (
+      await decide.cancelDelivery(
+        commandOf(tenantId),
+        serviceOrderId,
+        first.value.deliveryId,
+        'A primeira visita não aconteceu',
+      )
+    ).isRight(),
+  ).toBe(true)
+  const [cancelled] = await administrator`select payload from outbox where tenant_id = ${tenantId}
+    and event_type = 'sales.service.delivery-cancelled'`
+  expect(cancelled?.payload).toMatchObject({
+    deliveryId: first.value.deliveryId,
+    entryIds: [delivered[0]?.payload.lines[0].entryId],
+    reason: 'A primeira visita não aconteceu',
+  })
+  const snapshot = await database.findServiceOrderSnapshot(tenantId, serviceOrderId)
+  expect(snapshot).toMatchObject({
+    status: 'in_progress',
+    billed: '59334',
+    lines: [{ quantity: '3', delivered: '2' }],
+  })
+  expect(snapshot?.deliveries.map((delivery) => delivery.status)).toEqual(['cancelled', 'active'])
+
+  // A recorded delivery is never rewritten, and a cancelled one never comes back.
+  await expect(
+    administrator`update service_deliveries set value = 1 where id = ${rest.value.deliveryId}`,
+  ).rejects.toThrow(/never rewritten/)
+  await expect(
+    administrator`update service_deliveries set status = 'active', cancelled_by = null,
+      cancelled_on = null, cancellation_reason = null where id = ${first.value.deliveryId}`,
+  ).rejects.toThrow(/never rewritten/)
+  await expect(
+    application.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      await tx`update service_delivery_lines set amount = 1`
+    }),
+  ).rejects.toThrow(/permission denied/)
+})
+
+it('isolates service orders and their deliveries by tenant', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service')
+  const customerId = await serviceCustomer(tenantId)
+  const opened = await new OpenServiceOrderUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId,
+    lines: [{ lineId: randomUUID(), itemId: service, quantity: '1' }],
+  })
+  if (opened.isLeft()) throw opened.value
+  const { serviceOrderId } = opened.value
+  const decide = new DecideServiceOrderUseCase(database, clock)
+  expect((await decide.start(commandOf(tenantId), serviceOrderId)).isRight()).toBe(true)
+  const delivered = await new DeliverServiceUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    serviceOrderId,
+  })
+  if (delivered.isLeft()) throw delivered.value
+
+  const other = randomUUID()
+  await database.provisionTenant(other)
+  expect(await database.findServiceOrderSnapshot(other, serviceOrderId)).toBeNull()
+  expect(await database.listServiceOrderSnapshots(other)).toEqual([])
+  expect((await decide.accept(commandOf(other), serviceOrderId)).isLeft()).toBe(true)
+  await application.begin(async (tx) => {
+    await tx`select set_config('app.current_tenant', ${other}, true)`
+    for (const table of [
+      'service_orders',
+      'service_order_lines',
+      'service_deliveries',
+      'service_delivery_lines',
+    ])
+      expect(await tx`select 1 from ${tx(table)}`).toHaveLength(0)
+    const changed = await tx`update service_orders set status = 'cancelled'
+      where id = ${serviceOrderId}`
+    expect(changed.count).toBe(0)
+  })
+  // Goods are refused on a service order: they belong on a sales order.
+  const good = await projectItem(tenantId, 'product')
+  const refused = await new OpenServiceOrderUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId,
+    lines: [{ lineId: randomUUID(), itemId: good, quantity: '1' }],
+  })
+  expect(refused.isLeft()).toBe(true)
 })

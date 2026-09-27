@@ -16,7 +16,8 @@ import { useDate, useMoney, useQuantity } from '@/lib/use-format'
 import { QuoteFields, quoteBody } from './quote-form'
 import type { SalesScreenData } from './sales-page'
 import {
-  hasServiceLines,
+  conversionOf,
+  converted,
   historyOf,
   type Quote,
   reference,
@@ -365,9 +366,6 @@ function Decisions({
 }) {
   const t = useTranslations('sales')
   const [reason, setReason] = useState('')
-  const [warehouse, setWarehouse] = useState(
-    () => data.warehouses.find((row) => row.active)?.id ?? '',
-  )
   const decidable =
     detail.approvalState === 'pending' && detail.approvalRequestedBy !== abilities.userId
   const open = detail.status === 'sent'
@@ -427,39 +425,78 @@ function Decisions({
           </Button>
         </>
       ) : null}
-      {detail.status === 'accepted' && !detail.orderId && hasServiceLines(detail) ? (
-        <p className="document-note">{t('servicesConvertLater')}</p>
-      ) : null}
-      {detail.status === 'accepted' && !detail.orderId && !hasServiceLines(detail) ? (
-        <>
-          <SelectField
-            label={t('warehouse')}
-            name="fulfillmentWarehouseId"
-            onValueChange={(value) => setWarehouse(value ?? '')}
-            options={data.warehouses
-              .filter((row) => row.active)
-              .map((row) => ({ label: row.name, value: row.id }))}
-            value={warehouse}
-          />
-          <Button
-            disabled={busy || !warehouse}
-            onClick={() =>
-              onCommand(
-                'sales.quote.convert',
-                `${base}/order`,
-                { fulfillmentWarehouseId: warehouse },
-                true,
-              )
-            }
-            variant="primary"
-          >
-            {t('convert')}
-          </Button>
-        </>
+      {detail.status === 'accepted' && !converted(detail) ? (
+        <Conversion base={base} busy={busy} data={data} detail={detail} onCommand={onCommand} />
       ) : null}
       {detail.orderId ? (
         <p className="document-note">{t('becameOrder', { id: reference('SO', detail.orderId) })}</p>
       ) : null}
+      {detail.serviceOrderId ? (
+        <p className="document-note">
+          {t('becameServiceOrder', { id: reference('OS', detail.serviceOrderId) })}
+        </p>
+      ) : null}
     </div>
+  )
+}
+
+/**
+ * Turning an accepted offer into what delivers it (ADR 0056): the goods into a sales order,
+ * which needs a warehouse, and the services into a service order, which does not.
+ */
+function Conversion({
+  detail,
+  data,
+  base,
+  busy,
+  onCommand,
+}: {
+  detail: Quote
+  data: SalesScreenData
+  base: string
+  busy: boolean
+  onCommand: Command
+}) {
+  const t = useTranslations('sales')
+  const [warehouse, setWarehouse] = useState(
+    () => data.warehouses.find((row) => row.active)?.id ?? '',
+  )
+  const conversion = conversionOf(detail)
+  const label = conversion.services
+    ? conversion.goods
+      ? t('convertBoth')
+      : t('convertServices')
+    : t('convert')
+  return (
+    <>
+      {conversion.goods ? (
+        <SelectField
+          label={t('warehouse')}
+          name="fulfillmentWarehouseId"
+          onValueChange={(value) => setWarehouse(value ?? '')}
+          options={data.warehouses
+            .filter((row) => row.active)
+            .map((row) => ({ label: row.name, value: row.id }))}
+          value={warehouse}
+        />
+      ) : null}
+      {conversion.services ? (
+        <p className="document-note">{t('servicesBecomeServiceOrder')}</p>
+      ) : null}
+      <Button
+        disabled={busy || (conversion.goods && !warehouse)}
+        onClick={() =>
+          onCommand(
+            'sales.quote.convert',
+            `${base}/order`,
+            conversion.goods ? { fulfillmentWarehouseId: warehouse } : {},
+            true,
+          )
+        }
+        variant="primary"
+      >
+        {label}
+      </Button>
+    </>
   )
 }

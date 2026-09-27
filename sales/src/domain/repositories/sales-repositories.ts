@@ -2,6 +2,7 @@ import type { DomainEvent } from '@/core/events/domain-event'
 import type { Customer } from '../entities/customer'
 import type { Quote } from '../entities/quote'
 import type { SalesOrder } from '../entities/sales-order'
+import type { ServiceOrder } from '../entities/service-order'
 import type { Shipment } from '../entities/shipment'
 import type { LineDescription, Money } from '../value-objects/sales-values'
 
@@ -21,6 +22,13 @@ export abstract class SalesOrdersRepository {
   abstract findById(id: string): Promise<SalesOrder | null>
   abstract create(order: SalesOrder): Promise<void>
   abstract save(order: SalesOrder): Promise<void>
+}
+
+/** Services sold and delivered stage by stage (ADR 0056). */
+export abstract class ServiceOrdersRepository {
+  abstract findById(id: string): Promise<ServiceOrder | null>
+  abstract create(order: ServiceOrder): Promise<void>
+  abstract save(order: ServiceOrder): Promise<void>
 }
 
 /** A projection fed by `parties/`; Sales never registers a customer itself (ADR 0040). */

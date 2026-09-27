@@ -194,6 +194,61 @@ export const fiscalServiceProblemCodeSchema = z.enum([
   'SOURCE_KEY_CONFLICT',
 ])
 
+/**
+ * How an establishment issues the NFS-e of services delivered in Sales (Phase 50):
+ * `review` leaves each draft for a person, `automatic` validates and issues it at once.
+ */
+export const fiscalServiceIssuancePolicyRequestSchema = z.strictObject({
+  mode: z.enum(['review', 'automatic']),
+  series: z.number().int().min(1).max(999),
+  reason: reasonSchema,
+})
+
+export const fiscalServiceIssuancePolicySchema = z.strictObject({
+  establishmentId: uuidSchema,
+  mode: z.enum(['review', 'automatic']),
+  series: z.number().int().min(1).max(999),
+  /** False when nothing was configured and the default (`review`, series 1) applies. */
+  configured: z.boolean(),
+  updatedBy: z.string().min(1).max(200).nullable(),
+  updatedAt: instantSchema.nullable(),
+})
+
+export const fiscalServiceIntakeStatusSchema = z.enum([
+  'pending',
+  'blocked',
+  'drafted',
+  'issuing',
+  'cancelling',
+  'withdrawn',
+  'cancellation-refused',
+])
+
+/** One delivered service line on its way to an NFS-e, and where it stopped if it did. */
+export const fiscalServiceIntakeSchema = z.strictObject({
+  id: uuidSchema,
+  sourceKey: fiscalServiceSourceKeySchema,
+  deliveryId: uuidSchema,
+  serviceOrderId: uuidSchema,
+  customerId: uuidSchema,
+  serviceItemId: uuidSchema,
+  competenceDate: dateSchema,
+  amount: moneySchema,
+  status: fiscalServiceIntakeStatusSchema,
+  reason: z.string().min(1).max(1000).nullable(),
+  attempts: z.number().int().min(0),
+  nextAttemptAt: instantSchema.nullable(),
+  withdrawalRequested: z.boolean(),
+  serviceOriginId: uuidSchema.nullable(),
+  documentId: uuidSchema.nullable(),
+  createdAt: instantSchema,
+  updatedAt: instantSchema,
+})
+
+export const fiscalServiceIntakeListSchema = z.strictObject({
+  data: z.array(fiscalServiceIntakeSchema),
+})
+
 export type FiscalServiceProfileRequest = z.infer<typeof fiscalServiceProfileRequestSchema>
 export type FiscalServiceProfile = z.infer<typeof fiscalServiceProfileSchema>
 export type FiscalNfseRegistryEntry = z.infer<typeof fiscalNfseRegistryEntrySchema>
@@ -211,3 +266,5 @@ export type FiscalServiceSubstitutionRequest = z.infer<
   typeof fiscalServiceSubstitutionRequestSchema
 >
 export type FiscalServiceProblemCode = z.infer<typeof fiscalServiceProblemCodeSchema>
+export type FiscalServiceIssuancePolicy = z.infer<typeof fiscalServiceIssuancePolicySchema>
+export type FiscalServiceIntake = z.infer<typeof fiscalServiceIntakeSchema>

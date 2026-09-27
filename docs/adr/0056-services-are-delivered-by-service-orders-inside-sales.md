@@ -1,7 +1,7 @@
 # 56. Services are delivered by service orders inside Sales, and billed once per period
 
-- Status: accepted; Phase 49 implements the first part (service lines and the goods-only
-  sales order)
+- Status: accepted; Phase 49 implements the service lines and the goods-only sales order,
+  Phase 50 the service order, its deliveries and their receivable and NFS-e
 - Date: 2026-09-26
 
 ## Context
@@ -72,6 +72,15 @@ person can act on.
   screen says why instead of offering a conversion that would fail.
 - Service orders, contracts and billing add Sales tables and events in later phases,
   inside the same database, RLS and outbox.
+- **Phase 50 refinement of decision 5.** The national DPS carries one service code, so a
+  delivery is billed once in Financial (keyed by the delivery) and once per line in Fiscal
+  (source key `sales` / `service-delivery` / the line's `entryId` / competence month). A
+  contract period (Phase 52) follows the same rule.
+- Fiscal consumes delivered services asynchronously: the broker handler records an intake
+  per line, and the worker creates the origin and the draft. It issues the draft when the
+  establishment's policy is `automatic`. Whatever stops an intake (a missing profile, an
+  unsupported municipality, an incomplete recipient) is shown as a blocked intake with
+  its reason, and retried.
 
 ## Alternatives rejected
 

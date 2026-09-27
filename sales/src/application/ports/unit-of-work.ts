@@ -6,6 +6,7 @@ import type {
   QuotesRepository,
   SalesEventsRepository,
   SalesOrdersRepository,
+  ServiceOrdersRepository,
   ShipmentsRepository,
 } from '@/domain/repositories/sales-repositories'
 
@@ -13,7 +14,7 @@ import type {
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'quote' | 'order' | 'shipment' | 'catalog-item'
+  readonly subjectType: 'quote' | 'order' | 'shipment' | 'catalog-item' | 'service-order'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -60,6 +61,7 @@ export interface SalesScope {
   readonly customers: CustomersRepository
   readonly quotes: QuotesRepository
   readonly shipments: ShipmentsRepository
+  readonly serviceOrders: ServiceOrdersRepository
   readonly fiscalDispatchGate: FiscalDispatchGate
   readonly audit: AuditTrail
 }

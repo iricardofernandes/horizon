@@ -291,7 +291,7 @@ function apply(
 }
 
 /** The lines, priced from the catalogue projection as it stands today. */
-async function priceLines(
+export async function priceLines(
   scope: SalesScope,
   inputs: readonly QuoteLineInput[],
 ): Promise<Either<QuoteError, readonly QuoteLine[]>> {

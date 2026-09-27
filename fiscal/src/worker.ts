@@ -315,6 +315,9 @@ const issueWorkerTimer = setInterval(() => {
         config.FISCAL_SIMULATOR_RETRY_DELAY_MS,
       )
       await phase43Runtime?.worker.processOne(tenantId, 'fiscal:phase43-worker')
+      // Services delivered in Sales, a few per cycle so one tenant never starves the rest.
+      for (let step = 0; step < 5; step += 1)
+        if (!(await serviceRuntime.intakes.processOne(tenantId))) break
       await outbox.flush(tenantId)
     }),
   )

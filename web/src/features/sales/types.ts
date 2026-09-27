@@ -80,6 +80,8 @@ export type Quote = {
   supersededBy: string | null
   closureReason: string | null
   orderId: string | null
+  /** The service order its service lines became (Phase 50); absent before Phase 50. */
+  serviceOrderId?: string | null
   sentAt: string | null
   createdAt: string
   updatedAt: string
@@ -230,12 +232,28 @@ export function shippedShare(lines: readonly OrderLine[]): number {
   return Math.min(100, Math.round((shipped / ordered) * 100))
 }
 
-/**
- * A sales order is a goods order (ADR 0056): an accepted proposal with service lines waits
- * for the service order of Phase 50 instead of converting.
- */
+/** Whether a proposal prices any service (ADR 0056). */
 export function hasServiceLines(quote: { lines: readonly Pick<QuoteLine, 'kind'>[] }): boolean {
   return quote.lines.some((line) => line.kind === 'service')
+}
+
+/**
+ * What converting an accepted proposal makes (ADR 0056): a sales order for its goods, which
+ * needs a warehouse, and a service order for its services. An item of unknown kind is a good.
+ */
+export function conversionOf(quote: { lines: readonly Pick<QuoteLine, 'kind'>[] }): {
+  goods: boolean
+  services: boolean
+} {
+  return {
+    goods: quote.lines.some((line) => line.kind !== 'service'),
+    services: hasServiceLines(quote),
+  }
+}
+
+/** Whether the proposal already became its documents. */
+export function converted(quote: Pick<Quote, 'orderId' | 'serviceOrderId'>): boolean {
+  return Boolean(quote.orderId || quote.serviceOrderId)
 }
 
 /** The items a sales order may carry: goods only. */

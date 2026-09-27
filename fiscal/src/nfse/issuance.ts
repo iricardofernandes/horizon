@@ -52,6 +52,15 @@ export class FiscalServiceIssuance {
     await this.#db.end()
   }
 
+  private async withdrawnInSales(tenantId: string, documentId: string): Promise<boolean> {
+    const rows = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select 1 from fiscal_service_intakes where tenant_id = ${tenantId}
+        and document_id = ${documentId} and withdrawal_requested`
+    })
+    return rows.length > 0
+  }
+
   async issue(input: z.input<typeof commandSchema>) {
     const command = commandSchema.parse(input)
     const prior = await this.dispatch.findIssuance(
@@ -79,6 +88,9 @@ export class FiscalServiceIssuance {
     const document = await this.documents.get(command.tenantId, command.documentId)
     if (!document) throw new Error('Fiscal document not found')
     if (document.status !== 'ready') throw new Error('Fiscal document is not ready')
+    // A delivery cancelled in Sales withdrew this draft (Phase 50): it is never issued.
+    if (await this.withdrawnInSales(command.tenantId, command.documentId))
+      throw new Error('Fiscal document is blocked: its service delivery was cancelled in Sales')
     if (document.model !== 'nfse' || document.environment !== 'simulation')
       throw new Error('Fiscal capability is unsupported')
     const evidence = await this.readReadiness(command.tenantId, command.documentId)

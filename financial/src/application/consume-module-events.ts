@@ -10,6 +10,8 @@ import {
   procurementReceiptReturned,
   salesOrderCancelled,
   salesOrderConfirmed,
+  salesServiceDelivered,
+  salesServiceDeliveryCancelled,
   salesShipmentDispatched,
   salesShipmentReturned,
 } from '@horizon/contracts'
@@ -28,6 +30,10 @@ import {
   WithdrawReceivableOfOrderUseCase,
   WithdrawReceivableOfShipmentUseCase,
 } from './use-cases/follow-sales-and-parties'
+import {
+  RecordReceivableFromServiceDeliveryUseCase,
+  WithdrawReceivableOfServiceDeliveryUseCase,
+} from './use-cases/follow-services'
 
 type SourceModule = 'parties' | 'sales' | 'procurement'
 
@@ -41,6 +47,8 @@ export class FinancialModuleEventHandlers {
   private readonly payableFromReceipt: RecordPayableFromReceiptUseCase
   private readonly withdrawReceiptPayable: WithdrawPayableOfReceiptUseCase
   private readonly withdrawForecast: WithdrawPayableForecastUseCase
+  private readonly receivableFromService: RecordReceivableFromServiceDeliveryUseCase
+  private readonly withdrawServiceReceivable: WithdrawReceivableOfServiceDeliveryUseCase
 
   constructor(
     private readonly unitOfWork: FinancialUnitOfWork,
@@ -54,6 +62,8 @@ export class FinancialModuleEventHandlers {
     this.payableFromReceipt = new RecordPayableFromReceiptUseCase(clock)
     this.withdrawReceiptPayable = new WithdrawPayableOfReceiptUseCase(clock)
     this.withdrawForecast = new WithdrawPayableForecastUseCase(clock)
+    this.receivableFromService = new RecordReceivableFromServiceDeliveryUseCase(clock)
+    this.withdrawServiceReceivable = new WithdrawReceivableOfServiceDeliveryUseCase(clock)
     this.handlers = {
       'parties.party.registered': (event) => this.partyRegistered(event),
       'parties.party.updated': (event) => this.partyUpdated(event),
@@ -62,6 +72,8 @@ export class FinancialModuleEventHandlers {
       'sales.order.cancelled': (event) => this.orderCancelled(event),
       'sales.shipment.dispatched': (event) => this.shipmentDispatched(event),
       'sales.shipment.returned': (event) => this.shipmentReturned(event),
+      'sales.service.delivered': (event) => this.serviceDelivered(event),
+      'sales.service.delivery-cancelled': (event) => this.serviceDeliveryCancelled(event),
       'procurement.order.approved': (event) => this.purchaseApproved(event),
       'procurement.order.cancelled': (event) => this.purchaseWithdrawn(event, 'cancelled'),
       'procurement.order.closed': (event) => this.purchaseWithdrawn(event, 'closed'),
@@ -121,6 +133,43 @@ export class FinancialModuleEventHandlers {
       parsed.tenantId,
       received(parsed, 'sales'),
       (scope) => this.withdrawShipmentReceivable.executeInScope(scope, parsed.payload),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
+  }
+
+  /** Work was delivered: what it billed is owed, once per delivery (ADR 0056). */
+  private async serviceDelivered(event: EventEnvelope): Promise<void> {
+    const parsed = salesServiceDelivered.envelope.parse(event)
+    const { payload } = parsed
+    const outcome = await this.unitOfWork.processEvent(
+      parsed.tenantId,
+      received(parsed, 'sales'),
+      (scope) =>
+        this.receivableFromService.executeInScope(scope, {
+          serviceOrderId: payload.serviceOrderId,
+          deliveryId: payload.deliveryId,
+          customerId: payload.customerId,
+          performedOn: payload.performedOn,
+          value: payload.value,
+          installments: payload.installments,
+        }),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
+  }
+
+  /** The service was not provided after all: its receivable is withdrawn or reversed. */
+  private async serviceDeliveryCancelled(event: EventEnvelope): Promise<void> {
+    const parsed = salesServiceDeliveryCancelled.envelope.parse(event)
+    const { payload } = parsed
+    const outcome = await this.unitOfWork.processEvent(
+      parsed.tenantId,
+      received(parsed, 'sales'),
+      (scope) =>
+        this.withdrawServiceReceivable.executeInScope(scope, {
+          serviceOrderId: payload.serviceOrderId,
+          deliveryId: payload.deliveryId,
+          reason: payload.reason,
+        }),
     )
     if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
   }

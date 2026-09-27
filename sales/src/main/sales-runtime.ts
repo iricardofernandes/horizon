@@ -8,6 +8,11 @@ import {
 } from '@/application/use-cases/manage-quotes'
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
 import {
+  DecideServiceOrderUseCase,
+  DeliverServiceUseCase,
+  OpenServiceOrderUseCase,
+} from '@/application/use-cases/service-orders'
+import {
   AbandonShipmentUseCase,
   DispatchShipmentUseCase,
   PackShipmentUseCase,
@@ -32,6 +37,9 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
   readonly dispatchShipment: DispatchShipmentUseCase
   readonly returnShipment: ReturnShipmentUseCase
   readonly abandonShipment: AbandonShipmentUseCase
+  readonly openServiceOrder: OpenServiceOrderUseCase
+  readonly deliverService: DeliverServiceUseCase
+  readonly decideServiceOrder: DecideServiceOrderUseCase
   readonly accessTokens: AccessTokenVerifier
 
   constructor(config: SalesEnvironment) {
@@ -68,6 +76,9 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
     this.dispatchShipment = new DispatchShipmentUseCase(this.database, clock)
     this.returnShipment = new ReturnShipmentUseCase(this.database, clock)
     this.abandonShipment = new AbandonShipmentUseCase(this.database, clock)
+    this.openServiceOrder = new OpenServiceOrderUseCase(this.database, clock)
+    this.deliverService = new DeliverServiceUseCase(this.database, clock)
+    this.decideServiceOrder = new DecideServiceOrderUseCase(this.database, clock)
   }
 
   onModuleInit(): Promise<void> {

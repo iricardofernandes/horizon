@@ -20,7 +20,12 @@ export interface IdempotentContext extends CommandContext {
 export type Failure = InvalidInputError | ConflictError | ResourceNotFoundError
 export type Outcome<T> = Promise<Either<Failure, T>>
 
-/** Run `work` once per idempotency key, remembering the command and what it asked for. */
+/**
+ * Run `work` once per idempotency key, remembering the command and what it asked for.
+ *
+ * What it asked for excludes who asked and how the request was traced: a retry through the
+ * gateway carries a new request id, and it is still the same request.
+ */
 export function once<T>(
   unitOfWork: SalesUnitOfWork,
   context: IdempotentContext,
@@ -33,7 +38,9 @@ export function once<T>(
     {
       idempotencyKey: context.idempotencyKey,
       command,
-      fingerprint: createHash('sha256').update(canonicalJson({ command, request })).digest('hex'),
+      fingerprint: createHash('sha256')
+        .update(canonicalJson({ command, request: withoutContext(request) }))
+        .digest('hex'),
     },
     work,
   )
@@ -45,4 +52,10 @@ export function audit(
   record: Pick<AuditRecord, 'action' | 'subjectType' | 'subjectId' | 'occurredAt' | 'details'>,
 ) {
   return scope.audit.append({ ...record, actor: context.actor, requestId: context.requestId })
+}
+
+function withoutContext(request: unknown): unknown {
+  if (!request || typeof request !== 'object' || !('context' in request)) return request
+  const { context: _context, ...rest } = request as Record<string, unknown>
+  return rest
 }

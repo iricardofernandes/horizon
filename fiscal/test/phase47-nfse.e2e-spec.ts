@@ -16,6 +16,7 @@ import { FiscalCapabilities } from '../src/capabilities'
 import { FiscalDispatch } from '../src/dispatch'
 import { FiscalDocumentList } from '../src/document-list'
 import { FiscalDocuments } from '../src/documents'
+import { FiscalIngress } from '../src/ingress'
 import { FiscalIssueWorker } from '../src/issue-worker'
 import type { SimulationCredential } from '../src/nfe55/signature'
 import { DeterministicNfe55Simulator, type SimulatorScenario } from '../src/nfe55/simulator'
@@ -28,7 +29,9 @@ import {
   SourceKeyConflict,
   SubstitutionNotAllowed,
 } from '../src/nfse/errors'
+import { FiscalServiceIntakes } from '../src/nfse/intake'
 import { FiscalServiceIssuance, type ServiceProfile } from '../src/nfse/issuance'
+import { FiscalServiceIssuancePolicies } from '../src/nfse/issuance-policies'
 import { NfseDispatchProcessor, NfseProcessingFacts } from '../src/nfse/processor'
 import { FiscalServiceReadiness } from '../src/nfse/readiness'
 import { FiscalNfseRegistry } from '../src/nfse/registry'
@@ -77,6 +80,8 @@ let serviceDocuments: FiscalServiceDocuments
 let readiness: FiscalServiceReadiness
 let documentList: FiscalDocumentList
 let support: FiscalSupport
+let ingress: FiscalIngress
+let policies: FiscalServiceIssuancePolicies
 const services: Array<{ close(): Promise<void> }> = []
 const catalogServices = new Set<string>()
 
@@ -180,7 +185,9 @@ beforeAll(async () => {
   )
   documentList = new FiscalDocumentList(url)
   support = new FiscalSupport(url)
-  services.push(documentList, support)
+  ingress = new FiscalIngress(url, masterKey)
+  policies = new FiscalServiceIssuancePolicies(url)
+  services.push(documentList, support, ingress, policies)
 }, 180_000)
 
 afterAll(async () => {
@@ -610,6 +617,260 @@ describe('Phase 48 worklist and support commands', () => {
     await expect(support.retryDue(tenant.tenantId, 'support:operator', 101)).rejects.toThrow()
   })
 })
+
+describe('Phase 50 services delivered in Sales', () => {
+  it('issues one NFS-e per delivered line, however the fact is replayed, and cancels it', async () => {
+    const tenant = await seedTenant()
+    await policies.set({
+      tenantId: tenant.tenantId,
+      establishmentId: tenant.establishmentId,
+      actorId: 'reviewer:phase50-test',
+      request: { mode: 'automatic', series: 7, reason: 'Emissão automática revisada no teste' },
+    })
+    const fact = deliveredFact(tenant, 2)
+    const eventId = randomUUID()
+    expect(await receive(tenant, 'sales.service.delivered', fact, eventId)).toBe('applied')
+    expect(await receive(tenant, 'sales.service.delivered', fact, eventId)).toBe('duplicate')
+    // The same facts under a new event id find the same intakes.
+    expect(await receive(tenant, 'sales.service.delivered', fact)).toBe('applied')
+    await expect(
+      receive(tenant, 'sales.service.delivered', {
+        ...fact,
+        lines: [{ ...fact.lines[0], amount: { amount: '1', currency: 'BRL' } }],
+      }),
+    ).rejects.toThrow(/Conflicting service delivery facts/)
+
+    const intakes = intakesOf(tenant)
+    while (await intakes.processOne(tenant.tenantId));
+    await work(tenant, 'authorized')
+    await work(tenant, 'authorized')
+    const listed = await intakes.list(tenant.tenantId)
+    expect(listed).toHaveLength(2)
+    expect(listed.map((intake) => intake.status)).toEqual(['issuing', 'issuing'])
+    const documentIds = listed.map((intake) => String(intake.documentId))
+    for (const documentId of documentIds)
+      expect(await serviceDocuments.get(tenant.tenantId, documentId)).toMatchObject({
+        status: 'authorized',
+        series: 7,
+      })
+    const origins = await scoped(
+      tenant.tenantId,
+      (tx) => tx`select source_module, source_document_type, source_id, source_period
+        from fiscal_service_origins order by source_id`,
+    )
+    expect(
+      origins.map((row) => [row.source_module, row.source_document_type, row.source_period]),
+    ).toEqual([
+      ['sales', 'service-delivery', '2026-09'],
+      ['sales', 'service-delivery', '2026-09'],
+    ])
+    expect(origins.map((row) => row.source_id).sort()).toEqual(
+      fact.lines.map((line) => line.entryId).sort(),
+    )
+
+    await receive(tenant, 'sales.service.delivery-cancelled', cancelledFact(fact))
+    while (await intakes.processOne(tenant.tenantId));
+    await work(tenant, 'authorized')
+    await work(tenant, 'authorized')
+    await forceDue(tenant)
+    while (await intakes.processOne(tenant.tenantId));
+    for (const documentId of documentIds)
+      expect((await serviceDocuments.get(tenant.tenantId, documentId))?.status).toBe('cancelled')
+    expect((await intakes.list(tenant.tenantId)).map((intake) => intake.status)).toEqual([
+      'withdrawn',
+      'withdrawn',
+    ])
+    const cancellations = (await outbox(tenant)).filter(
+      (row) => row.payload.outcome === 'cancelled',
+    )
+    expect(cancellations).toHaveLength(2)
+    expect(cancellations[0]?.payload.sourceKey).toMatchObject({
+      module: 'sales',
+      documentType: 'service-delivery',
+      period: '2026-09',
+    })
+  })
+
+  it('blocks an intake with its reason, retries it and withdraws its draft', async () => {
+    const tenant = await seedTenant()
+    const unprofiled = randomUUID()
+    catalogServices.add(unprofiled)
+    const fact = deliveredFact(tenant, 1, unprofiled)
+    await receive(tenant, 'sales.service.delivered', fact)
+    const intakes = intakesOf(tenant)
+    expect(await intakes.processOne(tenant.tenantId)).toBe(true)
+    const [blocked] = await intakes.list(tenant.tenantId, { status: 'blocked' })
+    expect(blocked).toMatchObject({ attempts: 1, serviceOriginId: null })
+    expect(blocked?.reason).toMatch(/^SERVICE_PROFILE_MISSING/)
+    // Not due again until its backoff, unless someone asks.
+    expect(await intakes.processOne(tenant.tenantId)).toBe(false)
+
+    await profiles.create({
+      tenantId: tenant.tenantId,
+      actorId: 'reviewer:phase50-test',
+      request: {
+        itemId: unprofiled,
+        nationalTaxCode: '010101',
+        nbsCode: '115022000',
+        issTaxation: '1',
+        description: 'Suporte técnico',
+        effectiveFrom: '2026-01-01',
+        reason: 'Classificação revisada no teste da fase 50',
+      },
+    })
+    await intakes.retry(tenant.tenantId, String(blocked?.id), 'user:operator')
+    expect(await intakes.processOne(tenant.tenantId)).toBe(true)
+    const [drafted] = await intakes.list(tenant.tenantId)
+    // Nothing configured means review: the draft waits for a person.
+    expect(drafted).toMatchObject({ status: 'drafted', reason: null, nextAttemptAt: null })
+    const documentId = String(drafted?.documentId)
+    expect((await serviceDocuments.get(tenant.tenantId, documentId))?.status).toBe('draft')
+    await expect(
+      intakes.retry(tenant.tenantId, String(blocked?.id), 'user:operator'),
+    ).rejects.toThrow(/not blocked/)
+
+    await receive(tenant, 'sales.service.delivery-cancelled', cancelledFact(fact))
+    expect(await intakes.processOne(tenant.tenantId)).toBe(true)
+    expect((await intakes.list(tenant.tenantId))[0]).toMatchObject({
+      status: 'withdrawn',
+      withdrawalRequested: true,
+    })
+    await validate(tenant, documentId)
+    await expect(issue(tenant, documentId)).rejects.toThrow(/cancelled in Sales/)
+    await expect(
+      scoped(tenant.tenantId, (tx) => tx`update fiscal_service_intakes set status = 'pending'`),
+    ).rejects.toThrow(/only moves forward/)
+
+    // Another tenant sees none of it.
+    const other = await seedTenant()
+    expect(await intakesOf(other).list(other.tenantId)).toEqual([])
+    expect(
+      await scoped(other.tenantId, (tx) => tx`select 1 from fiscal_service_intakes`),
+    ).toHaveLength(0)
+  })
+
+  it('withdraws a delivery cancelled while its draft was being made', async () => {
+    const tenant = await seedTenant()
+    const fact = deliveredFact(tenant, 1)
+    await receive(tenant, 'sales.service.delivered', fact)
+    const intakes = new FiscalServiceIntakes(url, {
+      projections,
+      capabilities,
+      profiles,
+      origins,
+      documents: {
+        get: (tenantId, documentId) => serviceDocuments.get(tenantId, documentId),
+        async createDraft(input) {
+          // The cancellation lands between the claim and the record of this step.
+          await receive(tenant, 'sales.service.delivery-cancelled', cancelledFact(fact))
+          return serviceDocuments.createDraft(input)
+        },
+      },
+      readiness,
+      policies,
+      issuance: tenant.issuance,
+      cancellation: tenant.cancellation,
+    })
+    services.push(intakes)
+    expect(await intakes.processOne(tenant.tenantId)).toBe(true)
+    const [drafted] = await intakes.list(tenant.tenantId)
+    expect(drafted).toMatchObject({ status: 'drafted', withdrawalRequested: true })
+    expect(drafted?.nextAttemptAt).not.toBeNull()
+    expect(await intakes.processOne(tenant.tenantId)).toBe(true)
+    expect((await intakes.list(tenant.tenantId))[0]?.status).toBe('withdrawn')
+  })
+
+  it('waits for a cancellation that overtakes its delivery', async () => {
+    const tenant = await seedTenant()
+    const fact = deliveredFact(tenant, 1)
+    await expect(
+      receive(tenant, 'sales.service.delivery-cancelled', cancelledFact(fact)),
+    ).rejects.toThrow(/has not been received yet/)
+    // Rolled back with its inbox claim, so the redelivery is handled once it can be.
+    await receive(tenant, 'sales.service.delivered', fact)
+    await receive(tenant, 'sales.service.delivery-cancelled', cancelledFact(fact))
+    expect(await intakesOf(tenant).processOne(tenant.tenantId)).toBe(true)
+    expect((await intakesOf(tenant).list(tenant.tenantId))[0]?.status).toBe('withdrawn')
+  })
+})
+
+function intakesOf(tenant: Tenant) {
+  const intakes = new FiscalServiceIntakes(url, {
+    projections,
+    capabilities,
+    profiles,
+    origins,
+    documents: serviceDocuments,
+    readiness,
+    policies,
+    issuance: tenant.issuance,
+    cancellation: tenant.cancellation,
+  })
+  services.push(intakes)
+  return intakes
+}
+
+function deliveredFact(tenant: Tenant, lines: number, itemId = tenant.serviceItemId) {
+  return {
+    serviceOrderId: randomUUID(),
+    deliveryId: randomUUID(),
+    customerId: tenant.recipientId,
+    performedOn: '2026-09-20',
+    competence: '2026-09',
+    deliveredBy: 'user:operator',
+    lines: Array.from({ length: lines }, (_, index) => ({
+      entryId: randomUUID(),
+      lineId: randomUUID(),
+      itemId,
+      description: `Desenvolvimento de sistema sob medida, etapa ${index + 1}`,
+      quantity: '1',
+      unitPrice: { amount: '75000', currency: 'BRL' },
+      amount: { amount: '75000', currency: 'BRL' },
+    })),
+    value: { amount: String(75000 * lines), currency: 'BRL' },
+    installments: [
+      {
+        number: 1,
+        dueOn: '2026-10-20',
+        amount: { amount: String(75000 * lines), currency: 'BRL' },
+      },
+    ],
+    complete: true,
+  }
+}
+
+function cancelledFact(fact: ReturnType<typeof deliveredFact>) {
+  return {
+    serviceOrderId: fact.serviceOrderId,
+    deliveryId: fact.deliveryId,
+    customerId: fact.customerId,
+    competence: fact.competence,
+    entryIds: fact.lines.map((line) => line.entryId),
+    cancelledOn: '2026-09-21',
+    reason: 'O cliente cancelou a entrega',
+  }
+}
+
+function receive(tenant: Tenant, eventType: string, payload: unknown, eventId = randomUUID()) {
+  return ingress.accept({
+    eventId,
+    eventType,
+    eventVersion: 1,
+    occurredAt: new Date().toISOString(),
+    tenantId: tenant.tenantId,
+    traceId: randomBytes(16).toString('hex'),
+    payload,
+  })
+}
+
+/** Brings every waiting intake forward, as the passing of its wait would. */
+function forceDue(tenant: Tenant) {
+  return scoped(
+    tenant.tenantId,
+    (tx) => tx`update fiscal_service_intakes set next_attempt_at = now()
+      where next_attempt_at is not null`,
+  )
+}
 
 async function seedTenant(options: { municipality?: string } = {}): Promise<Tenant> {
   const municipality = options.municipality ?? SAO_PAULO

@@ -412,12 +412,23 @@ conversion, so the order says what was agreed rather than pointing at the offer.
 
 ### proposal
 The customer-facing **offer**, a Sales quote. It may price goods and services side by side.
-Once accepted, its goods become a sales order and, from Phase 50, its services become a
-service order.
+Once accepted, its goods become a sales order and its services a service order, in one
+conversion.
 
 ### service order
 The document that **delivers a service**, stage by stage. It is never reserved in a
 warehouse or shipped. Each delivery bills once, as a receivable and an NFS-e (ADR 0056).
+
+### service delivery
+Work of a service order recorded as delivered on the day it was performed. It bills its
+share of the order at once: one receivable for the delivery, and one NFS-e per delivered
+line (its **entry**). A delivery that was not provided is cancelled with a reason and stays
+in the record, and its work is owed again.
+
+### service intake
+Fiscal's record of one delivered service line on its way to an NFS-e: an origin, a draft,
+and — under the `automatic` policy — the issued document. When something stops it, it is
+**blocked** with the reason, and retried.
 
 ### billed period
 One competence month of a contract, billed once and never rewritten. A correction is a

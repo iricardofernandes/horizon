@@ -196,6 +196,7 @@ export const quotes = pgTable(
     supersededBy: uuid('superseded_by'),
     closureReason: text('closure_reason'),
     orderId: uuid('order_id'),
+    serviceOrderId: uuid('service_order_id'),
     sentAt: timestamp('sent_at', { withTimezone: true, mode: 'date' }),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),

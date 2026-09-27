@@ -79,6 +79,8 @@ import {
   salesQuoteAccepted,
   salesQuoteRejected,
   salesQuoteSent,
+  salesServiceDelivered,
+  salesServiceDeliveryCancelled,
   salesShipmentDispatched,
   salesShipmentReturned,
 } from './sales'
@@ -184,6 +186,8 @@ export const EVENTS: readonly EventDefinition[] = [
   salesQuoteRejected,
   salesShipmentDispatched,
   salesShipmentReturned,
+  salesServiceDelivered,
+  salesServiceDeliveryCancelled,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

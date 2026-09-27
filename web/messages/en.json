@@ -1188,7 +1188,10 @@
     "versionNumber": "Version {version}",
     "warehouse": "Warehouse",
     "serviceTag": "Service",
-    "servicesConvertLater": "This proposal has service lines. A sales order carries goods only, and converting services into a service order is not available yet."
+    "servicesBecomeServiceOrder": "Service lines become a service order, delivered stage by stage; goods become a sales order.",
+    "convertBoth": "Create the order and the service order",
+    "convertServices": "Create the service order",
+    "becameServiceOrder": "The services of this offer became service order {id}."
   },
   "shell": {
     "collapseSidebar": "Collapse sidebar",

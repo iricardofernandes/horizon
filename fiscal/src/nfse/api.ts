@@ -4,6 +4,9 @@ import {
   fiscalNfseRegistryVersionRequestSchema,
   fiscalServiceCancellationRequestSchema,
   fiscalServiceDocumentCreateRequestSchema,
+  fiscalServiceIntakeListSchema,
+  fiscalServiceIntakeStatusSchema,
+  fiscalServiceIssuancePolicyRequestSchema,
   fiscalServiceOriginRequestSchema,
   fiscalServiceProfileListSchema,
   fiscalServiceProfileRequestSchema,
@@ -23,7 +26,9 @@ import {
   SourceKeyConflict,
   SubstitutionNotAllowed,
 } from './errors'
+import type { FiscalServiceIntakes } from './intake'
 import type { FiscalServiceIssuance } from './issuance'
+import type { FiscalServiceIssuancePolicies } from './issuance-policies'
 import type { FiscalServiceReadiness } from './readiness'
 import type { FiscalNfseRegistry } from './registry'
 import type { FiscalServiceOrigins } from './service-origins'
@@ -36,6 +41,8 @@ export type ServiceDependencies = {
   origins: Pick<FiscalServiceOrigins, 'create'>
   documents: Pick<FiscalServiceDocuments, 'createDraft' | 'get'>
   readiness: Pick<FiscalServiceReadiness, 'validate'>
+  policies: Pick<FiscalServiceIssuancePolicies, 'read' | 'set'>
+  intakes?: Pick<FiscalServiceIntakes, 'list' | 'retry'>
   issuance?: Pick<FiscalServiceIssuance, 'issue'>
   cancellation?: Pick<FiscalServiceCancellation, 'request'>
   substitutions?: Pick<FiscalServiceSubstitutions, 'request'>
@@ -111,6 +118,47 @@ export async function handleServiceRoute(
         .date()
         .parse(url.searchParams.get('competenceDate') ?? new Date().toISOString().slice(0, 10))
       json(response, 200, await service.registry.resolve(tenantId, municipality[1], competenceDate))
+      return true
+    }
+    const policy = /^\/service-issuance-policies\/([0-9a-f-]{36})$/.exec(url.pathname)
+    if (policy?.[1] && request.method === 'GET') {
+      json(response, 200, await service.policies.read(tenantId, policy[1]))
+      return true
+    }
+    if (policy?.[1] && request.method === 'PUT') {
+      if (!allowed(principal, 'rules:manage', response)) return true
+      const body = fiscalServiceIssuancePolicyRequestSchema.parse(await readJson(request))
+      json(
+        response,
+        200,
+        await service.policies.set({
+          tenantId,
+          establishmentId: policy[1],
+          actorId: principal.subject,
+          request: body,
+        }),
+      )
+      return true
+    }
+    if (url.pathname === '/service-intakes' && request.method === 'GET') {
+      if (!service.intakes) return unconfigured(response)
+      const status = url.searchParams.get('status')
+      json(
+        response,
+        200,
+        fiscalServiceIntakeListSchema.parse({
+          data: await service.intakes.list(tenantId, {
+            status: status ? fiscalServiceIntakeStatusSchema.parse(status) : undefined,
+          }),
+        }),
+      )
+      return true
+    }
+    const retry = /^\/service-intakes\/([0-9a-f-]{36})\/retry$/.exec(url.pathname)
+    if (retry?.[1] && request.method === 'POST') {
+      if (!allowed(principal, 'draft:create', response)) return true
+      if (!service.intakes) return unconfigured(response)
+      json(response, 200, await service.intakes.retry(tenantId, retry[1], principal.subject))
       return true
     }
     if (url.pathname === '/service-origins' && request.method === 'POST') {

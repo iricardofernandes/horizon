@@ -13,6 +13,7 @@ import type { DomainEvent } from '@/core/events/domain-event'
 import type { Customer } from '@/domain/entities/customer'
 import type { Quote } from '@/domain/entities/quote'
 import type { SalesOrder } from '@/domain/entities/sales-order'
+import type { ServiceOrder } from '@/domain/entities/service-order'
 import type { Shipment } from '@/domain/entities/shipment'
 import {
   type CatalogItemProjection,
@@ -22,6 +23,7 @@ import {
   QuotesRepository,
   SalesEventsRepository,
   SalesOrdersRepository,
+  ServiceOrdersRepository,
   ShipmentsRepository,
 } from '@/domain/repositories/sales-repositories'
 
@@ -245,7 +247,36 @@ class InMemoryQuotes extends QuotesRepository {
   }
 }
 
+class InMemoryServiceOrders extends ServiceOrdersRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: ServiceOrder[],
+    private readonly events: DomainEvent[],
+  ) {
+    super()
+  }
+  findById(id: string): Promise<ServiceOrder | null> {
+    return Promise.resolve(
+      this.records.find(
+        (order) => order.tenantId === this.tenantId && order.id.toString() === id,
+      ) ?? null,
+    )
+  }
+  create(order: ServiceOrder): Promise<void> {
+    if (order.tenantId !== this.tenantId) throw new Error('tenant mismatch')
+    this.records.push(order)
+    this.events.push(...order.pullDomainEvents())
+    return Promise.resolve()
+  }
+  save(order: ServiceOrder): Promise<void> {
+    if (order.tenantId !== this.tenantId) throw new Error('tenant mismatch')
+    this.events.push(...order.pullDomainEvents())
+    return Promise.resolve()
+  }
+}
+
 export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
+  readonly serviceOrders: ServiceOrder[] = []
   readonly orders: SalesOrder[] = []
   readonly catalogItems: CatalogItemProjection[] = []
   readonly projectedCatalogItems = new Map<
@@ -395,6 +426,7 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
       customers: new InMemoryCustomers(tenantId, this.customers),
       quotes: new InMemoryQuotes(tenantId, this.quotes, this.events),
       shipments: new InMemoryShipments(tenantId, this.shipments),
+      serviceOrders: new InMemoryServiceOrders(tenantId, this.serviceOrders, this.events),
       audit: new InMemoryAudit(this.auditRecords),
     })
   }

@@ -65,7 +65,35 @@ const createQuoteInput = z.strictObject({
 
 const reviseQuoteInput = z.strictObject({ lines: quoteLines, terms: quoteTerms.optional() })
 
-const convertQuoteInput = z.strictObject({ fulfillmentWarehouseId: z.uuid() })
+// The warehouse is for the goods; a proposal of services alone converts without one.
+const convertQuoteInput = z.strictObject({ fulfillmentWarehouseId: z.uuid().optional() })
+
+const openServiceOrderInput = z.strictObject({
+  customerId: z.uuid(),
+  lines: quoteLines,
+  terms: quoteTerms.pick({ discount: true, paymentTermDays: true, notes: true }).optional(),
+  scheduledFor: z.iso.date().optional(),
+})
+
+const deliverServiceInput = z.strictObject({
+  lines: z
+    .array(
+      z.strictObject({
+        lineId: z.uuid(),
+        quantity: z.string().regex(/^\d+(?:\.\d{1,6})?$/),
+      }),
+    )
+    .min(1)
+    .max(100)
+    .optional(),
+  performedOn: z.iso.date().optional(),
+})
+
+function uuidOf(value: string, what: string): string {
+  const parsed = z.uuid().safeParse(value)
+  if (!parsed.success) throw new BadRequestException(`Invalid ${what} id`)
+  return parsed.data
+}
 
 const consignment = z.strictObject({
   carrier: z.string().trim().min(2).max(120).optional(),
@@ -349,6 +377,109 @@ export class SalesController {
         shipmentId: shipmentId(id),
         reason: parsed.data.reason,
       }),
+    )
+  }
+
+  @Get('service-orders')
+  @RequireSalesAction('read')
+  serviceOrders(@Req() request: SalesRequest) {
+    return this.runtime.database.listServiceOrderSnapshots(tenantOf(request))
+  }
+
+  @Get('service-orders/:id')
+  @RequireSalesAction('read')
+  async serviceOrder(@Param('id') id: string, @Req() request: SalesRequest) {
+    const order = await this.runtime.database.findServiceOrderSnapshot(
+      tenantOf(request),
+      uuidOf(id, 'service order'),
+    )
+    if (!order) throw new NotFoundException('Service order was not found')
+    return order
+  }
+
+  /** Services sold directly, without a proposal (ADR 0056). */
+  @Post('service-orders')
+  @RequireSalesAction('manage')
+  async openServiceOrder(@Body() body: unknown, @Req() request: SalesRequest) {
+    const parsed = openServiceOrderInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid service order')
+    return this.unwrap(
+      await this.runtime.openServiceOrder.execute({ ...parsed.data, context: idempotent(request) }),
+    )
+  }
+
+  @Post('service-orders/:id/start')
+  @RequireSalesAction('manage')
+  async startServiceOrder(@Param('id') id: string, @Req() request: SalesRequest) {
+    return this.unwrap(
+      await this.runtime.decideServiceOrder.start(context(request), uuidOf(id, 'service order')),
+    )
+  }
+
+  /** Work delivered: it is billed now, once. Without lines, everything still owed. */
+  @Post('service-orders/:id/deliveries')
+  @RequireSalesAction('manage')
+  async deliverService(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: SalesRequest,
+  ) {
+    const parsed = deliverServiceInput.safeParse(body ?? {})
+    if (!parsed.success) throw new BadRequestException('Invalid delivery')
+    return this.unwrap(
+      await this.runtime.deliverService.execute({
+        context: idempotent(request),
+        serviceOrderId: uuidOf(id, 'service order'),
+        lines: parsed.data.lines,
+        performedOn: parsed.data.performedOn,
+      }),
+    )
+  }
+
+  @Post('service-orders/:id/accept')
+  @RequireSalesAction('manage')
+  async acceptServiceOrder(@Param('id') id: string, @Req() request: SalesRequest) {
+    return this.unwrap(
+      await this.runtime.decideServiceOrder.accept(context(request), uuidOf(id, 'service order')),
+    )
+  }
+
+  @Post('service-orders/:id/cancel')
+  @RequireSalesAction('manage')
+  async cancelServiceOrder(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: SalesRequest,
+  ) {
+    const parsed = reasonInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid reason')
+    return this.unwrap(
+      await this.runtime.decideServiceOrder.cancel(
+        context(request),
+        uuidOf(id, 'service order'),
+        parsed.data.reason,
+      ),
+    )
+  }
+
+  /** The work was not provided after all: its receivable and NFS-e are undone downstream. */
+  @Post('service-orders/:id/deliveries/:deliveryId/cancel')
+  @RequireSalesAction('manage')
+  async cancelServiceDelivery(
+    @Param('id') id: string,
+    @Param('deliveryId') deliveryId: string,
+    @Body() body: unknown,
+    @Req() request: SalesRequest,
+  ) {
+    const parsed = reasonInput.safeParse(body)
+    if (!parsed.success) throw new BadRequestException('Invalid reason')
+    return this.unwrap(
+      await this.runtime.decideServiceOrder.cancelDelivery(
+        context(request),
+        uuidOf(id, 'service order'),
+        uuidOf(deliveryId, 'delivery'),
+        parsed.data.reason,
+      ),
     )
   }
 

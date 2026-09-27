@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   awaitingApproval,
+  conversionOf,
+  converted,
   currentVersions,
   deliverable,
   goodsOnly,
@@ -155,10 +157,22 @@ describe('what an order still owes', () => {
 })
 
 describe('goods and services', () => {
-  it('holds a proposal with service lines back from becoming a sales order', () => {
+  it('tells what an accepted proposal converts into', () => {
     expect(hasServiceLines({ lines: [{ kind: 'product' }, { kind: null }] })).toBe(false)
-    expect(hasServiceLines({ lines: [{ kind: 'product' }, { kind: 'service' }] })).toBe(true)
     expect(hasServiceLines({ lines: [{}] })).toBe(false)
+    expect(conversionOf({ lines: [{ kind: 'product' }, { kind: 'service' }] })).toEqual({
+      goods: true,
+      services: true,
+    })
+    expect(conversionOf({ lines: [{ kind: 'service' }] })).toEqual({
+      goods: false,
+      services: true,
+    })
+    // An item of unknown kind is still a good, and still needs a warehouse.
+    expect(conversionOf({ lines: [{ kind: null }] })).toEqual({ goods: true, services: false })
+    expect(converted({ orderId: null, serviceOrderId: null })).toBe(false)
+    expect(converted({ orderId: null, serviceOrderId: 'service-order' })).toBe(true)
+    expect(converted({ orderId: 'order' })).toBe(true)
   })
 
   it('offers only goods to a sales order', () => {

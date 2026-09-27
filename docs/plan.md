@@ -2352,9 +2352,21 @@ policy.
 
 ## Phase 50 — Service orders and execution
 
-**Planned.** A service order moves through its stages. A delivery publishes one fact
-that Financial turns into one receivable and Fiscal into one NFS-e draft; a cancellation
-reverses both. [Detailed work](services-implementation-plan.md#50--service-orders-and-execution).
+**Delivered on 2026-09-26.** Converting an accepted proposal makes a sales order of its
+goods and a service order of its services; a service order can also be opened directly.
+- The service order moves through `scheduled`, `in_progress`, `completed` and `accepted`
+  (or `cancelled`), and is delivered in parts. Each delivery publishes
+  `sales.service.delivered` once.
+- Financial raises one receivable per delivery. Fiscal issues one NFS-e per delivered
+  line, under a `review` or `automatic` policy per establishment, and shows what blocks
+  one.
+- Cancelling a delivery withdraws or reverses the receivable and cancels the NFS-e
+  (101101).
+- A replay under a new event id creates nothing twice.
+- Sales now recognises an idempotent retry that the gateway gives a new request id.
+
+[Evidence](services-phase50-evidence.md).
+[Detailed plan](services-phase50-implementation-plan.md). [Detailed work](services-implementation-plan.md#50--service-orders-and-execution).
 
 ## Phase 51 — Recurring contracts
 

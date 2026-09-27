@@ -10,6 +10,7 @@ import {
 } from '@horizon/contracts'
 import postgres from 'postgres'
 import { canonicalJson } from './canonical-json'
+import { recordServiceDelivery, withdrawServiceDelivery } from './nfse/intake-ingress'
 import { sealOrigin } from './origin-crypto'
 import { PURCHASE_EVENT_TYPES, projectPurchaseEvent } from './purchase-projections'
 
@@ -22,6 +23,8 @@ export const FISCAL_EVENT_TYPES = [
   'identity.company.fiscal-profile-changed',
   'catalog.item.classification-changed',
   'parties.party.erased',
+  'sales.service.delivered',
+  'sales.service.delivery-cancelled',
   ...PURCHASE_EVENT_TYPES,
 ] as const
 
@@ -113,6 +116,12 @@ export class FiscalIngress {
             where tenant_id = ${envelope.tenantId} and party_id = ${payload.partyId}`
           break
         }
+        case 'sales.service.delivered':
+          await recordServiceDelivery(tx, envelope.tenantId, envelope.payload)
+          break
+        case 'sales.service.delivery-cancelled':
+          await withdrawServiceDelivery(tx, envelope.tenantId, envelope.payload)
+          break
         case 'procurement.order.approved':
         case 'procurement.receipt.recorded':
         case 'procurement.receipt.returned':

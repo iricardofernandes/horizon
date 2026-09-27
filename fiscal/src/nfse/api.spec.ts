@@ -50,6 +50,10 @@ const document = {
   createdAt: '2026-09-26T12:00:00.000Z',
 }
 
+let lastPolicy: unknown = null
+let lastIntakeFilter: unknown = null
+const blockedIntakeId = randomUUID()
+
 const service: ServiceDependencies = {
   profiles: {
     async create() {
@@ -99,6 +103,39 @@ const service: ServiceDependencies = {
   readiness: {
     async validate() {
       throw new MunicipalityUnsupported('The competence date precedes the agreement start (E0016)')
+    },
+  },
+  policies: {
+    async read(_tenant, establishmentId) {
+      return {
+        establishmentId,
+        mode: 'review',
+        series: 1,
+        configured: false,
+        updatedBy: null,
+        updatedAt: null,
+      }
+    },
+    async set(input) {
+      lastPolicy = input
+      return {
+        establishmentId: input.establishmentId,
+        mode: input.request.mode,
+        series: input.request.series,
+        configured: true,
+        updatedBy: input.actorId,
+        updatedAt: '2026-09-26T12:00:00.000Z',
+      }
+    },
+  },
+  intakes: {
+    async list(_tenant, filter) {
+      lastIntakeFilter = filter
+      return []
+    },
+    async retry(_tenant, intakeId) {
+      if (intakeId !== blockedIntakeId) throw new Error('Fiscal service intake is not blocked')
+      throw new Error('unused')
     },
   },
   cancellation: {
@@ -278,4 +315,39 @@ it('queues cancellations and substitutions with their reason codes', async () =>
       })
     ).status,
   ).toBe(403)
+})
+
+it('keeps the issuance policy to administrators and lists delivered services', async () => {
+  const establishmentId = randomUUID()
+  role = 'viewer'
+  const current = await call('GET', `/service-issuance-policies/${establishmentId}`)
+  expect(await current.json()).toMatchObject({ mode: 'review', series: 1, configured: false })
+  const policy = {
+    mode: 'automatic',
+    series: 2,
+    reason: 'Emissão automática revisada pela contabilidade',
+  }
+  expect((await call('PUT', `/service-issuance-policies/${establishmentId}`, policy)).status).toBe(
+    403,
+  )
+  role = 'admin'
+  const saved = await call('PUT', `/service-issuance-policies/${establishmentId}`, policy)
+  expect(saved.status).toBe(200)
+  expect(await saved.json()).toMatchObject({ mode: 'automatic', series: 2, configured: true })
+  expect(lastPolicy).toMatchObject({ establishmentId, actorId: 'user:reviewer' })
+  expect(
+    (await call('PUT', `/service-issuance-policies/${establishmentId}`, { ...policy, series: 0 }))
+      .status,
+  ).toBe(400)
+
+  role = 'viewer'
+  const listed = await call('GET', '/service-intakes?status=blocked')
+  expect(await listed.json()).toEqual({ data: [] })
+  expect(lastIntakeFilter).toEqual({ status: 'blocked' })
+  expect((await call('GET', '/service-intakes?status=lost')).status).toBe(400)
+  expect((await call('POST', `/service-intakes/${randomUUID()}/retry`)).status).toBe(403)
+  role = 'issuer'
+  const retried = await call('POST', `/service-intakes/${randomUUID()}/retry`)
+  expect(retried.status).toBe(409)
+  expect(await retried.json()).toMatchObject({ code: 'INVALID_STATE_TRANSITION' })
 })

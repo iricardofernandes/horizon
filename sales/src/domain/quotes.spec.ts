@@ -212,9 +212,11 @@ describe('the offer to a customer', () => {
       total: { amount: '2000', currency: 'BRL' },
     })
     const orderId = randomUUID()
-    expect(quote.markOrdered(orderId, later(3)).isRight()).toBe(true)
-    expect(quote.markOrdered(randomUUID(), later(4)).isLeft()).toBe(true)
-    expect(snapshotOf(quote)).toMatchObject({ orderId })
+    expect(quote.markConverted({ orderId, serviceOrderId: null }, later(3)).isRight()).toBe(true)
+    expect(
+      quote.markConverted({ orderId: null, serviceOrderId: randomUUID() }, later(4)).isLeft(),
+    ).toBe(true)
+    expect(snapshotOf(quote)).toMatchObject({ orderId, serviceOrderId: null })
   })
 
   it('records a refusal with the reason the customer gave', () => {

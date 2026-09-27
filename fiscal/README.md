@@ -124,6 +124,25 @@ municipality and registers its capability. It prints the `service` block for
 `FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase47-smoke.mjs` runs the local-stack smoke
 through Kong.
 
+### Services delivered in Sales (Phase 50)
+
+The ingress records one intake per line of `sales.service.delivered`, keyed by its
+`entryId`. The worker cycle then turns each intake into a service origin with `sourceKey`
+`sales` / `service-delivery` / entry id / competence month, and a draft. It resolves the
+issuer and recipient revisions in force today and the service profile in force at the
+competence date, and picks the one establishment with an active NFS-e capability in the
+issuer's municipality. Each establishment's policy (`GET`/`PUT
+/service-issuance-policies/{establishmentId}`: `review`, the default, or `automatic`, and
+the DPS series) decides whether the draft waits for a person or is validated and issued.
+An intake that cannot proceed is `blocked` with its reason and retried with backoff;
+`POST /service-intakes/{id}/retry` asks for it now, and `GET /service-intakes?status=`
+lists them. `sales.service.delivery-cancelled` withdraws the intake:
+- an authorized NFS-e gets event 101101 with reason 2;
+- outside the window the intake is `cancellation-refused`;
+- a draft is withdrawn, and issuance refuses it from then on.
+
+`scripts/phase50-smoke.mjs` runs the services smoke through Kong.
+
 ### Operator reads, metrics and support (Phase 48)
 
 - `GET /documents` is the operator worklist:

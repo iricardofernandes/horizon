@@ -35,6 +35,7 @@ const executablePath = await firstExisting([
 if (!executablePath) throw new Error('No Chromium executable found; set CHROMIUM_PATH')
 
 const supplierXml = await supplierInvoice()
+const serviceProposal = await acceptedServiceProposal()
 const browser = await chromium.launch({
   executablePath,
   headless: true,
@@ -174,6 +175,16 @@ try {
   await quoteDialog.getByRole('button', { name: 'Fechar janela' }).click()
   evidence.steps.push({ step: 'proposal', serviceTagged: true })
 
+  // --- Phase 50: an accepted proposal of services converts into a service order -----------
+  await page.getByRole('button', { name: `Abrir orçamento ${serviceProposal.reference}` }).click()
+  const acceptedDialog = page.getByRole('dialog', { name: new RegExp(`^Orçamento ${serviceProposal.reference}`) })
+  await acceptedDialog.getByText('As linhas de serviço viram uma ordem de serviço').waitFor()
+  assert((await acceptedDialog.getByLabel('Depósito').count()) === 0, 'services alone need no warehouse')
+  await acceptedDialog.getByRole('button', { name: 'Gerar ordem de serviço' }).click()
+  await acceptedDialog.getByText(/viraram a ordem de serviço OS-[0-9A-F]{8}/).waitFor()
+  evidence.steps.push({ step: 'service-order-conversion', quote: serviceProposal.reference })
+  await acceptedDialog.getByRole('button', { name: 'Fechar janela' }).click()
+
   // --- the same reading in English ----------------------------------------------------------
   await setLanguage(page, 'English')
   await page.getByRole('link', { name: 'Issued documents' }).click()
@@ -235,6 +246,50 @@ async function supplierInvoice() {
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+}
+
+/** An accepted proposal of one priced Catalog service, made through the API (Phase 50). */
+async function acceptedServiceProposal() {
+  const token = execFileSync(
+    process.execPath,
+    [
+      join(root, 'infra/scripts/mint-dev-token.mjs'),
+      '--tenant',
+      tenantId,
+      '--sub',
+      randomUUID(),
+      ...['sales:admin', 'catalog:admin'].flatMap((role) => ['--role', role]),
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+  const api = async (path, init = {}) => {
+    const response = await fetch(`http://localhost:8000${path}`, {
+      ...init,
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'idempotency-key': randomUUID(),
+      },
+    })
+    return { status: response.status, body: await response.json() }
+  }
+  const customers = (await api('/sales/customers')).body
+  const customer = customers.find((row) => row.status === 'active')
+  const items = (await api('/catalog/items?limit=100')).body.data
+  for (const item of items.filter((row) => row.kind === 'service' && row.active !== false)) {
+    const quote = await api('/sales/quotes', {
+      method: 'POST',
+      body: JSON.stringify({
+        customerId: customer.id,
+        lines: [{ lineId: randomUUID(), itemId: item.id, quantity: '1' }],
+      }),
+    })
+    if (quote.status >= 400) continue
+    await api(`/sales/quotes/${quote.body.quoteId}/send`, { method: 'POST' })
+    await api(`/sales/quotes/${quote.body.quoteId}/accept`, { method: 'POST' })
+    return { quoteId: quote.body.quoteId, reference: `QT-${quote.body.quoteId.slice(-8).toUpperCase()}` }
+  }
+  throw new Error('No priced Catalog service to propose')
 }
 
 async function setLanguage(page, label) {

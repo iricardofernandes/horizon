@@ -12,7 +12,9 @@ import type { FiscalProjections } from '../projections'
 import type { ServiceDependencies } from './api'
 import { FiscalServiceCancellation } from './cancellation'
 import { FiscalServiceDocuments } from './documents'
+import { FiscalServiceIntakes } from './intake'
 import { FiscalServiceIssuance } from './issuance'
+import { FiscalServiceIssuancePolicies } from './issuance-policies'
 import { NfseDispatchProcessor, NfseProcessingFacts } from './processor'
 import { FiscalServiceReadiness } from './readiness'
 import { FiscalNfseRegistry } from './registry'
@@ -64,15 +66,25 @@ export function createServiceRuntime(input: {
     registry,
     input.calculations,
   )
-  const closeables: Array<{ close(): Promise<void> }> = [registry, profiles, origins, documents]
+  const policies = new FiscalServiceIssuancePolicies(input.databaseUrl)
+  const closeables: Array<{ close(): Promise<void> }> = [
+    registry,
+    profiles,
+    origins,
+    documents,
+    policies,
+  ]
   const dependencies: ServiceDependencies = {
     profiles,
     registry,
     origins,
     documents,
     readiness,
+    policies,
     dispatch: input.dispatch,
   }
+  let issuanceFlow: Pick<FiscalServiceIssuance, 'issue'> | undefined
+  let cancellationFlow: Pick<FiscalServiceCancellation, 'request'> | undefined
   let processor: NfseDispatchProcessor | undefined
   const service = input.issuance?.profile.service
   if (input.issuance && service) {
@@ -124,10 +136,27 @@ export function createServiceRuntime(input: {
       input.issuance.retryDelayMilliseconds,
     )
     Object.assign(dependencies, { issuance, cancellation, substitutions })
+    issuanceFlow = issuance
+    cancellationFlow = cancellation
     closeables.push(issuance, cancellation, substitutions, facts)
   }
+  // Services delivered in Sales become NFS-e through the same origins, drafts and flows.
+  const intakes = new FiscalServiceIntakes(input.databaseUrl, {
+    projections: input.projections,
+    capabilities: input.capabilities,
+    profiles,
+    origins,
+    documents,
+    readiness,
+    policies,
+    ...(issuanceFlow ? { issuance: issuanceFlow } : {}),
+    ...(cancellationFlow ? { cancellation: cancellationFlow } : {}),
+  })
+  closeables.push(intakes)
+  dependencies.intakes = intakes
   return {
     dependencies,
+    intakes,
     processor,
     close: async () => {
       await Promise.all(closeables.map((closeable) => closeable.close()))

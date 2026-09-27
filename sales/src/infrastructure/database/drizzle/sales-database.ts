@@ -46,6 +46,11 @@ import {
   TrackingCode,
 } from '@/domain/value-objects/sales-values'
 import * as schema from './schema'
+import {
+  findServiceOrderSnapshot,
+  listServiceOrderSnapshots,
+  serviceOrdersRepository,
+} from './service-orders-store'
 
 type Database = PostgresJsDatabase<typeof schema>
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
@@ -313,6 +318,16 @@ export class SalesDatabase extends SalesUnitOfWork {
         .where(eq(schema.salesOrderLines.orderId, row.id))
       return withOrderKinds(current.tx, mapOrder(row, lines).toSnapshot())
     })
+  }
+
+  async listServiceOrderSnapshots(tenantId: string) {
+    return this.inTenant(tenantId, () => listServiceOrderSnapshots(this.currentTransaction()))
+  }
+
+  async findServiceOrderSnapshot(tenantId: string, serviceOrderId: string) {
+    return this.inTenant(tenantId, () =>
+      findServiceOrderSnapshot(this.currentTransaction(), serviceOrderId),
+    )
   }
 
   async close(): Promise<void> {
@@ -626,6 +641,7 @@ function mapQuote(
       supersededBy: row.supersededBy,
       closure: row.closureReason ? restored(Reason.create(row.closureReason)) : null,
       orderId: row.orderId,
+      serviceOrderId: row.serviceOrderId,
       sentAt: row.sentAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -754,6 +770,7 @@ function quoteRow(row: ReturnType<Quote['toSnapshot']>) {
     supersededBy: row.supersededBy,
     closureReason: row.closureReason,
     orderId: row.orderId,
+    serviceOrderId: row.serviceOrderId,
     sentAt: row.sentAt,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
@@ -1055,6 +1072,9 @@ function makeScope(
       },
     },
     audit: auditTrail(tx, tenantId),
+    serviceOrders: serviceOrdersRepository(tx, tenantId, (order) =>
+      publishAll(tx, tenantId, order),
+    ),
     customers: {
       findById: async (id) => {
         const [row] = await tx
@@ -1182,6 +1202,7 @@ function makeScope(
             supersededBy: row.supersededBy,
             closureReason: row.closureReason,
             orderId: row.orderId,
+            serviceOrderId: row.serviceOrderId,
             sentAt: row.sentAt,
             expiresAt: row.expiresAt,
             updatedAt: row.updatedAt,

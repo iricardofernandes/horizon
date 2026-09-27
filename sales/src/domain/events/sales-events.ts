@@ -414,3 +414,82 @@ export class QuoteRejectedEvent extends SalesEvent {
     }
   }
 }
+
+/** One delivered line of a service order, as the delivery published it. */
+export interface DeliveredServiceLine extends ConfirmedOrderLine {
+  readonly entryId: string
+  readonly amount: Money
+}
+
+export class SalesServiceDeliveredEvent extends SalesEvent {
+  readonly eventType = 'sales.service.delivered'
+  constructor(
+    serviceOrderId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly delivery: {
+      deliveryId: string
+      customerId: string
+      performedOn: BusinessDate
+      deliveredBy: string
+      lines: readonly DeliveredServiceLine[]
+      value: Money
+      installments: readonly AgreedInstallment[]
+      complete: boolean
+    },
+  ) {
+    super(serviceOrderId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      serviceOrderId: this.aggregateId.toString(),
+      deliveryId: this.delivery.deliveryId,
+      customerId: this.delivery.customerId,
+      performedOn: this.delivery.performedOn.value,
+      competence: this.delivery.performedOn.value.slice(0, 7),
+      deliveredBy: this.delivery.deliveredBy,
+      lines: this.delivery.lines.map((line) => ({
+        entryId: line.entryId,
+        lineId: line.lineId,
+        itemId: line.itemId,
+        description: line.description.value,
+        quantity: line.quantity.toString(),
+        unitPrice: moneyPayload(line.unitPrice),
+        amount: moneyPayload(line.amount),
+      })),
+      value: moneyPayload(this.delivery.value),
+      installments: this.delivery.installments.map(installmentPayload),
+      complete: this.delivery.complete,
+    }
+  }
+}
+
+export class SalesServiceDeliveryCancelledEvent extends SalesEvent {
+  readonly eventType = 'sales.service.delivery-cancelled'
+  constructor(
+    serviceOrderId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly cancellation: {
+      deliveryId: string
+      customerId: string
+      performedOn: BusinessDate
+      entryIds: readonly string[]
+      cancelledOn: BusinessDate
+      reason: string
+    },
+  ) {
+    super(serviceOrderId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      serviceOrderId: this.aggregateId.toString(),
+      deliveryId: this.cancellation.deliveryId,
+      customerId: this.cancellation.customerId,
+      competence: this.cancellation.performedOn.value.slice(0, 7),
+      entryIds: [...this.cancellation.entryIds],
+      cancelledOn: this.cancellation.cancelledOn.value,
+      reason: this.cancellation.reason,
+    }
+  }
+}

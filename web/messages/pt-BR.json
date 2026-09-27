@@ -1188,7 +1188,10 @@
     "versionNumber": "Versão {version}",
     "warehouse": "Depósito",
     "serviceTag": "Serviço",
-    "servicesConvertLater": "Esta proposta tem linhas de serviço. O pedido de venda leva só mercadorias, e a conversão de serviços em ordem de serviço ainda não está disponível."
+    "servicesBecomeServiceOrder": "As linhas de serviço viram uma ordem de serviço, entregue por etapas; as mercadorias viram um pedido de venda.",
+    "convertBoth": "Gerar pedido e ordem de serviço",
+    "convertServices": "Gerar ordem de serviço",
+    "becameServiceOrder": "Os serviços desta oferta viraram a ordem de serviço {id}."
   },
   "shell": {
     "collapseSidebar": "Recolher menu lateral",

@@ -30,6 +30,7 @@ are all exercised by the phase 7 E2E flow.
 - **Discount approval** — how deep a discount a seller may give alone, and the four-eyes rule for anything deeper.
 - **Commercial terms** — the seller, discount, freight, carrier, payment terms and notes, on the quote and on the order it becomes.
 - **Sales orders** and their lines, including the price snapshotted at confirmation. A sales order is a **goods order**: a service item is refused when an order is placed or an accepted proposal is converted, before anything reaches Inventory (ADR 0056). Services are delivered by service orders (Phase 50).
+- **Service orders** (Phase 50) — services sold directly or converted from an accepted proposal, `scheduled` → `in_progress` → `completed` → `accepted` (or `cancelled` with a reason), delivered in **deliveries**. A delivery is billed once when it is recorded; a cancelled delivery stays in the record and its work is owed again. A service order has no warehouse and never reaches Inventory.
 - **Order lifecycle** — draft, placed, confirmed, cancelled — and the invariants of each transition.
 - **Shipments** — what is being picked for a customer, what left, and what came back, each carrying its share of the order's total.
 - **Fulfilment state** — how much of the order has reached the customer, and what it still has to deliver.
@@ -64,6 +65,8 @@ refusals.
 | `sales.quote.sent` | This version of an offer was put in front of the customer. |
 | `sales.quote.accepted` | The customer agreed to it. Nothing is committed until it is converted. |
 | `sales.quote.rejected` | The customer declined it, with the reason they gave. |
+| `sales.service.delivered` | Work of a service order was delivered: one receivable per delivery in `financial/`, one NFS-e per delivered line in `fiscal/` (keyed by the line's `entryId` and competence month). |
+| `sales.service.delivery-cancelled` | A delivery was not provided after all: its receivable is withdrawn or reversed and its NFS-e cancelled. |
 
 ### Consumed
 
@@ -106,6 +109,18 @@ audit entry per run.
 
 ---
 
+## Service orders (Phase 50)
+
+A delivery bills its share of the order total: the discount is carried in proportion to
+the work, and the delivery that completes the order bills whatever the active deliveries
+have not, so a completed order's deliveries add up to its total exactly. The installments
+come from the order's payment terms, dated from the performed day. Converting a proposal
+splits its discount between goods and services by their net; freight belongs to the goods,
+so a proposal with freight and no goods is refused. A recorded delivery is never rewritten
+(a database trigger enforces it).
+
+---
+
 ## Endpoints
 
 Every business endpoint requires a workspace-scoped Identity access token. Customers are
@@ -124,7 +139,15 @@ registered and erased in `parties/`, so they are read here and written nowhere (
 | `POST` | `/quotes/:id/accept` | Record that the customer agreed to an open, unexpired offer. |
 | `POST` | `/quotes/:id/decline` | Record that they declined it, with the reason. |
 | `POST` | `/quotes/:id/expire` | Record that nobody answered in time. |
-| `POST` | `/quotes/:id/order` | Convert the accepted offer into the order that delivers it. |
+| `POST` | `/quotes/:id/order` | Convert the accepted offer: its goods into a sales order (a `fulfillmentWarehouseId` is required only then) and its services into a service order. Answers `orderId` and `serviceOrderId`, either of which may be `null`. |
+| `GET` | `/service-orders` | List recent service orders with their deliveries. |
+| `GET` | `/service-orders/:id` | Read one service order: lines with delivered quantities, deliveries, billed total. |
+| `POST` | `/service-orders` | Open a service order directly: service items only, priced from the Catalog projection. |
+| `POST` | `/service-orders/:id/start` | Start the work. |
+| `POST` | `/service-orders/:id/deliveries` | Record delivered work (`lines`, or everything still owed; `performedOn`, the local day it was done). The delivery that completes the work completes the order. |
+| `POST` | `/service-orders/:id/accept` | Record the customer's acceptance of completed work. |
+| `POST` | `/service-orders/:id/cancel` | Cancel an order with no active delivery, with the reason. |
+| `POST` | `/service-orders/:id/deliveries/:deliveryId/cancel` | Cancel a delivery that was not provided, with the reason. |
 | `GET` | `/shipments` | Every delivery on its way out, newest first: the warehouse's board. |
 | `GET` | `/orders/:id/shipments` | Everything being picked, packed or gone for one order. |
 | `GET` | `/shipments/:id` | Read one delivery and what is in it. |
@@ -137,8 +160,10 @@ registered and erased in `parties/`, so they are read here and written nowhere (
 | `GET` | `/orders/:id` | Read one order snapshot. |
 | `POST` | `/orders` | Place an order and start the Inventory choreography. |
 
-Every command that creates a document — a quote, a version of one, an order, a conversion —
-requires an `Idempotency-Key` header and runs at most once under it (ADR 0028). A decision
+Every command that creates a document — a quote, a version of one, an order, a conversion,
+a service order, a delivery — requires an `Idempotency-Key` header and runs at most once
+under it (ADR 0028). A retry is recognised by its key and its body, whatever request id the
+gateway gives it. A decision
 on a document that already exists does not: repeating it is refused by the document's own
 state.
 
