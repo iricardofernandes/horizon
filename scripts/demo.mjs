@@ -957,6 +957,7 @@ async function migrateModules() {
     'treasury',
     'ledger',
     'procurement',
+    'crm',
   ]) {
     const client = postgres(moduleUrls(name).owner, { max: 1, connect_timeout: 5 })
     try {
@@ -1039,6 +1040,7 @@ async function seedIdentity(modules, database, admin, clock) {
         { module: 'ledger', role: 'admin' },
         { module: 'procurement', role: 'admin' },
         { module: 'fiscal', role: 'admin' },
+        { module: 'crm', role: 'admin' },
       ],
       actor: { type: 'user', id: ownerId },
     })
@@ -1053,6 +1055,7 @@ async function seedIdentity(modules, database, admin, clock) {
     { module: 'ledger', role: 'admin' },
     { module: 'procurement', role: 'admin' },
     { module: 'fiscal', role: 'admin' },
+    { module: 'crm', role: 'admin' },
   ]) {
     if (operator.holds(assignment)) continue
     const granted = operator.grant(assignment, clock.now())

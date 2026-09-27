@@ -8,6 +8,7 @@ import {
   FindLookalikePartiesUseCase,
   IdentifyPartyUseCase,
   RegisterPartyUseCase,
+  RepublishPartiesUseCase,
 } from '@/application/use-cases/manage-parties'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { PartiesDatabase } from '@/infrastructure/database/drizzle/parties-database'
@@ -351,4 +352,22 @@ it('backfills the lookup indexes of rows written before them, once', async () =>
   expect(found.isRight() && found.value.map((match) => match.party.id.toString())).toEqual([
     partyId,
   ])
+})
+
+it('republishes every live party of the tenant, and only of that tenant', async () => {
+  const tenantId = randomUUID()
+  const partyId = await register(tenantId)
+  await register(randomUUID())
+  const result = await new RepublishPartiesUseCase(database, clock).execute({
+    tenantId,
+    pageSize: 1,
+  })
+  expect(result).toEqual({ republished: 1 })
+  const events = await administrator`select event_type, event_version, payload from outbox
+    where tenant_id = ${tenantId} order by created_at`
+  expect(events.at(-1)).toMatchObject({
+    event_type: 'parties.party.updated',
+    event_version: 2,
+    payload: { partyId, kind: 'organization', roles: ['supplier'] },
+  })
 })

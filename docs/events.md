@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.41.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.42.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -697,13 +697,14 @@ A party’s identifying details, roles or active state changed. Consumers replac
 | `active` | boolean | yes | — |
 ### `parties.party.updated` — v2
 
-A party’s identifying details, document type, roles or active state changed. Consumers replace their projected copy; a null contact field means the party has none, and posted documents keep the snapshot they took.
+A party’s identifying details, document type, roles or active state changed, or the registry republished it so a newer consumer can project it. Consumers replace their projected copy; a null contact field means the party has none, and posted documents keep the snapshot they took.
 
 **Payload**
 
 | Field | Type | Required | Notes |
 |---|---|:--:|---|
 | `partyId` | string | yes | Party identifier, shared by every context that projects it. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `kind` | `organization` \| `person` | no | Present from 0.42.0, so a consumer that missed the registration still knows it |
 | `legalName` | string | yes | min length 2. max length 160 |
 | `tradeName` | any | yes | — |
 | `email` | any | yes | — |

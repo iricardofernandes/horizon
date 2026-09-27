@@ -90,6 +90,10 @@ services:
       # local development is a bug worth seeing rather than waiting through.
       - -c
       - statement_timeout=30s
+      # Twelve services, each with a pool of ten plus a relay, the Fiscal worker and the
+      # one-off scripts: the default of 100 runs out once CRM joins (Phase 55).
+      - -c
+      - max_connections=200
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro

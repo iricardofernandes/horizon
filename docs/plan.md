@@ -2435,9 +2435,16 @@ billed line, however often a month is re-run or its events replayed.
 
 ## Phase 55 — The CRM module, accounts and contacts
 
-**Planned.** `crm/` joins the platform with its roles. Accounts are projected from parties.
-Contacts are encrypted per person and shredded on erasure.
-[Detailed work](crm-implementation-plan.md#55--the-crm-module-accounts-and-contacts).
+**Delivered on 2026-09-27.** `crm/` runs on port 3012 behind `/crm`, with the `crm`
+module and the roles `admin`, `manager`, `representative` and `viewer` (contracts 0.42.0).
+- Every party holding a CRM role is an account; parties registered before CRM arrive
+  through `republish:parties`.
+- An account carries an owner, a segment and tags. The owners are the workspace's users,
+  fed by events and a one-off backfill.
+- Contacts are sealed per person and shredded when the contact or its party is erased.
+
+[Evidence](crm-phase55-evidence.md).
+[Detailed plan](crm-phase55-implementation-plan.md). [Detailed work](crm-implementation-plan.md#55--the-crm-module-accounts-and-contacts).
 
 ## Phase 56 — Pipelines and opportunities
 

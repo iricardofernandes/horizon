@@ -37,4 +37,10 @@ describe('role assignments', () => {
     expect(roleAssignmentSchema.safeParse({ module: 'fiscal', role: 'issuer' }).success).toBe(true)
     expect(roleAssignmentSchema.safeParse({ module: 'fiscal', role: 'buyer' }).success).toBe(false)
   })
+
+  it('declares CRM roles, where a representative is not an admin', () => {
+    expect(roleAssignmentSchema.safeParse({ module: 'crm', role: 'manager' }).success).toBe(true)
+    expect(roleAssignmentSchema.safeParse({ module: 'crm', role: 'buyer' }).success).toBe(false)
+    expect(isValidRole('crm', 'representative')).toBe(true)
+  })
 })

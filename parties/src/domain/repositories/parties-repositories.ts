@@ -23,6 +23,8 @@ export abstract class PartiesRepository {
     probe: LookupProbe & { readonly document: PartyDocument },
     limit: number,
   ): Promise<readonly Lookalike[]>
+  /** Parties in id order after `afterId`, erased ones included, for tenant-wide passes. */
+  abstract listAfter(afterId: string | null, limit: number): Promise<readonly Party[]>
   abstract create(party: Party): Promise<void>
   abstract save(party: Party): Promise<void>
 }

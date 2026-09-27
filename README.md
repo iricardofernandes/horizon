@@ -159,6 +159,7 @@ vendored side by side, and a cross-module import cannot resolve.
 | [`ledger/`](ledger/) | Chart of accounts, balanced double-entry journal, accounting periods, automatic postings from financial and treasury facts, trial balance, result of the period, cash flow and drill-down | 3009 | 22–25 |
 | [`procurement/`](procurement/) | Purchase requisitions, supplier quotations and their comparison, approval thresholds, purchase orders, receiving and returns | 3010 | 26–28 |
 | [`fiscal/`](fiscal/) | Fiscal origin ingress, encrypted projections, durable simulation records and read API; authority issuance remains disabled | 3011 | 39–40 |
+| [`crm/`](crm/) | Accounts projected from parties, their contacts (sealed per person) and owners; opportunities, pipelines and activities follow | 3012 | 55 |
 | [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, retry, DLQ, replay | 3005 | 9 |
 | [`web/`](web/) | Next.js frontend, routed and bilingual | 3000 | 10, 14 |
 | [`contracts/`](contracts/) | Published package: versioned Zod event and API schemas | — | 3 |

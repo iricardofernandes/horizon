@@ -19,6 +19,7 @@ import {
   FindLookalikePartiesUseCase,
   IdentifyPartyUseCase,
   RegisterPartyUseCase,
+  RepublishPartiesUseCase,
 } from './manage-parties'
 
 /** Tenant-scoped in-memory registry (ADR 0014); lookups compare the normalized forms. */
@@ -56,6 +57,11 @@ class InMemoryParties implements PartiesUnitOfWork {
               return { party, matchedOn }
             })
             .filter((match) => match.matchedOn.length > 0)
+            .slice(0, limit),
+        listAfter: async (afterId, limit) =>
+          mine()
+            .sort((a, b) => a.id.toString().localeCompare(b.id.toString()))
+            .filter((party) => afterId === null || party.id.toString() > afterId)
             .slice(0, limit),
         create: async (party) => keep(party),
         save: async (party) => keep(party),
@@ -350,5 +356,44 @@ describe('warning about lookalikes', () => {
         })
       ).isLeft(),
     ).toBe(true)
+  })
+})
+
+describe('republishing a tenant', () => {
+  it('announces every live party once, with its kind, across pages', async () => {
+    const context = setup()
+    for (const legalName of ['Alfa', 'Beta', 'Gama'])
+      valid(
+        await context.register.execute({
+          tenantId,
+          kind: 'organization',
+          legalName,
+          document: { type: 'none' },
+          roles: ['prospect'],
+        }),
+      )
+    const erased = valid(
+      await context.register.execute({
+        tenantId,
+        kind: 'person',
+        legalName: 'Delta',
+        document: { type: 'none' },
+        roles: [],
+      }),
+    ).partyId
+    valid(await context.erase.execute({ tenantId, partyId: erased }))
+    context.registry.events.length = 0
+
+    const result = await new RepublishPartiesUseCase(context.registry, clock).execute({
+      tenantId,
+      pageSize: 2,
+    })
+    expect(result).toEqual({ republished: 3 })
+    expect(context.registry.events.map((event) => event.eventType)).toEqual([
+      'parties.party.updated',
+      'parties.party.updated',
+      'parties.party.updated',
+    ])
+    expect(context.registry.events[0]?.payloadOf()).toMatchObject({ kind: 'organization' })
   })
 })

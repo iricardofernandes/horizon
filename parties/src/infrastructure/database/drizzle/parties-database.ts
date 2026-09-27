@@ -440,6 +440,15 @@ function makeScope(tx: Transaction, tenantId: string, privacy: PartyPrivacy): Pa
           .for('no key update')
         return row ? mapParty(tx, row, privacy) : null
       },
+      listAfter: async (afterId, limit) => {
+        const rows = await tx
+          .select()
+          .from(schema.parties)
+          .where(afterId === null ? undefined : gt(schema.parties.id, afterId))
+          .orderBy(asc(schema.parties.id))
+          .limit(limit)
+        return Promise.all(rows.map((row) => mapParty(tx, row, privacy)))
+      },
       findLookalikes: async (probe, limit) => {
         const indexes = lookupIndexes(tenantId, probe, privacy)
         const documentInput = probe.document.indexInput

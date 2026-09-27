@@ -301,6 +301,18 @@ export class Party extends AggregateRoot<PartyProps> {
   }
 
   /**
+   * Announce the party as it is, changing nothing, so a consumer that started after it was
+   * registered can project it (a new module, a rebuilt projection). Every consumer treats
+   * the update as a replacement, so a republish is harmless to those already in step.
+   */
+  republish(now: Date): Either<ConflictError, void> {
+    if (this.props.status === 'erased')
+      return left(new ConflictError('an erased party is not republished'))
+    this.announceUpdate(now)
+    return right(undefined)
+  }
+
+  /**
    * Crypto-shredding (ADR 0026). The aggregate records the fact; the repository destroys
    * the key material, and every projection is told to destroy its own copy.
    */
@@ -318,6 +330,7 @@ export class Party extends AggregateRoot<PartyProps> {
         this.id,
         this.props.tenantId,
         {
+          kind: this.props.kind,
           legalName: this.props.legalName.value,
           tradeName: this.props.tradeName?.value ?? null,
           email: this.props.email?.value ?? null,

@@ -1,6 +1,6 @@
 # CRM implementation plan — Phase L
 
-Status: **in progress** — Phase 54 delivered on 2026-09-27. This is the execution plan for Phase L of the
+Status: **in progress** — Phases 54 and 55 delivered on 2026-09-27. This is the execution plan for Phase L of the
 [ERP expansion plan](erp-expansion-plan.md#phase-l--crm), split into phases 54–60 of
 [plan.md](plan.md). Each numbered phase gets its own detailed plan before implementation,
 one local commit and an evidence record, as in Phases J and K.
@@ -129,6 +129,9 @@ Gaps:
 - The goods golden path is unchanged.
 
 ### 55 — The CRM module, accounts and contacts
+
+[Detailed Phase 55 plan](crm-phase55-implementation-plan.md) ·
+[evidence](crm-phase55-evidence.md).
 
 **Work**
 1. `crm/` exists with the full platform wiring:

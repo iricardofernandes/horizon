@@ -250,6 +250,44 @@ export class ChangePartyStatusUseCase {
   }
 }
 
+/**
+ * Republish every live party of a tenant as `parties.party.updated`, one page per
+ * transaction, so a consumer that started after the parties were registered — CRM in
+ * Phase 55 — projects them. Nothing is changed; each consumer treats it as a refresh.
+ */
+export class RepublishPartiesUseCase {
+  constructor(
+    private readonly unitOfWork: PartiesUnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  async execute(request: {
+    readonly tenantId: string
+    readonly pageSize: number
+  }): Promise<{ republished: number }> {
+    let republished = 0
+    let after: string | null = null
+    for (;;) {
+      const page: { count: number; last: string | null } = await this.unitOfWork.inTenant(
+        request.tenantId,
+        async (scope) => {
+          const parties = await scope.parties.listAfter(after, request.pageSize)
+          let count = 0
+          for (const party of parties) {
+            if (party.republish(this.clock.now()).isLeft()) continue
+            for (const event of party.pullDomainEvents()) await scope.events.append(event)
+            count += 1
+          }
+          return { count, last: parties.at(-1)?.id.toString() ?? null }
+        },
+      )
+      republished += page.count
+      if (page.last === null) return { republished }
+      after = page.last
+    }
+  }
+}
+
 /** LGPD erasure (ADR 0026): the key is destroyed here and every projection is told to forget. */
 export class ErasePartyUseCase {
   constructor(

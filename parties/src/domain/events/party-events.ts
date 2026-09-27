@@ -69,6 +69,7 @@ export class PartyUpdatedEvent extends PartyEvent {
     partyId: UniqueEntityID,
     tenantId: string,
     private readonly details: {
+      readonly kind: PartyKind
       readonly legalName: string
       readonly tradeName: string | null
       readonly roles: readonly PartyRole[]
@@ -81,6 +82,7 @@ export class PartyUpdatedEvent extends PartyEvent {
   payloadOf() {
     return {
       partyId: this.aggregateId.toString(),
+      kind: this.details.kind,
       legalName: this.details.legalName,
       tradeName: this.details.tradeName,
       email: this.details.email,

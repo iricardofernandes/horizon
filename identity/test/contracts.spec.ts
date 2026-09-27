@@ -17,6 +17,7 @@ describe('published role contract', () => {
     expect([...MODULES].sort()).toEqual(
       [
         'catalog',
+        'crm',
         'financial',
         'fiscal',
         'identity',

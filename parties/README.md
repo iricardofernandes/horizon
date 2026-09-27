@@ -67,3 +67,7 @@ Existing Sales customers are brought into the registry, keeping their ids, with
 
 Parties registered before Phase 54 get their duplicate-check indexes once, per tenant:
 `npm run backfill:party-lookups -- --tenant <uuid>` (it changes nothing when run again).
+
+A consumer that starts after the parties were registered — CRM in Phase 55 — receives them
+with `npm run republish:parties -- --tenant <uuid>`, which emits `parties.party.updated`
+(with the kind) for every live party. Every consumer treats it as a refresh.

@@ -351,6 +351,35 @@ services:
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_procurement
       DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_procurement
 
+  crm-migrate:
+    <<: *service
+    build:
+      context: ../crm
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_crm
+    command: ["npm", "run", "db:migrate"]
+
+  crm:
+    <<: *service
+    build:
+      context: ../crm
+      network: host
+    container_name: horizon-crm
+    depends_on:
+      crm-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      <<: *env
+      PORT: '3012'
+      OTEL_SERVICE_NAME: crm
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_crm
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_crm
+
   fiscal-migrate:
     <<: *service
     profiles: [fiscal]

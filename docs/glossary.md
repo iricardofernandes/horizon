@@ -203,6 +203,28 @@ blind indexes. It warns; only a repeated document is refused.
 
 ---
 
+## CRM
+
+### account
+A party the business is trying to win or keep: CRM's projection of a party holding
+`prospect`, `customer` or `partner` (ADR 0057), keyed by the party id. The registry owns
+its name, document and roles; CRM owns its owner, segment and tags. An account that loses
+its CRM role stays, inactive; one whose party is erased keeps its row with the names
+blanked.
+
+### contact
+A person at an account — the buyer, the finance contact — owned by CRM rather than the
+party registry. Its name, job title, email and phone are sealed under a key of its own
+and shredded with it; it records the lawful basis (`contract`, `legitimate-interest`,
+`consent`) for holding them.
+
+### owner
+The workspace user who looks after an account. CRM knows owners only as user ids and
+whether they are active; a disabled user keeps the accounts it owns but receives no new
+ones.
+
+---
+
 ## Financial
 
 ### financial category

@@ -102,10 +102,14 @@ export const partyUpdatedV2 = defineEvent({
   type: 'parties.party.updated',
   version: 2,
   description:
-    'A party’s identifying details, document type, roles or active state changed. Consumers replace their projected copy; a null contact field means the party has none, and posted documents keep the snapshot they took.',
+    'A party’s identifying details, document type, roles or active state changed, or the registry republished it so a newer consumer can project it. Consumers replace their projected copy; a null contact field means the party has none, and posted documents keep the snapshot they took.',
   payload: z
     .object({
       partyId,
+      kind: z
+        .enum(['organization', 'person'])
+        .optional()
+        .describe('Present from 0.42.0, so a consumer that missed the registration still knows it'),
       legalName: identity.legalName,
       tradeName: identity.tradeName,
       ...optionalContact,
