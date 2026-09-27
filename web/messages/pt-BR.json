@@ -254,7 +254,9 @@
     "never": "Nunca",
     "notSet": "Não definido",
     "pending": "Pendente",
-    "screenUnavailable": "Esta tela não pôde ser carregada. Verifique se os serviços da aplicação estão no ar."
+    "screenUnavailable": "Esta tela não pôde ser carregada. Verifique se os serviços da aplicação estão no ar.",
+    "exportList": "Exportar CSV",
+    "exportListHint": "Baixar esta lista em CSV, com o seu próprio acesso, até 50.000 linhas"
   },
   "customers": {
     "activeCustomers": "Clientes ativos",

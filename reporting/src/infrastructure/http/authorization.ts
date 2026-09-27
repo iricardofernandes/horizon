@@ -13,7 +13,14 @@ import type {
 
 const PUBLIC = 'reporting:public'
 const ACTION = 'reporting:action'
-export type ReportingAction = 'read' | 'reconcile' | 'save' | 'share'
+export type ReportingAction =
+  | 'read'
+  | 'reconcile'
+  | 'save'
+  | 'share'
+  | 'export'
+  | 'schedule'
+  | 'administer'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
 export const RequireReportingAction = (action: ReportingAction) => SetMetadata(ACTION, action)
 
@@ -33,13 +40,14 @@ export function tenantOf(request: ReportingRequest): string {
 }
 
 /**
- * The static role map for this module (ADR 0023). Everyone reads; an analyst also
- * reconciles and saves filters; only an administrator shares one with the workspace.
+ * The static role map for this module (ADR 0023). Everyone reads and exports what they
+ * read; an analyst also reconciles, saves filters and schedules exports; only an
+ * administrator shares a filter or sees everyone's exports and schedules.
  */
 export const PERMITS: Readonly<Record<string, readonly ReportingAction[]>> = {
-  admin: ['read', 'reconcile', 'save', 'share'],
-  analyst: ['read', 'reconcile', 'save'],
-  viewer: ['read'],
+  admin: ['read', 'reconcile', 'save', 'share', 'export', 'schedule', 'administer'],
+  analyst: ['read', 'reconcile', 'save', 'export', 'schedule'],
+  viewer: ['read', 'export'],
 }
 
 export function permits(

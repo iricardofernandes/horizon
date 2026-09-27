@@ -16,6 +16,9 @@ The reporting module lives in `reporting/`
 | `reconcile` | `admin`, `analyst` |
 | `save` | `admin`, `analyst` |
 | `share` | `admin` |
+| `export` | `admin`, `analyst`, `viewer` |
+| `schedule` | `admin`, `analyst` |
+| `administer` (see everyone's exports and schedules) | `admin` |
 
 **Errors:**
 - `400` for invalid input;
@@ -116,6 +119,55 @@ Idempotency-Key: 5d0e…
 
 A filter is changed or removed by its owner, or, when shared, by an administrator.
 Changes are audited in reporting's hash-chained audit log.
+
+## Exports (Phase 63)
+
+| Method | Path | Action | Key | What it does |
+|---|---|---|---|---|
+| `POST` | `/exports` | export | yes | `report`, `format` (`csv`, `xlsx`), `locale` (`pt-BR`, `en`), optional `cutoff`, `filter` or `filterId`: `202` with the job, `requested` |
+| `GET` | `/exports?limit=` | export | | The caller's exports (everyone's for an administrator) |
+| `GET` | `/exports/{id}` | export | | One export: `status` (`requested`, `running`, `ready`, `failed`, `expired`), `settled`, `rows`, `bytes`, `sha256`, `expiresAt` |
+| `GET` | `/exports/{id}/link` | export | | `{ url, expiresAt }`: a link valid for 15 minutes to a `ready` file |
+| `GET` | `/exports/{id}/file?tenant=&expires=&signature=` | public, signed | | The file, with `Content-Disposition` and `Digest: sha-256=…` |
+| `POST` | `/export-schedules` | schedule | yes | `report`, `format`, `locale`, `cadence` (`daily`, `weekly` on Mondays, `monthly` on the 1st), `timeZone` (IANA), `filter` or `filterId`, optional `since` (at most 31 days back) |
+| `GET` | `/export-schedules` | schedule | | The caller's schedules (everyone's for an administrator) |
+| `PATCH` | `/export-schedules/{id}` | schedule | | `{ active }`: pause, or resume and catch up |
+| `DELETE` | `/export-schedules/{id}` | schedule | | Removes it; the runs it made stay |
+
+**The file.**
+- It starts with metadata rows (`report`, `cutoff`, `settled`, `filter`, `generated_at`,
+  `locale`, and `schedule` for a scheduled run), then a blank row, then the table.
+- Amounts are decimal amounts of their currency, and column names are machine names.
+- **CSV** is UTF-8 with a BOM: `;` and a decimal comma in pt-BR, `,` and a decimal point
+  in English.
+- **XLSX** has one sheet, with numbers as numbers.
+- **Formula injection:** a text cell starting with `=`, `+`, `-`, `@`, a tab or a carriage
+  return is prefixed with `'` in both formats.
+
+**Scheduled runs.**
+- A scheduled run's cutoff is its due instant, local midnight in the schedule's timezone.
+- It waits for that cutoff to settle for the report's sources, up to
+  `EXPORT_SETTLE_GRACE_MS`. After that it runs, marked `settled: false`.
+- Missed instants are each run once, in order.
+
+**Retention.** Files are removed `EXPORT_RETENTION_HOURS` after they are written, and the
+job becomes `expired`.
+
+## List exports (web)
+
+`GET /api/export/<module>/<list path>?<the list's own query>&locale=pt-BR|en`, on the web
+server:
+- it pages the list as the signed-in user and returns CSV, up to 50,000 rows;
+- the metadata rows are `list`, `exported_at`, `filter`, `rows`, and `truncated_at` when
+  cut;
+- a user without read access gets the module's `403`, and no file.
+
+It follows the three paging styles the modules use:
+- `page.total`;
+- a top-level `total`;
+- `page.nextCursor`.
+
+A bare array is exported as one page.
 
 ## Owner summaries (Phase 62)
 

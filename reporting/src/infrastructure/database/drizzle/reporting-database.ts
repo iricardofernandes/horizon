@@ -24,17 +24,16 @@ import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { JOURNALED_SOURCES, type JournalEntry, type Source } from '@/domain/journal'
 import type { CheckResult, ReportFilter, ReportName, RunOutcome } from '@/domain/reports'
+import { exportScope } from './export-store'
 import { movedAfter, readReport } from './report-reads'
 import * as schema from './schema'
+import type { Database, Transaction } from './transaction'
 
 export interface ReportingDatabaseOptions {
   readonly url: string
   readonly poolMax?: number
   readonly statementTimeoutMs?: number
 }
-
-type Database = ReturnType<typeof drizzle<typeof schema>>
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 export interface SourceState {
   readonly source: Source
@@ -157,6 +156,7 @@ function mapFilter(row: typeof schema.savedFilters.$inferSelect): SavedFilter {
 function commandScope(tx: Transaction, tenantId: string): CommandScope {
   const filters = schema.savedFilters
   return {
+    ...exportScope(tx, tenantId),
     filters: {
       async insert(filter) {
         await tx.insert(filters).values({

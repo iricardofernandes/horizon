@@ -2,7 +2,9 @@ import { REPORTING_REPLAY_QUEUE } from '@horizon/contracts'
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { JOURNALED_EVENT_TYPES } from '@/application/journal-intake'
+import { ExportWorker, RelayExportWorkScan } from '@/infrastructure/exports/export-worker'
 import { ReportingAuthGuard } from '@/infrastructure/http/authorization'
+import { ExportsController } from '@/infrastructure/http/exports.controller'
 import { ReportingController } from '@/infrastructure/http/reporting.controller'
 import { ReportsController } from '@/infrastructure/http/reports.controller'
 import { QueueConsumer } from '@/infrastructure/messaging/queue-consumer'
@@ -54,9 +56,24 @@ export class AppModule {
           }),
       },
     ]
+    const relayUrl = config.DATABASE_RELAY_URL
+    if (relayUrl)
+      providers.push({
+        // Exports are written, scheduled and expired by a worker that finds its tenants as
+        // the relay role (Phase 63).
+        provide: ExportWorker,
+        inject: [ReportingRuntime],
+        useFactory: (runtime: ReportingRuntime) =>
+          new ExportWorker({
+            scan: new RelayExportWorkScan(relayUrl),
+            work: runtime.exportWork,
+            intervalMs: config.EXPORT_POLL_INTERVAL_MS,
+            leaseMs: config.EXPORT_LEASE_MS,
+          }),
+      })
     return {
       module: AppModule,
-      controllers: [ReportingController, ReportsController],
+      controllers: [ReportingController, ReportsController, ExportsController],
       providers,
       exports: [ReportingRuntime],
     }

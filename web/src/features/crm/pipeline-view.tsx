@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ExportButton } from '@/components/ui/export-button'
 import { Resource } from '@/components/ui/resource'
 import { SelectField } from '@/components/ui/select-field'
 import { Empty } from '@/components/ui/state'
@@ -75,6 +76,9 @@ function PipelineView({
           <p className="catalog-page-copy">{t('pipeline.copy')}</p>
         </div>
         <div className="page-actions">
+          {pipeline ? (
+            <ExportButton path="crm/opportunities" query={`pipelineId=${pipeline.id}`} />
+          ) : null}
           {abilities.canWrite && pipeline ? (
             <NewOpportunityDialog
               data={data}

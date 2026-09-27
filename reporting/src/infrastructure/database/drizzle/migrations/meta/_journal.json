@@ -15,6 +15,13 @@
       "when": 1790532000000,
       "tag": "0001_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790535600000,
+      "tag": "0002_exports",
+      "breakpoints": true
     }
   ]
 }

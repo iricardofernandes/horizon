@@ -1,6 +1,6 @@
 # Production readiness implementation plan — Phase M
 
-Status: **in progress** — Phases 61 and 62 delivered on 2026-09-27 ([61](readiness-phase61-evidence.md), [62](readiness-phase62-evidence.md)). This is the execution plan for Phase M of the
+Status: **in progress** — Phases 61 to 63 delivered on 2026-09-27 ([61](readiness-phase61-evidence.md), [62](readiness-phase62-evidence.md), [63](readiness-phase63-evidence.md)). This is the execution plan for Phase M of the
 [ERP expansion plan](erp-expansion-plan.md#phase-m--reporting-data-operations-and-product-hardening),
 split into phases 61–70 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to L.
@@ -249,24 +249,26 @@ Gaps:
 
 ### 63 — Exports and scheduled exports
 
+[Detailed Phase 63 plan](readiness-phase63-implementation-plan.md) ·
+[evidence](readiness-phase63-evidence.md).
+
 **Work**
 1. **Report exports:**
-   - `POST /exports` creates a job (report, filter, cutoff, format);
-   - the job writes CSV or XLSX to object storage;
-   - the file downloads through a signed link valid for 15 minutes;
+   - `POST /exports` creates a job (report, filter, cutoff, format, locale);
+   - a worker writes CSV or XLSX to object storage (MinIO, now in the default platform);
+   - the file downloads through a link signed for 15 minutes;
    - it expires by retention.
 2. **Scheduled exports:**
-   - a report, a saved filter and a cadence (daily, weekly or monthly, in the workspace's
-     timezone);
-   - each run records its cutoff, so a missed run is caught up, never skipped silently.
-3. **List exports from the web server:**
-   - the current list's filter is streamed from the owning module's API as the signed-in
-     user;
-   - the row limit is 50,000, and the header states the instant and the filter.
-4. Export button on every list and report screen, in pt-BR and en.
+   - a report, a filter or saved filter, and a cadence (daily, weekly or monthly) in the
+     schedule's own timezone;
+   - each run's cutoff is its due instant, and missed runs are caught up once each.
+3. **List exports from the web server:** any paged list is exported as CSV as the
+   signed-in user, up to 50,000 rows, with the instant and the filter in its header.
+4. **The export button** on the CRM accounts and pipeline, Catalog items and Procurement
+   orders. The reports screen, with its own button, is Phase 70.
 
 **Exit evidence**
-- An exported report's totals equal the screen's at the same cutoff.
+- An exported report's totals equal the report at the same cutoff.
 - A user without read access to a module cannot export its list.
 - Formula injection is neutralized: cells starting with `=`, `+`, `-` or `@` are quoted.
 

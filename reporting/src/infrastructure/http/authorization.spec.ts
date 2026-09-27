@@ -18,4 +18,13 @@ describe('reporting roles', () => {
     expect(permits(as('viewer'), 'reconcile')).toBe(false)
     expect(permits(as('viewer'), 'save')).toBe(false)
   })
+
+  it('lets everyone export, an analyst schedule, and only an administrator see all', () => {
+    const as = (role: string) => [{ module: 'reporting', role }]
+    expect(permits(as('viewer'), 'export')).toBe(true)
+    expect(permits(as('viewer'), 'schedule')).toBe(false)
+    expect(permits(as('analyst'), 'schedule')).toBe(true)
+    expect(permits(as('analyst'), 'administer')).toBe(false)
+    expect(permits(as('admin'), 'administer')).toBe(true)
+  })
 })

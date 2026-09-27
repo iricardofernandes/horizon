@@ -5,6 +5,11 @@ const positive = z.coerce.number().int().positive()
 const environmentSchema = z.object({
   PORT: positive.max(65_535).default(3013),
   DATABASE_URL: z.url().regex(/^postgres(?:ql)?:\/\//),
+  /** The export worker asks which tenants have work as this role; without it, it does not run. */
+  DATABASE_RELAY_URL: z
+    .url()
+    .regex(/^postgres(?:ql)?:\/\//)
+    .optional(),
   DATABASE_POOL_MAX: positive.max(100).default(10),
   DATABASE_STATEMENT_TIMEOUT_MS: positive.max(60_000).default(5000),
   RABBITMQ_URL: z.url().regex(/^amqps?:\/\//),
@@ -16,6 +21,18 @@ const environmentSchema = z.object({
     .url()
     .regex(/^https?:\/\//)
     .default('http://localhost:8000'),
+  /** Where export files are kept (Phase 63): S3-compatible storage, or a directory. */
+  EXPORT_STORE: z.enum(['s3', 'file']).default('s3'),
+  EXPORT_BUCKET: z.string().min(3).default('horizon-exports'),
+  EXPORT_S3_ENDPOINT: z.url().default('http://localhost:9000'),
+  EXPORT_S3_REGION: z.string().min(1).default('us-east-1'),
+  EXPORT_FILE_ROOT: z.string().min(1).default('/tmp/horizon-exports'),
+  /** Signs download links; at least 32 characters, never shared with another service. */
+  EXPORT_LINK_SECRET: z.string().min(32),
+  EXPORT_RETENTION_HOURS: positive.max(24 * 90).default(72),
+  EXPORT_SETTLE_GRACE_MS: positive.max(86_400_000).default(3_600_000),
+  EXPORT_POLL_INTERVAL_MS: positive.min(500).max(600_000).default(5000),
+  EXPORT_LEASE_MS: positive.min(60_000).default(600_000),
 })
 
 export type ReportingEnvironment = z.infer<typeof environmentSchema>

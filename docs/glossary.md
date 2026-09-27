@@ -858,3 +858,9 @@ A **comparison of a report with its owners' own reports** at one settled cutoff,
 every check it made. A check is matched, different (with each difference), or not
 comparable, with the reason. An owner that answers only its current state is not compared
 once it has moved since the cutoff.
+
+### export job and scheduled export
+An **export job** is a report written to a file (CSV or XLSX) at a cutoff, kept for a
+retention period and downloaded through a link signed for fifteen minutes. A **scheduled
+export** makes one job per due instant (local midnight daily, on Mondays or on the 1st) with
+that instant as its cutoff, catching up every missed one once.

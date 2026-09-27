@@ -7,11 +7,12 @@ An independently deployable NestJS service with its own database, its own contai
 its own lifecycle. It is reached through Kong at `/reporting`, never directly, and it
 shares no source with any other module (ADR 0001).
 
-**Status: Phase 62.**
+**Status: Phase 63.**
 - The event journal, the producers' seals and the per-source watermarks.
 - Four reports read from the journal at a cutoff, reconciled against the owners' own
   reports.
 - Saved filters.
+- Exports to CSV and XLSX, signed download links, and scheduled exports.
 
 See the [production readiness plan](../docs/production-readiness-implementation-plan.md),
 the [API reference](../docs/reporting-api.md) and
@@ -41,6 +42,10 @@ the [API reference](../docs/reporting-api.md) and
 - **Reconciliation runs:** every check against an owner's own report, kept with its
   differences.
 - **Saved filters:** private, or shared by an administrator.
+- **Export jobs and schedules:**
+  - reports written to CSV or XLSX in object storage by a worker, downloaded through
+    links signed for 15 minutes, and removed after their retention;
+  - schedules that run daily, weekly or monthly and catch up every missed run.
 
 It never writes to another module (ADR 0047). It reads the owners' reports only for a
 reconciliation, through the gateway, with the token of the person who asked.
@@ -62,6 +67,8 @@ the queue's `.dlq` at once. A failing write is retried once, then dead-lettered.
 | `GET` | `/sources?cutoff=` | `admin`, `analyst`, `viewer` | Per source: events held, the latest one, the watermark, the last seal and whether the cutoff is settled; and whether it is settled for every source |
 | `GET` | `/reports`, `/reports/{name}`, `/dashboard` | every role | The reports at a cutoff ([API reference](../docs/reporting-api.md)) |
 | `POST` | `/reports/{name}/reconciliations` | `admin`, `analyst` | A reconciliation run at a settled cutoff |
+| `POST`, `GET` | `/exports`, `/exports/{id}`, `/exports/{id}/link` | every role | Export jobs; `/exports/{id}/file` is public and checks the link's signature |
+| `POST`, `GET`, `PATCH`, `DELETE` | `/export-schedules` | `admin`, `analyst` | Scheduled exports |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/saved-filters` | `admin`, `analyst` (sharing: `admin`) | Saved filters |
 | `GET` | `/health/live`, `/health/ready` | public | Liveness, and readiness with a database ping |
 

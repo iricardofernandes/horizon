@@ -3,6 +3,7 @@ import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { Source } from '@/domain/journal'
 import type { CheckResult, ReportFilter, ReportName, RunOutcome } from '@/domain/reports'
 import type { ReportData } from '../report-data'
+import type { ExportScope } from './export-store'
 
 export interface StoredRun {
   readonly runId: string
@@ -62,14 +63,14 @@ export abstract class OwnerReports {
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'reconciliation-run' | 'saved-filter'
+  readonly subjectType: 'reconciliation-run' | 'saved-filter' | 'export' | 'export-schedule'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
   readonly details: Readonly<Record<string, unknown>>
 }
 
-export interface CommandScope {
+export interface CommandScope extends ExportScope {
   readonly filters: {
     insert(filter: SavedFilter): Promise<void>
     find(filterId: string): Promise<SavedFilter | null>

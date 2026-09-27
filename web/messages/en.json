@@ -254,7 +254,9 @@
     "never": "Never",
     "notSet": "Not set",
     "pending": "Pending",
-    "screenUnavailable": "This screen could not be loaded. Check that the application services are running."
+    "screenUnavailable": "This screen could not be loaded. Check that the application services are running.",
+    "exportList": "Export CSV",
+    "exportListHint": "Download this list as CSV, with your own access, up to 50,000 rows"
   },
   "customers": {
     "activeCustomers": "Active customers",

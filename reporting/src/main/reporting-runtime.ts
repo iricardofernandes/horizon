@@ -1,12 +1,22 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { JournalIntake } from '@/application/journal-intake'
+import type { ObjectStore } from '@/application/ports/export-store'
 import type { Clock } from '@/application/ports/journal-store'
+import {
+  ExportWorkUseCase,
+  ManageExportSchedulesUseCase,
+  ReadExportsUseCase,
+  RequestExportUseCase,
+} from '@/application/use-cases/exports'
 import { ManageSavedFiltersUseCase } from '@/application/use-cases/manage-saved-filters'
 import { DashboardUseCase, ReadReportUseCase } from '@/application/use-cases/read-report'
 import { RunReconciliationUseCase } from '@/application/use-cases/run-reconciliation'
 import { reportFilterOf } from '@/domain/reports'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { ReportingDatabase } from '@/infrastructure/database/drizzle/reporting-database'
+import { ExportLinks } from '@/infrastructure/exports/export-links'
+import { FileObjectStore, S3ObjectStore } from '@/infrastructure/exports/object-stores'
+import { writeFile } from '@/infrastructure/exports/writers'
 import { GatewayOwnerReports } from '@/infrastructure/http/gateway-owner-reports'
 import type { ReportingEnvironment } from './environment'
 
@@ -21,6 +31,12 @@ export class ReportingRuntime implements OnModuleInit, OnModuleDestroy {
   readonly runReconciliation: RunReconciliationUseCase
   readonly savedFilters: ManageSavedFiltersUseCase
   readonly filterOf = reportFilterOf
+  readonly objectStore: ObjectStore
+  readonly exportLinks: ExportLinks
+  readonly requestExport: RequestExportUseCase
+  readonly readExports: ReadExportsUseCase
+  readonly exportSchedules: ManageExportSchedulesUseCase
+  readonly exportWork: ExportWorkUseCase
 
   constructor(config: ReportingEnvironment) {
     this.clock = { now: () => new Date() }
@@ -43,6 +59,30 @@ export class ReportingRuntime implements OnModuleInit, OnModuleDestroy {
       this.clock,
     )
     this.savedFilters = new ManageSavedFiltersUseCase(this.database.commands, this.clock)
+    this.objectStore =
+      config.EXPORT_STORE === 's3'
+        ? new S3ObjectStore(config.EXPORT_BUCKET, {
+            endpoint: config.EXPORT_S3_ENDPOINT,
+            region: config.EXPORT_S3_REGION,
+          })
+        : new FileObjectStore(config.EXPORT_FILE_ROOT)
+    this.exportLinks = new ExportLinks(config.EXPORT_LINK_SECRET)
+    this.requestExport = new RequestExportUseCase(this.database.commands, this.clock)
+    this.readExports = new ReadExportsUseCase(this.database.commands, this.objectStore)
+    this.exportSchedules = new ManageExportSchedulesUseCase(this.database.commands, this.clock)
+    this.exportWork = new ExportWorkUseCase(
+      this.database.commands,
+      this.database.reports,
+      this.objectStore,
+      writeFile,
+      this.clock,
+      {
+        retentionMs: config.EXPORT_RETENTION_HOURS * 3_600_000,
+        leaseMs: config.EXPORT_LEASE_MS,
+        settleGraceMs: config.EXPORT_SETTLE_GRACE_MS,
+        batch: 20,
+      },
+    )
   }
 
   onModuleInit(): Promise<void> {

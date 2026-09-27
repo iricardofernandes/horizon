@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
 import { useNotice } from '@/components/shell/workspace-context'
 import { Badge } from '@/components/ui/badge'
+import { ExportButton } from '@/components/ui/export-button'
 import { Resource } from '@/components/ui/resource'
 import { SelectField } from '@/components/ui/select-field'
 import { Empty } from '@/components/ui/state'
@@ -66,6 +67,7 @@ function AccountsView({
           <p className="catalog-page-copy">{t('accounts.copy')}</p>
         </div>
         <div className="page-actions">
+          <ExportButton path="crm/accounts" query={role === 'all' ? '' : `role=${role}`} />
           {abilities.canManageParties ? <NewProspectDialog onChanged={onChanged} /> : null}
         </div>
       </header>

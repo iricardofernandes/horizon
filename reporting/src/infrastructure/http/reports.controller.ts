@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -16,7 +15,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import { z } from 'zod'
-import type { IdempotentContext } from '@/application/use-cases/commands'
 import { isReportName, NO_FILTER, REPORT_NAMES, REPORTS, type ReportName } from '@/domain/reports'
 import { ReportingRuntime } from '@/main/reporting-runtime'
 import {
@@ -26,9 +24,9 @@ import {
   RequireReportingAction,
   tenantOf,
 } from './authorization'
+import { commandContext as context, idempotentContext as idempotent } from './command-context'
 import { parse, unwrap } from './request-parsing'
 
-const IDEMPOTENCY_KEY = /^[\x21-\x7e]{8,255}$/
 const instant = z.iso.datetime({ offset: true })
 const reportQuery = z.object({
   cutoff: instant.optional(),
@@ -63,24 +61,6 @@ const changeFilter = z
 function reportOf(name: string): ReportName {
   if (!isReportName(name)) throw new NotFoundException('Report was not found')
   return name
-}
-
-function context(request: ReportingRequest) {
-  const requestId = request.headers['x-request-id']
-  return {
-    tenantId: tenantOf(request),
-    actor: actorOf(request),
-    requestId: typeof requestId === 'string' ? requestId.slice(0, 128) : null,
-  }
-}
-
-function idempotent(request: ReportingRequest): IdempotentContext {
-  const key = request.headers['idempotency-key']
-  if (typeof key !== 'string' || !IDEMPOTENCY_KEY.test(key))
-    throw new BadRequestException(
-      'Idempotency-Key header is required: 8 to 255 visible ASCII characters',
-    )
-  return { ...context(request), idempotencyKey: key }
 }
 
 function bearerOf(request: ReportingRequest): string {

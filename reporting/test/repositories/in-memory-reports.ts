@@ -1,3 +1,4 @@
+import type { ExportJob, ExportSchedule } from '@/application/ports/export-store'
 import {
   type CommandReceipt,
   type CommandScope,
@@ -31,6 +32,8 @@ export class InMemoryReports extends ReportReads {
   readonly runs: StoredRun[] = []
   readonly filters: SavedFilter[] = []
   readonly audit: string[] = []
+  readonly jobs: ExportJob[] = []
+  readonly schedules: ExportSchedule[] = []
   readonly requested: { name: ReportName; filter: ReportFilter }[] = []
 
   async report<N extends ReportName>(_: string, name: N, __: Date, filter: ReportFilter) {
@@ -107,6 +110,63 @@ export class InMemoryCommands extends ReportingCommands {
           reports.audit.push(record.action)
         },
       },
+      jobs: {
+        insert: async (job) => {
+          const twin = reports.jobs.some(
+            (held) =>
+              held.scheduleId !== null &&
+              held.scheduleId === job.scheduleId &&
+              held.cutoff.getTime() === job.cutoff.getTime(),
+          )
+          if (twin) return false
+          reports.jobs.push(job)
+          return true
+        },
+        find: async (jobId) => reports.jobs.find((job) => job.jobId === jobId) ?? null,
+        update: async (job) => {
+          reports.jobs[reports.jobs.findIndex((held) => held.jobId === job.jobId)] = job
+        },
+        list: async (requestedBy, limit) =>
+          reports.jobs
+            .filter((job) => !requestedBy || job.requestedBy === requestedBy)
+            .slice(0, limit),
+        claimNext: async (staleBefore) =>
+          reports.jobs.find(
+            (job) =>
+              job.status === 'requested' ||
+              (job.status === 'running' &&
+                (job.startedAt?.getTime() ?? 0) <= staleBefore.getTime()),
+          ) ?? null,
+        claimExpired: async (now, limit) =>
+          reports.jobs
+            .filter(
+              (job) => job.status === 'ready' && (job.expiresAt?.getTime() ?? 0) <= now.getTime(),
+            )
+            .slice(0, limit),
+      },
+      schedules: {
+        insert: async (schedule) => {
+          reports.schedules.push(schedule)
+        },
+        find: async (id) => reports.schedules.find((held) => held.scheduleId === id) ?? null,
+        update: async (schedule) => {
+          reports.schedules[
+            reports.schedules.findIndex((held) => held.scheduleId === schedule.scheduleId)
+          ] = schedule
+        },
+        remove: async (id) => {
+          reports.schedules.splice(
+            reports.schedules.findIndex((held) => held.scheduleId === id),
+            1,
+          )
+        },
+        list: async (ownerId) =>
+          reports.schedules.filter((held) => !ownerId || held.ownerId === ownerId),
+        claimDue: async (now, limit) =>
+          reports.schedules
+            .filter((held) => held.active && held.nextDueAt.getTime() <= now.getTime())
+            .slice(0, limit),
+      },
     }
   }
   inTenant<T>(_: string, work: (scope: CommandScope) => Promise<T>) {
@@ -126,5 +186,23 @@ export class InMemoryCommands extends ReportingCommands {
     if (outcome.isRight())
       this.receipts.set(receipt.idempotencyKey, { receipt, response: outcome.value })
     return outcome
+  }
+}
+
+/** Keeps files in memory, and can be made to fail. */
+export class MemoryObjectStore {
+  readonly files = new Map<string, Buffer>()
+  failing = false
+  async put(key: string, bytes: Buffer) {
+    if (this.failing) throw new Error('storage down')
+    this.files.set(key, bytes)
+  }
+  async get(key: string) {
+    const bytes = this.files.get(key)
+    if (!bytes) throw new Error('missing')
+    return bytes
+  }
+  async remove(key: string) {
+    this.files.delete(key)
   }
 }

@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 import { type FormEvent, type ReactNode, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ExportButton } from '@/components/ui/export-button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
 import { minorUnits } from '@/lib/format'
@@ -91,15 +92,18 @@ export function CatalogView({
     <section>
       <PageHeader
         actions={
-          readOnly ? (
-            <span className="read-only-badge">{t('viewOnly')}</span>
-          ) : section === 'items' ? (
-            <CreateItemDialog units={units} onChanged={onChanged} setNotice={setNotice} />
-          ) : section === 'units' ? (
-            <CreateUnitDialog onChanged={onChanged} setNotice={setNotice} />
-          ) : (
-            <CreatePriceListDialog onChanged={onChanged} setNotice={setNotice} />
-          )
+          <>
+            {section === 'items' ? <ExportButton path="catalog/items" /> : null}
+            {readOnly ? (
+              <span className="read-only-badge">{t('viewOnly')}</span>
+            ) : section === 'items' ? (
+              <CreateItemDialog units={units} onChanged={onChanged} setNotice={setNotice} />
+            ) : section === 'units' ? (
+              <CreateUnitDialog onChanged={onChanged} setNotice={setNotice} />
+            ) : (
+              <CreatePriceListDialog onChanged={onChanged} setNotice={setNotice} />
+            )}
+          </>
         }
       />
 

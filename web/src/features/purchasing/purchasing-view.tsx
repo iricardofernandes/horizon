@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Board, BoardCard } from '@/components/ui/board'
 import { Button } from '@/components/ui/button'
+import { ExportButton } from '@/components/ui/export-button'
 import { useStatusLabel } from '@/lib/status'
 import { useDate, useMoney } from '@/lib/use-format'
 import { OrderDialog } from './order-dialog'
@@ -47,10 +48,17 @@ export function PurchasingView({
 
   return (
     <section>
-      <header className="page-heading">
-        <p className="eyebrow">{t('eyebrow')}</p>
-        <h1>{t(`${screen}.title`)}</h1>
-        <p className="catalog-page-copy">{t(`${screen}.copy`)}</p>
+      <header className="page-heading page-heading-with-actions">
+        <div>
+          <p className="eyebrow">{t('eyebrow')}</p>
+          <h1>{t(`${screen}.title`)}</h1>
+          <p className="catalog-page-copy">{t(`${screen}.copy`)}</p>
+        </div>
+        {screen === 'orders' ? (
+          <div className="page-actions">
+            <ExportButton path="procurement/orders" />
+          </div>
+        ) : null}
       </header>
 
       {screen === 'requisitions' ? (

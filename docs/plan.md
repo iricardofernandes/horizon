@@ -2549,8 +2549,18 @@ Each says whether its sources are sealed through that cutoff.
 
 ## Phase 63 — Exports and scheduled exports
 
-**Planned.** CSV and XLSX exports of reports as jobs with signed, expiring links; scheduled exports
-that catch up missed runs; list exports streamed as the signed-in user.
+**Delivered on 2026-09-27.** Every report is exported as CSV or XLSX at a cutoff.
+- **Files.** They are written by a worker to object storage (MinIO, now part of the
+  default platform), downloaded through a link signed for 15 minutes, and removed after
+  their retention.
+- **Schedules.** A report is exported daily, weekly or monthly at midnight in the
+  schedule's timezone, and missed runs are made once each.
+- **Lists.** A list screen exports its list as CSV through the web server, with the user's
+  own access, up to 50,000 rows.
+- **Formulas.** No exported cell can run as a formula.
+
+[Evidence](readiness-phase63-evidence.md).
+[Detailed plan](readiness-phase63-implementation-plan.md).
 [Detailed work](production-readiness-implementation-plan.md#63--exports-and-scheduled-exports).
 
 ## Phase 64 — Bulk imports with preview and failures you can download
