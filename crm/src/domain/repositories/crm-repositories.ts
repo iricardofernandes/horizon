@@ -1,8 +1,11 @@
 import type { Account } from '../entities/account'
+import type { Activity } from '../entities/activity'
 import type { Contact } from '../entities/contact'
 import type { ListEntry } from '../entities/list-entry'
+import type { Note } from '../entities/note'
 import type { Opportunity, RecordedFact } from '../entities/opportunity'
 import type { Pipeline } from '../entities/pipeline'
+import type { Task } from '../entities/task'
 import type { ListKind } from '../value-objects/crm-values'
 
 export abstract class AccountsRepository {
@@ -58,4 +61,36 @@ export abstract class OpportunitiesRepository {
   /** Appends the pending facts to the history and writes their fold, in one transaction. */
   abstract create(opportunity: Opportunity): Promise<void>
   abstract save(opportunity: Opportunity): Promise<void>
+}
+
+/**
+ * Activities, tasks and notes seal their text under the account's key (Phase 57): the
+ * repository creates the key with the account's first record and never returns the text
+ * of an erased account.
+ */
+export abstract class ActivitiesRepository {
+  abstract findById(id: string): Promise<Activity | null>
+  abstract create(activity: Activity): Promise<void>
+  abstract save(activity: Activity): Promise<void>
+}
+
+export abstract class TasksRepository {
+  abstract findById(id: string): Promise<Task | null>
+  /** The account's open tasks, to cancel with its party. */
+  abstract findOpenOf(accountId: string): Promise<readonly Task[]>
+  /**
+   * Open tasks whose reminder is due and was not sent, locked for this transaction and
+   * skipped by any other that already holds them: a reminder is claimed by one sender.
+   */
+  abstract claimDueReminders(now: Date, limit: number): Promise<readonly Task[]>
+  abstract create(task: Task): Promise<void>
+  abstract save(task: Task): Promise<void>
+}
+
+export abstract class NotesRepository {
+  abstract findById(id: string): Promise<Note | null>
+  /** Writes the note and its first revision. */
+  abstract create(note: Note): Promise<void>
+  /** Appends the new revisions; nothing already written changes. */
+  abstract save(note: Note): Promise<void>
 }

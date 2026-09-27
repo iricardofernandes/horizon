@@ -2,18 +2,29 @@ import type { Either } from '@/core/either'
 import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type {
   AccountsRepository,
+  ActivitiesRepository,
   ContactsRepository,
   ListEntriesRepository,
+  NotesRepository,
   OpportunitiesRepository,
   OwnersRepository,
   PipelinesRepository,
+  TasksRepository,
 } from '@/domain/repositories/crm-repositories'
 
 /** One line in the tenant's hash-chained audit log (ADR 0025). Never a contact's values. */
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'account' | 'contact' | 'pipeline' | 'list-entry' | 'opportunity'
+  readonly subjectType:
+    | 'account'
+    | 'contact'
+    | 'pipeline'
+    | 'list-entry'
+    | 'opportunity'
+    | 'activity'
+    | 'task'
+    | 'note'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -32,6 +43,9 @@ export interface CrmScope {
   readonly pipelines: PipelinesRepository
   readonly lists: ListEntriesRepository
   readonly opportunities: OpportunitiesRepository
+  readonly activities: ActivitiesRepository
+  readonly tasks: TasksRepository
+  readonly notes: NotesRepository
   readonly audit: AuditTrail
 }
 

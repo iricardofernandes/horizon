@@ -15,6 +15,13 @@
       "when": 1790514000000,
       "tag": "0001_opportunities",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790517600000,
+      "tag": "0002_activities",
+      "breakpoints": true
     }
   ]
 }

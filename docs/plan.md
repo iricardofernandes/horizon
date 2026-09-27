@@ -2461,9 +2461,16 @@ workspace lists, and accounts gain a source.
 
 ## Phase 57 — Activities, tasks, notes and reminders
 
-**Planned.** Activities, tasks with reminders that fire once, append-only notes, the agenda
-and a timeline per account and opportunity.
-[Detailed work](crm-implementation-plan.md#57--activities-tasks-notes-and-reminders).
+**Delivered on 2026-09-27.** Activities, tasks and notes are attached to an account, a
+contact or an opportunity, and their free text is sealed under a key of the account,
+destroyed with its party.
+- A task's reminder is sent once as `crm.task.due` (contracts 0.44.0), even when the
+  scheduler restarts or runs twice.
+- Note corrections append revisions and keep the earlier text.
+- My agenda and ordered, tenant-scoped timelines per account and opportunity.
+
+[Evidence](crm-phase57-evidence.md).
+[Detailed plan](crm-phase57-implementation-plan.md). [Detailed work](crm-implementation-plan.md#57--activities-tasks-notes-and-reminders).
 
 ## Phase 58 — Conversion to quote and attribution
 

@@ -15,6 +15,7 @@ import {
   crmOpportunityRevised,
   crmOpportunityStageChanged,
   crmOpportunityWon,
+  crmTaskDue,
 } from './crm'
 import type { EventDefinition } from './define'
 import {
@@ -221,6 +222,7 @@ export const EVENTS: readonly EventDefinition[] = [
   crmOpportunityWon,
   crmOpportunityLost,
   crmOpportunityReopened,
+  crmTaskDue,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

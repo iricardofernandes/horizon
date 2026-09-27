@@ -235,6 +235,26 @@ Workspace lists: where an account or opportunity came from, and why an opportuni
 lost. Entries are archived, never deleted, and a name is unique among the active entries
 of its list.
 
+### activity
+A call, meeting, email or visit that happened with an account, attached to the account,
+one of its contacts or one of its opportunities, and naming the contacts who took part.
+It is corrected, never deleted. Recorded by a person, never captured from a mailbox or a
+phone system.
+
+### task and reminder
+Something a person has to do about an account by a due instant, assigned to a workspace
+user. It is completed or cancelled, never deleted. Its optional reminder is sent once, as
+`crm.task.due`, when its instant comes; rescheduling the task arms it again.
+
+### note and note revision
+Free text a person writes about an account, a contact or an opportunity. A correction
+appends a revision; every earlier text stays in the note's history.
+
+### agenda and timeline
+The agenda is a user's open tasks due by a horizon, overdue ones flagged. A timeline is
+an account's or an opportunity's activities, tasks, notes and opportunity history in one
+order, newest first.
+
 ### owner
 The workspace user who looks after an account. CRM knows owners only as user ids and
 whether they are active; a disabled user keeps the accounts it owns but receives no new

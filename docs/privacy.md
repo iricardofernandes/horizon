@@ -36,6 +36,8 @@ it does not adjudicate the request.
 | Customer name, `cnpj`/`cpf`, email, phone, address | `sales/` | Customer contact, or a sole trader | Performing the sales contract: a counterparty must be identifiable and reachable |
 | Legal name, CPF/CNPJ or a foreign identifier with its country, registration and structured fiscal address | `parties/` | Person, company contact or sole trader, in Brazil or abroad | Identifying the counterparty and preparing a lawful fiscal document; a foreign identifier is sealed under the party's key exactly like a CPF (ADR 0057) |
 | Keyed blind indexes of the normalized name, email and phone | `parties/` | Same | Warning about a probable duplicate before registering; cleared on erasure, and never reversible without the tenant's index key |
+| Contact name, job title, email and phone, with the lawful basis for holding them | `crm/` | A person at an account | Talking to the account; sealed under a key per contact, destroyed when the contact or its account's party is erased |
+| Free text of activities, tasks and notes (titles, summaries, note revisions) | `crm/` | Whoever the text names | Recording the relationship with an account; sealed under a key of the account, destroyed when its party is erased, and never published |
 | Restricted encrypted copy of issuer and recipient fiscal profiles | `fiscal/` | Issuer or recipient | Preparing a document against an exact effective-dated owner revision |
 | Actor identity on every audit entry | all modules | User | Legal obligation and legitimate interest in an accountable record |
 
@@ -122,6 +124,20 @@ only through role-restricted, tenant-scoped HTTP exports. Fiscal encrypts each r
 with AES-GCM under its own per-subject key. Its broker and worker logs omit export bodies.
 Issuer profiles use a separate per-tenant key; retention and erasure of a sole-trader
 issuer need a legal-hold decision before production enablement.
+
+CRM holds two kinds of key. Each contact's fields are sealed under the contact's own key,
+so erasing a contact destroys only that key. The free text of an account's activities,
+tasks and notes is sealed under a key of the account (Phase 57). When
+`parties.party.erased` arrives, CRM:
+- destroys every contact key of the account and the account's own key;
+- cancels the account's open tasks, so no reminder is sent about it;
+- blanks the account's names.
+
+The note revisions are append-only, so they are never rewritten; nothing can open them any
+more. Erasing a contact does not touch the account's key: an activity, task or note that
+mentions the contact by name stays readable until the account itself is erased. Records
+refer to contacts by id, and an erased contact reads as erased wherever it is referenced.
+`crm.task.due` and the audit log never carry this text.
 
 ### What redaction cannot hide
 

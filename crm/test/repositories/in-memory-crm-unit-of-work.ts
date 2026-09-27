@@ -10,10 +10,13 @@ import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DomainEvent } from '@/core/events/domain-event'
 import type { Account } from '@/domain/entities/account'
+import type { Activity } from '@/domain/entities/activity'
 import type { Contact } from '@/domain/entities/contact'
 import type { ListEntry } from '@/domain/entities/list-entry'
+import type { Note, NoteRevision } from '@/domain/entities/note'
 import type { Opportunity, RecordedFact } from '@/domain/entities/opportunity'
 import type { Pipeline } from '@/domain/entities/pipeline'
+import type { Task } from '@/domain/entities/task'
 import type { Owner } from '@/domain/repositories/crm-repositories'
 
 /**
@@ -29,6 +32,13 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
   readonly lists = new Map<string, ListEntry>()
   readonly opportunities = new Map<string, Opportunity>()
   readonly history = new Map<string, RecordedFact[]>()
+  readonly activities = new Map<string, Activity>()
+  readonly tasks = new Map<string, Task>()
+  readonly notes = new Map<string, Note>()
+  /** Every revision each note had written, as the append-only table would hold it. */
+  readonly noteRevisions = new Map<string, NoteRevision[]>()
+  /** Accounts whose record key exists and was not destroyed. */
+  readonly accountKeys = new Set<string>()
   readonly published: DomainEvent[] = []
   readonly audit: (AuditRecord & { tenantId: string })[] = []
   readonly consumed = new Set<string>()
@@ -42,7 +52,10 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
       accounts: {
         findById: async (id) => mine(this.accounts.get(id)),
         create: async (account) => void this.accounts.set(account.id.toString(), account),
-        save: async (account) => void this.accounts.set(account.id.toString(), account),
+        save: async (account) => {
+          this.accounts.set(account.id.toString(), account)
+          if (account.isErased()) this.accountKeys.delete(account.id.toString())
+        },
       },
       contacts: {
         findById: async (id) => mine(this.contacts.get(id)),
@@ -93,8 +106,52 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
         create: async (opportunity) => this.keepOpportunity(opportunity),
         save: async (opportunity) => this.keepOpportunity(opportunity),
       },
+      activities: {
+        findById: async (id) => mine(this.activities.get(id)),
+        create: async (activity) => {
+          this.accountKeys.add(activity.accountId)
+          this.activities.set(activity.id.toString(), activity)
+        },
+        save: async (activity) => void this.activities.set(activity.id.toString(), activity),
+      },
+      tasks: {
+        findById: async (id) => mine(this.tasks.get(id)),
+        findOpenOf: async (accountId) =>
+          [...this.tasks.values()].filter(
+            (task) =>
+              task.belongsTo(tenantId) && task.accountId === accountId && task.status === 'open',
+          ),
+        claimDueReminders: async (now, limit) =>
+          [...this.tasks.values()]
+            .filter((task) => task.belongsTo(tenantId) && task.isReminderDue(now))
+            .slice(0, limit),
+        create: async (task) => {
+          this.accountKeys.add(task.accountId)
+          this.keepTask(task)
+        },
+        save: async (task) => this.keepTask(task),
+      },
+      notes: {
+        findById: async (id) => mine(this.notes.get(id)),
+        create: async (note) => {
+          this.accountKeys.add(note.accountId)
+          this.keepNote(note)
+        },
+        save: async (note) => this.keepNote(note),
+      },
       audit: { append: async (record) => void this.audit.push({ ...record, tenantId }) },
     })
+  }
+
+  private keepTask(task: Task): void {
+    this.tasks.set(task.id.toString(), task)
+    this.published.push(...task.pullDomainEvents())
+  }
+
+  private keepNote(note: Note): void {
+    const id = note.id.toString()
+    this.notes.set(id, note)
+    this.noteRevisions.set(id, [...(this.noteRevisions.get(id) ?? []), ...note.pullNewRevisions()])
   }
 
   private keepOpportunity(opportunity: Opportunity): void {

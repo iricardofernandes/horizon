@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { dateSchema, moneySchema, uuidSchema } from '../common'
+import { dateSchema, instantSchema, moneySchema, uuidSchema } from '../common'
 import { defineEvent } from './define'
 
 /**
@@ -115,5 +115,28 @@ export const crmOpportunityReopened = defineEvent({
     accountId,
     ...position,
     previousStatus: z.enum(['won', 'lost']),
+  }),
+})
+
+/**
+ * A task's reminder came due (Phase 57). Published once per armed reminder, even across
+ * scheduler restarts, so a webhook can alert the assignee. The title is never published:
+ * it is free text that may name a person.
+ */
+export const crmTaskDue = defineEvent({
+  type: 'crm.task.due',
+  version: 1,
+  description:
+    'The reminder of an open task came due. Sent once per reminder; rescheduling the task arms a new one.',
+  payload: z.strictObject({
+    taskId: uuidSchema,
+    accountId,
+    subject: z.strictObject({
+      type: z.enum(['account', 'contact', 'opportunity']),
+      id: uuidSchema,
+    }),
+    assigneeId: uuidSchema.describe('The user the task is assigned to'),
+    dueAt: instantSchema,
+    remindAt: instantSchema,
   }),
 })

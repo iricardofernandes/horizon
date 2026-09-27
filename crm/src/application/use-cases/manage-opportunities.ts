@@ -65,8 +65,8 @@ async function selectable(
   return null
 }
 
-/** Contacts on an opportunity are live contacts of its own account. */
-async function contactsOf(
+/** Contacts named on a record are live contacts of its own account. */
+export async function contactsOf(
   scope: CrmScope,
   accountId: string,
   contactIds: readonly string[],
@@ -79,7 +79,10 @@ async function contactsOf(
   return null
 }
 
-async function activeOwner(scope: CrmScope, ownerId: string): Promise<InvalidInputError | null> {
+export async function activeOwner(
+  scope: CrmScope,
+  ownerId: string,
+): Promise<InvalidInputError | null> {
   const owner = await scope.owners.find(ownerId)
   if (!owner) return new InvalidInputError('/ownerId', 'is not a user of this workspace')
   if (!owner.active) return new InvalidInputError('/ownerId', 'is a disabled user')

@@ -1,6 +1,6 @@
 # CRM implementation plan — Phase L
 
-Status: **in progress** — Phases 54 to 56 delivered on 2026-09-27. This is the execution plan for Phase L of the
+Status: **in progress** — Phases 54 to 57 delivered on 2026-09-27. This is the execution plan for Phase L of the
 [ERP expansion plan](erp-expansion-plan.md#phase-l--crm), split into phases 54–60 of
 [plan.md](plan.md). Each numbered phase gets its own detailed plan before implementation,
 one local commit and an evidence record, as in Phases J and K.
@@ -177,6 +177,9 @@ Gaps:
 - Replaying CRM events gives the same opportunity state.
 
 ### 57 — Activities, tasks, notes and reminders
+
+[Detailed Phase 57 plan](crm-phase57-implementation-plan.md) ·
+[evidence](crm-phase57-evidence.md).
 
 **Work**
 1. Activities (call, meeting, email, visit) record what happened, when and with whom.

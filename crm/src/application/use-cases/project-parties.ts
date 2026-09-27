@@ -3,6 +3,9 @@ import { Account, type PartyFacts } from '@/domain/entities/account'
 import type { Clock } from '../ports/clock'
 import type { CrmScope } from '../ports/unit-of-work'
 
+/** Who closed a task that was cancelled because its party was erased. */
+const PARTY_ERASURE = 'crm:party-erased'
+
 export type ProjectionOutcome = 'projected' | 'refreshed' | 'ignored'
 
 /**
@@ -40,6 +43,10 @@ export class ProjectPartyUseCase {
  * The registry shredded the party. CRM forgets the account's names and shreds every
  * contact of the account with it: a contact at a company that no longer exists here is
  * data nobody may keep (ADR 0026, ADR 0057).
+ *
+ * Saving the erased account also destroys the account's key, so the text of its
+ * activities, tasks and notes can no longer be read; its open tasks are cancelled first,
+ * so no reminder is sent about it (Phase 57).
  */
 export class ForgetPartyUseCase {
   constructor(private readonly clock: Clock) {}
@@ -54,6 +61,8 @@ export class ForgetPartyUseCase {
       await scope.contacts.save(contact)
       shredded += 1
     }
+    for (const task of await scope.tasks.findOpenOf(partyId))
+      if (task.cancel(PARTY_ERASURE, now).isRight()) await scope.tasks.save(task)
     if (account.erase(now)) await scope.accounts.save(account)
     return shredded
   }

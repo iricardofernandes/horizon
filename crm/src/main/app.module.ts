@@ -1,9 +1,13 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
+import { FireDueRemindersUseCase } from '@/application/use-cases/fire-due-reminders'
 import { CrmAuthGuard } from '@/infrastructure/http/authorization'
 import { CrmController } from '@/infrastructure/http/crm.controller'
 import { OpportunitiesController } from '@/infrastructure/http/opportunities.controller'
+import { RecordsController } from '@/infrastructure/http/records.controller'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
+import { RelayDueReminderTenants } from '@/infrastructure/scheduling/relay-due-reminder-tenants'
+import { ReminderWorker } from '@/infrastructure/scheduling/reminder-worker'
 import { CrmRuntime } from './crm-runtime'
 import type { CrmEnvironment } from './environment'
 
@@ -31,20 +35,42 @@ export class AppModule {
           }),
       },
     ]
-    if (config.DATABASE_RELAY_URL)
-      providers.push({
-        provide: OutboxWorker,
-        useFactory: () =>
-          new OutboxWorker({
-            databaseUrl: config.DATABASE_RELAY_URL ?? '',
-            rabbitmqUrl: config.RABBITMQ_URL,
-            intervalMs: config.OUTBOX_POLL_INTERVAL_MS,
-            batchSize: config.OUTBOX_BATCH_SIZE,
-          }),
-      })
+    const relayUrl = config.DATABASE_RELAY_URL
+    if (relayUrl)
+      providers.push(
+        {
+          provide: OutboxWorker,
+          useFactory: () =>
+            new OutboxWorker({
+              databaseUrl: relayUrl,
+              rabbitmqUrl: config.RABBITMQ_URL,
+              intervalMs: config.OUTBOX_POLL_INTERVAL_MS,
+              batchSize: config.OUTBOX_BATCH_SIZE,
+            }),
+        },
+        {
+          // Reminders ask across tenants only which ones have work, as the relay role.
+          provide: ReminderWorker,
+          inject: [CrmRuntime],
+          useFactory: (runtime: CrmRuntime) => {
+            const tenants = new RelayDueReminderTenants(relayUrl)
+            const reminders = new FireDueRemindersUseCase(
+              runtime.database,
+              tenants,
+              runtime.clock,
+              config.REMINDER_BATCH_SIZE,
+            )
+            return new ReminderWorker({
+              run: () => reminders.execute(),
+              intervalMs: config.REMINDER_POLL_INTERVAL_MS,
+              close: () => tenants.close(),
+            })
+          },
+        },
+      )
     return {
       module: AppModule,
-      controllers: [CrmController, OpportunitiesController],
+      controllers: [CrmController, OpportunitiesController, RecordsController],
       providers,
       exports: [CrmRuntime],
     }

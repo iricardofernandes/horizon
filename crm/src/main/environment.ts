@@ -17,6 +17,8 @@ const environmentSchema = z.object({
   AMQP_PREFETCH: positive.max(1000).default(20),
   OUTBOX_POLL_INTERVAL_MS: positive.min(100).default(1000),
   OUTBOX_BATCH_SIZE: positive.max(1000).default(100),
+  REMINDER_POLL_INTERVAL_MS: positive.min(1000).max(3_600_000).default(15_000),
+  REMINDER_BATCH_SIZE: positive.max(1000).default(100),
 })
 
 export type CrmEnvironment = z.infer<typeof environmentSchema>

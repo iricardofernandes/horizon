@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, asc, desc, eq, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, ne, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { AuditRecord, AuditTrail, CrmScope } from '@/application/ports/unit-of-work'
 import { canonicalJson } from '@/core/audit/canonical-json'
@@ -32,6 +32,7 @@ import {
   Segment,
   Tags,
 } from '@/domain/value-objects/crm-values'
+import { type AccountSealer, KeyRing, recordRepositories } from './record-store'
 import * as schema from './schema'
 
 export type Transaction = Parameters<
@@ -314,7 +315,13 @@ function auditTrail(tx: Transaction, tenantId: string): AuditTrail {
   }
 }
 
-export function makeScope(tx: Transaction, tenantId: string, sealer: ContactSealer): CrmScope {
+export interface Sealers {
+  readonly contacts: ContactSealer
+  readonly accounts: AccountSealer
+}
+
+export function makeScope(tx: Transaction, tenantId: string, sealers: Sealers): CrmScope {
+  const sealer = sealers.contacts
   const assertTenant = (owner: { belongsTo(tenantId: string): boolean }) => {
     if (!owner.belongsTo(tenantId)) throw new Error('Aggregate tenant does not match transaction')
   }
@@ -367,6 +374,17 @@ export function makeScope(tx: Transaction, tenantId: string, sealer: ContactSeal
           .update(schema.accounts)
           .set(accountRow(account))
           .where(eq(schema.accounts.id, account.id.toString()))
+        // Crypto-shredding: the text of the account's records can no longer be opened.
+        if (account.isErased())
+          await tx
+            .update(schema.accountDataKeys)
+            .set({ material: null, erasedAt: account.toSnapshot().updatedAt })
+            .where(
+              and(
+                eq(schema.accountDataKeys.id, account.id.toString()),
+                isNotNull(schema.accountDataKeys.material),
+              ),
+            )
         await flush(account)
       },
     },
@@ -585,6 +603,13 @@ export function makeScope(tx: Transaction, tenantId: string, sealer: ContactSeal
         await appendHistory(opportunity)
       },
     },
+    ...recordRepositories(
+      tx,
+      tenantId,
+      new KeyRing(tx, tenantId, sealers.accounts),
+      flush,
+      assertTenant,
+    ),
     audit: auditTrail(tx, tenantId),
   }
 }

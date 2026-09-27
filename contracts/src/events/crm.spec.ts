@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { crmOpportunityCreated, crmOpportunityLost, crmOpportunityReopened } from './crm'
+import {
+  crmOpportunityCreated,
+  crmOpportunityLost,
+  crmOpportunityReopened,
+  crmTaskDue,
+} from './crm'
 
 const base = {
   opportunityId: randomUUID(),
@@ -46,6 +51,25 @@ describe('opportunity events', () => {
         probabilityBps: 0,
         previousStatus: 'open',
       }).success,
+    ).toBe(false)
+  })
+})
+
+describe('task events', () => {
+  it('names the task, its subject and its assignee, never its title', () => {
+    const due = {
+      taskId: randomUUID(),
+      accountId: randomUUID(),
+      subject: { type: 'opportunity', id: randomUUID() },
+      assigneeId: randomUUID(),
+      dueAt: '2026-09-28T13:00:00.000Z',
+      remindAt: '2026-09-28T12:30:00.000Z',
+    }
+    expect(crmTaskDue.payload.safeParse(due).success).toBe(true)
+    expect(crmTaskDue.payload.safeParse({ ...due, title: 'Ligar para Maria' }).success).toBe(false)
+    expect(
+      crmTaskDue.payload.safeParse({ ...due, subject: { type: 'quote', id: randomUUID() } })
+        .success,
     ).toBe(false)
   })
 })

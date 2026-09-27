@@ -228,3 +228,85 @@ export const opportunityEvents = pgTable(
   },
   (table) => [primaryKey({ columns: [table.tenantId, table.opportunityId, table.sequence] })],
 )
+
+/** One key per account for the text of its records; destroying it is the erasure (Phase 57). */
+export const accountDataKeys = pgTable('account_data_keys', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  material: text('material'),
+  erasedAt: instant('erased_at'),
+  createdAt: instant('created_at').notNull(),
+})
+
+/** A call, meeting, email or visit, attached to an account, a contact or an opportunity. */
+export const activities = pgTable('activities', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  accountId: uuid('account_id').notNull(),
+  subjectType: text('subject_type').notNull(),
+  subjectId: uuid('subject_id').notNull(),
+  kind: text('kind').notNull(),
+  occurredAt: instant('occurred_at').notNull(),
+  titleCiphertext: text('title_ciphertext').notNull(),
+  summaryCiphertext: text('summary_ciphertext'),
+  contactIds: uuid('contact_ids').array().notNull(),
+  recordedBy: text('recorded_by').notNull(),
+  version: integer('version').notNull(),
+  createdAt: instant('created_at').notNull(),
+  updatedAt: instant('updated_at').notNull(),
+})
+
+export const tasks = pgTable('tasks', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  accountId: uuid('account_id').notNull(),
+  subjectType: text('subject_type').notNull(),
+  subjectId: uuid('subject_id').notNull(),
+  titleCiphertext: text('title_ciphertext').notNull(),
+  assigneeId: uuid('assignee_id').notNull(),
+  dueAt: instant('due_at').notNull(),
+  remindAt: instant('remind_at'),
+  remindedAt: instant('reminded_at'),
+  status: text('status').notNull(),
+  createdBy: text('created_by').notNull(),
+  closedBy: text('closed_by'),
+  closedAt: instant('closed_at'),
+  version: integer('version').notNull(),
+  createdAt: instant('created_at').notNull(),
+  updatedAt: instant('updated_at').notNull(),
+})
+
+export const notes = pgTable('notes', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  accountId: uuid('account_id').notNull(),
+  subjectType: text('subject_type').notNull(),
+  subjectId: uuid('subject_id').notNull(),
+  currentRevision: integer('current_revision').notNull(),
+  createdAt: instant('created_at').notNull(),
+  updatedAt: instant('updated_at').notNull(),
+})
+
+/** Append-only: every text a note ever had (Phase 57). */
+export const noteRevisions = pgTable(
+  'note_revisions',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    noteId: uuid('note_id').notNull(),
+    revision: integer('revision').notNull(),
+    bodyCiphertext: text('body_ciphertext').notNull(),
+    author: text('author').notNull(),
+    writtenAt: instant('written_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.noteId, table.revision] })],
+)

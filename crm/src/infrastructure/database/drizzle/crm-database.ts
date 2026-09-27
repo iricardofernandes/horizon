@@ -25,7 +25,18 @@ import {
   opportunityDetail,
   pipelineDetail,
 } from './crm-reads'
-import { ContactSealer, makeScope, type Transaction } from './crm-store'
+import { ContactSealer, makeScope, type Sealers, type Transaction } from './crm-store'
+import {
+  activityDetail,
+  listTasks,
+  noteDetail,
+  type TaskFilter,
+  type TimelinePage,
+  type TimelineScope,
+  taskDetail,
+  timeline,
+} from './record-reads'
+import { AccountSealer } from './record-store'
 import * as schema from './schema'
 
 export interface CrmDatabaseOptions {
@@ -49,10 +60,12 @@ export class CrmDatabase extends CrmUnitOfWork {
   readonly #db
   readonly #transactions = new AsyncLocalStorage<{ tx: Transaction }>()
   readonly #sealer: ContactSealer
+  readonly #sealers: Sealers
 
   constructor(options: CrmDatabaseOptions) {
     super()
     this.#sealer = new ContactSealer(options.secretBox)
+    this.#sealers = { contacts: this.#sealer, accounts: new AccountSealer(options.secretBox) }
     this.#client = postgres(options.url, {
       max: options.poolMax ?? 10,
       connect_timeout: 5,
@@ -67,7 +80,7 @@ export class CrmDatabase extends CrmUnitOfWork {
     return this.#db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
       await tx.insert(schema.tenants).values({ id: tenantId }).onConflictDoNothing()
-      return this.#transactions.run({ tx }, () => work(makeScope(tx, tenantId, this.#sealer)))
+      return this.#transactions.run({ tx }, () => work(makeScope(tx, tenantId, this.#sealers)))
     })
   }
 
@@ -156,6 +169,28 @@ export class CrmDatabase extends CrmUnitOfWork {
 
   opportunityDetail(tenantId: string, id: string) {
     return this.read(tenantId, (tx) => opportunityDetail(tx, id))
+  }
+
+  activityDetail(tenantId: string, id: string) {
+    return this.read(tenantId, (tx) => activityDetail(tx, this.#sealers.accounts, tenantId, id))
+  }
+
+  taskDetail(tenantId: string, id: string, now: Date) {
+    return this.read(tenantId, (tx) => taskDetail(tx, this.#sealers.accounts, tenantId, id, now))
+  }
+
+  noteDetail(tenantId: string, id: string) {
+    return this.read(tenantId, (tx) => noteDetail(tx, this.#sealers.accounts, tenantId, id))
+  }
+
+  listTasks(tenantId: string, filter: TaskFilter, now: Date) {
+    return this.read(tenantId, (tx) => listTasks(tx, this.#sealers.accounts, tenantId, filter, now))
+  }
+
+  timeline(tenantId: string, scope: TimelineScope, page: TimelinePage, now: Date) {
+    return this.read(tenantId, (tx) =>
+      timeline(tx, this.#sealers.accounts, tenantId, scope, page, now),
+    )
   }
 
   listOwners(tenantId: string) {
