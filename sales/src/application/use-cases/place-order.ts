@@ -1,6 +1,7 @@
 import { left, right } from '@/core/either'
 import { SalesOrder } from '@/domain/entities/sales-order'
 import type { RequestedOrderLine } from '@/domain/events/sales-events'
+import { goodsOnly } from '@/domain/services/goods-only'
 import { BusinessDate, Currency, Quantity } from '@/domain/value-objects/sales-values'
 import type { Clock } from '../ports/clock'
 import type { SalesScope, SalesUnitOfWork } from '../ports/unit-of-work'
@@ -61,6 +62,10 @@ export async function placeAndRecord(
   now: Date,
   details: { customerId: string; quoteId: string | null },
 ): Outcome<{ orderId: string }> {
+  const requested = order.requestedLines()
+  const kinds = await scope.catalogItems.kindsOf(requested.map((line) => line.itemId))
+  const goods = goodsOnly(requested, kinds, details.quoteId ? 'proposal' : 'order')
+  if (goods.isLeft()) return left(goods.value)
   const placed = order.place(now)
   if (placed.isLeft()) return left(placed.value)
   await scope.orders.create(order)

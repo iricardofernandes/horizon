@@ -18,7 +18,7 @@ import { idempotentJsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 import { useDate, useDateTime, useMoney, useQuantity } from '@/lib/use-format'
-import { type Order, outstandingOf } from './types'
+import { goodsOnly, type Order, outstandingOf } from './types'
 
 export type { Order }
 
@@ -112,7 +112,7 @@ export function OrdersView({
                 <SelectField
                   label={t('item', { index: index + 1 })}
                   name="itemId"
-                  options={items
+                  options={goodsOnly(items)
                     .filter((row) => row.active)
                     .map((row) => ({ label: `${row.name} · ${row.sku}`, value: row.id }))}
                   required

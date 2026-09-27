@@ -2864,3 +2864,20 @@ tbody tr.reconciliation-selected td {
 .fiscal-timeline li > .badge {
   justify-self: start;
 }
+.line-kind {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--jade-3);
+  color: var(--jade-11);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fiscal-upcoming {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-muted);
+}

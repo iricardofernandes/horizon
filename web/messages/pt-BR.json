@@ -516,7 +516,8 @@
       "fiscalDocuments": "Documentos emitidos",
       "fiscalPreview": "Prévia de regras",
       "fiscalInbound": "XML de entrada",
-      "fiscalSupport": "Suporte"
+      "fiscalSupport": "Suporte",
+      "fiscalServiceProfiles": "Perfis de serviço"
     }
   },
   "orders": {
@@ -1185,7 +1186,9 @@
     "unitPrice": "Preço unitário",
     "value": "Valor",
     "versionNumber": "Versão {version}",
-    "warehouse": "Depósito"
+    "warehouse": "Depósito",
+    "serviceTag": "Serviço",
+    "servicesConvertLater": "Esta proposta tem linhas de serviço. O pedido de venda leva só mercadorias, e a conversão de serviços em ordem de serviço ainda não está disponível."
   },
   "shell": {
     "collapseSidebar": "Recolher menu lateral",
@@ -1862,6 +1865,40 @@
       "sourcesCopy": "Fontes oficiais por trás das regras, por data de importação.",
       "source": "publicado em {published} · importado há {days} dias",
       "noSources": "Nenhum pacote de fontes importado."
+    },
+    "serviceProfiles": {
+      "title": "Perfis de serviço",
+      "copy": "O que cada serviço do Catálogo é para o fisco: o código de tributação nacional e a NBS que a NFS-e leva.",
+      "panelTitle": "Serviços do Catálogo",
+      "panelCopy": "Uma revisão vale a partir de uma data e nunca altera NFS-e já emitida.",
+      "service": "Serviço",
+      "nationalTaxCode": "Código de tributação nacional",
+      "nationalTaxCodeHint": "Seis dígitos, por exemplo 010101.",
+      "nbsCode": "NBS",
+      "nbsCodeHint": "Nove dígitos, por exemplo 115022000.",
+      "municipalTaxCode": "Código municipal (opcional)",
+      "description": "Descrição na NFS-e",
+      "effectiveFrom": "Vigente desde",
+      "reason": "Motivo (pelo menos 10 caracteres)",
+      "state": "Perfil",
+      "revision": "revisão {revision}",
+      "missing": "sem perfil",
+      "upcoming": "próxima revisão a partir de {date}",
+      "open": "Abrir",
+      "openItem": "Abrir o perfil fiscal de {name}",
+      "empty": "O Catálogo não tem item de serviço.",
+      "dialogDescription": "Serviço do Catálogo {sku}",
+      "history": "Revisões",
+      "historyLine": "Revisão {revision}: {code} · NBS {nbs} · desde {date}",
+      "noHistory": "Ainda sem perfil fiscal. A NFS-e deste serviço é recusada até existir um.",
+      "newRevision": "Nova revisão",
+      "save": "Salvar revisão",
+      "readOnly": "Só um administrador fiscal cria revisões.",
+      "nationalTaxCodeInvalid": "O código de tributação nacional tem seis dígitos.",
+      "nbsCodeInvalid": "O código NBS tem nove dígitos.",
+      "descriptionRequired": "Descreva o serviço como deve sair na NFS-e.",
+      "effectiveFromInvalid": "Escolha a data de vigência.",
+      "reasonTooShort": "Explique a revisão em pelo menos 10 caracteres."
     }
   }
 }

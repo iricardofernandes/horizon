@@ -516,7 +516,8 @@
       "fiscalDocuments": "Issued documents",
       "fiscalPreview": "Rule preview",
       "fiscalInbound": "Supplier XML",
-      "fiscalSupport": "Support"
+      "fiscalSupport": "Support",
+      "fiscalServiceProfiles": "Service profiles"
     }
   },
   "orders": {
@@ -1185,7 +1186,9 @@
     "unitPrice": "Unit price",
     "value": "Value",
     "versionNumber": "Version {version}",
-    "warehouse": "Warehouse"
+    "warehouse": "Warehouse",
+    "serviceTag": "Service",
+    "servicesConvertLater": "This proposal has service lines. A sales order carries goods only, and converting services into a service order is not available yet."
   },
   "shell": {
     "collapseSidebar": "Collapse sidebar",
@@ -1862,6 +1865,40 @@
       "sourcesCopy": "Official sources behind the rules, by import date.",
       "source": "published {published} · imported {days} days ago",
       "noSources": "No source package imported."
+    },
+    "serviceProfiles": {
+      "title": "Service profiles",
+      "copy": "What each service in the Catalog is for tax: the national code and NBS its NFS-e carries.",
+      "panelTitle": "Catalog services",
+      "panelCopy": "A revision takes effect on a date and never changes an NFS-e already issued.",
+      "service": "Service",
+      "nationalTaxCode": "National tax code",
+      "nationalTaxCodeHint": "Six digits, for example 010101.",
+      "nbsCode": "NBS",
+      "nbsCodeHint": "Nine digits, for example 115022000.",
+      "municipalTaxCode": "Municipal code (optional)",
+      "description": "Description on the NFS-e",
+      "effectiveFrom": "Effective from",
+      "reason": "Reason (at least 10 characters)",
+      "state": "Profile",
+      "revision": "revision {revision}",
+      "missing": "no profile",
+      "upcoming": "next revision from {date}",
+      "open": "Open",
+      "openItem": "Open the fiscal profile of {name}",
+      "empty": "The Catalog has no service item.",
+      "dialogDescription": "Catalog service {sku}",
+      "history": "Revisions",
+      "historyLine": "Revision {revision}: {code} · NBS {nbs} · from {date}",
+      "noHistory": "No fiscal profile yet. An NFS-e for this service is refused until one exists.",
+      "newRevision": "New revision",
+      "save": "Save revision",
+      "readOnly": "Only a fiscal administrator creates revisions.",
+      "nationalTaxCodeInvalid": "The national tax code has six digits.",
+      "nbsCodeInvalid": "The NBS code has nine digits.",
+      "descriptionRequired": "Describe the service as the NFS-e should.",
+      "effectiveFromInvalid": "Choose the effective date.",
+      "reasonTooShort": "Explain the revision in at least 10 characters."
     }
   }
 }

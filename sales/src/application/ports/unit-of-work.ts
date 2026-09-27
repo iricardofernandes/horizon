@@ -13,7 +13,7 @@ import type {
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'quote' | 'order' | 'shipment'
+  readonly subjectType: 'quote' | 'order' | 'shipment' | 'catalog-item'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null

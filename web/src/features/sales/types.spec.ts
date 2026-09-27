@@ -3,6 +3,8 @@ import {
   awaitingApproval,
   currentVersions,
   deliverable,
+  goodsOnly,
+  hasServiceLines,
   historyOf,
   type Order,
   type OrderLine,
@@ -149,5 +151,21 @@ describe('what an order still owes', () => {
       order({ id: 'placed', status: 'placed' }),
     ]
     expect(deliverable(orders).map((row) => row.id)).toEqual(['confirmed', 'part'])
+  })
+})
+
+describe('goods and services', () => {
+  it('holds a proposal with service lines back from becoming a sales order', () => {
+    expect(hasServiceLines({ lines: [{ kind: 'product' }, { kind: null }] })).toBe(false)
+    expect(hasServiceLines({ lines: [{ kind: 'product' }, { kind: 'service' }] })).toBe(true)
+    expect(hasServiceLines({ lines: [{}] })).toBe(false)
+  })
+
+  it('offers only goods to a sales order', () => {
+    const items = [
+      { id: 'a', kind: 'product' as const },
+      { id: 'b', kind: 'service' as const },
+    ]
+    expect(goodsOnly(items).map((item) => item.id)).toEqual(['a'])
   })
 })

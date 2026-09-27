@@ -146,6 +146,34 @@ try {
   await page.getByText(/^3509502: não suportado/).waitFor()
   evidence.steps.push({ step: 'support', campinas: 'unsupported' })
 
+  // --- Phase 49: a service's fiscal profile, and a proposal that names its services --------
+  await page.getByRole('link', { name: 'Perfis de serviço' }).click()
+  await page.getByRole('heading', { name: 'Perfis de serviço', exact: true }).waitFor()
+  const serviceRow = page.getByRole('button', { name: /^Abrir o perfil fiscal de Implantação assistida/ })
+  await serviceRow.first().click()
+  const profileDialog = page.getByRole('dialog', { name: 'Implantação assistida' })
+  await profileDialog.waitFor()
+  const revisionsBefore = await profileDialog.locator('.fiscal-list li').count()
+  await profileDialog.getByLabel('Código de tributação nacional').fill('01.01.01')
+  await profileDialog.getByLabel('NBS').fill('115022000')
+  await profileDialog.getByLabel('Motivo (pelo menos 10 caracteres)').fill('Classificação conferida no teste de navegador')
+  await profileDialog.getByRole('button', { name: 'Salvar revisão' }).click()
+  await profileDialog.locator('.fiscal-list li').nth(revisionsBefore).waitFor()
+  const revisionText = (await profileDialog.locator('.fiscal-list li').first().textContent()) ?? ''
+  assert(revisionText.includes('010101') && revisionText.includes('115022000'), revisionText)
+  evidence.steps.push({ step: 'service-profile', revisions: revisionsBefore + 1 })
+  await profileDialog.getByRole('button', { name: 'Fechar janela' }).click()
+
+  await page.getByRole('link', { name: 'Orçamentos' }).click()
+  await page.getByRole('button', { name: 'Novo orçamento' }).first().click()
+  const quoteDialog = page.getByRole('dialog', { name: 'Criar orçamento' })
+  await quoteDialog.waitFor()
+  await quoteDialog.getByRole('combobox', { name: 'Item 1' }).click()
+  await page.getByRole('option', { name: /Implantação assistida .* · Serviço$/ }).first().waitFor()
+  await page.keyboard.press('Escape')
+  await quoteDialog.getByRole('button', { name: 'Fechar janela' }).click()
+  evidence.steps.push({ step: 'proposal', serviceTagged: true })
+
   // --- the same reading in English ----------------------------------------------------------
   await setLanguage(page, 'English')
   await page.getByRole('link', { name: 'Issued documents' }).click()

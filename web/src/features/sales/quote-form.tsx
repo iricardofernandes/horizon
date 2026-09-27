@@ -74,7 +74,10 @@ export function QuoteFields({
               label={t('item', { index: position + 1 })}
               name="itemId"
               options={sellable.map((item) => ({
-                label: `${item.name} · ${item.sku}`,
+                label:
+                  item.kind === 'service'
+                    ? `${item.name} · ${item.sku} · ${t('serviceTag')}`
+                    : `${item.name} · ${item.sku}`,
                 value: item.id,
               }))}
               required

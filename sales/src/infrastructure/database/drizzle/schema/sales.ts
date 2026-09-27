@@ -116,6 +116,8 @@ export const catalogItems = pgTable(
     unitPrice: bigint('unit_price', { mode: 'bigint' }),
     currency: text('currency'),
     active: integer('active').notNull().default(1),
+    /** `product` or `service` from the Catalog; null only for rows projected before Phase 49. */
+    kind: text('kind').$type<'product' | 'service'>(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (table) => [primaryKey({ columns: [table.tenantId, table.itemId] })],

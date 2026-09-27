@@ -67,6 +67,7 @@ export class SalesModuleEventHandlers {
         tenantId: parsed.tenantId,
         itemId: parsed.payload.itemId,
         description: description.value,
+        kind: parsed.payload.kind,
       }),
     )
   }

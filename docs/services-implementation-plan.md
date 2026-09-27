@@ -1,6 +1,6 @@
 # Services implementation plan — Phase K
 
-Status: **planned on 2026-09-26**. This is the execution plan for Phase K of the
+Status: **in progress** — Phase 49 delivered on 2026-09-26; phases 50–53 planned. This is the execution plan for Phase K of the
 [ERP expansion plan](erp-expansion-plan.md#phase-k--services-and-recurring-contracts),
 split into phases 49–53 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phase J.
@@ -49,6 +49,8 @@ Gaps:
    - The `services` module name stays reserved.
    - It is used only if a later aggregate needs its own transactional boundary, with its
      own ADR.
+   - A sales order stays a goods order; services are delivered by a service order (see
+     Phase 49).
 2. **Ownership.**
    - Sales owns the service order, the contract and the billed period.
    - Financial owns the receivable.
@@ -72,28 +74,37 @@ Gaps:
 
 ### 49 — Service lines and service decisions
 
+[Detailed Phase 49 plan](services-phase49-implementation-plan.md).
+
 **Work**
-1. ADR 0056 records the decisions above: boundary, ownership, period identity and
-   issuance policy.
-2. Sales learns the item kind from the Catalog projection:
-   - a quote or order can carry service lines;
-   - a service line never reserves stock and is never shipped;
-   - an order with only service lines skips reservation and shipment;
-   - a mixed order keeps the goods path for its goods lines only.
-3. Customer-facing proposal wording (a quote with service lines) and pricing from price
-   lists, as for goods.
-4. Screen to maintain the service fiscal profile (national tax code, NBS) from the
-   Catalog item, reading the Phase 47 Fiscal API.
+1. ADR 0056 records the decisions above. It adds one revision made while planning Phase
+   49: **a sales order stays a goods order**.
+   - A proposal (quote) carries goods and services.
+   - From Phase 50, converting it creates a sales order for the goods and a service
+     order for the services.
+   - Putting service lines in the sales order would need a reservation-less version of
+     `sales.order.confirmed`, and would duplicate the service order.
+2. Sales projects the item kind from the Catalog, with a backfill for older items:
+   - a service item is refused when placing a sales order, and when converting an
+     accepted proposal with service lines (until Phase 50);
+   - it never reaches Inventory.
+3. Proposal and order screens show the kind of each line; the order form offers goods
+   only.
+4. A screen maintains the service fiscal profile (national tax code, NBS) through the
+   Phase 47 Fiscal API.
 
 **Exit evidence**
-- A service-only order is confirmed without a reservation.
-- A mixed order reserves and ships only its goods.
-- The existing goods golden path is unchanged.
+- A service never reaches Inventory.
+- Goods orders and the goods golden path are unchanged.
+- Old and new items know their kind.
+- A person creates a service fiscal profile revision from the screen.
 
 ### 50 — Service orders and execution
 
 **Work**
-1. A service order comes from an accepted proposal, or is created directly.
+1. A service order comes from an accepted proposal, or is created directly. Converting a
+   proposal creates a sales order for its goods lines and a service order for its service
+   lines, from the same accepted version.
    - Stages: `scheduled`, `in_progress`, `completed`, `accepted` by the customer, or
      `cancelled` with a reason.
    - Each line shows the quantity delivered so far.

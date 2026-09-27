@@ -5,12 +5,16 @@ import type { SalesOrder } from '../entities/sales-order'
 import type { Shipment } from '../entities/shipment'
 import type { LineDescription, Money } from '../value-objects/sales-values'
 
+/** What the Catalog says an item is; null for an item projected before Phase 49. */
+export type ItemKind = 'product' | 'service'
+
 export interface CatalogItemProjection {
   readonly tenantId: string
   readonly itemId: string
   readonly description: LineDescription
   readonly unitPrice: Money
   readonly active: boolean
+  readonly kind: ItemKind | null
 }
 
 export abstract class SalesOrdersRepository {
@@ -45,7 +49,13 @@ export abstract class CatalogItemsRepository {
     tenantId: string
     itemId: string
     description: LineDescription
+    kind: ItemKind
   }): Promise<void>
+  /** Kinds of the given items, whether or not they are priced; absent when unknown. */
+  abstract kindsOf(itemIds: readonly string[]): Promise<ReadonlyMap<string, ItemKind>>
+  /** Fills a kind that was never recorded; a recorded kind is never changed. */
+  abstract backfillKind(itemId: string, kind: ItemKind): Promise<boolean>
+  abstract unknownKinds(limit: number): Promise<readonly string[]>
   abstract recordPrice(itemId: string, unitPrice: Money): Promise<void>
   abstract deactivate(itemId: string): Promise<void>
 }

@@ -20,7 +20,8 @@
     "test:cov": "vitest run --coverage",
     "test:e2e": "vitest run --config vitest.config.e2e.mts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node scripts/migrate.mjs"
+    "db:migrate": "node scripts/migrate.mjs",
+    "backfill:item-kinds": "node --enable-source-maps dist/main/backfill-item-kinds.js"
   },
   "dependencies": {
     "@casl/ability": "^7.0.1",

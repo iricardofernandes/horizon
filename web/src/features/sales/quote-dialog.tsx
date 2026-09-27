@@ -15,7 +15,14 @@ import { tracedFetch } from '@/lib/telemetry'
 import { useDate, useMoney, useQuantity } from '@/lib/use-format'
 import { QuoteFields, quoteBody } from './quote-form'
 import type { SalesScreenData } from './sales-page'
-import { historyOf, type Quote, reference, SALES_API, type SalesAbilities } from './types'
+import {
+  hasServiceLines,
+  historyOf,
+  type Quote,
+  reference,
+  SALES_API,
+  type SalesAbilities,
+} from './types'
 
 type Command = (name: string, path: string, body?: unknown, idempotent?: boolean) => Promise<void>
 
@@ -242,7 +249,12 @@ function Lines({ detail }: { detail: Quote }) {
         <tbody>
           {detail.lines.map((line) => (
             <tr key={line.lineId}>
-              <td>{line.description}</td>
+              <td>
+                {line.description}
+                {line.kind === 'service' ? (
+                  <span className="line-kind">{t('serviceTag')}</span>
+                ) : null}
+              </td>
               <td className="numeric">{quantity(line.quantity)}</td>
               <td className="numeric">{money(line.unitPrice, detail.currency)}</td>
               <td className="numeric">{money(line.lineTotal, detail.currency)}</td>
@@ -415,7 +427,10 @@ function Decisions({
           </Button>
         </>
       ) : null}
-      {detail.status === 'accepted' && !detail.orderId ? (
+      {detail.status === 'accepted' && !detail.orderId && hasServiceLines(detail) ? (
+        <p className="document-note">{t('servicesConvertLater')}</p>
+      ) : null}
+      {detail.status === 'accepted' && !detail.orderId && !hasServiceLines(detail) ? (
         <>
           <SelectField
             label={t('warehouse')}

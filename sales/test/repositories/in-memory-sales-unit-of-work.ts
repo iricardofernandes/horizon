@@ -18,6 +18,7 @@ import {
   type CatalogItemProjection,
   CatalogItemsRepository,
   CustomersRepository,
+  type ItemKind,
   QuotesRepository,
   SalesEventsRepository,
   SalesOrdersRepository,
@@ -54,7 +55,7 @@ class InMemoryCatalogItems extends CatalogItemsRepository {
     private readonly records: CatalogItemProjection[],
     private readonly pending: Map<
       string,
-      Partial<Pick<CatalogItemProjection, 'description' | 'unitPrice' | 'active'>>
+      Partial<Pick<CatalogItemProjection, 'description' | 'unitPrice' | 'active' | 'kind'>>
     >,
   ) {
     super()
@@ -76,6 +77,7 @@ class InMemoryCatalogItems extends CatalogItemsRepository {
             description: projected.description,
             unitPrice: projected.unitPrice,
             active: projected.active ?? true,
+            kind: projected.kind ?? null,
           }
         : null,
     )
@@ -84,12 +86,43 @@ class InMemoryCatalogItems extends CatalogItemsRepository {
     tenantId: string
     itemId: string
     description: CatalogItemProjection['description']
+    kind: ItemKind
   }): Promise<void> {
     if (item.tenantId !== this.tenantId) throw new Error('tenant mismatch')
     const key = this.key(item.itemId)
     const existing = this.pending.get(key) ?? {}
-    this.pending.set(key, { ...existing, description: item.description, active: true })
+    this.pending.set(key, {
+      ...existing,
+      description: item.description,
+      active: true,
+      kind: existing.kind ?? item.kind,
+    })
     return Promise.resolve()
+  }
+  kindsOf(itemIds: readonly string[]): Promise<ReadonlyMap<string, ItemKind>> {
+    const kinds = new Map<string, ItemKind>()
+    for (const itemId of itemIds) {
+      const kind =
+        this.records.find((item) => item.tenantId === this.tenantId && item.itemId === itemId)
+          ?.kind ?? this.pending.get(this.key(itemId))?.kind
+      if (kind) kinds.set(itemId, kind)
+    }
+    return Promise.resolve(kinds)
+  }
+  backfillKind(itemId: string, kind: ItemKind): Promise<boolean> {
+    const key = this.key(itemId)
+    const existing = this.pending.get(key)
+    if (!existing || existing.kind) return Promise.resolve(false)
+    this.pending.set(key, { ...existing, kind })
+    return Promise.resolve(true)
+  }
+  unknownKinds(limit: number): Promise<readonly string[]> {
+    return Promise.resolve(
+      [...this.pending.entries()]
+        .filter(([key, value]) => key.startsWith(`${this.tenantId}:`) && !value.kind)
+        .map(([key]) => key.slice(this.tenantId.length + 1))
+        .slice(0, limit),
+    )
   }
   recordPrice(itemId: string, unitPrice: CatalogItemProjection['unitPrice']): Promise<void> {
     const key = this.key(itemId)

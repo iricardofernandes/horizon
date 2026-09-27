@@ -29,7 +29,7 @@ are all exercised by the phase 7 E2E flow.
 - **Quotes** — priced offers with an expiry, negotiated in versions: a sent quote is never rewritten, and the version that answers it supersedes it while sharing its identifier.
 - **Discount approval** — how deep a discount a seller may give alone, and the four-eyes rule for anything deeper.
 - **Commercial terms** — the seller, discount, freight, carrier, payment terms and notes, on the quote and on the order it becomes.
-- **Sales orders** and their lines, including the price snapshotted at confirmation.
+- **Sales orders** and their lines, including the price snapshotted at confirmation. A sales order is a **goods order**: a service item is refused when an order is placed or an accepted proposal is converted, before anything reaches Inventory (ADR 0056). Services are delivered by service orders (Phase 50).
 - **Order lifecycle** — draft, placed, confirmed, cancelled — and the invariants of each transition.
 - **Shipments** — what is being picked for a customer, what left, and what came back, each carrying its share of the order's total.
 - **Fulfilment state** — how much of the order has reached the customer, and what it still has to deliver.
@@ -69,7 +69,7 @@ refusals.
 
 | Event | Reaction |
 |---|---|
-| `catalog.item.created` | Creates the local product or service projection used for order entry. |
+| `catalog.item.created` | Creates the local item projection used for order entry, with its immutable kind (`product` or `service`); a replay never changes a recorded kind. |
 | `catalog.item.deactivated` | Prevents the item from being added to new orders. |
 | `catalog.price.changed` | Refreshes the current price projection; confirmed order snapshots never change. |
 | `inventory.stock.reserved` | Advances the order to confirmed. |
@@ -86,6 +86,23 @@ does not define its own wire shapes.
 Every order transition increments a monotonic `orderVersion`. Inventory echoes the
 version it handled, so a late reservation outcome cannot move a newer or cancelled order
 backward.
+
+---
+
+## Item kinds (Phase 49)
+
+Quote and order lines expose `kind` (`product`, `service`, or `null` for an item projected
+before Phase 49, which is treated as a good). Items projected before Phase 49 get their
+kind from a one-off, idempotent command that reads the Catalog API and fills only unknown
+kinds:
+
+```sh
+CATALOG_URL=http://localhost:8000/catalog CATALOG_TOKEN=<catalog read token> \
+  npm run backfill:item-kinds -- --tenant <uuid>
+```
+
+It needs `DATABASE_URL` and `CUSTOMER_BLIND_INDEX_KEY` as the service does, and records one
+audit entry per run.
 
 ---
 

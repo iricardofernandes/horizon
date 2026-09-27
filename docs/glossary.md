@@ -410,6 +410,19 @@ What a quote or an order says beyond the goods themselves — the seller, the di
 freight, the carrier, the payment terms and the notes. They are copied onto the order at
 conversion, so the order says what was agreed rather than pointing at the offer.
 
+### proposal
+The customer-facing **offer**, a Sales quote. It may price goods and services side by side.
+Once accepted, its goods become a sales order and, from Phase 50, its services become a
+service order.
+
+### service order
+The document that **delivers a service**, stage by stage. It is never reserved in a
+warehouse or shipped. Each delivery bills once, as a receivable and an NFS-e (ADR 0056).
+
+### billed period
+One competence month of a contract, billed once and never rewritten. A correction is a
+linked credit (ADR 0042, ADR 0056).
+
 ## Purchasing
 
 ### purchase requisition

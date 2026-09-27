@@ -816,3 +816,234 @@ async function verifyRestoredFiscalGate(tenantId: string, shipmentId: string): P
     await restoredContainer?.stop()
   }
 }
+
+// --- Phase 49: a sales order is a goods order -----------------------------------------------
+
+async function projectItem(tenantId: string, kind: 'product' | 'service', price = 5000n) {
+  const itemId = randomUUID()
+  const handlers = new SalesModuleEventHandlers(database, clock)
+  const envelope = (eventType: string, payload: Record<string, unknown>) => ({
+    eventId: randomUUID(),
+    eventType,
+    eventVersion: 1,
+    occurredAt: new Date().toISOString(),
+    tenantId,
+    traceId: randomBytes(16).toString('hex'),
+    payload,
+  })
+  const created = envelope('catalog.item.created', {
+    itemId,
+    kind,
+    sku: `P49-${itemId.slice(0, 8)}`,
+    name: kind === 'service' ? 'Implantação assistida' : 'Café torrado',
+    unitId: randomUUID(),
+    ncm: kind === 'service' ? null : '09012100',
+  })
+  await handlers.handlers['catalog.item.created']?.(created)
+  // A replay (or a forged kind on a later copy) never changes the recorded kind.
+  await handlers.handlers['catalog.item.created']?.({
+    ...created,
+    eventId: randomUUID(),
+    payload: { ...created.payload, kind: kind === 'service' ? 'product' : 'service' },
+  })
+  await handlers.handlers['catalog.price.changed']?.(
+    envelope('catalog.price.changed', {
+      itemId,
+      priceListId: randomUUID(),
+      amount: price.toString(),
+      currency: 'BRL',
+      effectiveFrom: new Date().toISOString(),
+    }),
+  )
+  return itemId
+}
+
+it('projects the Catalog kind once and never changes it', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service')
+  const good = await projectItem(tenantId, 'product')
+  const rows = await administrator`select item_id, kind from catalog_items
+    where tenant_id = ${tenantId} order by kind`
+  expect(rows.map((row) => [row.item_id, row.kind])).toEqual([
+    [good, 'product'],
+    [service, 'service'],
+  ])
+  const kinds = await database.inTenant(tenantId, (scope) =>
+    scope.catalogItems.kindsOf([service, good, randomUUID()]),
+  )
+  expect(Object.fromEntries(kinds)).toEqual({ [service]: 'service', [good]: 'product' })
+  // Another tenant sees nothing of these rows.
+  const other = randomUUID()
+  await database.provisionTenant(other)
+  expect(
+    (await database.inTenant(other, (scope) => scope.catalogItems.kindsOf([service]))).size,
+  ).toBe(0)
+})
+
+it('refuses a service in a sales order before Inventory is asked for anything', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service')
+  const good = await projectItem(tenantId, 'product')
+  const serviceLine = randomUUID()
+  const refused = await new PlaceOrderUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId: randomUUID(),
+    fulfillmentWarehouseId: randomUUID(),
+    lines: [
+      { lineId: randomUUID(), itemId: good, quantity: '1' },
+      { lineId: serviceLine, itemId: service, quantity: '1' },
+    ],
+  })
+  expect(refused.isLeft()).toBe(true)
+  expect(refused.value).toMatchObject({
+    message: expect.stringContaining(`service items are delivered by a service order`),
+  })
+  expect((refused.value as Error).message).toContain(serviceLine)
+  expect(
+    await administrator`select 1 from sales_orders where tenant_id = ${tenantId}`,
+  ).toHaveLength(0)
+  expect(
+    await administrator`select 1 from outbox where tenant_id = ${tenantId}
+      and event_type = 'sales.order.placed'`,
+  ).toHaveLength(0)
+
+  // A goods order is placed exactly as before, and so is an item of unknown kind.
+  const legacy = randomUUID()
+  await administrator`insert into catalog_items
+    (tenant_id, item_id, description, unit_price, currency, active, updated_at)
+    values (${tenantId}, ${legacy}, 'Item antigo', 900, 'BRL', 1, now())`
+  const placed = await new PlaceOrderUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId: randomUUID(),
+    fulfillmentWarehouseId: randomUUID(),
+    lines: [
+      { lineId: randomUUID(), itemId: good, quantity: '1' },
+      { lineId: randomUUID(), itemId: legacy, quantity: '1' },
+    ],
+  })
+  if (placed.isLeft()) throw placed.value
+  const order = await database.findOrderSnapshot(tenantId, placed.value.orderId)
+  expect(order?.requestedLines.map((line) => line.kind).sort()).toEqual([null, 'product'])
+})
+
+it('keeps an accepted proposal with services unconverted and readable with its kinds', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service', 150000n)
+  const good = await projectItem(tenantId, 'product')
+  const customerId = randomUUID()
+  const projected = await database.inTenant(tenantId, (scope) =>
+    new ProjectPartyUseCase(clock).executeInScope(scope, {
+      tenantId,
+      partyId: customerId,
+      legalName: 'Cliente Serviços',
+      email: 'servicos@example.com',
+      phone: '+55 11 99999-9999',
+      address: 'Rua Um, 42, São Paulo',
+      roles: ['customer'],
+      active: true,
+    }),
+  )
+  if (projected.isLeft()) throw projected.value
+  const quote = await new WriteQuoteUseCase(database, clock, 15).execute({
+    context: commandOf(tenantId),
+    customerId,
+    quote: {
+      lines: [
+        { lineId: randomUUID(), itemId: good, quantity: '2' },
+        { lineId: randomUUID(), itemId: service, quantity: '1' },
+      ],
+    },
+  })
+  if (quote.isLeft()) throw quote.value
+  const decide = new DecideQuoteUseCase(database, clock)
+  expect((await decide.send(commandOf(tenantId), quote.value.quoteId)).isRight()).toBe(true)
+  expect((await decide.accept(commandOf(tenantId), quote.value.quoteId)).isRight()).toBe(true)
+  const read = await database.findQuoteSnapshot(tenantId, quote.value.quoteId)
+  expect(read?.lines.map((line) => [line.itemId, line.kind])).toEqual(
+    expect.arrayContaining([
+      [good, 'product'],
+      [service, 'service'],
+    ]),
+  )
+  expect(read?.total).toBe('160000')
+
+  const converted = await new ConvertQuoteUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    quoteId: quote.value.quoteId,
+    fulfillmentWarehouseId: randomUUID(),
+  })
+  expect(converted.isLeft()).toBe(true)
+  expect(converted.value).toMatchObject({
+    message: expect.stringMatching(/^service lines of a proposal are delivered by a service order/),
+  })
+  // The refusal rolled back: the proposal is still accepted and can convert once Phase 50 exists.
+  const [after] = await administrator`select status, order_id from quotes
+    where tenant_id = ${tenantId} and id = ${quote.value.quoteId}`
+  expect(after).toMatchObject({ status: 'accepted', order_id: null })
+})
+
+it('backfills unknown kinds once and never overwrites a recorded one', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const known = await projectItem(tenantId, 'service')
+  const old = randomUUID()
+  await administrator`insert into catalog_items
+    (tenant_id, item_id, description, unit_price, currency, active, updated_at)
+    values (${tenantId}, ${old}, 'Consultoria antiga', 900, 'BRL', 1, now())`
+  const unknown = await database.inTenant(tenantId, (scope) => scope.catalogItems.unknownKinds(100))
+  expect(unknown).toEqual([old])
+  const filled = await database.inTenant(tenantId, async (scope) => [
+    await scope.catalogItems.backfillKind(old, 'service'),
+    await scope.catalogItems.backfillKind(old, 'product'),
+    await scope.catalogItems.backfillKind(known, 'product'),
+  ])
+  expect(filled).toEqual([true, false, false])
+  const rows = await administrator`select item_id, kind from catalog_items
+    where tenant_id = ${tenantId}`
+  expect(Object.fromEntries(rows.map((row) => [row.item_id, row.kind]))).toEqual({
+    [known]: 'service',
+    [old]: 'service',
+  })
+})
+
+it('keeps a price that arrives before its item', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const itemId = randomUUID()
+  const handlers = new SalesModuleEventHandlers(database, clock)
+  const envelope = (eventType: string, payload: Record<string, unknown>) => ({
+    eventId: randomUUID(),
+    eventType,
+    eventVersion: 1,
+    occurredAt: new Date().toISOString(),
+    tenantId,
+    traceId: randomBytes(16).toString('hex'),
+    payload,
+  })
+  await handlers.handlers['catalog.price.changed']?.(
+    envelope('catalog.price.changed', {
+      itemId,
+      priceListId: randomUUID(),
+      amount: '150000',
+      currency: 'BRL',
+      effectiveFrom: new Date().toISOString(),
+    }),
+  )
+  await handlers.handlers['catalog.item.created']?.(
+    envelope('catalog.item.created', {
+      itemId,
+      kind: 'service',
+      sku: 'LATE-1',
+      name: 'Suporte mensal',
+      unitId: randomUUID(),
+      ncm: null,
+    }),
+  )
+  const item = await database.inTenant(tenantId, (scope) => scope.catalogItems.findById(itemId))
+  expect(item).toMatchObject({ kind: 'service', active: true })
+  expect(item?.description.value).toBe('Suporte mensal')
+  expect(item?.unitPrice.amount).toBe(150000n)
+})

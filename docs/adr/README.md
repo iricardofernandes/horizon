@@ -88,6 +88,7 @@ one means writing a new ADR that supersedes it.
 | [0053](0053-nfce-is-a-separate-model-over-the-sales-shipment.md) | NFC-e is a separate model over the same Sales shipment |
 | [0054](0054-national-nfse-is-keyed-by-municipality-and-reconciled-by-dps.md) | The national NFS-e is keyed by municipality and reconciled by its DPS |
 | [0055](0055-fiscal-support-reads-metrics-and-bounded-replay.md) | Fiscal support reads the API, measures without tenants and replays within bounds |
+| [0056](0056-services-are-delivered-by-service-orders-inside-sales.md) | Services are delivered by service orders inside Sales, and billed once per period |
 
 ## Frontend
 

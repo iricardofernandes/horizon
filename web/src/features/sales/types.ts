@@ -49,6 +49,8 @@ export type QuoteLine = {
   description: string
   unitPrice: string
   lineTotal: string
+  /** From the Catalog; null only for items Sales projected before Phase 49. */
+  kind?: 'product' | 'service' | null
 }
 
 /** One version of one offer. Every version of the same offer shares a `rootId`. */
@@ -226,4 +228,17 @@ export function shippedShare(lines: readonly OrderLine[]): number {
   if (ordered === 0) return 0
   const shipped = lines.reduce((sum, line) => sum + Number(line.shipped), 0)
   return Math.min(100, Math.round((shipped / ordered) * 100))
+}
+
+/**
+ * A sales order is a goods order (ADR 0056): an accepted proposal with service lines waits
+ * for the service order of Phase 50 instead of converting.
+ */
+export function hasServiceLines(quote: { lines: readonly Pick<QuoteLine, 'kind'>[] }): boolean {
+  return quote.lines.some((line) => line.kind === 'service')
+}
+
+/** The items a sales order may carry: goods only. */
+export function goodsOnly<T extends { kind: 'product' | 'service' }>(items: readonly T[]): T[] {
+  return items.filter((item) => item.kind === 'product')
 }

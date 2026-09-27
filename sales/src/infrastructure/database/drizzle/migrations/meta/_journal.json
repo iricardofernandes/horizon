@@ -78,6 +78,13 @@
       "when": 1791100006000,
       "tag": "0010_fiscal_origin_freeze_fence",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791100007000,
+      "tag": "0011_catalog_item_kind",
+      "breakpoints": true
     }
   ]
 }

@@ -2337,10 +2337,18 @@ No homologation or production row is enabled, so Phase J is closed for simulatio
 
 ## Phase 49 — Service lines and service decisions
 
-**Planned.** ADR 0056 fixes the Phase K boundary (inside `sales/`), who owns each effect,
-the identity of a billed period and the NFS-e issuance policy. Quotes and orders carry
-service lines that never reserve or ship stock, and the service fiscal profile gets a
-screen. [Detailed work](services-implementation-plan.md#49--service-lines-and-service-decisions).
+**Delivered on 2026-09-26.** ADR 0056 fixes the Phase K decisions: the boundary (inside
+`sales/`), who owns each effect, the identity of a billed period and the NFS-e issuance
+policy.
+- A sales order stays a goods order. Sales projects each item's kind, with a one-off
+  backfill for older items. It refuses a service in an order, or in the conversion of an
+  accepted proposal, before anything reaches Inventory.
+- Proposals show their service lines.
+- The service fiscal profile has a screen.
+- A lost price, when it arrived before its item, is fixed.
+
+[Evidence](services-phase49-evidence.md).
+[Detailed plan](services-phase49-implementation-plan.md). [Detailed work](services-implementation-plan.md#49--service-lines-and-service-decisions).
 
 ## Phase 50 — Service orders and execution
 

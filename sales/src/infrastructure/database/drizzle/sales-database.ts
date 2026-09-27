@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { salesFiscalOriginFrozen } from '@horizon/contracts'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import type {
@@ -202,7 +202,7 @@ export class SalesDatabase extends SalesUnitOfWork {
             .select()
             .from(schema.salesOrderLines)
             .where(eq(schema.salesOrderLines.orderId, row.id))
-          return mapOrder(row, lines).toSnapshot()
+          return withOrderKinds(current.tx, mapOrder(row, lines).toSnapshot())
         }),
       )
     })
@@ -223,7 +223,7 @@ export class SalesDatabase extends SalesUnitOfWork {
             .select()
             .from(schema.quoteLines)
             .where(eq(schema.quoteLines.quoteId, row.id))
-          return mapQuote(row, lines).toSnapshot()
+          return withQuoteKinds(current.tx, mapQuote(row, lines).toSnapshot())
         }),
       )
     })
@@ -243,7 +243,7 @@ export class SalesDatabase extends SalesUnitOfWork {
         .select()
         .from(schema.quoteLines)
         .where(eq(schema.quoteLines.quoteId, row.id))
-      return mapQuote(row, lines).toSnapshot()
+      return withQuoteKinds(current.tx, mapQuote(row, lines).toSnapshot())
     })
   }
 
@@ -311,7 +311,7 @@ export class SalesDatabase extends SalesUnitOfWork {
         .select()
         .from(schema.salesOrderLines)
         .where(eq(schema.salesOrderLines.orderId, row.id))
-      return mapOrder(row, lines).toSnapshot()
+      return withOrderKinds(current.tx, mapOrder(row, lines).toSnapshot())
     })
   }
 
@@ -323,6 +323,67 @@ export class SalesDatabase extends SalesUnitOfWork {
     const current = this.#transactions.getStore()
     if (!current) throw new Error('This operation requires a tenant transaction')
     return current.tx
+  }
+}
+
+/** The Catalog kind of each line's item, for reads; null while unknown (before Phase 49). */
+async function kindsFor(
+  tx: Transaction,
+  itemIds: readonly string[],
+): Promise<ReadonlyMap<string, 'product' | 'service'>> {
+  if (itemIds.length === 0) return new Map()
+  const rows = await tx
+    .select({ itemId: schema.catalogItems.itemId, kind: schema.catalogItems.kind })
+    .from(schema.catalogItems)
+    .where(inArray(schema.catalogItems.itemId, [...new Set(itemIds)]))
+  return new Map(rows.flatMap((row) => (row.kind ? [[row.itemId, row.kind] as const] : [])))
+}
+
+type Kinded<L> = L & { kind: 'product' | 'service' | null }
+
+function withKind<L extends { itemId: string }>(
+  lines: readonly L[],
+  kinds: ReadonlyMap<string, 'product' | 'service'>,
+): Kinded<L>[] {
+  return lines.map((line) => ({ ...line, kind: kinds.get(line.itemId) ?? null }))
+}
+
+async function withQuoteKinds<T extends { lines: readonly { itemId: string }[] }>(
+  tx: Transaction,
+  snapshot: T,
+): Promise<Omit<T, 'lines'> & { lines: Kinded<T['lines'][number]>[] }> {
+  const lines = snapshot.lines as readonly T['lines'][number][]
+  const kinds = await kindsFor(
+    tx,
+    lines.map((line) => line.itemId),
+  )
+  return { ...snapshot, lines: withKind(lines, kinds) }
+}
+
+async function withOrderKinds<
+  T extends {
+    requestedLines: readonly { itemId: string }[]
+    confirmedLines: readonly { itemId: string }[]
+  },
+>(
+  tx: Transaction,
+  snapshot: T,
+): Promise<
+  Omit<T, 'requestedLines' | 'confirmedLines'> & {
+    requestedLines: Kinded<T['requestedLines'][number]>[]
+    confirmedLines: Kinded<T['confirmedLines'][number]>[]
+  }
+> {
+  const requested = snapshot.requestedLines as readonly T['requestedLines'][number][]
+  const confirmed = snapshot.confirmedLines as readonly T['confirmedLines'][number][]
+  const kinds = await kindsFor(tx, [
+    ...requested.map((line) => line.itemId),
+    ...confirmed.map((line) => line.itemId),
+  ])
+  return {
+    ...snapshot,
+    requestedLines: withKind(requested, kinds),
+    confirmedLines: withKind(confirmed, kinds),
   }
 }
 
@@ -1296,6 +1357,7 @@ function makeScope(
           description: restored(LineDescription.create(row.description)),
           unitPrice: Money.fromAmount(row.unitPrice, currency),
           active: row.active === 1,
+          kind: row.kind ?? null,
         }
       },
       recordItem: async (item) => {
@@ -1309,22 +1371,68 @@ function makeScope(
             unitPrice: null,
             currency: null,
             active: 1,
+            kind: item.kind,
             updatedAt: new Date(),
           })
           .onConflictDoUpdate({
             target: [schema.catalogItems.tenantId, schema.catalogItems.itemId],
-            set: { description: item.description.value, active: 1, updatedAt: new Date() },
+            set: {
+              description: item.description.value,
+              active: 1,
+              // The Catalog kind is immutable: a replay fills an unknown kind, never changes one.
+              kind: sql`coalesce(${schema.catalogItems.kind}, excluded.kind)`,
+              updatedAt: new Date(),
+            },
           })
       },
-      recordPrice: async (itemId, unitPrice) => {
-        await tx
+      kindsOf: async (itemIds) => {
+        if (itemIds.length === 0) return new Map()
+        const rows = await tx
+          .select({ itemId: schema.catalogItems.itemId, kind: schema.catalogItems.kind })
+          .from(schema.catalogItems)
+          .where(inArray(schema.catalogItems.itemId, [...itemIds]))
+        return new Map(rows.flatMap((row) => (row.kind ? [[row.itemId, row.kind] as const] : [])))
+      },
+      backfillKind: async (itemId, kind) => {
+        const changed = await tx
           .update(schema.catalogItems)
-          .set({
+          .set({ kind, updatedAt: new Date() })
+          .where(and(eq(schema.catalogItems.itemId, itemId), isNull(schema.catalogItems.kind)))
+          .returning({ itemId: schema.catalogItems.itemId })
+        return changed.length > 0
+      },
+      unknownKinds: async (limit) => {
+        const rows = await tx
+          .select({ itemId: schema.catalogItems.itemId })
+          .from(schema.catalogItems)
+          .where(isNull(schema.catalogItems.kind))
+          .orderBy(schema.catalogItems.itemId)
+          .limit(limit)
+        return rows.map((row) => row.itemId)
+      },
+      recordPrice: async (itemId, unitPrice) => {
+        // Catalog events travel independently, so a price can arrive before its item. The
+        // row is created with the item id as a placeholder description, which the item's
+        // own event then replaces; the price is never lost to the order they arrive in.
+        await tx
+          .insert(schema.catalogItems)
+          .values({
+            tenantId,
+            itemId,
+            description: itemId,
             unitPrice: unitPrice.amount,
             currency: unitPrice.currency.value,
+            active: 1,
             updatedAt: new Date(),
           })
-          .where(eq(schema.catalogItems.itemId, itemId))
+          .onConflictDoUpdate({
+            target: [schema.catalogItems.tenantId, schema.catalogItems.itemId],
+            set: {
+              unitPrice: unitPrice.amount,
+              currency: unitPrice.currency.value,
+              updatedAt: new Date(),
+            },
+          })
       },
       deactivate: async (itemId) => {
         await tx
