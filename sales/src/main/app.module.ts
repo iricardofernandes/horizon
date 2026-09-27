@@ -4,6 +4,7 @@ import { SalesAuthGuard } from '@/infrastructure/http/authorization'
 import { BillingController } from '@/infrastructure/http/billing.controller'
 import { ContractsController } from '@/infrastructure/http/contracts.controller'
 import { SalesController } from '@/infrastructure/http/sales.controller'
+import { JournalSealWorker } from '@/infrastructure/messaging/journal-replay'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import { BillingGauges } from '@/infrastructure/observability/billing-metrics'
 import type { SalesEnvironment } from './environment'
@@ -54,6 +55,19 @@ export class AppModule {
             }),
         },
       )
+    if (config.DATABASE_RELAY_URL) {
+      const relayUrl = config.DATABASE_RELAY_URL
+      providers.push({
+        // Seals every tenant's history for reporting, as the relay role (Phase 62).
+        provide: JournalSealWorker,
+        useFactory: () =>
+          new JournalSealWorker({
+            databaseUrl: relayUrl,
+            rabbitmqUrl: config.RABBITMQ_URL,
+            intervalMs: config.JOURNAL_SEAL_INTERVAL_MS,
+          }),
+      })
+    }
     return {
       module: AppModule,
       controllers: [SalesController, ContractsController, BillingController],

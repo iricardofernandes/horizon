@@ -1,6 +1,6 @@
 # Production readiness implementation plan — Phase M
 
-Status: **in progress** — Phase 61 delivered on 2026-09-27 ([evidence](readiness-phase61-evidence.md)). This is the execution plan for Phase M of the
+Status: **in progress** — Phases 61 and 62 delivered on 2026-09-27 ([61](readiness-phase61-evidence.md), [62](readiness-phase62-evidence.md)). This is the execution plan for Phase M of the
 [ERP expansion plan](erp-expansion-plan.md#phase-m--reporting-data-operations-and-product-hardening),
 split into phases 61–70 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to L.
@@ -220,30 +220,32 @@ Gaps:
 
 ### 62 — Cross-domain reports reconciled at a cutoff
 
+[Detailed Phase 62 plan](readiness-phase62-implementation-plan.md) ·
+[evidence](readiness-phase62-evidence.md).
+
 **Work**
-1. **Projections from the journal:**
-   - **order-to-cash:** order → shipment → fiscal document → receivable → settlement →
-     reconciled bank line;
-   - **procure-to-pay:** requisition → order → receipt → supplier XML → payable → payment;
-   - **stock versus ledger:** inventory valuation against the inventory accounts;
-   - **cash position:** treasury balances, open receivables and payables by due date;
-   - **pipeline to revenue:** CRM opportunities → quotes → orders → invoiced.
+1. **Four reports, each a query over the journal at the cutoff:**
+   - cash position;
+   - order to cash;
+   - procure to pay;
+   - pipeline to revenue.
+
+   Stock against the ledger moves to Phase 69's consistency checks.
 2. `GET /reports/{name}?cutoff=&…` for each, and a dashboard of their headline figures.
    Every figure carries the cutoff and whether it is settled.
 3. **Reconciliation checks:**
-   - one per report, against the owning module's report at the same cutoff;
-   - run by CI's golden path and by a scheduled job;
-   - stored as `reconciliation_runs` with each difference.
+   - each figure is checked against its owning module's report, or marked derived;
+   - runs are started by a person, with that person's access to the owners, and stored as
+     `reconciliation_runs` with each difference;
+   - scheduled runs move to Phase 69.
 4. **Saved report filters** per user, and shared ones for the workspace.
-5. `npm run rebuild:reports` replays the journal into the projections, compares, and
-   fails only on drift.
-6. **Scheduled seals:** each producer's relay seals its active tenants on a schedule, and
-   CRM, Fiscal and Catalog gain `republish:journal`.
+5. **Scheduled seals:** each producer the reports read seals its tenants on a schedule,
+   and CRM gains `republish:journal`.
 
 **Exit evidence**
-- The golden path's month reconciles to zero difference in every report.
-- A hand-edited projection row is caught by the check and fixed by a rebuild.
+- The local stack's history reconciles to zero difference in every check.
 - A late event after a settled cutoff never changes it.
+- A journal row cannot be changed, and a gap shows as a seal mismatch.
 
 ### 63 — Exports and scheduled exports
 
@@ -406,6 +408,11 @@ Gaps:
 - A tampered audit row shows as a broken chain on the screen.
 
 ### 69 — Backups, restore drills, retention and consistency checks
+
+Carried over from Phase 62:
+- a service identity for scheduled work, so reconciliation runs on a schedule, not only
+  when a person asks;
+- stock against the ledger as a consistency check.
 
 **Work**
 1. **Backups:**

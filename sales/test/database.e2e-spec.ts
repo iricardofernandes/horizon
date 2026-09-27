@@ -153,6 +153,26 @@ it('persists the order and immutable commercial snapshot with its outbox events'
   expect(events[1]?.payload).toMatchObject({ orderId, orderVersion: 2, reservationId })
 })
 
+it('sums orders by status and currency for reporting to reconcile against', async () => {
+  const fixture = await seedCatalogItem()
+  const confirmedId = await placeOrder(fixture)
+  await new ApplyStockReservedUseCase(database, clock).execute({
+    tenantId: fixture.tenantId,
+    orderId: confirmedId,
+    orderVersion: 1,
+    reservationId: randomUUID(),
+  })
+  await placeOrder(fixture)
+  expect(await database.ordersSummary(fixture.tenantId)).toEqual({
+    data: [
+      { status: 'confirmed', currency: 'BRL', count: 1, total: '3125' },
+      // A placed order is priced when Inventory confirms it.
+      { status: 'placed', currency: 'BRL', count: 1, total: '0' },
+    ],
+  })
+  expect(await database.ordersSummary(randomUUID())).toEqual({ data: [] })
+})
+
 it('serializes competing reservation outcomes and rejects the stale transition', async () => {
   const fixture = await seedCatalogItem()
   const orderId = await placeOrder(fixture)

@@ -1,12 +1,30 @@
-import { and, count, desc, eq, lte, max, sql } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
+import { context, trace } from '@opentelemetry/api'
+import { and, count, desc, eq, lte, max, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
+import { uuidv7 } from 'uuidv7'
 import {
   type JournalScope,
   JournalStore,
   type RecordedSeal,
 } from '@/application/ports/journal-store'
+import {
+  type AuditRecord,
+  type CommandReceipt,
+  type CommandScope,
+  ReportingCommands,
+  ReportReads,
+  type SavedFilter,
+  type StoredRun,
+} from '@/application/ports/report-store'
+import type { ReportData } from '@/application/report-data'
+import { canonicalJson } from '@/core/audit/canonical-json'
+import { type Either, left, right } from '@/core/either'
+import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { JOURNALED_SOURCES, type JournalEntry, type Source } from '@/domain/journal'
+import type { CheckResult, ReportFilter, ReportName, RunOutcome } from '@/domain/reports'
+import { movedAfter, readReport } from './report-reads'
 import * as schema from './schema'
 
 export interface ReportingDatabaseOptions {
@@ -101,10 +119,136 @@ function scopeOf(tx: Transaction, tenantId: string): JournalScope {
   }
 }
 
+const GENESIS_HASH = '0'.repeat(64)
+
+/** `hash = sha256(previous_hash || canonical_json(entry))`, as identity's chain (ADR 0025). */
+export function auditHash(previousHash: string, entry: Record<string, unknown>): string {
+  return createHash('sha256')
+    .update(previousHash, 'utf8')
+    .update(canonicalJson(entry), 'utf8')
+    .digest('hex')
+}
+
+function mapRun(row: typeof schema.reconciliationRuns.$inferSelect): StoredRun {
+  return {
+    runId: row.id,
+    report: row.report as ReportName,
+    cutoff: row.cutoff,
+    outcome: row.outcome as RunOutcome,
+    checks: row.checks as CheckResult[],
+    startedBy: row.startedBy,
+    startedAt: row.startedAt,
+  }
+}
+
+function mapFilter(row: typeof schema.savedFilters.$inferSelect): SavedFilter {
+  return {
+    filterId: row.id,
+    report: row.report as ReportName,
+    name: row.name,
+    filter: row.filter as ReportFilter,
+    ownerId: row.ownerId,
+    shared: row.shared,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function commandScope(tx: Transaction, tenantId: string): CommandScope {
+  const filters = schema.savedFilters
+  return {
+    filters: {
+      async insert(filter) {
+        await tx.insert(filters).values({
+          id: filter.filterId,
+          tenantId,
+          report: filter.report,
+          name: filter.name,
+          filter: filter.filter,
+          ownerId: filter.ownerId,
+          shared: filter.shared,
+          createdAt: filter.createdAt,
+          updatedAt: filter.updatedAt,
+        })
+      },
+      async find(filterId) {
+        const [row] = await tx.select().from(filters).where(eq(filters.id, filterId))
+        return row ? mapFilter(row) : null
+      },
+      async update(filter) {
+        await tx
+          .update(filters)
+          .set({
+            name: filter.name,
+            filter: filter.filter,
+            shared: filter.shared,
+            updatedAt: filter.updatedAt,
+          })
+          .where(eq(filters.id, filter.filterId))
+      },
+      async remove(filterId) {
+        await tx.delete(filters).where(eq(filters.id, filterId))
+      },
+    },
+    runs: {
+      async insert(run) {
+        await tx.insert(schema.reconciliationRuns).values({
+          id: run.runId,
+          tenantId,
+          report: run.report,
+          cutoff: run.cutoff,
+          outcome: run.outcome,
+          checks: run.checks,
+          startedBy: run.startedBy,
+          startedAt: run.startedAt,
+        })
+      },
+    },
+    audit: {
+      async append(record: AuditRecord) {
+        // A per-tenant transaction lock serializes chain appends, including the first link.
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`reporting.audit:${tenantId}`}, 0))`,
+        )
+        const [last] = await tx
+          .select({ sequence: schema.auditLog.sequence, hash: schema.auditLog.hash })
+          .from(schema.auditLog)
+          .orderBy(desc(schema.auditLog.sequence))
+          .limit(1)
+        const entry = {
+          sequence: (last?.sequence ?? 0) + 1,
+          tenantId,
+          actor: record.actor,
+          subjectType: record.subjectType,
+          subjectId: record.subjectId,
+          action: record.action,
+          occurredAt: record.occurredAt,
+          requestId: record.requestId,
+          traceId: trace.getSpan(context.active())?.spanContext().traceId ?? null,
+          details: JSON.parse(canonicalJson(record.details)) as Record<string, unknown>,
+        }
+        const previousHash = last?.hash ?? GENESIS_HASH
+        await tx
+          .insert(schema.auditLog)
+          .values({ id: uuidv7(), ...entry, previousHash, hash: auditHash(previousHash, entry) })
+      },
+    },
+  }
+}
+
+/** Carries a refused command out of its transaction, so nothing it wrote is kept. */
+class Refused<E> extends Error {
+  constructor(readonly failure: E) {
+    super('command refused')
+  }
+}
+
 /** Owns the connection; only tenant-bound scopes leave this module (ADR 0017). */
 export class ReportingDatabase extends JournalStore {
   readonly #client: ReturnType<typeof postgres>
   readonly #db: Database
+  readonly reports: ReportReads
+  readonly commands: ReportingCommands
 
   constructor(options: ReportingDatabaseOptions) {
     super()
@@ -114,6 +258,110 @@ export class ReportingDatabase extends JournalStore {
       connection: { statement_timeout: options.statementTimeoutMs ?? 5000 },
     })
     this.#db = drizzle(this.#client, { schema })
+    const within = <T>(tenantId: string, work: (tx: Transaction) => Promise<T>) =>
+      this.#within(tenantId, work)
+    this.reports = new (class extends ReportReads {
+      report<N extends ReportName>(tenantId: string, name: N, cutoff: Date, filter: ReportFilter) {
+        return within(tenantId, (tx) => readReport(tx, name, cutoff, filter)) as Promise<
+          ReportData[N]
+        >
+      }
+      movedAfter(tenantId: string, source: Source, cutoff: Date) {
+        return within(tenantId, (tx) => movedAfter(tx, source, cutoff))
+      }
+      watermarks(tenantId: string) {
+        return within(tenantId, async (tx) => {
+          const rows = await tx.select().from(schema.sourceWatermarks)
+          return new Map<Source, Date | null>(
+            rows.map((row) => [row.sourceModule as Source, row.through]),
+          )
+        })
+      }
+      latestRun(tenantId: string, report: ReportName, cutoff: Date) {
+        return within(tenantId, async (tx) => {
+          const runs = schema.reconciliationRuns
+          const [row] = await tx
+            .select()
+            .from(runs)
+            .where(and(eq(runs.report, report), eq(runs.cutoff, cutoff)))
+            .orderBy(desc(runs.startedAt))
+            .limit(1)
+          return row ? mapRun(row) : null
+        })
+      }
+      listRuns(tenantId: string, report: ReportName, limit: number) {
+        return within(tenantId, async (tx) => {
+          const runs = schema.reconciliationRuns
+          const found = await tx
+            .select()
+            .from(runs)
+            .where(eq(runs.report, report))
+            .orderBy(desc(runs.startedAt))
+            .limit(limit)
+          return found.map(mapRun)
+        })
+      }
+      listFilters(tenantId: string, userId: string, report: ReportName | null) {
+        return within(tenantId, async (tx) => {
+          const filters = schema.savedFilters
+          const visible = or(eq(filters.ownerId, userId), eq(filters.shared, true))
+          const found = await tx
+            .select()
+            .from(filters)
+            .where(report ? and(visible, eq(filters.report, report)) : visible)
+            .orderBy(filters.report, filters.name)
+          return found.map(mapFilter)
+        })
+      }
+    })()
+    this.commands = new (class extends ReportingCommands {
+      inTenant<T>(tenantId: string, work: (scope: CommandScope) => Promise<T>) {
+        return within(tenantId, (tx) => work(commandScope(tx, tenantId)))
+      }
+      async once<E, T>(
+        tenantId: string,
+        receipt: CommandReceipt,
+        work: (scope: CommandScope) => Promise<Either<E, T>>,
+      ): Promise<Either<E | ConflictError, T>> {
+        try {
+          return await within(tenantId, async (tx) => {
+            const receipts = schema.commandReceipts
+            // Claiming first makes a concurrent retry wait on this transaction, then see it.
+            const claimed = await tx
+              .insert(receipts)
+              .values({ tenantId, ...receipt, response: {} })
+              .onConflictDoNothing()
+              .returning({ key: receipts.idempotencyKey })
+            if (claimed.length === 0) {
+              const [previous] = await tx
+                .select()
+                .from(receipts)
+                .where(eq(receipts.idempotencyKey, receipt.idempotencyKey))
+              if (
+                previous?.command !== receipt.command ||
+                previous.fingerprint !== receipt.fingerprint
+              )
+                return left<E | ConflictError, T>(
+                  new ConflictError(
+                    'this Idempotency-Key was already used for a different request',
+                  ),
+                )
+              return right<E | ConflictError, T>(previous.response as T)
+            }
+            const outcome = await work(commandScope(tx, tenantId))
+            if (outcome.isLeft()) throw new Refused(outcome.value)
+            await tx
+              .update(receipts)
+              .set({ response: JSON.parse(JSON.stringify(outcome.value)) as object })
+              .where(eq(receipts.idempotencyKey, receipt.idempotencyKey))
+            return right<E | ConflictError, T>(outcome.value)
+          })
+        } catch (error) {
+          if (error instanceof Refused) return left(error.failure as E)
+          throw error
+        }
+      }
+    })()
   }
 
   inTenant<T>(tenantId: string, work: (scope: JournalScope) => Promise<T>): Promise<T> {

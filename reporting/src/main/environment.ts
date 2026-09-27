@@ -11,6 +11,11 @@ const environmentSchema = z.object({
   JWKS_URL: z.url().regex(/^https?:\/\//),
   ACCESS_TOKEN_MAX_AGE_SECONDS: positive.max(900).default(900),
   AMQP_PREFETCH: positive.max(1000).default(20),
+  /** Where owners' reports are read, with the caller's token (Phase 62). */
+  GATEWAY_URL: z
+    .url()
+    .regex(/^https?:\/\//)
+    .default('http://localhost:8000'),
 })
 
 export type ReportingEnvironment = z.infer<typeof environmentSchema>

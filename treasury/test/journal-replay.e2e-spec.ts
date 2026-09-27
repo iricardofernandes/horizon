@@ -6,6 +6,7 @@ import {
   JOURNAL_SOURCE,
   type ReplayMessage,
   replayJournal,
+  sealAllTenants,
 } from '@/infrastructure/messaging/journal-replay'
 
 /**
@@ -113,5 +114,14 @@ describe('republish:journal', () => {
         now,
       }),
     ).rejects.toThrow(/in the past/)
+  })
+
+  it('seals every tenant with outbox rows on a schedule, each with its own count', async () => {
+    const sink = collector()
+    expect(await sealAllTenants(relay, sink.deliver, now)).toBeGreaterThanOrEqual(2)
+    const seals = sink.messages as JournalSeal[]
+    expect(seals.find((seal) => seal.tenantId === tenantId)?.count).toBe(3)
+    expect(seals.find((seal) => seal.tenantId === otherTenant)?.count).toBe(1)
+    expect(seals.every((seal) => seal.kind === 'seal' && seal.source === JOURNAL_SOURCE)).toBe(true)
   })
 })

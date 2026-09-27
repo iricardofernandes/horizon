@@ -7,9 +7,14 @@ An independently deployable NestJS service with its own database, its own contai
 its own lifecycle. It is reached through Kong at `/reporting`, never directly, and it
 shares no source with any other module (ADR 0001).
 
-**Status: Phase 61.** The event journal, the producers' seals and the per-source
-watermarks. There are no reports yet; they arrive in Phase 62 on this journal. See the
-[production readiness plan](../docs/production-readiness-implementation-plan.md) and
+**Status: Phase 62.**
+- The event journal, the producers' seals and the per-source watermarks.
+- Four reports read from the journal at a cutoff, reconciled against the owners' own
+  reports.
+- Saved filters.
+
+See the [production readiness plan](../docs/production-readiness-implementation-plan.md),
+the [API reference](../docs/reporting-api.md) and
 [ADR 0058](../docs/adr/0058-reporting-keeps-a-sealed-event-journal.md).
 
 ---
@@ -27,8 +32,18 @@ watermarks. There are no reports yet; they arrive in Phase 62 on this journal. S
   two-minute margin.
 - **Watermarks:** per tenant and source, how far the journal is proven complete. Only a
   matched seal moves it, and never backwards.
+- **Reports** are queries over the journal at a cutoff, so there is no projection to drift
+  or rebuild:
+  - cash position;
+  - order to cash;
+  - procure to pay;
+  - pipeline to revenue.
+- **Reconciliation runs:** every check against an owner's own report, kept with its
+  differences.
+- **Saved filters:** private, or shared by an administrator.
 
-It never writes to another module and calls none of them (ADR 0047).
+It never writes to another module (ADR 0047). It reads the owners' reports only for a
+reconciliation, through the gateway, with the token of the person who asked.
 
 ## How events arrive
 
@@ -45,11 +60,14 @@ the queue's `.dlq` at once. A failing write is retried once, then dead-lettered.
 | Method | Path | Roles | What it answers |
 |---|---|---|---|
 | `GET` | `/sources?cutoff=` | `admin`, `analyst`, `viewer` | Per source: events held, the latest one, the watermark, the last seal and whether the cutoff is settled; and whether it is settled for every source |
+| `GET` | `/reports`, `/reports/{name}`, `/dashboard` | every role | The reports at a cutoff ([API reference](../docs/reporting-api.md)) |
+| `POST` | `/reports/{name}/reconciliations` | `admin`, `analyst` | A reconciliation run at a settled cutoff |
+| `GET`, `POST`, `PATCH`, `DELETE` | `/saved-filters` | `admin`, `analyst` (sharing: `admin`) | Saved filters |
 | `GET` | `/health/live`, `/health/ready` | public | Liveness, and readiness with a database ping |
 
 ## Filling the journal from a producer's history
 
-In `sales/`, `financial/`, `treasury/`, `inventory/`, `procurement/` or `ledger/`:
+In `sales/`, `financial/`, `treasury/`, `inventory/`, `procurement/`, `ledger/` or `crm/`:
 
 ```bash
 npm run republish:journal -- --tenant <uuid> [--since <iso>] [--until <iso>] [--seal-only]
@@ -60,7 +78,8 @@ The command:
 - resends each row unchanged to `reporting.replay`;
 - then seals the count up to `--until`, which defaults to two minutes ago.
 
-Running it again changes nothing.
+Running it again changes nothing. Each of those producers also seals every tenant by
+itself every `JOURNAL_SEAL_INTERVAL_MS` (five minutes by default).
 
 ## Running it
 

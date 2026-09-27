@@ -2,6 +2,7 @@ import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { LedgerAuthGuard } from '@/infrastructure/http/authorization'
 import { LedgerController } from '@/infrastructure/http/ledger.controller'
+import { JournalSealWorker } from '@/infrastructure/messaging/journal-replay'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { LedgerEnvironment } from './environment'
 import { LedgerRuntime } from './ledger-runtime'
@@ -41,6 +42,19 @@ export class AppModule {
             batchSize: config.OUTBOX_BATCH_SIZE,
           }),
       })
+    if (config.DATABASE_RELAY_URL) {
+      const relayUrl = config.DATABASE_RELAY_URL
+      providers.push({
+        // Seals every tenant's history for reporting, as the relay role (Phase 62).
+        provide: JournalSealWorker,
+        useFactory: () =>
+          new JournalSealWorker({
+            databaseUrl: relayUrl,
+            rabbitmqUrl: config.RABBITMQ_URL,
+            intervalMs: config.JOURNAL_SEAL_INTERVAL_MS,
+          }),
+      })
+    }
     return {
       module: AppModule,
       controllers: [LedgerController],

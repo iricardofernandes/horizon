@@ -8,4 +8,14 @@ describe('reporting roles', () => {
     expect(permits([{ module: 'sales', role: 'admin' }], 'read')).toBe(false)
     expect(permits([], 'read')).toBe(false)
   })
+
+  it('lets an analyst reconcile and save, and only an administrator share', () => {
+    const as = (role: string) => [{ module: 'reporting', role }]
+    expect(permits(as('analyst'), 'reconcile')).toBe(true)
+    expect(permits(as('analyst'), 'save')).toBe(true)
+    expect(permits(as('analyst'), 'share')).toBe(false)
+    expect(permits(as('admin'), 'share')).toBe(true)
+    expect(permits(as('viewer'), 'reconcile')).toBe(false)
+    expect(permits(as('viewer'), 'save')).toBe(false)
+  })
 })

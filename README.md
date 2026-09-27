@@ -160,7 +160,7 @@ vendored side by side, and a cross-module import cannot resolve.
 | [`procurement/`](procurement/) | Purchase requisitions, supplier quotations and their comparison, approval thresholds, purchase orders, receiving and returns | 3010 | 26–28 |
 | [`fiscal/`](fiscal/) | Fiscal origin ingress, encrypted projections, durable simulation records and read API; authority issuance remains disabled | 3011 | 39–40 |
 | [`crm/`](crm/) | Accounts projected from parties, contacts sealed per person, owners, pipelines, event-sourced opportunities, activities, tasks, notes and reminders, conversion to a Sales quote, forecast and pipeline metrics rebuilt from history | 3012 | 55–60 |
-| [`reporting/`](reporting/) | An append-only journal of the events of the modules it reports on, sealed by their producers, with per-source watermarks that settle a cutoff | 3013 | 61 |
+| [`reporting/`](reporting/) | An append-only journal of the events of the modules it reports on, sealed by their producers; cash position, order to cash, procure to pay and pipeline to revenue at a settled cutoff, reconciled against the owners' own reports; saved filters | 3013 | 61–62 |
 | [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, retry, DLQ, replay | 3005 | 9 |
 | [`web/`](web/) | Next.js frontend, routed and bilingual | 3000 | 10, 14 |
 | [`contracts/`](contracts/) | Published package: versioned Zod event and API schemas | — | 3 |

@@ -407,6 +407,8 @@ services:
       PORT: '3013'
       OTEL_SERVICE_NAME: reporting
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_reporting
+      # Owners' reports are read through the gateway with the caller's token (Phase 62).
+      GATEWAY_URL: http://kong:8000
 
   fiscal-migrate:
     <<: *service

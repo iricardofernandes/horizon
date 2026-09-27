@@ -4,6 +4,7 @@ import { APP_GUARD, Reflector } from '@nestjs/core'
 import { JOURNALED_EVENT_TYPES } from '@/application/journal-intake'
 import { ReportingAuthGuard } from '@/infrastructure/http/authorization'
 import { ReportingController } from '@/infrastructure/http/reporting.controller'
+import { ReportsController } from '@/infrastructure/http/reports.controller'
 import { QueueConsumer } from '@/infrastructure/messaging/queue-consumer'
 import type { ReportingEnvironment } from './environment'
 import { ReportingRuntime } from './reporting-runtime'
@@ -55,7 +56,7 @@ export class AppModule {
     ]
     return {
       module: AppModule,
-      controllers: [ReportingController],
+      controllers: [ReportingController, ReportsController],
       providers,
       exports: [ReportingRuntime],
     }

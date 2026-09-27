@@ -13,7 +13,7 @@ import type {
 
 const PUBLIC = 'reporting:public'
 const ACTION = 'reporting:action'
-export type ReportingAction = 'read'
+export type ReportingAction = 'read' | 'reconcile' | 'save' | 'share'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
 export const RequireReportingAction = (action: ReportingAction) => SetMetadata(ACTION, action)
 
@@ -22,18 +22,23 @@ export interface ReportingRequest {
   principal?: AccessClaims
 }
 
+export function actorOf(request: ReportingRequest): string {
+  if (!request.principal) throw new UnauthorizedException()
+  return request.principal.subject
+}
+
 export function tenantOf(request: ReportingRequest): string {
   if (!request.principal) throw new UnauthorizedException()
   return request.principal.tenantId
 }
 
 /**
- * The static role map for this module (ADR 0023). Every role reads; what an analyst may
- * do beyond an admin's viewers arrives with saved filters and exports (Phases 62–63).
+ * The static role map for this module (ADR 0023). Everyone reads; an analyst also
+ * reconciles and saves filters; only an administrator shares one with the workspace.
  */
 export const PERMITS: Readonly<Record<string, readonly ReportingAction[]>> = {
-  admin: ['read'],
-  analyst: ['read'],
+  admin: ['read', 'reconcile', 'save', 'share'],
+  analyst: ['read', 'reconcile', 'save'],
   viewer: ['read'],
 }
 

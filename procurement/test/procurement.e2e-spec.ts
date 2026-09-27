@@ -320,6 +320,21 @@ describe('approval thresholds', () => {
     expect((await database.orderDetail(shop.tenantId, large.id))?.status).toBe('approved')
   })
 
+  it('sums orders by status and currency for reporting to reconcile against', async () => {
+    const shop = await workspace()
+    const committed = await orderWorth(shop, '500')
+    value(await shop.decidingOrder.place(shop.context(), committed.id))
+    await orderWorth(shop, '700')
+    expect(await database.ordersSummary(shop.tenantId)).toEqual({
+      data: [
+        { status: 'draft', currency: 'BRL', count: 1, total: '700' },
+        // With no threshold set, a placed order waits for somebody's approval.
+        { status: 'pending', currency: 'BRL', count: 1, total: committed.total },
+      ],
+    })
+    expect(await database.ordersSummary(randomUUID())).toEqual({ data: [] })
+  })
+
   it('asks somebody about every order when no threshold has been set', async () => {
     const shop = await workspace()
     const order = await orderWorth(shop, '1')

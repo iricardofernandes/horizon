@@ -523,6 +523,13 @@ export class SalesController {
     return this.runtime.database.listOrderSnapshots(tenantOf(request))
   }
 
+  /** Orders by status and currency, which reporting reconciles against (Phase 62). */
+  @Get('orders/summary')
+  @RequireSalesAction('read')
+  ordersSummary(@Req() request: SalesRequest) {
+    return this.runtime.database.ordersSummary(tenantOf(request))
+  }
+
   @Get('orders/:id')
   @RequireSalesAction('read')
   async order(@Param('id') id: string, @Req() request: SalesRequest) {

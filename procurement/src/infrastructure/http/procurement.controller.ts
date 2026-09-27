@@ -274,6 +274,13 @@ export class ProcurementController {
     })
   }
 
+  /** Orders by status and currency, which reporting reconciles against (Phase 62). */
+  @Get('orders/summary')
+  @RequireProcurementAction('read')
+  ordersSummary(@Req() request: ProcurementRequest) {
+    return this.runtime.database.ordersSummary(tenantOf(request))
+  }
+
   @Get('orders/:id')
   @RequireProcurementAction('read')
   async order(@Param('id') orderId: string, @Req() request: ProcurementRequest) {

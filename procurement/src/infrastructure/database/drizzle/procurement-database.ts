@@ -175,6 +175,27 @@ export class ProcurementDatabase extends ProcurementUnitOfWork {
     return current.tx
   }
 
+  /**
+   * Orders by status and currency: the owner's own figure that reporting reconciles its
+   * procure-to-pay report against (Phase 62). Committed orders are approved, received or
+   * closed; a cancelled or rejected one commits nothing.
+   */
+  ordersSummary(tenantId: string) {
+    return this.read(tenantId, async (tx) => {
+      const rows = await tx
+        .select({
+          status: schema.orders.status,
+          currency: schema.orders.currency,
+          count: sql<number>`count(*)::int`,
+          total: sql<string>`coalesce(sum(${schema.orders.total}), 0)::text`,
+        })
+        .from(schema.orders)
+        .groupBy(schema.orders.status, schema.orders.currency)
+        .orderBy(schema.orders.status, schema.orders.currency)
+      return { data: rows }
+    })
+  }
+
   private read<T>(tenantId: string, query: (tx: Transaction) => Promise<T>): Promise<T> {
     return this.inTenant(tenantId, () => query(this.currentTransaction()))
   }

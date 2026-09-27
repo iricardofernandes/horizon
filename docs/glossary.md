@@ -852,3 +852,9 @@ never moves a watermark.
 A cutoff every source a report reads is **proven complete** through, by its watermark. Its
 figures can no longer change. A figure at a cutoff that is not settled is provisional.
 This differs from a CRM cutoff, which settles on the clock because its facts are local.
+
+### reconciliation run
+A **comparison of a report with its owners' own reports** at one settled cutoff, kept with
+every check it made. A check is matched, different (with each difference), or not
+comparable, with the reason. An owner that answers only its current state is not compared
+once it has moved since the cutoff.

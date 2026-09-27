@@ -2529,9 +2529,22 @@ Also delivered:
 
 ## Phase 62 — Cross-domain reports reconciled at a cutoff
 
-**Planned.** Order-to-cash, procure-to-pay, stock versus ledger, cash position and pipeline to revenue,
-read at a cutoff that is settled only on every source's watermark. Each report is
-reconciled against its owning module's report by a stored, scheduled check.
+**Delivered on 2026-09-27.** Four reports are read from the journal at a cutoff:
+- cash position;
+- order to cash;
+- procure to pay;
+- pipeline to revenue.
+
+Each says whether its sources are sealed through that cutoff.
+- **Reconciliation.** A person reconciles a report with the owners' own reports, with
+  their own access, and the run is kept with every difference. Sales and Procurement gain
+  an order summary for it.
+- **Saved filters.** They are private, or shared by an administrator.
+- **Seals.** Every producer the reports read seals its tenants on a schedule, and CRM can
+  resend its history.
+
+[Evidence](readiness-phase62-evidence.md).
+[Detailed plan](readiness-phase62-implementation-plan.md).
 [Detailed work](production-readiness-implementation-plan.md#62--cross-domain-reports-reconciled-at-a-cutoff).
 
 ## Phase 63 — Exports and scheduled exports

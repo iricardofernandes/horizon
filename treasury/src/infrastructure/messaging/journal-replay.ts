@@ -6,8 +6,9 @@ import {
   journalSealSchema,
   REPORTING_REPLAY_QUEUE,
 } from '@horizon/contracts'
+import { Logger } from '@nestjs/common'
 import { type ConfirmChannel, connect, type Message } from 'amqplib'
-import type postgres from 'postgres'
+import postgres from 'postgres'
 
 /**
  * This module's history for `reporting/` alone (ADR 0058). Every outbox row of a tenant
@@ -92,6 +93,18 @@ async function resend(
   }
 }
 
+function sealOf(tenantId: string, through: Date, count: number): JournalSeal {
+  return journalSealSchema.parse({
+    kind: 'seal',
+    sealId: randomUUID(),
+    source: JOURNAL_SOURCE,
+    tenantId,
+    through: through.toISOString(),
+    count,
+    sealedAt: new Date().toISOString(),
+  })
+}
+
 export async function replayJournal(
   sql: postgres.Sql,
   deliver: Deliver,
@@ -105,15 +118,7 @@ export async function replayJournal(
     select count(*)::int as count from outbox
     where tenant_id = ${options.tenantId}
       and date_trunc('milliseconds', occurred_at) <= ${through}`
-  const seal = journalSealSchema.parse({
-    kind: 'seal',
-    sealId: randomUUID(),
-    source: JOURNAL_SOURCE,
-    tenantId: options.tenantId,
-    through: through.toISOString(),
-    count: Number(row?.count ?? 0),
-    sealedAt: new Date().toISOString(),
-  })
+  const seal = sealOf(options.tenantId, through, Number(row?.count ?? 0))
   await deliver(seal.sealId, seal)
   return { sent, seal }
 }
@@ -155,4 +160,79 @@ function confirm(channel: ConfirmChannel, messageId: string, body: ReplayMessage
       finish,
     )
   })
+}
+
+/**
+ * Seals every tenant that has outbox rows, through the margin (Phase 62), so reporting's
+ * cutoffs settle without anyone running a command. Returns the number of seals sent.
+ */
+export async function sealAllTenants(sql: postgres.Sql, deliver: Deliver, now: Date) {
+  const through = throughOf(null, now)
+  const rows = await sql`
+    select tenant_id, count(*) filter (
+      where date_trunc('milliseconds', occurred_at) <= ${through})::int as count
+    from outbox group by tenant_id order by tenant_id`
+  for (const row of rows) {
+    const seal = sealOf(String(row.tenant_id), through, Number(row.count))
+    await deliver(seal.sealId, seal)
+  }
+  return rows.length
+}
+
+export interface JournalSealWorkerOptions {
+  readonly databaseUrl: string
+  readonly rabbitmqUrl: string
+  readonly intervalMs: number
+}
+
+/**
+ * Runs next to the outbox relay, as the relay role. A failure (reporting not running, the
+ * broker down) is logged and tried again at the next interval; it never touches the relay.
+ */
+export class JournalSealWorker {
+  private readonly logger = new Logger(JournalSealWorker.name)
+  private timer: ReturnType<typeof setTimeout> | undefined
+  private pending: Promise<void> | undefined
+  private stopped = false
+
+  constructor(private readonly options: JournalSealWorkerOptions) {
+    if (!Number.isInteger(options.intervalMs) || options.intervalMs < 10_000)
+      throw new Error('Journal seal interval must be at least 10s')
+  }
+
+  onModuleInit(): void {
+    this.schedule()
+  }
+
+  private schedule(): void {
+    if (this.stopped) return
+    this.timer = setTimeout(() => {
+      this.pending = this.seal().finally(() => this.schedule())
+    }, this.options.intervalMs)
+  }
+
+  private async seal(): Promise<void> {
+    const sql = postgres(this.options.databaseUrl, {
+      max: 1,
+      connect_timeout: 5,
+      connection: { statement_timeout: 30_000 },
+    })
+    let queue: Awaited<ReturnType<typeof openReplayQueue>> | undefined
+    try {
+      queue = await openReplayQueue(this.options.rabbitmqUrl)
+      await sealAllTenants(sql, queue.deliver, new Date())
+    } catch (error) {
+      const kind = error instanceof Error ? error.name : 'unknown'
+      this.logger.warn(`Journal seals were not sent (${kind}); retrying at the next interval`)
+    } finally {
+      await queue?.close().catch(() => undefined)
+      await sql.end({ timeout: 5 })
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    this.stopped = true
+    clearTimeout(this.timer)
+    await this.pending
+  }
 }

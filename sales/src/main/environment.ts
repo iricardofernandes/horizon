@@ -17,6 +17,8 @@ const environmentSchema = z.object({
   AMQP_PREFETCH: positive.max(1000).default(20),
   OUTBOX_POLL_INTERVAL_MS: positive.min(100).default(1000),
   OUTBOX_BATCH_SIZE: positive.max(1000).default(100),
+  /** How often the relay seals every tenant's history for reporting (ADR 0058). */
+  JOURNAL_SEAL_INTERVAL_MS: positive.min(10_000).max(3_600_000).default(300_000),
   QUOTE_DEFAULT_VALIDITY_DAYS: positive.default(15),
   /** A billed period older than this without a receivable or an NFS-e is reported. */
   CONTRACT_BILLING_GAP_SECONDS: positive.default(259_200),

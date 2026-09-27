@@ -6,6 +6,7 @@ import { CrmController } from '@/infrastructure/http/crm.controller'
 import { MetricsController } from '@/infrastructure/http/metrics.controller'
 import { OpportunitiesController } from '@/infrastructure/http/opportunities.controller'
 import { RecordsController } from '@/infrastructure/http/records.controller'
+import { JournalSealWorker } from '@/infrastructure/messaging/journal-replay'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import { RelayDueReminderTenants } from '@/infrastructure/scheduling/relay-due-reminder-tenants'
 import { ReminderWorker } from '@/infrastructure/scheduling/reminder-worker'
@@ -69,6 +70,19 @@ export class AppModule {
           },
         },
       )
+    if (config.DATABASE_RELAY_URL) {
+      const relayUrl = config.DATABASE_RELAY_URL
+      providers.push({
+        // Seals every tenant's history for reporting, as the relay role (Phase 62).
+        provide: JournalSealWorker,
+        useFactory: () =>
+          new JournalSealWorker({
+            databaseUrl: relayUrl,
+            rabbitmqUrl: config.RABBITMQ_URL,
+            intervalMs: config.JOURNAL_SEAL_INTERVAL_MS,
+          }),
+      })
+    }
     return {
       module: AppModule,
       controllers: [CrmController, OpportunitiesController, RecordsController, MetricsController],

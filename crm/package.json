@@ -22,7 +22,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
     "backfill:owners": "node --enable-source-maps dist/main/backfill-owners.js",
-    "rebuild:metrics": "node --enable-source-maps dist/main/rebuild-metrics.js"
+    "rebuild:metrics": "node --enable-source-maps dist/main/rebuild-metrics.js",
+    "republish:journal": "node --enable-source-maps dist/main/republish-journal.js"
   },
   "dependencies": {
     "@horizon/contracts": "0.46.0",

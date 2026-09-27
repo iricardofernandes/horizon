@@ -224,6 +224,30 @@ export class SalesDatabase extends SalesUnitOfWork {
     })
   }
 
+  /**
+   * Orders by status and currency: the owner's own figure that reporting reconciles its
+   * order-to-cash report against (Phase 62). A draft has no total yet.
+   */
+  async ordersSummary(tenantId: string) {
+    return this.inTenant(tenantId, async () => {
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('Order summary requires a transaction')
+      const orders = schema.salesOrders
+      const rows = await current.tx
+        .select({
+          status: orders.status,
+          currency: orders.currency,
+          count: sql<number>`count(*)::int`,
+          total: sql<string>`coalesce(sum(${orders.total}), 0)::text`,
+        })
+        .from(orders)
+        .where(sql`${orders.currency} is not null`)
+        .groupBy(orders.status, orders.currency)
+        .orderBy(orders.status, orders.currency)
+      return { data: rows }
+    })
+  }
+
   async listQuoteSnapshots(tenantId: string) {
     return this.inTenant(tenantId, async () => {
       const current = this.#transactions.getStore()
