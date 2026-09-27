@@ -2514,9 +2514,17 @@ Also delivered:
 
 ## Phase 61 — Phase M decisions and the reporting journal
 
-**Planned.** ADRs 0058–0063 fix the Phase M decisions. Contracts declare the `reporting` and `files`
-modules. `reporting/` joins the platform on port 3013 and keeps an append-only journal of
-every event it consumes, filled by bounded republish commands, with per-source watermarks.
+**Delivered on 2026-09-27.** ADRs 0058–0063 fix the Phase M decisions, and contracts
+0.46.0 declare the `reporting` module.
+- `reporting/` runs on port 3013. It keeps an append-only journal of every event of the
+  modules it reports on, never personal data.
+- Sales, Financial, Treasury, Inventory, Procurement and Ledger resend their history to it
+  alone with `republish:journal`, then seal it.
+- A matching seal moves the source's watermark. A cutoff is settled only behind the
+  watermarks.
+
+[Evidence](readiness-phase61-evidence.md).
+[Detailed plan](readiness-phase61-implementation-plan.md).
 [Detailed work](production-readiness-implementation-plan.md#61--phase-m-decisions-and-the-reporting-journal).
 
 ## Phase 62 — Cross-domain reports reconciled at a cutoff

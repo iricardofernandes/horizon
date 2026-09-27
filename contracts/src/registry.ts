@@ -80,6 +80,7 @@ import {
   fiscalServiceSourceKeySchema,
   fiscalServiceSubstitutionRequestSchema,
   fiscalSupportOverviewSchema,
+  journalSealSchema,
   paginationQuerySchema,
   problemDetailsSchema,
   validationProblemSchema,
@@ -623,6 +624,13 @@ const staticEntries: readonly RegistryEntry[] = [
     kind: 'http',
     description: 'Keyset pagination response metadata.',
     schema: pageInfoSchema,
+  },
+  {
+    id: 'http:reporting-journal-seal',
+    kind: 'http',
+    description:
+      "A producer's count of a tenant's outbox rows up to an instant, sent to the reporting replay queue (ADR 0058).",
+    schema: journalSealSchema,
   },
   {
     id: 'authorization:role-assignment',

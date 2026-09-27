@@ -43,4 +43,13 @@ describe('role assignments', () => {
     expect(roleAssignmentSchema.safeParse({ module: 'crm', role: 'buyer' }).success).toBe(false)
     expect(isValidRole('crm', 'representative')).toBe(true)
   })
+
+  it('declares reporting roles, where an analyst is not an admin', () => {
+    expect(roleAssignmentSchema.safeParse({ module: 'reporting', role: 'analyst' }).success).toBe(
+      true,
+    )
+    expect(roleAssignmentSchema.safeParse({ module: 'reporting', role: 'manager' }).success).toBe(
+      false,
+    )
+  })
 })

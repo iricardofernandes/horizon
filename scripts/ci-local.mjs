@@ -80,7 +80,7 @@ if (full) {
     'compose', '-f', 'infra/docker-compose.yml', '-f', 'infra/docker-compose.apps.yml',
     '--profile', 'fiscal', 'build',
     'identity', 'catalog', 'inventory', 'sales', 'webhooks', 'parties',
-    'financial', 'treasury', 'ledger', 'procurement', 'fiscal', 'crm', 'web',
+    'financial', 'treasury', 'ledger', 'procurement', 'fiscal', 'crm', 'reporting', 'web',
   ])
 }
 

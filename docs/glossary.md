@@ -834,3 +834,21 @@ sum the same numbers across tenants, with no tenant label (ADR 0055).
 An **audited request to publish a delivered event again**, under the same event id. The
 outbox row stays immutable, and consumers deduplicate by event id, so a replay can
 refresh a projection but cannot repeat an effect.
+
+### event journal
+**Reporting's own copy of every event** of the modules it reports on, kept once per
+event id and never rewritten (ADR 0058). Reports are functions of it, so a rebuild
+replays the journal, never the broker. It holds nothing of the party registry or of
+Identity, and a field that may name a person is removed before a row is written.
+
+### seal and watermark
+A **seal** is a producer's count of one tenant's events up to an instant, sent after its
+history. When the journal holds exactly that many, the source's **watermark** for the
+tenant moves to that instant: nothing before it is missing. A mismatch leaves the
+watermark where it was and stays recorded. An event arriving proves only itself, so it
+never moves a watermark.
+
+### settled cutoff (reporting)
+A cutoff every source a report reads is **proven complete** through, by its watermark. Its
+figures can no longer change. A figure at a cutoff that is not settled is provisional.
+This differs from a CRM cutoff, which settles on the clock because its facts are local.

@@ -160,6 +160,7 @@ vendored side by side, and a cross-module import cannot resolve.
 | [`procurement/`](procurement/) | Purchase requisitions, supplier quotations and their comparison, approval thresholds, purchase orders, receiving and returns | 3010 | 26–28 |
 | [`fiscal/`](fiscal/) | Fiscal origin ingress, encrypted projections, durable simulation records and read API; authority issuance remains disabled | 3011 | 39–40 |
 | [`crm/`](crm/) | Accounts projected from parties, contacts sealed per person, owners, pipelines, event-sourced opportunities, activities, tasks, notes and reminders, conversion to a Sales quote, forecast and pipeline metrics rebuilt from history | 3012 | 55–60 |
+| [`reporting/`](reporting/) | An append-only journal of the events of the modules it reports on, sealed by their producers, with per-source watermarks that settle a cutoff | 3013 | 61 |
 | [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, retry, DLQ, replay | 3005 | 9 |
 | [`web/`](web/) | Next.js frontend, routed and bilingual | 3000 | 10, 14 |
 | [`contracts/`](contracts/) | Published package: versioned Zod event and API schemas | — | 3 |
@@ -294,7 +295,7 @@ Jaeger / Prometheus / Loki / Grafana · Docker · Terraform (never applied) · G
 | [`docs/fiscal-implementation-plan.md`](docs/fiscal-implementation-plan.md) | Detailed Phase J sequence, fiscal source register, integration gates and exit evidence |
 | [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece is deferred |
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
-| [`docs/adr/`](docs/adr/) | 57 decision records |
+| [`docs/adr/`](docs/adr/) | 63 decision records |
 | [`docs/patterns/`](docs/patterns/) | How to reimplement each cross-cutting pattern (phase 5) |
 | [`docs/events.md`](docs/events.md) | The event catalogue, generated from the schemas |
 | [`docs/privacy.md`](docs/privacy.md) | Lawful basis, retention, erasure |

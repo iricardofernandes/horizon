@@ -41,6 +41,7 @@ jobs:
           - { name: procurement, context: procurement }
           - { name: fiscal, context: fiscal }
           - { name: crm, context: crm }
+          - { name: reporting, context: reporting }
           - { name: web, context: web }
           - { name: gateway, context: gateway }
     steps:

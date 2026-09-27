@@ -380,6 +380,34 @@ services:
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_crm
       DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_crm
 
+  reporting-migrate:
+    <<: *service
+    build:
+      context: ../reporting
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_reporting
+    command: ["npm", "run", "db:migrate"]
+
+  reporting:
+    <<: *service
+    build:
+      context: ../reporting
+      network: host
+    container_name: horizon-reporting
+    depends_on:
+      reporting-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      <<: *env
+      PORT: '3013'
+      OTEL_SERVICE_NAME: reporting
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_reporting
+
   fiscal-migrate:
     <<: *service
     profiles: [fiscal]

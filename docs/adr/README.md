@@ -91,6 +91,17 @@ one means writing a new ADR that supersedes it.
 | [0056](0056-services-are-delivered-by-service-orders-inside-sales.md) | Services are delivered by service orders inside Sales, and billed once per period |
 | [0057](0057-crm-accounts-are-parties-with-typed-documents.md) | CRM accounts are parties, and a party's document is typed |
 
+## Production readiness
+
+| # | Decision |
+|---|---|
+| [0058](0058-reporting-keeps-a-sealed-event-journal.md) | Reporting keeps a sealed event journal, and a cutoff settles on seals |
+| [0059](0059-bulk-data-jobs-belong-to-the-owning-module.md) | Bulk data jobs belong to the module that owns the data |
+| [0060](0060-attachments-are-a-files-module.md) | Attachments are a `files` module, scanned before served and shredded with their owner |
+| [0061](0061-access-hardening-stays-in-identity.md) | Access hardening stays in Identity: invitations, MFA, passkeys and visible sessions |
+| [0062](0062-segregation-of-duties-is-a-declared-matrix.md) | Segregation of duties is a declared matrix, enforced by each module, with delegation |
+| [0063](0063-recovery-is-measured-by-drills.md) | Recovery is measured by drills, and retention is declared per table class |
+
 ## Frontend
 
 | # | Decision |

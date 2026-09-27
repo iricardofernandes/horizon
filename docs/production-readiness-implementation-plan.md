@@ -1,6 +1,6 @@
 # Production readiness implementation plan — Phase M
 
-Status: **planned on 2026-09-27.** This is the execution plan for Phase M of the
+Status: **in progress** — Phase 61 delivered on 2026-09-27 ([evidence](readiness-phase61-evidence.md)). This is the execution plan for Phase M of the
 [ERP expansion plan](erp-expansion-plan.md#phase-m--reporting-data-operations-and-product-hardening),
 split into phases 61–70 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to L.
@@ -141,9 +141,8 @@ Gaps:
      (party or user). Erasing the owner destroys the key, the same crypto-shredding as
      ADR 0026.
    - **Retention:** it is per record type. Expiry is a job, never a silent delete.
-   - Identity, Catalog and every service upgrade to the contracts version that declares
-     `reporting` and `files` before anyone is granted a role in them. This is the
-     expansion plan's rollout rule.
+   - It holds no roles of its own, so it needs no module name in contracts until it is an
+     API-key scope.
 6. **Access hardening stays in Identity** (ADR 0061).
    - **Invitations:**
      - An invitation replaces the administrator-chosen password: a single-use link, valid
@@ -191,12 +190,16 @@ Gaps:
 
 ### 61 — Phase M decisions and the reporting journal
 
+[Detailed Phase 61 plan](readiness-phase61-implementation-plan.md) ·
+[evidence](readiness-phase61-evidence.md).
+
 **Work**
 1. ADRs 0058–0063 record the decisions above, indexed in `docs/adr/README.md`. The
    expansion plan's module list and port table gain `files` (3014).
-2. Contracts 0.46.0 declare the modules `reporting` (roles `admin`, `analyst`, `viewer`)
-   and `files` (no roles of its own: it checks the owning module's). Every service is
-   pinned to 0.46.0.
+2. Contracts 0.46.0 declare the module `reporting` (roles `admin`, `analyst`, `viewer`)
+   and the journal seal. `files` is not declared: it holds no roles of its own, so it
+   needs no module name until it is an API-key scope (ADR 0060). Every service is pinned
+   to 0.46.0.
 3. `reporting/` joins the platform with the full wiring checklist, on port 3013 behind
    `/reporting`, with database `horizon_reporting`.
 4. **The event journal:**
@@ -204,7 +207,6 @@ Gaps:
    - the append-only `event_journal`, with forced RLS and a trigger that refuses updates;
    - per-source watermarks.
 5. **Filling the journal:**
-   - `npm run replay:journal -- --tenant` rebuilds the projections from the journal;
    - producers gain a bounded `republish` command where the first reports need history:
      Sales, Financial, Treasury, Inventory, Procurement and Ledger.
 6. `GET /sources` answers each source's watermark and lag, and whether a cutoff is
@@ -233,7 +235,10 @@ Gaps:
    - run by CI's golden path and by a scheduled job;
    - stored as `reconciliation_runs` with each difference.
 4. **Saved report filters** per user, and shared ones for the workspace.
-5. `npm run rebuild:reports` rebuilds, compares and fails only on drift.
+5. `npm run rebuild:reports` replays the journal into the projections, compares, and
+   fails only on drift.
+6. **Scheduled seals:** each producer's relay seals its active tenants on a schedule, and
+   CRM, Fiscal and Catalog gain `republish:journal`.
 
 **Exit evidence**
 - The golden path's month reconciles to zero difference in every report.
@@ -460,7 +465,7 @@ Gaps:
 - **61 goes first.** It sets the module names, and every service's pin, before any grant.
 - **Reporting track:** 62 needs 61's journal; 63 needs 62's reports.
 - **64 is independent of reporting** and can follow 61.
-- **65 needs 61's `files` module name.**
+- **65 needs 61's decisions,** and nothing else from 61.
 - **66 comes after 63–65**, because it shows their jobs and notifies about them.
 - **67 and 68** are independent of reporting and can follow 61.
 - **69 comes after 65 and 68**, because it restores attachments and checks the audit chains.
