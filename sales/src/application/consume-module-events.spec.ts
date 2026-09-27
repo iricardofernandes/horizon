@@ -55,6 +55,68 @@ async function placedOrder(unitOfWork: InMemorySalesUnitOfWork, tenantId: string
   return placed.value.orderId
 }
 
+describe('party events in both versions', () => {
+  const details = {
+    legalName: 'Acme GmbH',
+    tradeName: null,
+    email: 'buyer@acme.example',
+    phone: '+4930123456',
+    address: 'Hauptstraße 1, Berlin',
+    roles: ['customer'],
+  }
+
+  async function projectedFrom(event: EventEnvelope) {
+    const unitOfWork = new InMemorySalesUnitOfWork()
+    const handlers = new SalesModuleEventHandlers(unitOfWork, clock)
+    await required(handlers.handlers[event.eventType])(event)
+    const { createdAt, updatedAt, ...projection } = snapshotOf(required(unitOfWork.customers[0]))
+    return projection
+  }
+
+  it('projects the same customer from a v1 replay and a v2 event', async () => {
+    const tenantId = randomUUID()
+    const partyId = randomUUID()
+    const v1 = envelope('parties.party.registered', tenantId, {
+      partyId,
+      kind: 'organization',
+      ...details,
+    })
+    const v2 = {
+      ...envelope('parties.party.registered', tenantId, {
+        partyId,
+        kind: 'organization',
+        ...details,
+        documentType: 'foreign',
+        documentCountry: 'DE',
+      }),
+      eventVersion: 2,
+    }
+    expect(await projectedFrom(v2)).toEqual(await projectedFrom(v1))
+  })
+
+  it('reads a v2 update of a prospect with no contacts as none of its business', async () => {
+    const unitOfWork = new InMemorySalesUnitOfWork()
+    const handlers = new SalesModuleEventHandlers(unitOfWork, clock)
+    const updated = {
+      ...envelope('parties.party.updated', randomUUID(), {
+        partyId: randomUUID(),
+        legalName: 'Maria',
+        tradeName: null,
+        email: null,
+        phone: null,
+        address: null,
+        documentType: 'none',
+        documentCountry: null,
+        roles: ['prospect'],
+        active: true,
+      }),
+      eventVersion: 2,
+    }
+    await required(handlers.handlers[updated.eventType])(updated)
+    expect(unitOfWork.customers).toHaveLength(0)
+  })
+})
+
 describe('sales module event handlers', () => {
   it('projects catalog facts and confirms an order once', async () => {
     const unitOfWork = new InMemorySalesUnitOfWork()

@@ -1,10 +1,10 @@
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
-import type { PartyKind, PartyRole } from '../value-objects/party-values'
+import type { PartyDocumentType, PartyKind, PartyRole } from '../value-objects/party-values'
 
 abstract class PartyEvent implements DomainEvent {
   abstract readonly eventType: string
-  readonly eventVersion = 1
+  readonly eventVersion: number = 1
   constructor(
     readonly aggregateId: UniqueEntityID,
     readonly tenantId: string,
@@ -13,15 +13,25 @@ abstract class PartyEvent implements DomainEvent {
   abstract payloadOf(): Readonly<Record<string, unknown>>
 }
 
+interface PublishedDetails {
+  readonly email: string | null
+  readonly phone: string | null
+  readonly address: string | null
+  readonly documentType: PartyDocumentType
+  readonly documentCountry: string | null
+}
+
 /**
  * A party entered the registry.
  *
  * The payload carries the identity a consuming context needs to build its own projection
- * and nothing more: no tax identifier, because a projection that does not need it should
- * not hold a second copy of personal data to erase (ADR 0026, ADR 0040).
+ * and nothing more: the document's type but never its number, because a projection that
+ * does not need it should not hold a second copy of personal data to erase (ADR 0026,
+ * ADR 0040). Version 2 allows a missing document and missing contact fields (ADR 0057).
  */
 export class PartyRegisteredEvent extends PartyEvent {
   readonly eventType = 'parties.party.registered'
+  override readonly eventVersion = 2
   constructor(
     partyId: UniqueEntityID,
     tenantId: string,
@@ -29,11 +39,8 @@ export class PartyRegisteredEvent extends PartyEvent {
       readonly kind: PartyKind
       readonly legalName: string
       readonly tradeName: string | null
-      readonly email: string
-      readonly phone: string
-      readonly address: string
       readonly roles: readonly PartyRole[]
-    },
+    } & PublishedDetails,
     occurredAt: Date,
   ) {
     super(partyId, tenantId, occurredAt)
@@ -47,6 +54,8 @@ export class PartyRegisteredEvent extends PartyEvent {
       email: this.details.email,
       phone: this.details.phone,
       address: this.details.address,
+      documentType: this.details.documentType,
+      documentCountry: this.details.documentCountry,
       roles: [...this.details.roles],
     }
   }
@@ -55,18 +64,16 @@ export class PartyRegisteredEvent extends PartyEvent {
 /** The party's identifying details changed; consumers refresh their projection. */
 export class PartyUpdatedEvent extends PartyEvent {
   readonly eventType = 'parties.party.updated'
+  override readonly eventVersion = 2
   constructor(
     partyId: UniqueEntityID,
     tenantId: string,
     private readonly details: {
       readonly legalName: string
       readonly tradeName: string | null
-      readonly email: string
-      readonly phone: string
-      readonly address: string
       readonly roles: readonly PartyRole[]
       readonly active: boolean
-    },
+    } & PublishedDetails,
     occurredAt: Date,
   ) {
     super(partyId, tenantId, occurredAt)
@@ -79,6 +86,8 @@ export class PartyUpdatedEvent extends PartyEvent {
       email: this.details.email,
       phone: this.details.phone,
       address: this.details.address,
+      documentType: this.details.documentType,
+      documentCountry: this.details.documentCountry,
       roles: [...this.details.roles],
       active: this.details.active,
     }

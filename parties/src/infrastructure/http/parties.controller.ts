@@ -25,21 +25,40 @@ import { PARTY_KINDS, PARTY_ROLES } from '@/domain/value-objects/party-values'
 import { PartiesRuntime } from '@/main/parties-runtime'
 import { type PartiesRequest, PublicRoute, RequirePartiesAction, tenantOf } from './authorization'
 
+// Contact fields are optional here; which roles require them is a domain rule (ADR 0057).
 const details = {
   legalName: z.string().trim().min(2).max(160),
   tradeName: z.string().trim().max(160).nullish(),
-  email: z.email().max(254),
-  phone: z.string().min(8).max(24),
-  address: z.string().min(5).max(500),
+  email: z.email().max(254).nullish(),
+  phone: z.string().min(8).max(24).nullish(),
+  address: z.string().min(5).max(500).nullish(),
 }
+const documentInput = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.enum(['cpf', 'cnpj']), number: z.string().min(11).max(18) }),
+  z.strictObject({
+    type: z.literal('foreign'),
+    country: z.string().length(2),
+    number: z.string().min(1).max(40),
+  }),
+  z.strictObject({ type: z.literal('none') }),
+])
 const registerInput = z.strictObject({
   partyId: z.uuid().optional(),
   kind: z.enum(PARTY_KINDS),
-  taxId: z.string().min(11).max(18),
+  // `taxId` is the pre-Phase 54 shorthand for a CPF or a CNPJ; send it or `document`.
+  taxId: z.string().min(11).max(18).optional(),
+  document: documentInput.optional(),
   roles: z.array(z.enum(PARTY_ROLES)).max(PARTY_ROLES.length).default([]),
   ...details,
 })
 const describeInput = z.strictObject(details)
+const identifyInput = z.strictObject({ document: documentInput })
+const lookalikeInput = z.strictObject({
+  legalName: details.legalName,
+  email: z.string().trim().max(254).nullish(),
+  phone: z.string().trim().max(24).nullish(),
+  document: documentInput.optional(),
+})
 const roleInput = z.strictObject({ operation: z.enum(['grant', 'revoke']) })
 const statusInput = z.strictObject({ active: z.boolean() })
 const fiscalProfileInput = z.strictObject({
@@ -69,14 +88,19 @@ const fiscalListQuery = z.strictObject({
   cursor: z.uuid().optional(),
 })
 
-/** The tax identifier leaves as its last digits only; the full value is not a list field. */
+/** The document leaves as its type and last characters only; the full value is not a list field. */
 function present(party: PartySnapshot) {
+  const suffix =
+    party.status === 'erased' || party.document.number === null
+      ? null
+      : party.document.number.slice(-4)
   return {
     id: party.id,
     kind: party.kind,
     legalName: party.legalName,
     tradeName: party.tradeName,
-    taxIdSuffix: party.status === 'erased' ? null : party.taxId.slice(-4),
+    document: { type: party.document.type, country: party.document.country, suffix },
+    taxIdSuffix: suffix,
     email: party.email,
     phone: party.phone,
     address: party.address,
@@ -142,6 +166,34 @@ export class PartiesController {
     )
   }
 
+  /** A read, sent as a POST because the probe carries personal data that must not sit in a URL. */
+  @Post('parties/duplicate-check')
+  @RequirePartiesAction('read')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async duplicateCheck(@Body() body: unknown, @Req() request: PartiesRequest) {
+    const parsed = lookalikeInput.safeParse(body)
+    if (!parsed.success)
+      throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid duplicate check')
+    const matches = unwrap(
+      await this.runtime.findLookalikes.execute({ ...parsed.data, tenantId: tenantOf(request) }),
+    )
+    // Enough to recognise the party, not a second copy of its record.
+    return {
+      data: matches.map(({ party, matchedOn }) => {
+        const snapshot = party.toSnapshot()
+        return {
+          partyId: snapshot.id,
+          legalName: snapshot.legalName,
+          tradeName: snapshot.tradeName,
+          roles: snapshot.roles,
+          status: snapshot.status,
+          matchedOn,
+        }
+      }),
+    }
+  }
+
   @Get('parties/:id')
   @RequirePartiesAction('read')
   async get(@Param('id') id: string, @Req() request: PartiesRequest) {
@@ -172,6 +224,23 @@ export class PartiesController {
         ...parsed.data,
         tenantId: tenantOf(request),
         partyId: uuid(id),
+      }),
+    )
+  }
+
+  /** Once, for a party registered without a document (ADR 0057). */
+  @Put('parties/:id/document')
+  @RequirePartiesAction('manage')
+  @HttpCode(204)
+  async identify(@Param('id') id: string, @Body() body: unknown, @Req() request: PartiesRequest) {
+    const parsed = identifyInput.safeParse(body)
+    if (!parsed.success)
+      throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid document')
+    unwrap(
+      await this.runtime.identifyParty.execute({
+        tenantId: tenantOf(request),
+        partyId: uuid(id),
+        document: parsed.data.document,
       }),
     )
   }

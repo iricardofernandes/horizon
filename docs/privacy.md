@@ -34,7 +34,8 @@ it does not adjudicate the request.
 | Name, email address, password hash | `identity/` | User | Authentication and access control — without it, no one can log in |
 | Session and API key metadata, IP address, user agent | `identity/` | User | Security: reuse detection, revocation, audit |
 | Customer name, `cnpj`/`cpf`, email, phone, address | `sales/` | Customer contact, or a sole trader | Performing the sales contract: a counterparty must be identifiable and reachable |
-| Legal name, CPF/CNPJ, registration and structured fiscal address | `parties/` | Person, company contact or sole trader | Identifying the counterparty and preparing a lawful fiscal document |
+| Legal name, CPF/CNPJ or a foreign identifier with its country, registration and structured fiscal address | `parties/` | Person, company contact or sole trader, in Brazil or abroad | Identifying the counterparty and preparing a lawful fiscal document; a foreign identifier is sealed under the party's key exactly like a CPF (ADR 0057) |
+| Keyed blind indexes of the normalized name, email and phone | `parties/` | Same | Warning about a probable duplicate before registering; cleared on erasure, and never reversible without the tenant's index key |
 | Restricted encrypted copy of issuer and recipient fiscal profiles | `fiscal/` | Issuer or recipient | Preparing a document against an exact effective-dated owner revision |
 | Actor identity on every audit entry | all modules | User | Legal obligation and legitimate interest in an accountable record |
 

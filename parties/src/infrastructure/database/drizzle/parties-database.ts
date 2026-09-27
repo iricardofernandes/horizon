@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHmac, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, asc, desc, eq, gt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, isNull, ne, or, sql } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { type PartiesScope, PartiesUnitOfWork } from '@/application/ports/unit-of-work'
@@ -12,14 +12,23 @@ import { Party, type PartySnapshot, type PartyStatus } from '@/domain/entities/p
 import type { SecretBox } from '@/domain/services/secret-box'
 import { FiscalProfile, type FiscalProfileData } from '@/domain/value-objects/fiscal-profile'
 import {
+  type LookupField,
+  type LookupProbe,
+  lookupEmail,
+  lookupName,
+  lookupPhone,
+} from '@/domain/value-objects/party-lookup'
+import {
+  PARTY_DOCUMENT_TYPES,
   PARTY_KINDS,
   PartyAddress,
+  PartyDocument,
+  type PartyDocumentType,
   PartyEmail,
   type PartyKind,
   PartyName,
   PartyPhone,
   PartyRoles,
-  TaxId,
 } from '@/domain/value-objects/party-values'
 import * as schema from './schema'
 
@@ -188,6 +197,32 @@ export class PartiesDatabase extends PartiesUnitOfWork {
     })
   }
 
+  /**
+   * Fills the lookup indexes of parties written before Phase 54, one page at a time. Only
+   * rows without a name index are touched, so running it again changes nothing.
+   */
+  async backfillLookups(tenantId: string, limit: number): Promise<number> {
+    return this.inTenant(tenantId, async () => {
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('Lookup backfill requires a transaction')
+      const rows = await current.tx
+        .select()
+        .from(schema.parties)
+        .where(and(isNull(schema.parties.nameIndex), ne(schema.parties.status, 'erased')))
+        .orderBy(asc(schema.parties.id))
+        .limit(limit)
+        .for('no key update')
+      for (const row of rows) {
+        const party = (await mapParty(current.tx, row, this.#privacy)).toSnapshot()
+        await current.tx
+          .update(schema.parties)
+          .set(lookupIndexes(tenantId, party, this.#privacy))
+          .where(eq(schema.parties.id, row.id))
+      }
+      return rows.length
+    })
+  }
+
   async findSnapshot(tenantId: string, partyId: string): Promise<PartySnapshot | null> {
     return this.inTenant(tenantId, async (scope) => {
       const party = await scope.parties.findById(partyId)
@@ -213,12 +248,42 @@ function taxIdIndex(tenantId: string, taxId: string, privacy: PartyPrivacy): str
   return createHmac('sha256', privacy.blindIndexKey).update(`${tenantId}:${taxId}`).digest('hex')
 }
 
-const ERASED = {
-  legalName: 'Erased party',
-  taxId: '00000000000',
-  email: 'erased@invalid.example',
-  phone: '00000000',
-  address: 'Erased address',
+/** A lookup index is tagged by field, so a name can never collide with an email. */
+function lookupIndex(
+  tenantId: string,
+  field: Exclude<LookupField, 'document'>,
+  value: string | null,
+  privacy: PartyPrivacy,
+): string | null {
+  return value === null
+    ? null
+    : createHmac('sha256', privacy.blindIndexKey)
+        .update(`${tenantId}:lookup:${field}:${value}`)
+        .digest('hex')
+}
+
+function lookupIndexes(tenantId: string, probe: LookupProbe, privacy: PartyPrivacy) {
+  return {
+    nameIndex: lookupIndex(tenantId, 'name', lookupName(probe.legalName), privacy),
+    emailIndex: lookupIndex(tenantId, 'email', lookupEmail(probe.email), privacy),
+    phoneIndex: lookupIndex(tenantId, 'phone', lookupPhone(probe.phone), privacy),
+  }
+}
+
+const ERASED_NAME = 'Erased party'
+
+/** An erased party's number can no longer be opened, so it reads as having none. */
+function restoredDocument(
+  type: PartyDocumentType,
+  country: string | null,
+  number: string | null,
+): PartyDocument {
+  if (type === 'none' || number === null) return PartyDocument.none()
+  return restored(
+    type === 'foreign'
+      ? PartyDocument.create({ type, country: country ?? '', number })
+      : PartyDocument.create({ type, number }),
+  )
 }
 
 async function mapParty(
@@ -229,6 +294,8 @@ async function mapParty(
   if (!['active', 'inactive', 'erased'].includes(row.status))
     throw new Error('Invalid persisted party status')
   if (!PARTY_KINDS.includes(row.kind as PartyKind)) throw new Error('Invalid persisted party kind')
+  if (!PARTY_DOCUMENT_TYPES.includes(row.documentType as PartyDocumentType))
+    throw new Error('Invalid persisted party document type')
   const erased = row.status === 'erased'
   const [key] = await tx
     .select()
@@ -245,28 +312,29 @@ async function mapParty(
     if (plaintext === null) throw new Error('Party personal data authentication failed')
     return plaintext
   }
-  const tradeName =
-    erased || row.tradeNameCiphertext === null
-      ? null
-      : restored(PartyName.create(open('tradeName', row.tradeNameCiphertext), '/tradeName'))
+  const openOptional = (field: string, ciphertext: string | null): string | null =>
+    erased || ciphertext === null ? null : open(field, ciphertext)
+  const tradeName = openOptional('tradeName', row.tradeNameCiphertext)
+  const email = openOptional('email', row.emailCiphertext)
+  const phone = openOptional('phone', row.phoneCiphertext)
+  const address = openOptional('address', row.addressCiphertext)
+  const document = restoredDocument(
+    row.documentType as PartyDocumentType,
+    row.documentCountry,
+    openOptional('taxId', row.taxIdCiphertext),
+  )
   return Party.rehydrate(
     {
       tenantId: row.tenantId,
       kind: row.kind as PartyKind,
       legalName: restored(
-        PartyName.create(erased ? ERASED.legalName : open('legalName', row.legalNameCiphertext)),
+        PartyName.create(erased ? ERASED_NAME : open('legalName', row.legalNameCiphertext)),
       ),
-      tradeName,
-      taxId: restored(TaxId.create(erased ? ERASED.taxId : open('taxId', row.taxIdCiphertext))),
-      email: restored(
-        PartyEmail.create(erased ? ERASED.email : open('email', row.emailCiphertext)),
-      ),
-      phone: restored(
-        PartyPhone.create(erased ? ERASED.phone : open('phone', row.phoneCiphertext)),
-      ),
-      address: restored(
-        PartyAddress.create(erased ? ERASED.address : open('address', row.addressCiphertext)),
-      ),
+      tradeName: tradeName === null ? null : restored(PartyName.create(tradeName, '/tradeName')),
+      document,
+      email: email === null ? null : restored(PartyEmail.create(email)),
+      phone: phone === null ? null : restored(PartyPhone.create(phone)),
+      address: address === null ? null : restored(PartyAddress.create(address)),
       fiscalProfile:
         erased || row.fiscalProfileCiphertext === null
           ? null
@@ -318,15 +386,20 @@ function makeScope(tx: Transaction, tenantId: string, privacy: PartyPrivacy): Pa
   const sealed = (row: PartySnapshot, material: string) => {
     const seal = (field: string, value: string) =>
       privacy.secretBox.seal(`${tenantId}:${row.id}:${field}:${material}`, value)
+    const sealOptional = (field: string, value: string | null) =>
+      value === null ? null : seal(field, value)
     return {
       kind: row.kind,
+      documentType: row.document.type,
+      documentCountry: row.document.country,
       legalNameCiphertext: seal('legalName', row.legalName),
-      tradeNameCiphertext: row.tradeName === null ? null : seal('tradeName', row.tradeName),
-      taxIdCiphertext: seal('taxId', row.taxId),
-      taxIdIndex: taxIdIndex(tenantId, row.taxId, privacy),
-      emailCiphertext: seal('email', row.email),
-      phoneCiphertext: seal('phone', row.phone),
-      addressCiphertext: seal('address', row.address),
+      tradeNameCiphertext: sealOptional('tradeName', row.tradeName),
+      taxIdCiphertext: sealOptional('taxId', row.document.number),
+      taxIdIndex: documentIndex(row.document),
+      emailCiphertext: sealOptional('email', row.email),
+      phoneCiphertext: sealOptional('phone', row.phone),
+      addressCiphertext: sealOptional('address', row.address),
+      ...lookupIndexes(tenantId, row, privacy),
       fiscalProfileCiphertext:
         row.fiscalProfile === null
           ? null
@@ -336,6 +409,10 @@ function makeScope(tx: Transaction, tenantId: string, privacy: PartyPrivacy): Pa
       status: row.status,
       updatedAt: row.updatedAt,
     }
+  }
+  const documentIndex = (document: PartySnapshot['document']): string | null => {
+    const input = PartyDocument.indexInputOf(document)
+    return input === null ? null : taxIdIndex(tenantId, input, privacy)
   }
   const flush = async (party: Party) => {
     for (const event of party.pullDomainEvents()) await publish(tx, tenantId, event)
@@ -352,14 +429,54 @@ function makeScope(tx: Transaction, tenantId: string, privacy: PartyPrivacy): Pa
           .for('no key update')
         return row ? mapParty(tx, row, privacy) : null
       },
-      findByTaxId: async (taxId) => {
+      findByDocument: async (document) => {
+        const input = document.indexInput
+        if (input === null) return null
         const [row] = await tx
           .select()
           .from(schema.parties)
-          .where(eq(schema.parties.taxIdIndex, taxIdIndex(tenantId, taxId, privacy)))
+          .where(eq(schema.parties.taxIdIndex, taxIdIndex(tenantId, input, privacy)))
           .limit(1)
           .for('no key update')
         return row ? mapParty(tx, row, privacy) : null
+      },
+      findLookalikes: async (probe, limit) => {
+        const indexes = lookupIndexes(tenantId, probe, privacy)
+        const documentInput = probe.document.indexInput
+        const document =
+          documentInput === null ? null : taxIdIndex(tenantId, documentInput, privacy)
+        const matches = [
+          document === null ? undefined : eq(schema.parties.taxIdIndex, document),
+          indexes.nameIndex === null ? undefined : eq(schema.parties.nameIndex, indexes.nameIndex),
+          indexes.emailIndex === null
+            ? undefined
+            : eq(schema.parties.emailIndex, indexes.emailIndex),
+          indexes.phoneIndex === null
+            ? undefined
+            : eq(schema.parties.phoneIndex, indexes.phoneIndex),
+        ].filter((condition) => condition !== undefined)
+        if (!matches.length) return []
+        const rows = await tx
+          .select()
+          .from(schema.parties)
+          .where(and(ne(schema.parties.status, 'erased'), or(...matches)))
+          .orderBy(desc(schema.parties.createdAt))
+          .limit(limit)
+        return Promise.all(
+          rows.map(async (row) => ({
+            party: await mapParty(tx, row, privacy),
+            matchedOn: (
+              [
+                ['document', document !== null && row.taxIdIndex === document],
+                ['name', indexes.nameIndex !== null && row.nameIndex === indexes.nameIndex],
+                ['email', indexes.emailIndex !== null && row.emailIndex === indexes.emailIndex],
+                ['phone', indexes.phoneIndex !== null && row.phoneIndex === indexes.phoneIndex],
+              ] as const
+            )
+              .filter(([, matched]) => matched)
+              .map(([field]) => field),
+          })),
+        )
       },
       create: async (party) => {
         const row = party.toSnapshot()
@@ -384,6 +501,9 @@ function makeScope(tx: Transaction, tenantId: string, privacy: PartyPrivacy): Pa
               status: 'erased',
               roles: [],
               taxIdIndex: `erased:${row.id}`,
+              nameIndex: null,
+              emailIndex: null,
+              phoneIndex: null,
               updatedAt: row.updatedAt,
             })
             .where(eq(schema.parties.id, row.id))
@@ -414,7 +534,7 @@ function makeScope(tx: Transaction, tenantId: string, privacy: PartyPrivacy): Pa
                   kind: row.kind,
                   legalName: row.legalName,
                   tradeName: row.tradeName,
-                  taxId: row.taxId,
+                  taxId: row.document.number,
                   revision: row.fiscalProfileRevision,
                   profile: row.fiscalProfile,
                 }),

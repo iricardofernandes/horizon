@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { findEvent } from '@horizon/contracts'
+import { type EventEnvelope, findEvent } from '@horizon/contracts'
 import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { ProcurementModuleEventHandlers } from '@/application/consume-module-events'
 import { DefineApprovalPolicyUseCase } from '@/application/use-cases/define-policies'
 import {
   DecideOrderUseCase,
@@ -652,5 +653,82 @@ describe('receiving', () => {
         values (${randomUUID()}::uuid, ${shop.tenantId}::uuid, ${drafted.id}::uuid,
           ${shop.warehouseId}::uuid, '2026-09-20', 'nobody', 'BRL', 0, 'recorded', now())`,
     ).rejects.toThrow(/is not receiving goods/)
+  })
+})
+
+describe('suppliers from party events in both versions', () => {
+  function delivered(tenantId: string, eventType: string, version: number, payload: object) {
+    const event: EventEnvelope = {
+      eventId: randomUUID(),
+      eventType,
+      eventVersion: version,
+      occurredAt: new Date().toISOString(),
+      tenantId,
+      traceId: randomUUID().replaceAll('-', ''),
+      payload,
+    }
+    const handler = new ProcurementModuleEventHandlers(database, clock).handlers[eventType]
+    if (!handler) throw new Error(`no handler for ${eventType}`)
+    return handler(event)
+  }
+
+  const supplier = {
+    kind: 'organization',
+    legalName: 'Acme Inc',
+    tradeName: null,
+    email: 'sales@acme.example',
+    phone: '+14155550100',
+    address: '1 Market St, San Francisco',
+    roles: ['supplier'],
+  }
+
+  it('projects a foreign supplier from v2 as it would from v1, and ignores a bare prospect', async () => {
+    const tenantId = randomUUID()
+    const fromV1 = randomUUID()
+    const fromV2 = randomUUID()
+    await delivered(tenantId, 'parties.party.registered', 1, { partyId: fromV1, ...supplier })
+    await delivered(tenantId, 'parties.party.registered', 2, {
+      partyId: fromV2,
+      ...supplier,
+      documentType: 'foreign',
+      documentCountry: 'US',
+    })
+    const prospect = randomUUID()
+    await delivered(tenantId, 'parties.party.registered', 2, {
+      partyId: prospect,
+      kind: 'person',
+      legalName: 'Maria',
+      tradeName: null,
+      email: null,
+      phone: null,
+      address: null,
+      documentType: 'none',
+      documentCountry: null,
+      roles: ['prospect'],
+    })
+    const read = (id: string) =>
+      database.inTenant(tenantId, async (scope) =>
+        (await scope.suppliers.findById(id))?.toSnapshot(),
+      )
+    const { id: _v1, createdAt: _c1, updatedAt: _u1, ...one } = (await read(fromV1)) ?? {}
+    const { id: _v2, createdAt: _c2, updatedAt: _u2, ...two } = (await read(fromV2)) ?? {}
+    expect(two).toEqual(one)
+    expect(two).toMatchObject({ name: 'Acme Inc', email: 'sales@acme.example', status: 'active' })
+    expect(await read(prospect)).toBeUndefined()
+
+    // A former supplier whose contacts were cleared keeps what the orders printed.
+    await delivered(tenantId, 'parties.party.updated', 2, {
+      partyId: fromV2,
+      legalName: 'Acme Inc',
+      tradeName: null,
+      email: null,
+      phone: null,
+      address: null,
+      documentType: 'foreign',
+      documentCountry: 'US',
+      roles: ['partner'],
+      active: true,
+    })
+    expect(await read(fromV2)).toMatchObject({ email: 'sales@acme.example', status: 'inactive' })
   })
 })

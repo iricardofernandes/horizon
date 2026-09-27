@@ -4,7 +4,9 @@ import {
   type EventEnvelope,
   partyErased,
   partyRegistered,
+  partyRegisteredV2,
   partyUpdated,
+  partyUpdatedV2,
 } from '@horizon/contracts'
 import { LineDescription } from '@/domain/value-objects/procurement-values'
 import type { EventHandler } from '@/infrastructure/messaging/rabbitmq-transport'
@@ -65,13 +67,20 @@ export class ProcurementModuleEventHandlers {
     )
   }
 
+  /** v2 may carry a party without a document or contacts (ADR 0057); v1 is still replayed. */
   private async partyRegistered(event: EventEnvelope): Promise<void> {
-    const parsed = partyRegistered.envelope.parse(event)
+    const parsed =
+      event.eventVersion === 2
+        ? partyRegisteredV2.envelope.parse(event)
+        : partyRegistered.envelope.parse(event)
     await this.project(parsed, { ...parsed.payload, active: true })
   }
 
   private async partyUpdated(event: EventEnvelope): Promise<void> {
-    const parsed = partyUpdated.envelope.parse(event)
+    const parsed =
+      event.eventVersion === 2
+        ? partyUpdatedV2.envelope.parse(event)
+        : partyUpdated.envelope.parse(event)
     await this.project(parsed, parsed.payload)
   }
 

@@ -181,14 +181,25 @@ never exported, so no repository can bypass it.
 ## Registrations
 
 ### party
-An organization or a natural person the business deals with, recorded once per tax
-identifier in `parties/` (ADR 0040). Other contexts reference it by its id and keep their
+An organization or a natural person the business deals with, recorded once per document
+in `parties/` (ADR 0040, ADR 0057). Other contexts reference it by its id and keep their
 own projection of the fields they need.
 
 ### party role
 What a party is to the business: `customer`, `supplier`, `carrier`, `prospect` or
 `partner`. A set, not a type — one company being both a customer and a supplier is the
 ordinary case, and revoking a role never deletes the party.
+
+### party document
+How a party is identified (ADR 0057): `cpf` for a person, `cnpj` for an organization,
+`foreign` with its ISO country for a party identified abroad, or `none` for one that has
+not given a document yet. A party has at most one; `none` can be completed once, and a
+present document never changes. Only a CPF or a CNPJ can carry a fiscal profile.
+
+### duplicate check
+The registry's answer to "is this someone we already know?" before registering: parties
+whose normalized name, email, phone or document match the probe, found through keyed
+blind indexes. It warns; only a repeated document is refused.
 
 ---
 

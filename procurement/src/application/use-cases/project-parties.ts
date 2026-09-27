@@ -1,6 +1,6 @@
 import { type Either, left, right } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
-import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { Supplier } from '@/domain/entities/supplier'
 import { PartyName } from '@/domain/value-objects/procurement-values'
 import type { Clock } from '../ports/clock'
@@ -10,9 +10,10 @@ export interface PartyState {
   readonly tenantId: string
   readonly partyId: string
   readonly legalName: string
-  readonly email: string
-  readonly phone: string
-  readonly address: string
+  /** Null only for a party that is not a supplier: the registry requires them for the role. */
+  readonly email: string | null
+  readonly phone: string | null
+  readonly address: string | null
   readonly roles: readonly string[]
   readonly active: boolean
 }
@@ -34,6 +35,9 @@ export class ProjectPartyUseCase {
     scope: ProcurementScope,
     state: PartyState,
   ): Promise<Either<InvalidInputError, ProjectionOutcome>> {
+    const existing = await scope.suppliers.findById(state.partyId)
+    // A prospect known only by name is not Procurement's business (ADR 0057).
+    if (!existing && !state.roles.includes('supplier')) return right('ignored')
     const name = PartyName.create(state.legalName)
     if (name.isLeft()) return left(name.value)
     const details = {
@@ -44,16 +48,18 @@ export class ProjectPartyUseCase {
       active: state.active && state.roles.includes('supplier'),
     }
     const now = this.clock.now()
-    const existing = await scope.suppliers.findById(state.partyId)
     if (existing) {
       if (!existing.refresh(details, now)) return right('ignored')
       await scope.suppliers.save(existing)
       return right('refreshed')
     }
-    if (!state.roles.includes('supplier')) return right('ignored')
+    // The registry requires every contact of a supplier, so a new one always carries them.
+    const { email, phone, address } = details
+    if (email === null || phone === null || address === null)
+      return left(new InvalidInputError('/email', 'a supplier needs email, phone and address'))
     await scope.suppliers.create(
       Supplier.project(
-        { ...details, tenantId: state.tenantId, now },
+        { ...details, email, phone, address, tenantId: state.tenantId, now },
         new UniqueEntityID(state.partyId),
       ),
     )

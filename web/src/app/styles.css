@@ -173,6 +173,8 @@ select:focus-visible,
 }
 .ui-field {
   display: grid;
+  /* Beside a field with help text, keep label and input at their own height. */
+  align-content: start;
   gap: 8px;
 }
 .ui-field-label {
@@ -226,7 +228,8 @@ select:focus-visible,
   color: var(--color-text-muted);
 }
 .ui-select-positioner {
-  z-index: 20;
+  /* Above dialogs (31): a select inside a dialog must open over it, not under it. */
+  z-index: 40;
   outline: 0;
 }
 .ui-select-popup {
@@ -350,6 +353,28 @@ select:focus-visible,
   background: var(--color-danger-bg);
   color: var(--color-danger-text);
   font-size: 13px;
+}
+.form-warning {
+  display: grid;
+  gap: 6px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--color-warning-border);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  font-size: 13px;
+}
+.form-warning strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.form-warning p,
+.form-warning ul {
+  margin: 0;
+}
+.form-warning ul {
+  padding-left: 18px;
 }
 .demo-note {
   color: var(--color-text-muted);

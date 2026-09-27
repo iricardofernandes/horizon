@@ -783,6 +783,7 @@ function loadModules() {
     ...from(partiesRequire, 'parties/dist/infrastructure/database/drizzle/parties-database.js'),
     ...from(partiesRequire, 'parties/dist/infrastructure/cryptography/aes-gcm-secret-box.js'),
     ...from(partiesRequire, 'parties/dist/application/use-cases/manage-parties.js'),
+    ...from(partiesRequire, 'parties/dist/domain/value-objects/party-values.js'),
   }
   const partiesTransport = from(
     partiesRequire,
@@ -871,6 +872,7 @@ function loadModules() {
     PartiesSecretBox: parties.AesGcmSecretBox,
     RegisterPartyUseCase: parties.RegisterPartyUseCase,
     DescribePartyUseCase: parties.DescribePartyUseCase,
+    PartyDocument: parties.PartyDocument,
     PartiesOutboxRelay: partiesTransport.OutboxRelay,
     PlaceOrderUseCase: sales.PlaceOrderUseCase,
     WriteQuoteUseCase: sales.WriteQuoteUseCase,
@@ -1148,7 +1150,7 @@ async function seedProcurementProjection(admin, tenantId, itemId) {
  */
 async function seedSupplier(modules, parties, procurementAdmin, tenantId, clock) {
   const existing = await parties.inTenant(tenantId, (scope) =>
-    scope.parties.findByTaxId(DEMO.supplierTaxId),
+    scope.parties.findByDocument(documentOf(modules, DEMO.supplierTaxId)),
   )
   if (existing) {
     const partyId = existing.id.toString()
@@ -1305,9 +1307,16 @@ function addDays(date, days) {
 }
 
 
+/** A demo party's CPF or CNPJ, typed as the registry looks it up (ADR 0057). */
+function documentOf(modules, taxId) {
+  const document = modules.PartyDocument.fromTaxId(taxId)
+  if (document.isLeft()) throw document.value
+  return document.value
+}
+
 async function seedCustomer(modules, parties, salesAdmin, tenantId, clock) {
   const existing = await parties.inTenant(tenantId, (scope) =>
-    scope.parties.findByTaxId(DEMO.customerTaxId),
+    scope.parties.findByDocument(documentOf(modules, DEMO.customerTaxId)),
   )
   if (existing) {
     // Describing the party again republishes it, so a context that started consuming the

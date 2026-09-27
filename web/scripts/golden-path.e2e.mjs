@@ -131,6 +131,9 @@ try {
   await customerDialog.getByLabel('Phone').fill(existingCustomer.phone)
   await customerDialog.getByLabel('Address').fill(existingCustomer.address)
   await customerDialog.getByRole('button', { name: 'Create customer' }).click()
+  // The same name, email and phone as a customer on file: the registry warns first (ADR 0057).
+  await customerDialog.getByText('This may already be registered').waitFor()
+  await customerDialog.getByRole('button', { name: 'Register anyway' }).click()
   await customerDialog
     .getByRole('alert')
     .filter({ hasText: 'must be an 11-digit CPF or a 14-character CNPJ with two check digits' })

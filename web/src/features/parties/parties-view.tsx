@@ -2,17 +2,19 @@
 
 import { Checkbox } from '@base-ui/react/checkbox'
 import { Dialog } from '@base-ui/react/dialog'
-import { Buildings, Check, Plus, Tag, User, X } from '@phosphor-icons/react'
+import { Buildings, Check, IdentificationCard, Plus, Tag, User, X } from '@phosphor-icons/react'
 import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
 import { apiError } from '@/lib/api'
 import { jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
-import { kindOfTaxId, maskedTaxId, PARTY_ROLES, type Party, type PartyRole } from './party'
+import { documentOf, maskedDocument, PARTY_ROLES, type Party, type PartyRole } from './party'
+import { PartyRegistrationForm } from './party-registration-form'
 
 type MutationProps = { onChanged: () => Promise<void>; setNotice: (value: string) => void }
 
@@ -29,7 +31,7 @@ export function PartiesView({
     (party) =>
       !normalized ||
       party.legalName.toLocaleLowerCase().includes(normalized) ||
-      party.email.toLocaleLowerCase().includes(normalized),
+      (party.email ?? '').toLocaleLowerCase().includes(normalized),
   )
 
   return (
@@ -98,12 +100,14 @@ function PartiesTable({ parties, onChanged, setNotice }: { parties: Party[] } & 
                 </span>
                 <span>
                   <strong>{party.legalName}</strong>
-                  <small>{party.email}</small>
+                  <small>{party.email ?? '—'}</small>
                 </span>
               </div>
             </td>
             <td>{kinds(party.kind)}</td>
-            <td>{maskedTaxId(party)}</td>
+            <td>
+              {party.document.type === 'none' ? t('documentChoices.none') : maskedDocument(party)}
+            </td>
             <td>
               <div className="role-list">
                 {party.roles.length ? (
@@ -122,7 +126,16 @@ function PartiesTable({ parties, onChanged, setNotice }: { parties: Party[] } & 
             </td>
             <td>
               {party.status !== 'erased' ? (
-                <PartyRolesDialog party={party} onChanged={onChanged} setNotice={setNotice} />
+                <div className="row-actions">
+                  {party.document.type === 'none' ? (
+                    <IdentifyPartyDialog
+                      party={party}
+                      onChanged={onChanged}
+                      setNotice={setNotice}
+                    />
+                  ) : null}
+                  <PartyRolesDialog party={party} onChanged={onChanged} setNotice={setNotice} />
+                </div>
               ) : null}
             </td>
           </tr>
@@ -167,46 +180,8 @@ function RoleCheckboxes({
 
 function RegisterPartyDialog({ onChanged, setNotice }: MutationProps) {
   const t = useTranslations('parties')
-  const customers = useTranslations('customers')
-  const common = useTranslations('common')
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
   const [roles, setRoles] = useState<PartyRole[]>(['customer'])
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    const form = event.currentTarget
-    const data = new FormData(form)
-    const taxId = String(data.get('taxId') ?? '').trim()
-    const tradeName = String(data.get('tradeName') ?? '').trim()
-    const response = await tracedFetch('parties.party.register', '/api/horizon/parties/parties', {
-      method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify({
-        kind: kindOfTaxId(taxId),
-        legalName: String(data.get('legalName') ?? '').trim(),
-        ...(tradeName ? { tradeName } : {}),
-        taxId,
-        email: String(data.get('email') ?? '').trim(),
-        phone: String(data.get('phone') ?? '').trim(),
-        address: String(data.get('address') ?? '').trim(),
-        roles,
-      }),
-    })
-    if (!response.ok) {
-      setError(await apiError(response, t('createFailed')))
-      setBusy(false)
-      return
-    }
-    form.reset()
-    setOpen(false)
-    setNotice(t('created'))
-    await onChanged()
-    setBusy(false)
-  }
 
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
@@ -217,60 +192,19 @@ function RegisterPartyDialog({ onChanged, setNotice }: MutationProps) {
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup customer-dialog">
-          <div className="dialog-heading">
-            <Dialog.Title>{t('createTitle')}</Dialog.Title>
-            <Dialog.Description className="dialog-description">
-              {t('createDescription')}
-            </Dialog.Description>
-          </div>
-          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
-            <X aria-hidden="true" size={18} weight="bold" />
-          </Dialog.Close>
-          <form className="dialog-form" onSubmit={submit}>
-            <div className="form-grid two-columns">
-              <TextField
-                label={customers('name')}
-                maxLength={160}
-                minLength={2}
-                name="legalName"
-                required
-              />
-              <TextField label={t('tradeName')} maxLength={160} name="tradeName" />
-            </div>
-            <div className="form-grid two-columns">
-              <TextField
-                description={customers('taxIdHelp')}
-                label={t('taxId')}
-                maxLength={18}
-                minLength={11}
-                name="taxId"
-                required
-              />
-              <TextField
-                label={customers('email')}
-                maxLength={254}
-                name="email"
-                required
-                type="email"
-              />
-            </div>
-            <TextField
-              description={customers('phoneHelp')}
-              label={customers('phone')}
-              maxLength={24}
-              minLength={8}
-              name="phone"
-              required
-              type="tel"
-            />
-            <TextField
-              label={customers('address')}
-              maxLength={500}
-              minLength={5}
-              name="address"
-              placeholder={customers('addressPlaceholder')}
-              required
-            />
+          <DialogHeading title={t('createTitle')} description={t('createDescription')} />
+          <PartyRegistrationForm
+            failedLabel={t('createFailed')}
+            onRegistered={async () => {
+              setOpen(false)
+              setRoles(['customer'])
+              setNotice(t('created'))
+              await onChanged()
+            }}
+            roles={roles}
+            showTradeName
+            submitLabel={t('createSubmit')}
+          >
             <fieldset className="scope-fieldset">
               <legend>{t('roles')}</legend>
               <RoleCheckboxes
@@ -286,6 +220,104 @@ function RegisterPartyDialog({ onChanged, setNotice }: MutationProps) {
               />
               <p className="settings-card-caption">{t('rolesHelp')}</p>
             </fieldset>
+          </PartyRegistrationForm>
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
+function DialogHeading({ title, description }: { title: string; description: string }) {
+  const common = useTranslations('common')
+  return (
+    <>
+      <div className="dialog-heading">
+        <Dialog.Title>{title}</Dialog.Title>
+        <Dialog.Description className="dialog-description">{description}</Dialog.Description>
+      </div>
+      <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
+        <X aria-hidden="true" size={18} weight="bold" />
+      </Dialog.Close>
+    </>
+  )
+}
+
+/** A party registered without a document gives it once, later (ADR 0057). */
+function IdentifyPartyDialog({ party, onChanged, setNotice }: { party: Party } & MutationProps) {
+  const t = useTranslations('parties')
+  const common = useTranslations('common')
+  const [open, setOpen] = useState(false)
+  const [choice, setChoice] = useState<'brazilian' | 'foreign'>('brazilian')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    const data = new FormData(event.currentTarget)
+    const document = documentOf(choice, {
+      number: String(data.get('documentNumber') ?? '').trim(),
+      country: String(data.get('documentCountry') ?? ''),
+    })
+    const response = await tracedFetch(
+      'parties.party.identify',
+      `/api/horizon/parties/parties/${party.id}/document`,
+      { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ document }) },
+    )
+    if (!response.ok) {
+      setError(await apiError(response, t('identifyFailed')))
+      setBusy(false)
+      return
+    }
+    setOpen(false)
+    setNotice(t('identified', { name: party.legalName }))
+    await onChanged()
+    setBusy(false)
+  }
+
+  return (
+    <Dialog.Root onOpenChange={setOpen} open={open}>
+      <Dialog.Trigger className="ui-button ui-button-ghost row-action-button">
+        <IdentificationCard aria-hidden="true" size={16} />
+        {t('identify')}
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="ui-dialog-backdrop" />
+        <Dialog.Popup className="ui-dialog-popup">
+          <DialogHeading
+            title={t('identifyTitle', { name: party.legalName })}
+            description={t('identifyDescription')}
+          />
+          <form className="dialog-form" onSubmit={submit}>
+            <SelectField
+              label={t('documentType')}
+              name="documentChoice"
+              onValueChange={(value) => setChoice(value === 'foreign' ? 'foreign' : 'brazilian')}
+              options={[
+                { value: 'brazilian', label: t('documentChoices.brazilian') },
+                { value: 'foreign', label: t('documentChoices.foreign') },
+              ]}
+              value={choice}
+            />
+            {choice === 'foreign' ? (
+              <TextField
+                description={t('countryHelp')}
+                label={t('documentCountry')}
+                maxLength={2}
+                minLength={2}
+                name="documentCountry"
+                pattern="[A-Za-z]{2}"
+                required
+              />
+            ) : null}
+            <TextField
+              label={choice === 'foreign' ? t('documentNumber') : t('taxId')}
+              maxLength={choice === 'foreign' ? 40 : 18}
+              minLength={choice === 'foreign' ? 1 : 11}
+              name="documentNumber"
+              required
+            />
             {error ? (
               <p className="form-error" role="alert">
                 {error}
@@ -296,7 +328,7 @@ function RegisterPartyDialog({ onChanged, setNotice }: MutationProps) {
                 {common('cancel')}
               </Dialog.Close>
               <Button disabled={busy} type="submit" variant="primary">
-                {busy ? customers('saving') : t('createSubmit')}
+                {t('identifySubmit')}
               </Button>
             </div>
           </form>

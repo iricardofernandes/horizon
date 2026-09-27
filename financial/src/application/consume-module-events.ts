@@ -2,7 +2,9 @@ import {
   type EventEnvelope,
   partyErased,
   partyRegistered,
+  partyRegisteredV2,
   partyUpdated,
+  partyUpdatedV2,
   procurementOrderApproved,
   procurementOrderCancelled,
   procurementOrderClosed,
@@ -93,7 +95,11 @@ export class FinancialModuleEventHandlers {
   }
 
   private async partyRegistered(event: EventEnvelope): Promise<void> {
-    const parsed = partyRegistered.envelope.parse(event)
+    // v2 may carry a party without a document or contacts (ADR 0057); Financial keeps neither.
+    const parsed =
+      event.eventVersion === 2
+        ? partyRegisteredV2.envelope.parse(event)
+        : partyRegistered.envelope.parse(event)
     const { partyId, legalName, roles } = parsed.payload
     await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'parties'), (scope) =>
       scope.parties.record({ partyId, legalName, roles, active: true }, this.clock.now()),
@@ -101,7 +107,10 @@ export class FinancialModuleEventHandlers {
   }
 
   private async partyUpdated(event: EventEnvelope): Promise<void> {
-    const parsed = partyUpdated.envelope.parse(event)
+    const parsed =
+      event.eventVersion === 2
+        ? partyUpdatedV2.envelope.parse(event)
+        : partyUpdated.envelope.parse(event)
     const { partyId, legalName, roles, active } = parsed.payload
     await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'parties'), (scope) =>
       scope.parties.record({ partyId, legalName, roles, active }, this.clock.now()),

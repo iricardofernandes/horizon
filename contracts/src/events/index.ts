@@ -53,9 +53,11 @@ import {
   partyErased,
   partyFiscalProfileChanged,
   partyRegistered,
+  partyRegisteredV2,
   partyRoleGranted,
   partyRoleRevoked,
   partyUpdated,
+  partyUpdatedV2,
 } from './parties'
 import {
   procurementOrderApproved,
@@ -146,6 +148,8 @@ export const EVENTS: readonly EventDefinition[] = [
   salesFiscalOriginFrozen,
   partyRegistered,
   partyUpdated,
+  partyRegisteredV2,
+  partyUpdatedV2,
   partyRoleGranted,
   partyRoleRevoked,
   partyErased,

@@ -56,6 +56,72 @@ export const partyUpdated = defineEvent({
   payload: z.object({ partyId, ...identity, roles, active: z.boolean() }),
 })
 
+/** How a party is identified. The number itself never travels on the bus (ADR 0057). */
+export const PARTY_DOCUMENT_TYPES = ['cpf', 'cnpj', 'foreign', 'none'] as const
+
+const documentOf = {
+  documentType: z.enum(PARTY_DOCUMENT_TYPES),
+  documentCountry: z
+    .string()
+    .regex(/^[A-Z]{2}$/)
+    .nullable()
+    .describe('ISO 3166-1 alpha-2 country of a foreign document; null for every other type'),
+}
+
+const optionalContact = {
+  email: identity.email.nullable(),
+  phone: identity.phone.nullable(),
+  address: identity.address.nullable(),
+}
+
+export const partyRegisteredV2 = defineEvent({
+  type: 'parties.party.registered',
+  version: 2,
+  description:
+    'An organization or person entered the shared registry with the roles it plays. It may be foreign or have no Brazilian document, and a prospect or partner may have no email, phone or address; customers, suppliers and carriers always have them. The document number is deliberately absent.',
+  payload: z
+    .object({
+      partyId,
+      kind: z.enum(['organization', 'person']),
+      legalName: identity.legalName,
+      tradeName: identity.tradeName,
+      ...optionalContact,
+      ...documentOf,
+      roles,
+    })
+    .refine(
+      (payload) => (payload.documentType === 'foreign') === (payload.documentCountry !== null),
+      {
+        message: 'documentCountry is present exactly when the document is foreign',
+        path: ['documentCountry'],
+      },
+    ),
+})
+
+export const partyUpdatedV2 = defineEvent({
+  type: 'parties.party.updated',
+  version: 2,
+  description:
+    'A party’s identifying details, document type, roles or active state changed. Consumers replace their projected copy; a null contact field means the party has none, and posted documents keep the snapshot they took.',
+  payload: z
+    .object({
+      partyId,
+      legalName: identity.legalName,
+      tradeName: identity.tradeName,
+      ...optionalContact,
+      ...documentOf,
+      roles,
+      active: z.boolean(),
+    })
+    .refine(
+      (payload) => (payload.documentType === 'foreign') === (payload.documentCountry !== null),
+      {
+        message: 'documentCountry is present exactly when the document is foreign',
+        path: ['documentCountry'],
+      },
+    ),
+})
+
 export const partyRoleGranted = defineEvent({
   type: 'parties.party.role-granted',
   version: 1,

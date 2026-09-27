@@ -5,6 +5,8 @@ import {
   ChangePartyRoleUseCase,
   DescribePartyFiscalProfileUseCase,
   ErasePartyUseCase,
+  FindLookalikePartiesUseCase,
+  IdentifyPartyUseCase,
   RegisterPartyUseCase,
 } from '@/application/use-cases/manage-parties'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
@@ -90,7 +92,7 @@ it('keeps alphanumeric CNPJ letters through encryption and deduplicates case and
   const tenantId = randomUUID()
   const partyId = await register(tenantId, '00.000.000/e08g-12')
   const snapshot = await database.findSnapshot(tenantId, partyId)
-  expect(snapshot?.taxId).toBe('00000000E08G12')
+  expect(snapshot?.document).toEqual({ type: 'cnpj', number: '00000000E08G12', country: null })
 
   const duplicate = await new RegisterPartyUseCase(database, clock).execute({
     ...details,
@@ -229,4 +231,124 @@ it('refuses an outbox row written for another tenant', async () => {
         values (${randomUUID()}, ${randomUUID()}, ${randomUUID()}, 'parties.party.erased', 1, now(), 'x', '{}')`
     }),
   ).rejects.toThrow()
+})
+
+it('stores a foreign document encrypted, unique per country, and publishes only its type', async () => {
+  const tenantId = randomUUID()
+  const registered = await new RegisterPartyUseCase(database, clock).execute({
+    tenantId,
+    kind: 'organization',
+    legalName: 'Acme GmbH',
+    document: { type: 'foreign', country: 'DE', number: 'HRB 98765' },
+    roles: ['prospect'],
+  })
+  if (registered.isLeft()) throw registered.value
+  const { partyId } = registered.value
+  const [row] = await administrator`select document_type, document_country, tax_id_ciphertext,
+    email_ciphertext, name_index from parties where id = ${partyId}`
+  expect(row).toMatchObject({
+    document_type: 'foreign',
+    document_country: 'DE',
+    email_ciphertext: null,
+  })
+  expect(JSON.stringify(row)).not.toContain('98765')
+  expect(row?.name_index).toMatch(/^[0-9a-f]{64}$/)
+
+  const [event] =
+    await administrator`select event_version, payload from outbox where tenant_id = ${tenantId}`
+  expect(event).toMatchObject({
+    event_version: 2,
+    payload: { documentType: 'foreign', documentCountry: 'DE', email: null },
+  })
+  expect(JSON.stringify(event)).not.toContain('98765')
+
+  const again = await new RegisterPartyUseCase(database, clock).execute({
+    tenantId,
+    kind: 'organization',
+    legalName: 'Acme Deutschland',
+    document: { type: 'foreign', country: 'de', number: 'hrb 98765' },
+    roles: [],
+  })
+  expect(again.isLeft()).toBe(true)
+  expect(await database.findSnapshot(tenantId, partyId)).toMatchObject({
+    document: { type: 'foreign', country: 'DE', number: 'HRB 98765' },
+    email: null,
+  })
+})
+
+it('registers parties without a document side by side and identifies one later', async () => {
+  const tenantId = randomUUID()
+  const register = (legalName: string) =>
+    new RegisterPartyUseCase(database, clock).execute({
+      tenantId,
+      kind: 'person',
+      legalName,
+      document: { type: 'none' },
+      roles: ['prospect'],
+    })
+  const first = await register('Maria Souza')
+  const second = await register('João Lima')
+  if (first.isLeft() || second.isLeft()) throw new Error('registration failed')
+  const identified = await new IdentifyPartyUseCase(database, clock).execute({
+    tenantId,
+    partyId: first.value.partyId,
+    document: { type: 'cpf', number: '123.456.789-01' },
+  })
+  expect(identified.isRight()).toBe(true)
+  const [row] = await administrator`select document_type, tax_id_index from parties
+    where id = ${first.value.partyId}`
+  expect(row?.document_type).toBe('cpf')
+  expect(row?.tax_id_index).toMatch(/^[0-9a-f]{64}$/)
+  const [untouched] = await administrator`select tax_id_index from parties
+    where id = ${second.value.partyId}`
+  expect(untouched?.tax_id_index).toBeNull()
+
+  // The database refuses what the aggregate would: a CPF on an organization.
+  await expect(
+    administrator`update parties set kind = 'organization' where id = ${first.value.partyId}`,
+  ).rejects.toThrow(/parties_document_kind_valid/)
+})
+
+it('finds lookalikes through keyed indexes, only in the tenant, and forgets them on erasure', async () => {
+  const tenantId = randomUUID()
+  const partyId = await register(tenantId)
+  const lookalikes = new FindLookalikePartiesUseCase(database)
+  const found = await lookalikes.execute({
+    tenantId,
+    legalName: 'TORREFACAO SERRA',
+    phone: '(11) 99999-0000',
+  })
+  if (found.isLeft()) throw found.value
+  expect(found.value.map((match) => [match.party.id.toString(), match.matchedOn])).toEqual([
+    [partyId, ['name', 'phone']],
+  ])
+  const elsewhere = await lookalikes.execute({
+    tenantId: randomUUID(),
+    legalName: 'Torrefação Serra',
+  })
+  expect(elsewhere.isRight() && elsewhere.value).toEqual([])
+
+  await new ErasePartyUseCase(database, clock).execute({ tenantId, partyId })
+  const [row] = await administrator`select name_index, email_index, phone_index from parties
+    where id = ${partyId}`
+  expect(row).toEqual({ name_index: null, email_index: null, phone_index: null })
+  const after = await lookalikes.execute({ tenantId, legalName: 'Torrefação Serra' })
+  expect(after.isRight() && after.value).toEqual([])
+})
+
+it('backfills the lookup indexes of rows written before them, once', async () => {
+  const tenantId = randomUUID()
+  const partyId = await register(tenantId)
+  await administrator`update parties set name_index = null, email_index = null, phone_index = null
+    where id = ${partyId}`
+  expect(await database.backfillLookups(tenantId, 50)).toBe(1)
+  expect(await database.backfillLookups(tenantId, 50)).toBe(0)
+  const found = await new FindLookalikePartiesUseCase(database).execute({
+    tenantId,
+    legalName: 'Other',
+    email: 'COMPRAS@serra.example',
+  })
+  expect(found.isRight() && found.value.map((match) => match.party.id.toString())).toEqual([
+    partyId,
+  ])
 })

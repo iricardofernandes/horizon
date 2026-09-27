@@ -25,20 +25,110 @@ export class PartyName extends ValueObject<{ value: string }> {
   }
 }
 
+/** How a party is identified (ADR 0057). `none` is a party that has not given one yet. */
+export const PARTY_DOCUMENT_TYPES = ['cpf', 'cnpj', 'foreign', 'none'] as const
+export type PartyDocumentType = (typeof PARTY_DOCUMENT_TYPES)[number]
+
+export type PartyDocumentInput =
+  | { readonly type: 'cpf' | 'cnpj'; readonly number: string }
+  | { readonly type: 'foreign'; readonly country: string; readonly number: string }
+  | { readonly type: 'none' }
+
+/** The roles whose consumers need a way to reach the party and an address (ADR 0057). */
+export const CONTACT_ROLES: readonly PartyRole[] = ['customer', 'supplier', 'carrier']
+
+function canonicalNumber(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[.\-/\s]/g, '')
+}
+
 /**
- * A CPF or a CNPJ. The first twelve CNPJ positions may be alphanumeric;
- * its two check digits and every CPF position remain numeric.
+ * A CPF, a CNPJ, a foreign identifier with its country, or nothing yet.
  *
- * Uniqueness per tenant is enforced against a keyed blind index of this value rather than
- * the value itself, which is what allows "is this company already a supplier?" to be
- * answered without storing the identifier in the clear (ADR 0026).
+ * The first twelve CNPJ positions may be alphanumeric; its two check digits and every CPF
+ * position remain numeric. A CPF identifies a person and a CNPJ an organization; a foreign
+ * identifier or no document may belong to either.
+ *
+ * Uniqueness per tenant is enforced against a keyed blind index of `indexInput` rather
+ * than the value itself, which is what allows "is this company already a supplier?" to be
+ * answered without storing the identifier in the clear (ADR 0026). A CPF or CNPJ keeps the
+ * index input it had before foreign documents existed, so no stored index is rewritten.
  */
-export class TaxId extends ValueObject<{ value: string }> {
-  static create(value: string, kind?: PartyKind): Either<InvalidInputError, TaxId> {
-    const canonical = value
-      .trim()
-      .toUpperCase()
-      .replace(/[.\-/\s]/g, '')
+export class PartyDocument extends ValueObject<{
+  type: PartyDocumentType
+  number: string | null
+  country: string | null
+}> {
+  static none(): PartyDocument {
+    return new PartyDocument({ type: 'none', number: null, country: null })
+  }
+
+  static create(
+    input: PartyDocumentInput,
+    kind?: PartyKind,
+  ): Either<InvalidInputError, PartyDocument> {
+    if (input.type === 'none') return right(PartyDocument.none())
+    if (input.type === 'foreign') return PartyDocument.foreign(input.country, input.number)
+    return PartyDocument.brazilian(input.type, input.number, kind)
+  }
+
+  private static foreign(
+    country: string,
+    number: string,
+  ): Either<InvalidInputError, PartyDocument> {
+    const code = country.trim().toUpperCase()
+    if (!/^[A-Z]{2}$/.test(code))
+      return left(new InvalidInputError('/document/country', 'must be a two-letter ISO country'))
+    if (code === 'BR')
+      return left(
+        new InvalidInputError(
+          '/document/country',
+          'a Brazilian party is identified by CPF or CNPJ',
+        ),
+      )
+    const canonical = number.trim().toUpperCase().replace(/\s+/g, ' ')
+    if (!/^[A-Z0-9][A-Z0-9 ./-]{0,39}$/.test(canonical))
+      return left(
+        new InvalidInputError(
+          '/document/number',
+          'must contain 1 to 40 letters, digits, spaces, dots, dashes or slashes',
+        ),
+      )
+    return right(new PartyDocument({ type: 'foreign', number: canonical, country: code }))
+  }
+
+  private static brazilian(
+    type: 'cpf' | 'cnpj',
+    value: string,
+    kind?: PartyKind,
+  ): Either<InvalidInputError, PartyDocument> {
+    const number = canonicalNumber(value)
+    const shape = type === 'cpf' ? /^\d{11}$/ : /^[A-Z0-9]{12}\d{2}$/
+    if (!shape.test(number))
+      return left(
+        new InvalidInputError(
+          '/document/number',
+          type === 'cpf'
+            ? 'a CPF has 11 digits'
+            : 'a CNPJ has 14 characters, the last two numeric check digits',
+        ),
+      )
+    const owner: PartyKind = type === 'cpf' ? 'person' : 'organization'
+    if (kind !== undefined && kind !== owner)
+      return left(
+        new InvalidInputError(
+          '/document/type',
+          owner === 'person' ? 'a CPF identifies a person' : 'a CNPJ identifies an organization',
+        ),
+      )
+    return right(new PartyDocument({ type, number, country: null }))
+  }
+
+  /** The pre-Phase 54 shorthand: an 11-digit CPF or a 14-character CNPJ, paired with the kind. */
+  static fromTaxId(value: string, kind?: PartyKind): Either<InvalidInputError, PartyDocument> {
+    const canonical = canonicalNumber(value)
     if (!/^(?:\d{11}|[A-Z0-9]{12}\d{2})$/.test(canonical))
       return left(
         new InvalidInputError(
@@ -52,13 +142,46 @@ export class TaxId extends ValueObject<{ value: string }> {
       return left(
         new InvalidInputError('/taxId', 'an organization is identified by a 14-character CNPJ'),
       )
-    return right(new TaxId({ value: canonical }))
+    return PartyDocument.create({
+      type: canonical.length === 11 ? 'cpf' : 'cnpj',
+      number: canonical,
+    })
   }
-  get value(): string {
-    return this.props.value
+
+  get type(): PartyDocumentType {
+    return this.props.type
   }
+
+  get number(): string | null {
+    return this.props.number
+  }
+
+  get country(): string | null {
+    return this.props.country
+  }
+
+  /** A CPF or a CNPJ: what a Brazilian fiscal document can name as its recipient. */
+  isBrazilian(): boolean {
+    return this.props.type === 'cpf' || this.props.type === 'cnpj'
+  }
+
+  /** What the uniqueness index is computed from; a party without a document has none. */
+  get indexInput(): string | null {
+    return PartyDocument.indexInputOf(this.props)
+  }
+
+  static indexInputOf(document: {
+    readonly type: PartyDocumentType
+    readonly number: string | null
+    readonly country: string | null
+  }): string | null {
+    if (document.type === 'none' || document.number === null) return null
+    if (document.type === 'foreign') return `foreign:${document.country}:${document.number}`
+    return document.number
+  }
+
   protected componentsOf(): readonly unknown[] {
-    return [this.value]
+    return [this.props.type, this.props.number, this.props.country]
   }
 }
 

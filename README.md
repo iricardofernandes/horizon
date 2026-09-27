@@ -293,7 +293,7 @@ Jaeger / Prometheus / Loki / Grafana · Docker · Terraform (never applied) · G
 | [`docs/fiscal-implementation-plan.md`](docs/fiscal-implementation-plan.md) | Detailed Phase J sequence, fiscal source register, integration gates and exit evidence |
 | [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece is deferred |
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
-| [`docs/adr/`](docs/adr/) | 56 decision records |
+| [`docs/adr/`](docs/adr/) | 57 decision records |
 | [`docs/patterns/`](docs/patterns/) | How to reimplement each cross-cutting pattern (phase 5) |
 | [`docs/events.md`](docs/events.md) | The event catalogue, generated from the schemas |
 | [`docs/privacy.md`](docs/privacy.md) | Lawful basis, retention, erasure |

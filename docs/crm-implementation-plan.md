@@ -1,6 +1,6 @@
 # CRM implementation plan — Phase L
 
-Status: **planned.** This is the execution plan for Phase L of the
+Status: **in progress** — Phase 54 delivered on 2026-09-27. This is the execution plan for Phase L of the
 [ERP expansion plan](erp-expansion-plan.md#phase-l--crm), split into phases 54–60 of
 [plan.md](plan.md). Each numbered phase gets its own detailed plan before implementation,
 one local commit and an evidence record, as in Phases J and K.
@@ -104,6 +104,9 @@ Gaps:
 
 ### 54 — Parties without a Brazilian document, and CRM decisions
 
+[Detailed Phase 54 plan](crm-phase54-implementation-plan.md) ·
+[evidence](crm-phase54-evidence.md).
+
 **Work**
 1. ADR 0057 records the decisions above.
 2. Parties accepts the typed document and optional contact fields:
@@ -113,14 +116,14 @@ Gaps:
 3. Party events v2 are added to `@horizon/contracts`.
    - Sales, Procurement and Financial accept both versions.
    - Their projections handle a party without email, phone or address.
-4. Fiscal refuses an NF-e for a recipient with a `foreign` or `none` document where a
-   document is required, with a visible refusal code. An NFC-e without a CPF keeps
-   working.
+4. Parties refuses a fiscal profile to a party without a CPF or a CNPJ. Fiscal then has no
+   recipient projection for it and refuses an NF-e with its existing visible code
+   (`DOCUMENT_NOT_READY`); NFC-e behaviour is unchanged.
 5. The party screens offer the document type, the country and a duplicate warning.
 
 **Exit evidence**
 - A foreign company and a person without a CPF are registered, become customers, and
-  receive a quote and an order.
+  receive a quote.
 - Existing parties keep their ids and documents.
 - A replayed v1 event and a v2 event give the same projection.
 - The goods golden path is unchanged.

@@ -15,6 +15,13 @@
       "when": 1790020800000,
       "tag": "0001_fiscal_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790496000000,
+      "tag": "0002_party_documents",
+      "breakpoints": true
     }
   ]
 }

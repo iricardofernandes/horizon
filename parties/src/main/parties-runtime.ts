@@ -5,6 +5,8 @@ import {
   DescribePartyFiscalProfileUseCase,
   DescribePartyUseCase,
   ErasePartyUseCase,
+  FindLookalikePartiesUseCase,
+  IdentifyPartyUseCase,
   RegisterPartyUseCase,
 } from '@/application/use-cases/manage-parties'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
@@ -22,6 +24,8 @@ export class PartiesRuntime implements OnModuleInit, OnModuleDestroy {
   readonly changeRole: ChangePartyRoleUseCase
   readonly changeStatus: ChangePartyStatusUseCase
   readonly eraseParty: ErasePartyUseCase
+  readonly identifyParty: IdentifyPartyUseCase
+  readonly findLookalikes: FindLookalikePartiesUseCase
 
   constructor(config: PartiesEnvironment) {
     const clock = { now: () => new Date() }
@@ -44,6 +48,8 @@ export class PartiesRuntime implements OnModuleInit, OnModuleDestroy {
     this.changeRole = new ChangePartyRoleUseCase(this.database, clock)
     this.changeStatus = new ChangePartyStatusUseCase(this.database, clock)
     this.eraseParty = new ErasePartyUseCase(this.database, clock)
+    this.identifyParty = new IdentifyPartyUseCase(this.database, clock)
+    this.findLookalikes = new FindLookalikePartiesUseCase(this.database)
   }
 
   onModuleInit(): Promise<void> {

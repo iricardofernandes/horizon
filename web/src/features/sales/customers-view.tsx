@@ -4,14 +4,16 @@ import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Dialog } from '@base-ui/react/dialog'
 import { Envelope, IdentificationCard, Plus, Trash, User, X } from '@phosphor-icons/react'
 import { useTranslations } from 'next-intl'
-import { type FormEvent, useState } from 'react'
+import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { TextField } from '@/components/ui/text-field'
-import { kindOfTaxId, maskedTaxId, type Party } from '@/features/parties/party'
+import { maskedDocument, type Party, type PartyRole } from '@/features/parties/party'
+import { PartyRegistrationForm } from '@/features/parties/party-registration-form'
 import { CustomerServicesDialog } from '@/features/services/customer-services-dialog'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
+
+const CUSTOMER_ROLES: readonly PartyRole[] = ['customer']
 
 /** Sales' projection of a party holding the customer role, as quotes and orders read it. */
 export type Customer = {
@@ -47,8 +49,8 @@ export function CustomersView({
     (customer) =>
       !normalizedQuery ||
       customer.legalName.toLocaleLowerCase().includes(normalizedQuery) ||
-      customer.email.toLocaleLowerCase().includes(normalizedQuery) ||
-      (customer.taxIdSuffix ?? '').includes(normalizedQuery),
+      (customer.email ?? '').toLocaleLowerCase().includes(normalizedQuery) ||
+      (customer.document.suffix ?? '').includes(normalizedQuery),
   )
 
   return (
@@ -110,7 +112,7 @@ export function CustomersView({
                       <span>
                         <strong>{customer.legalName}</strong>
                         <small>
-                          <Envelope aria-hidden="true" size={11} /> {customer.email}
+                          <Envelope aria-hidden="true" size={11} /> {customer.email ?? '—'}
                         </small>
                       </span>
                     </div>
@@ -118,10 +120,10 @@ export function CustomersView({
                   <td>
                     <span className="customer-tax-id">
                       <IdentificationCard aria-hidden="true" size={15} />
-                      {maskedTaxId(customer)}
+                      {maskedDocument(customer)}
                     </span>
                   </td>
-                  <td>{customer.phone}</td>
+                  <td>{customer.phone ?? '—'}</td>
                   <td className="customer-address">{customer.address}</td>
                   <td>
                     <Badge status={customer.status} label={statusLabel(customer.status)} />
@@ -164,40 +166,6 @@ function CreateCustomerDialog({
   const t = useTranslations('customers')
   const common = useTranslations('common')
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    const form = event.currentTarget
-    const data = new FormData(form)
-    const taxId = String(data.get('taxId') ?? '').trim()
-    const response = await tracedFetch('parties.party.register', '/api/horizon/parties/parties', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        kind: kindOfTaxId(taxId),
-        legalName: String(data.get('name') ?? '').trim(),
-        taxId,
-        email: String(data.get('email') ?? '').trim(),
-        phone: String(data.get('phone') ?? '').trim(),
-        address: String(data.get('address') ?? '').trim(),
-        roles: ['customer'],
-      }),
-    })
-    if (!response.ok) {
-      setError(await apiError(response, t('createFailed')))
-      setBusy(false)
-      return
-    }
-    form.reset()
-    setOpen(false)
-    setNotice(t('created'))
-    await onChanged()
-    setBusy(false)
-  }
 
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
@@ -217,52 +185,16 @@ function CreateCustomerDialog({
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} weight="bold" />
           </Dialog.Close>
-          <form className="dialog-form" onSubmit={submit}>
-            <TextField label={t('name')} maxLength={160} minLength={2} name="name" required />
-            <div className="form-grid two-columns">
-              <TextField
-                description={t('taxIdHelp')}
-                label={t('taxId')}
-                maxLength={18}
-                minLength={11}
-                name="taxId"
-                placeholder="000.000.000-00"
-                required
-              />
-              <TextField label={t('email')} maxLength={254} name="email" required type="email" />
-            </div>
-            <TextField
-              description={t('phoneHelp')}
-              label={t('phone')}
-              maxLength={24}
-              minLength={8}
-              name="phone"
-              placeholder="+55 11 99999-0000"
-              required
-              type="tel"
-            />
-            <TextField
-              label={t('address')}
-              maxLength={500}
-              minLength={5}
-              name="address"
-              placeholder={t('addressPlaceholder')}
-              required
-            />
-            {error ? (
-              <p className="form-error" role="alert">
-                {error}
-              </p>
-            ) : null}
-            <div className="dialog-actions">
-              <Dialog.Close className="ui-button ui-button-secondary">
-                {common('cancel')}
-              </Dialog.Close>
-              <Button disabled={busy} type="submit" variant="primary">
-                {busy ? t('saving') : t('createSubmit')}
-              </Button>
-            </div>
-          </form>
+          <PartyRegistrationForm
+            failedLabel={t('createFailed')}
+            onRegistered={async () => {
+              setOpen(false)
+              setNotice(t('created'))
+              await onChanged()
+            }}
+            roles={CUSTOMER_ROLES}
+            submitLabel={t('createSubmit')}
+          />
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

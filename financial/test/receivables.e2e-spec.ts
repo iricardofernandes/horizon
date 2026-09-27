@@ -46,12 +46,13 @@ async function deliver(
   eventType: string,
   payload: unknown,
   eventId = randomUUID(),
+  eventVersion = 1,
 ) {
   const envelope: EventEnvelope = {
     eventId,
     tenantId,
     eventType,
-    eventVersion: 1,
+    eventVersion,
     occurredAt: new Date().toISOString(),
     traceId: randomBytes(16).toString('hex'),
     payload,
@@ -120,6 +121,57 @@ async function outboxOf(tenantId: string) {
 }
 
 describe('receivables', () => {
+  it('drafts a receivable for a foreign customer registered by a v2 event', async () => {
+    const { context, terms, tenantId } = await workspace()
+    const foreign = randomUUID()
+    await deliver(
+      tenantId,
+      'parties.party.registered',
+      {
+        partyId: foreign,
+        ...customerDetails,
+        legalName: 'Acme GmbH',
+        documentType: 'foreign',
+        documentCountry: 'DE',
+        roles: ['customer'],
+      },
+      randomUUID(),
+      2,
+    )
+    const draft = new DraftTitleUseCase(database, clock, 'receivable')
+    const drafted = await draft.execute({
+      context: context(),
+      terms: { ...terms, partyId: foreign },
+    })
+    expect(drafted.isRight()).toBe(true)
+
+    // A prospect known only by name is recorded without contacts and cannot owe anything yet.
+    const prospect = randomUUID()
+    await deliver(
+      tenantId,
+      'parties.party.updated',
+      {
+        partyId: prospect,
+        legalName: 'Maria',
+        tradeName: null,
+        email: null,
+        phone: null,
+        address: null,
+        documentType: 'none',
+        documentCountry: null,
+        roles: ['prospect'],
+        active: true,
+      },
+      randomUUID(),
+      2,
+    )
+    const refused = await draft.execute({
+      context: context(),
+      terms: { ...terms, partyId: prospect },
+    })
+    expect(refused.isLeft()).toBe(true)
+  })
+
   it('drafts once per idempotency key and forgets a refused attempt', async () => {
     const { context, terms, tenantId } = await workspace()
     const draft = new DraftTitleUseCase(database, clock, 'receivable')

@@ -60,13 +60,26 @@ export class Supplier extends AggregateRoot<SupplierProps> {
     return this.props.name
   }
 
-  /** Replace the projected details. An erased supplier is never brought back. */
-  refresh(details: SupplierDetails & { active: boolean }, now: Date): boolean {
+  /**
+   * Replace the projected details. An erased supplier is never brought back. A contact the
+   * registry no longer holds (null) keeps the value Procurement last knew: the orders already
+   * written to a former supplier still print it (ADR 0057).
+   */
+  refresh(
+    details: {
+      readonly name: PartyName
+      readonly email: string | null
+      readonly phone: string | null
+      readonly address: string | null
+      readonly active: boolean
+    },
+    now: Date,
+  ): boolean {
     if (this.props.status === 'erased') return false
     this.props.name = details.name
-    this.props.email = details.email
-    this.props.phone = details.phone
-    this.props.address = details.address
+    this.props.email = details.email ?? this.props.email
+    this.props.phone = details.phone ?? this.props.phone
+    this.props.address = details.address ?? this.props.address
     this.props.status = details.active ? 'active' : 'inactive'
     this.props.updatedAt = now
     return true

@@ -72,6 +72,36 @@ describe('customers and quotes', () => {
     })
   })
 
+  it('ignores a prospect known only by name without validating what it lacks', async () => {
+    const unitOfWork = new InMemorySalesUnitOfWork()
+    const outcome = await project(
+      unitOfWork,
+      partyState(randomUUID(), { roles: ['prospect'], email: null, phone: null, address: null }),
+    )
+    expect(unwrap(outcome)).toBe('ignored')
+    expect(unitOfWork.customers).toHaveLength(0)
+  })
+
+  it('keeps what it knew of a former customer whose contacts were cleared', async () => {
+    const unitOfWork = new InMemorySalesUnitOfWork()
+    const state = partyState(randomUUID())
+    unwrap(await project(unitOfWork, state))
+    const cleared = { ...state, roles: ['prospect'], email: null, phone: null, address: null }
+    expect(unwrap(await project(unitOfWork, cleared))).toBe('refreshed')
+    expect(snapshotOf(required(unitOfWork.customers[0]))).toMatchObject({
+      email: 'maria@example.com',
+      phone: '+5511999999999',
+      address: 'Rua Um, 42, São Paulo',
+      status: 'inactive',
+    })
+  })
+
+  it('refuses a customer the registry sent without a way to reach it', async () => {
+    const unitOfWork = new InMemorySalesUnitOfWork()
+    const outcome = await project(unitOfWork, partyState(randomUUID(), { email: null }))
+    expect(outcome.isLeft()).toBe(true)
+  })
+
   it('ignores a party that has never been a customer', async () => {
     const unitOfWork = new InMemorySalesUnitOfWork()
     const outcome = await project(unitOfWork, partyState(randomUUID(), { roles: ['supplier'] }))

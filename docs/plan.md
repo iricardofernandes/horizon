@@ -2419,10 +2419,19 @@ billed line, however often a month is re-run or its events replayed.
 
 ## Phase 54 — Parties without a Brazilian document, and CRM decisions
 
-**Planned.** ADR 0057 fixes the Phase L decisions. A party's document becomes typed
-(`cpf`, `cnpj`, `foreign` or `none`), and its contact fields become optional, so a foreign
-company or a prospect with no CPF can be registered. Party events get a v2 that every
-consumer accepts. [Detailed work](crm-implementation-plan.md#54--parties-without-a-brazilian-document-and-crm-decisions).
+**Delivered on 2026-09-27.** ADR 0057 fixes the Phase L decisions.
+- A party's document is typed: `cpf`, `cnpj`, `foreign` with its country, or `none`. A
+  `none` can be completed once.
+- Contacts are required only for customers, suppliers and carriers. A foreign company or
+  a prospect with no CPF can be registered, become a customer and receive a quote.
+- A duplicate check warns before creating a lookalike.
+- A fiscal profile needs a CPF or a CNPJ.
+- `parties.party.registered` and `updated` move to v2. Sales, Procurement and Financial
+  accept both versions.
+- Selects inside dialogs open over them again.
+
+[Evidence](crm-phase54-evidence.md).
+[Detailed plan](crm-phase54-implementation-plan.md). [Detailed work](crm-implementation-plan.md#54--parties-without-a-brazilian-document-and-crm-decisions).
 
 ## Phase 55 — The CRM module, accounts and contacts
 

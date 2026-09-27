@@ -1,6 +1,6 @@
 import { type Either, left, right } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
-import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { Customer } from '@/domain/entities/customer'
 import { CustomerEmail, CustomerName, CustomerPhone } from '@/domain/value-objects/sales-values'
 import type { Clock } from '../ports/clock'
@@ -10,14 +10,23 @@ export interface PartyState {
   readonly tenantId: string
   readonly partyId: string
   readonly legalName: string
-  readonly email: string
-  readonly phone: string
-  readonly address: string
+  /** Null only for a party that is not a customer: the registry requires them for the role. */
+  readonly email: string | null
+  readonly phone: string | null
+  readonly address: string | null
   readonly roles: readonly string[]
   readonly active: boolean
 }
 
 export type ProjectionOutcome = 'projected' | 'refreshed' | 'ignored'
+
+/** An absent contact stays absent; a present one must be valid. */
+function nullable<T>(
+  value: string | null,
+  create: (present: string) => Either<InvalidInputError, T>,
+): Either<InvalidInputError, T | null> {
+  return value === null ? right(null) : create(value)
+}
 
 /**
  * Keep Sales' customer projection in step with the party registry.
@@ -33,11 +42,14 @@ export class ProjectPartyUseCase {
     scope: SalesScope,
     state: PartyState,
   ): Promise<Either<InvalidInputError, ProjectionOutcome>> {
+    const existing = await scope.customers.findById(state.partyId)
+    // A prospect known only by name is not Sales' business, so it is never validated here.
+    if (!existing && !state.roles.includes('customer')) return right('ignored')
     const name = CustomerName.create(state.legalName)
     if (name.isLeft()) return left(name.value)
-    const email = CustomerEmail.create(state.email)
+    const email = nullable(state.email, CustomerEmail.create)
     if (email.isLeft()) return left(email.value)
-    const phone = CustomerPhone.create(state.phone)
+    const phone = nullable(state.phone, CustomerPhone.create)
     if (phone.isLeft()) return left(phone.value)
 
     const details = {
@@ -48,16 +60,24 @@ export class ProjectPartyUseCase {
       active: state.active && state.roles.includes('customer'),
     }
     const now = this.clock.now()
-    const existing = await scope.customers.findById(state.partyId)
     if (existing) {
       if (!existing.refresh(details, now)) return right('ignored')
       await scope.customers.save(existing)
       return right('refreshed')
     }
-    if (!state.roles.includes('customer')) return right('ignored')
+    // The registry requires every contact of a customer, so a new one always carries them.
+    if (!details.email || !details.phone || !details.address)
+      return left(new InvalidInputError('/email', 'a customer needs email, phone and address'))
     await scope.customers.create(
       Customer.project(
-        { ...details, tenantId: state.tenantId, now },
+        {
+          ...details,
+          email: details.email,
+          phone: details.phone,
+          address: details.address,
+          tenantId: state.tenantId,
+          now,
+        },
         new UniqueEntityID(state.partyId),
       ),
     )

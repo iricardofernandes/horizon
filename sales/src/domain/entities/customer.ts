@@ -16,6 +16,14 @@ export interface CustomerDetails {
   readonly address: string
 }
 
+/** What an update from the registry carries: contacts may be absent for a former customer. */
+export interface ProjectedDetails {
+  readonly name: CustomerName
+  readonly email: CustomerEmail | null
+  readonly phone: CustomerPhone | null
+  readonly address: string | null
+}
+
 interface CustomerProps {
   name: CustomerName
   email: CustomerEmail
@@ -62,13 +70,17 @@ export class Customer extends AggregateRoot<CustomerProps> {
     return new Customer(props, id)
   }
 
-  /** Replace the projected details. An erased customer is never brought back. */
-  refresh(details: CustomerDetails & { active: boolean }, now: Date): boolean {
+  /**
+   * Replace the projected details. An erased customer is never brought back. A contact the
+   * registry no longer holds (null) keeps the value Sales last knew: a former customer may
+   * have its contacts cleared, and its documents still print them (ADR 0057).
+   */
+  refresh(details: ProjectedDetails & { active: boolean }, now: Date): boolean {
     if (this.props.status === 'erased') return false
     this.props.name = details.name
-    this.props.email = details.email
-    this.props.phone = details.phone
-    this.props.address = details.address
+    this.props.email = details.email ?? this.props.email
+    this.props.phone = details.phone ?? this.props.phone
+    this.props.address = details.address ?? this.props.address
     this.props.status = details.active ? 'active' : 'inactive'
     this.props.updatedAt = now
     return true

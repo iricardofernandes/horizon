@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.40.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.41.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -639,6 +639,24 @@ An organization or person entered the shared registry with the roles it plays. C
 | `phone` | string | yes | pattern `^\+?\d{8,15}$` |
 | `address` | string | yes | min length 5. max length 500 |
 | `roles` | array | yes | — |
+### `parties.party.registered` — v2
+
+An organization or person entered the shared registry with the roles it plays. It may be foreign or have no Brazilian document, and a prospect or partner may have no email, phone or address; customers, suppliers and carriers always have them. The document number is deliberately absent.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `partyId` | string | yes | Party identifier, shared by every context that projects it. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `kind` | `organization` \| `person` | yes | — |
+| `legalName` | string | yes | min length 2. max length 160 |
+| `tradeName` | any | yes | — |
+| `email` | any | yes | — |
+| `phone` | any | yes | — |
+| `address` | any | yes | — |
+| `documentType` | `cpf` \| `cnpj` \| `foreign` \| `none` | yes | — |
+| `documentCountry` | any | yes | ISO 3166-1 alpha-2 country of a foreign document; null for every other type |
+| `roles` | array | yes | — |
 ### `parties.party.role-granted` — v1
 
 A party started playing a role — a supplier became a customer too. `roles` is the complete set after the change; a `parties.party.updated` carrying the party’s details follows in the same transaction.
@@ -675,6 +693,24 @@ A party’s identifying details, roles or active state changed. Consumers replac
 | `email` | string | yes | pattern `^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$`. format `email`. max length 254 |
 | `phone` | string | yes | pattern `^\+?\d{8,15}$` |
 | `address` | string | yes | min length 5. max length 500 |
+| `roles` | array | yes | — |
+| `active` | boolean | yes | — |
+### `parties.party.updated` — v2
+
+A party’s identifying details, document type, roles or active state changed. Consumers replace their projected copy; a null contact field means the party has none, and posted documents keep the snapshot they took.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `partyId` | string | yes | Party identifier, shared by every context that projects it. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `legalName` | string | yes | min length 2. max length 160 |
+| `tradeName` | any | yes | — |
+| `email` | any | yes | — |
+| `phone` | any | yes | — |
+| `address` | any | yes | — |
+| `documentType` | `cpf` \| `cnpj` \| `foreign` \| `none` | yes | — |
+| `documentCountry` | any | yes | ISO 3166-1 alpha-2 country of a foreign document; null for every other type |
 | `roles` | array | yes | — |
 | `active` | boolean | yes | — |
 
