@@ -2512,6 +2512,70 @@ Also delivered:
 [Evidence](crm-phase60-evidence.md).
 [Detailed plan](crm-phase60-implementation-plan.md). [Detailed work](crm-implementation-plan.md#60--crm-screens-golden-path-and-release-evidence).
 
+## Phase 61 — Phase M decisions and the reporting journal
+
+**Planned.** ADRs 0058–0063 fix the Phase M decisions. Contracts declare the `reporting` and `files`
+modules. `reporting/` joins the platform on port 3013 and keeps an append-only journal of
+every event it consumes, filled by bounded republish commands, with per-source watermarks.
+[Detailed work](production-readiness-implementation-plan.md#61--phase-m-decisions-and-the-reporting-journal).
+
+## Phase 62 — Cross-domain reports reconciled at a cutoff
+
+**Planned.** Order-to-cash, procure-to-pay, stock versus ledger, cash position and pipeline to revenue,
+read at a cutoff that is settled only on every source's watermark. Each report is
+reconciled against its owning module's report by a stored, scheduled check.
+[Detailed work](production-readiness-implementation-plan.md#62--cross-domain-reports-reconciled-at-a-cutoff).
+
+## Phase 63 — Exports and scheduled exports
+
+**Planned.** CSV and XLSX exports of reports as jobs with signed, expiring links; scheduled exports
+that catch up missed runs; list exports streamed as the signed-in user.
+[Detailed work](production-readiness-implementation-plan.md#63--exports-and-scheduled-exports).
+
+## Phase 64 — Bulk imports with preview and failures you can download
+
+**Planned.** One import job contract implemented by Parties, Catalog, Inventory and Financial: map,
+validate, preview, confirm and follow. Resumable, idempotent per row, and every failed row
+reported with its reason.
+[Detailed work](production-readiness-implementation-plan.md#64--bulk-imports-with-preview-and-failures-you-can-download).
+
+## Phase 65 — Attachments
+
+**Planned.** `files/` on port 3014: uploads scanned before they are served, encrypted per owner and
+shredded on erasure, with retention per record type.
+[Detailed work](production-readiness-implementation-plan.md#65--attachments).
+
+## Phase 66 — Search, command palette, saved views, notifications and the job centre
+
+**Planned.** Federated search that shows only what the user may read, a command palette, saved views,
+in-app notifications from events, and one centre for every background job.
+[Detailed work](production-readiness-implementation-plan.md#66--search-command-palette-saved-views-notifications-and-the-job-centre).
+
+## Phase 67 — Invitations, MFA, passkeys and sessions
+
+**Planned.** Invitations replace administrator-chosen passwords. TOTP with recovery codes, passkeys, a
+workspace MFA policy, and sessions a user and an administrator can see and revoke.
+[Detailed work](production-readiness-implementation-plan.md#67--invitations-mfa-passkeys-and-sessions).
+
+## Phase 68 — Segregation of duties, delegation and the audit screen
+
+**Planned.** A declared duties matrix enforced by each module, approval delegation that records both
+names, and a federated audit screen with chain verification.
+[Detailed work](production-readiness-implementation-plan.md#68--segregation-of-duties-delegation-and-the-audit-screen).
+
+## Phase 69 — Backups, restore drills, retention and consistency checks
+
+**Planned.** Point-in-time backups with RPO 15 minutes and RTO 1 hour, a full restore drill that
+stores its evidence, retention jobs per table class, and scheduled financial consistency
+checks.
+[Detailed work](production-readiness-implementation-plan.md#69--backups-restore-drills-retention-and-consistency-checks).
+
+## Phase 70 — Service levels, synthetic monitoring, release evidence and closing Phase M
+
+**Planned.** SLIs and SLOs with tested alert rules, a synthetic probe of the critical path, the Phase M
+screens, golden path, browser workflow, drills and threat model. Phase M closes here.
+[Detailed work](production-readiness-implementation-plan.md#70--service-levels-synthetic-monitoring-release-evidence-and-closing-phase-m).
+
 ---
 
 ## Standing rules across all phases

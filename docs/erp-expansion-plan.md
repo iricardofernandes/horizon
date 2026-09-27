@@ -269,6 +269,7 @@ never disagree:
 | `fiscal` | 3011 | Phase J |
 | `crm` | 3012 | Phase L |
 | `reporting` | 3013 | Phase M |
+| `files` | 3014 | Phase M (phase 65, ADR 0060) |
 
 **Rollout order for a new module name.** Identity and Catalog reject an access token whose
 role assignments name a module their pinned `@horizon/contracts` does not know. Every
@@ -668,6 +669,8 @@ browser workflow and the Phase 58–59 suites: see the
 
 ### Phase M — reporting, data operations and product hardening
 
+Split into phases 61–70: [production readiness implementation plan](production-readiness-implementation-plan.md).
+
 **Deliverables**
 
 - Add `reporting/` projections for cross-domain dashboards, scheduled exports and saved
@@ -789,4 +792,5 @@ The first executable backlog, in order, is:
 **Status:** items 1 to 12 are delivered as plan phases 14 to 21, Phase F as plan phases 22
 to 25, Phase G as 26 to 28, Phase H as 29 to 31 and Phase I as 32 to 38. Phase J is
 planned as phases 39 to 48 in the [fiscal implementation plan](fiscal-implementation-plan.md).
-Phase K is delivered as phases 49 to 53 and Phase L as phases 54 to 60.
+Phase K is delivered as phases 49 to 53 and Phase L as phases 54 to 60. Phase M is
+planned as phases 61 to 70.
