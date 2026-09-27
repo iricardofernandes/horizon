@@ -482,7 +482,8 @@
       "purchasing": "Compras",
       "registrations": "Cadastros",
       "sales": "Vendas",
-      "fiscal": "Fiscal"
+      "fiscal": "Fiscal",
+      "crm": "CRM"
     },
     "items": {
       "apiKeys": "Chaves de API",
@@ -520,7 +521,12 @@
       "fiscalServiceProfiles": "Perfis de serviço",
       "serviceOrders": "Ordens de serviço",
       "contracts": "Contratos",
-      "contractBilling": "Faturamento de contratos"
+      "contractBilling": "Faturamento de contratos",
+      "pipeline": "Funil de vendas",
+      "accounts": "Contas",
+      "agenda": "Minha agenda",
+      "forecast": "Previsão e métricas",
+      "crmSettings": "Configurações do CRM"
     }
   },
   "orders": {
@@ -2140,6 +2146,311 @@
       "noContracts": "Nenhum contrato.",
       "goOrders": "Ir para ordens de serviço",
       "goContracts": "Ir para contratos"
+    }
+  },
+  "crm": {
+    "eyebrow": "CRM",
+    "unknownAccount": "Conta desconhecida",
+    "noOwner": "Sem responsável",
+    "system": "Automático",
+    "pipeline": {
+      "title": "Funil de vendas",
+      "copy": "Oportunidades etapa por etapa. Arraste um card para outra etapa, ou selecione-o e use as setas do teclado.",
+      "none": "Ainda não há funil. Um gerente cria um nas configurações do CRM.",
+      "choose": "Funil",
+      "view": "Visualização",
+      "mode": {
+        "board": "Quadro",
+        "table": "Tabela"
+      },
+      "moveFailed": "Não foi possível mover a oportunidade.",
+      "moved": "{title} movida para {stage}.",
+      "keyboardHint": "Com um card selecionado, as setas para a direita e para a esquerda o levam à próxima etapa ou à anterior.",
+      "archivedStage": "arquivada",
+      "probability": "{percent}% de chance",
+      "columnEmpty": "Nenhuma oportunidade aberta aqui.",
+      "open": "Abrir oportunidade {title}"
+    },
+    "table": {
+      "status": "Situação",
+      "empty": "Nenhuma oportunidade encontrada.",
+      "title": "Título",
+      "account": "Conta",
+      "stage": "Etapa",
+      "value": "Valor",
+      "closeOn": "Fechamento previsto",
+      "owner": "Responsável"
+    },
+    "opportunityStatus": {
+      "all": "Todas",
+      "open": "aberta",
+      "won": "ganha",
+      "lost": "perdida"
+    },
+    "timeline": {
+      "title": "Linha do tempo",
+      "empty": "Nada registrado ainda.",
+      "erasedText": "Texto apagado",
+      "task": "Tarefa",
+      "note": "Nota",
+      "revisions": "{count} revisões"
+    },
+    "activityKind": {
+      "call": "Ligação",
+      "meeting": "Reunião",
+      "email": "E-mail",
+      "visit": "Visita"
+    },
+    "taskStatus": {
+      "open": "aberta",
+      "completed": "concluída",
+      "cancelled": "cancelada"
+    },
+    "fact": {
+      "created": "Oportunidade aberta",
+      "revised": "Condições revisadas",
+      "stage-changed": "Mudou de etapa",
+      "owner-changed": "Responsável alterado",
+      "won": "Ganha",
+      "lost": "Perdida",
+      "reopened": "Reaberta",
+      "converted": "Convertida por orçamento aceito"
+    },
+    "records": {
+      "heading": "Registrar",
+      "sections": "Tipos de registro",
+      "activity": "Atividade",
+      "task": "Tarefa",
+      "note": "Nota",
+      "failed": "Não foi possível registrar.",
+      "activityRecorded": "Atividade registrada.",
+      "kind": "Tipo",
+      "occurredAt": "Quando aconteceu",
+      "title": "Título",
+      "summary": "Resumo",
+      "participants": "Quem participou",
+      "recordActivity": "Registrar atividade",
+      "taskCreated": "Tarefa criada.",
+      "dueAt": "Prazo",
+      "remindAt": "Lembrar em",
+      "assignee": "Responsável",
+      "createTask": "Criar tarefa",
+      "noteWritten": "Nota registrada.",
+      "noteBody": "Nota",
+      "writeNote": "Registrar nota"
+    },
+    "convert": {
+      "title": "Converter {title} em orçamento",
+      "description": "A conta vira cliente se ainda for prospect, o Sales recebe um momento para listá-la e o orçamento é criado para esta oportunidade. O Sales usa o responsável e a origem da oportunidade.",
+      "steps": "Etapas da conversão",
+      "step": {
+        "customer": "Cliente no cadastro",
+        "sales": "Cliente no Sales",
+        "quote": "Orçamento criado"
+      },
+      "state": {
+        "waiting": "aguardando",
+        "running": "em andamento",
+        "done": "concluído",
+        "failed": "falhou"
+      },
+      "grantFailed": "O cadastro não tornou a conta cliente.",
+      "salesTimeout": "O Sales ainda não lista o cliente. Tente de novo em instantes.",
+      "quoteFailed": "O Sales não criou o orçamento.",
+      "done": "Orçamento criado para a oportunidade.",
+      "openQuote": "Abrir o orçamento",
+      "itemsUnavailable": "Não foi possível ler o catálogo, então nenhum item pode ser escolhido.",
+      "openParty": "Completar o cadastro em Cadastros",
+      "retry": "Tentar de novo",
+      "submit": "Converter em orçamento"
+    },
+    "opportunity": {
+      "unavailable": "Não foi possível ler esta oportunidade.",
+      "closedOn": "Fechada em",
+      "source": "Origem",
+      "noSource": "Sem origem",
+      "lossReason": "Motivo de perda",
+      "converted": "Ganha pelo orçamento aceito {quote}.",
+      "openQuote": "Abrir o orçamento",
+      "quotes": "Orçamentos",
+      "failed": "A oportunidade recusou esta mudança.",
+      "actions": "Ações",
+      "moveTo": "Mover para",
+      "move": "Mover",
+      "reassignTo": "Novo responsável",
+      "reassign": "Transferir",
+      "lossNote": "Observação da perda",
+      "lose": "Marcar como perdida",
+      "win": "Marcar como ganha",
+      "convert": "Converter em orçamento",
+      "convertedFinal": "Uma oportunidade ganha por orçamento aceito não é reaberta; abra uma nova para dar sequência.",
+      "reopenIn": "Reabrir em",
+      "reopen": "Reabrir"
+    },
+    "quoteStatus": {
+      "sent": "enviado",
+      "accepted": "aceito",
+      "rejected": "recusado"
+    },
+    "newOpportunity": {
+      "open": "Nova oportunidade",
+      "title": "Nova oportunidade",
+      "description": "Aberta em {pipeline}.",
+      "amount": "Valor esperado",
+      "currency": "Moeda",
+      "submit": "Abrir oportunidade",
+      "invalidAmount": "Informe o valor com até duas casas decimais.",
+      "failed": "Não foi possível abrir a oportunidade.",
+      "created": "Oportunidade aberta."
+    },
+    "accounts": {
+      "title": "Contas",
+      "copy": "Prospects, clientes e parceiros, vindos do cadastro de parties, com as pessoas com quem o CRM fala em cada um.",
+      "search": "Buscar pelo nome",
+      "role": "Papel",
+      "allRoles": "Todos os papéis",
+      "empty": "Nenhuma conta encontrada.",
+      "name": "Nome",
+      "roles": "Papéis",
+      "document": "Documento",
+      "segment": "Segmento",
+      "open": "Abrir conta {name}",
+      "newProspect": "Novo prospect",
+      "newProspectDescription": "Um prospect precisa só do nome. Ele é registrado no Parties e aparece aqui em instantes.",
+      "registerFailed": "Não foi possível registrar o prospect.",
+      "registered": "Prospect registrado.",
+      "register": "Registrar prospect",
+      "unavailable": "Não foi possível ler esta conta.",
+      "profileFailed": "Não foi possível salvar o perfil.",
+      "profileSaved": "Perfil salvo.",
+      "profile": "Perfil",
+      "tags": "Etiquetas (separadas por vírgula)",
+      "saveProfile": "Salvar perfil",
+      "opportunities": "Oportunidades",
+      "noOpportunities": "Nenhuma oportunidade para esta conta ainda."
+    },
+    "documentType": {
+      "cpf": "CPF",
+      "cnpj": "CNPJ",
+      "foreign": "Estrangeiro",
+      "none": "Sem documento"
+    },
+    "accountStatus": {
+      "active": "ativa",
+      "inactive": "inativa",
+      "erased": "apagada"
+    },
+    "contacts": {
+      "title": "Contatos",
+      "empty": "Nenhum contato ainda.",
+      "erased": "Contato apagado",
+      "name": "Nome",
+      "jobTitle": "Cargo",
+      "email": "E-mail",
+      "phone": "Telefone",
+      "lawfulBasis": "Base legal",
+      "add": "Adicionar contato",
+      "failed": "Não foi possível adicionar o contato.",
+      "created": "Contato adicionado."
+    },
+    "contactStatus": {
+      "active": "ativo",
+      "inactive": "inativo",
+      "erased": "apagado"
+    },
+    "lawfulBasis": {
+      "contract": "Contrato",
+      "legitimate-interest": "Legítimo interesse",
+      "consent": "Consentimento"
+    },
+    "agenda": {
+      "title": "Minha agenda",
+      "copy": "Suas tarefas abertas, as atrasadas primeiro.",
+      "horizon": "Com prazo em até",
+      "horizons": {
+        "day": "24 horas",
+        "week": "7 dias",
+        "month": "30 dias"
+      },
+      "failed": "Não foi possível encerrar a tarefa.",
+      "completed": "Tarefa concluída.",
+      "cancelled": "Tarefa cancelada.",
+      "empty": "Nada com prazo neste período.",
+      "task": "Tarefa",
+      "due": "Prazo",
+      "reminder": "Lembrete",
+      "overdue": "atrasada",
+      "completeTask": "Concluir {title}",
+      "complete": "Concluir",
+      "cancel": "Cancelar tarefa"
+    },
+    "forecast": {
+      "title": "Previsão e métricas",
+      "copy": "O que o funil deve fechar e como ele converte, num instante de corte.",
+      "cutoff": "Corte",
+      "groupBy": "Agrupar a previsão por",
+      "by": {
+        "pipeline": "Funil",
+        "owner": "Responsável",
+        "source": "Origem"
+      },
+      "metricsPipeline": "Métricas de",
+      "apply": "Atualizar",
+      "asOf": "Posição em {cutoff}.",
+      "settled": "fechado",
+      "provisional": "ainda pode mudar",
+      "forecast": "Previsão",
+      "empty": "Nada aberto ou ganho neste corte.",
+      "month": "Mês",
+      "open": "Aberto",
+      "weighted": "Ponderado",
+      "won": "Ganho",
+      "metrics": "Métricas do funil",
+      "winRate": "Taxa de ganho",
+      "decided": "{won} ganhas, {lost} perdidas",
+      "noMetrics": "Nenhuma etapa foi visitada ainda.",
+      "entered": "Entraram",
+      "current": "Agora",
+      "moved": "Avançaram",
+      "wonExit": "Ganhas",
+      "lostExit": "Perdidas",
+      "averageTime": "Tempo médio",
+      "medianTime": "Tempo mediano",
+      "conversions": "Etapa para etapa",
+      "noConversions": "Nenhuma mudança de etapa ainda.",
+      "lossReasons": "Motivos de perda",
+      "noLosses": "Nenhuma perda.",
+      "duration": {
+        "days": "{value} dias",
+        "hours": "{value} horas",
+        "minutes": "{value} minutos"
+      },
+      "cutoffHelp": "Deixe em branco para usar agora."
+    },
+    "settings": {
+      "title": "Configurações do CRM",
+      "copy": "Funis e suas etapas, origens e motivos de perda. Nada é apagado: o que está em uso é arquivado e mantém sua história.",
+      "readOnly": "Só um gerente ou administrador do CRM muda estas configurações.",
+      "failed": "A mudança foi recusada.",
+      "saved": "Salvo.",
+      "pipelines": "Funis",
+      "pipelineName": "Nome do funil",
+      "firstStage": "Primeira etapa",
+      "probability": "Probabilidade de ganho (%)",
+      "createPipeline": "Criar funil",
+      "archived": "arquivado",
+      "restore": "Restaurar",
+      "archive": "Arquivar",
+      "stageName": "Etapa",
+      "addStage": "Adicionar etapa",
+      "save": "Salvar",
+      "moveUp": "Subir {stage}",
+      "moveDown": "Descer {stage}",
+      "sources": "Origens",
+      "loss-reasons": "Motivos de perda",
+      "entryName": "Nome",
+      "addEntry": "Adicionar",
+      "noEntries": "Nada aqui ainda."
     }
   }
 }

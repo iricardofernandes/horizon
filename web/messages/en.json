@@ -482,7 +482,8 @@
       "purchasing": "Purchasing",
       "registrations": "Registrations",
       "sales": "Sales",
-      "fiscal": "Fiscal"
+      "fiscal": "Fiscal",
+      "crm": "CRM"
     },
     "items": {
       "apiKeys": "API keys",
@@ -520,7 +521,12 @@
       "fiscalServiceProfiles": "Service profiles",
       "serviceOrders": "Service orders",
       "contracts": "Contracts",
-      "contractBilling": "Contract billing"
+      "contractBilling": "Contract billing",
+      "pipeline": "Pipeline",
+      "accounts": "Accounts",
+      "agenda": "My agenda",
+      "forecast": "Forecast and metrics",
+      "crmSettings": "CRM settings"
     }
   },
   "orders": {
@@ -2140,6 +2146,311 @@
       "noContracts": "No contract.",
       "goOrders": "Go to service orders",
       "goContracts": "Go to contracts"
+    }
+  },
+  "crm": {
+    "eyebrow": "CRM",
+    "unknownAccount": "Unknown account",
+    "noOwner": "No owner",
+    "system": "Automatic",
+    "pipeline": {
+      "title": "Pipeline",
+      "copy": "Opportunities stage by stage. Drag a card to another stage, or focus it and use the arrow keys.",
+      "none": "There is no pipeline yet. A manager creates one in CRM settings.",
+      "choose": "Pipeline",
+      "view": "View",
+      "mode": {
+        "board": "Board",
+        "table": "Table"
+      },
+      "moveFailed": "The opportunity could not be moved.",
+      "moved": "{title} moved to {stage}.",
+      "keyboardHint": "On a focused card, the right and left arrow keys move it to the next or previous stage.",
+      "archivedStage": "archived",
+      "probability": "{percent}% chance",
+      "columnEmpty": "No open opportunity here.",
+      "open": "Open opportunity {title}"
+    },
+    "table": {
+      "status": "Status",
+      "empty": "No opportunity matches.",
+      "title": "Title",
+      "account": "Account",
+      "stage": "Stage",
+      "value": "Value",
+      "closeOn": "Expected close",
+      "owner": "Owner"
+    },
+    "opportunityStatus": {
+      "all": "All",
+      "open": "open",
+      "won": "won",
+      "lost": "lost"
+    },
+    "timeline": {
+      "title": "Timeline",
+      "empty": "Nothing recorded yet.",
+      "erasedText": "Erased text",
+      "task": "Task",
+      "note": "Note",
+      "revisions": "{count} revisions"
+    },
+    "activityKind": {
+      "call": "Call",
+      "meeting": "Meeting",
+      "email": "Email",
+      "visit": "Visit"
+    },
+    "taskStatus": {
+      "open": "open",
+      "completed": "completed",
+      "cancelled": "cancelled"
+    },
+    "fact": {
+      "created": "Opportunity opened",
+      "revised": "Terms revised",
+      "stage-changed": "Moved to another stage",
+      "owner-changed": "Owner changed",
+      "won": "Won",
+      "lost": "Lost",
+      "reopened": "Reopened",
+      "converted": "Converted into an accepted quote"
+    },
+    "records": {
+      "heading": "Record",
+      "sections": "Record types",
+      "activity": "Activity",
+      "task": "Task",
+      "note": "Note",
+      "failed": "It could not be recorded.",
+      "activityRecorded": "Activity recorded.",
+      "kind": "Kind",
+      "occurredAt": "When it happened",
+      "title": "Title",
+      "summary": "Summary",
+      "participants": "Who took part",
+      "recordActivity": "Record activity",
+      "taskCreated": "Task created.",
+      "dueAt": "Due",
+      "remindAt": "Remind me at",
+      "assignee": "Assigned to",
+      "createTask": "Create task",
+      "noteWritten": "Note written.",
+      "noteBody": "Note",
+      "writeNote": "Write note"
+    },
+    "convert": {
+      "title": "Convert {title} into a quote",
+      "description": "The account becomes a customer if it is still a prospect, Sales is given a moment to list it, and the quote is written for this opportunity. Sales takes the owner and the source from the opportunity.",
+      "steps": "Conversion steps",
+      "step": {
+        "customer": "Customer in the registry",
+        "sales": "Customer in Sales",
+        "quote": "Quote written"
+      },
+      "state": {
+        "waiting": "waiting",
+        "running": "in progress",
+        "done": "done",
+        "failed": "failed"
+      },
+      "grantFailed": "The registry did not make the account a customer.",
+      "salesTimeout": "Sales does not list the customer yet. Try again in a moment.",
+      "quoteFailed": "Sales did not write the quote.",
+      "done": "Quote written for the opportunity.",
+      "openQuote": "Open the quote",
+      "itemsUnavailable": "The catalogue could not be read, so no line can be chosen.",
+      "openParty": "Complete the party in Registrations",
+      "retry": "Try again",
+      "submit": "Convert into a quote"
+    },
+    "opportunity": {
+      "unavailable": "This opportunity could not be read.",
+      "closedOn": "Closed on",
+      "source": "Source",
+      "noSource": "No source",
+      "lossReason": "Loss reason",
+      "converted": "Won by the accepted quote {quote}.",
+      "openQuote": "Open the quote",
+      "quotes": "Quotes",
+      "failed": "The opportunity did not accept this change.",
+      "actions": "Actions",
+      "moveTo": "Move to",
+      "move": "Move",
+      "reassignTo": "New owner",
+      "reassign": "Reassign",
+      "lossNote": "Loss note",
+      "lose": "Mark as lost",
+      "win": "Mark as won",
+      "convert": "Convert into a quote",
+      "convertedFinal": "An opportunity won by an accepted quote is not reopened; open a new one to follow up.",
+      "reopenIn": "Reopen in",
+      "reopen": "Reopen"
+    },
+    "quoteStatus": {
+      "sent": "sent",
+      "accepted": "accepted",
+      "rejected": "rejected"
+    },
+    "newOpportunity": {
+      "open": "New opportunity",
+      "title": "New opportunity",
+      "description": "Opened in {pipeline}.",
+      "amount": "Expected value",
+      "currency": "Currency",
+      "submit": "Open opportunity",
+      "invalidAmount": "Enter the value with up to two decimals.",
+      "failed": "The opportunity could not be opened.",
+      "created": "Opportunity opened."
+    },
+    "accounts": {
+      "title": "Accounts",
+      "copy": "Prospects, customers and partners, from the party registry, with the people CRM talks to there.",
+      "search": "Search by name",
+      "role": "Role",
+      "allRoles": "All roles",
+      "empty": "No account matches.",
+      "name": "Name",
+      "roles": "Roles",
+      "document": "Document",
+      "segment": "Segment",
+      "open": "Open account {name}",
+      "newProspect": "New prospect",
+      "newProspectDescription": "A prospect needs only a name. It is registered in Parties and appears here in a moment.",
+      "registerFailed": "The prospect could not be registered.",
+      "registered": "Prospect registered.",
+      "register": "Register prospect",
+      "unavailable": "This account could not be read.",
+      "profileFailed": "The profile could not be saved.",
+      "profileSaved": "Profile saved.",
+      "profile": "Profile",
+      "tags": "Tags (separated by commas)",
+      "saveProfile": "Save profile",
+      "opportunities": "Opportunities",
+      "noOpportunities": "No opportunity for this account yet."
+    },
+    "documentType": {
+      "cpf": "CPF",
+      "cnpj": "CNPJ",
+      "foreign": "Foreign",
+      "none": "No document"
+    },
+    "accountStatus": {
+      "active": "active",
+      "inactive": "inactive",
+      "erased": "erased"
+    },
+    "contacts": {
+      "title": "Contacts",
+      "empty": "No contact yet.",
+      "erased": "Erased contact",
+      "name": "Name",
+      "jobTitle": "Job title",
+      "email": "Email",
+      "phone": "Phone",
+      "lawfulBasis": "Lawful basis",
+      "add": "Add contact",
+      "failed": "The contact could not be added.",
+      "created": "Contact added."
+    },
+    "contactStatus": {
+      "active": "active",
+      "inactive": "inactive",
+      "erased": "erased"
+    },
+    "lawfulBasis": {
+      "contract": "Contract",
+      "legitimate-interest": "Legitimate interest",
+      "consent": "Consent"
+    },
+    "agenda": {
+      "title": "My agenda",
+      "copy": "Your open tasks, overdue ones first.",
+      "horizon": "Due within",
+      "horizons": {
+        "day": "24 hours",
+        "week": "7 days",
+        "month": "30 days"
+      },
+      "failed": "The task could not be closed.",
+      "completed": "Task completed.",
+      "cancelled": "Task cancelled.",
+      "empty": "Nothing due in this period.",
+      "task": "Task",
+      "due": "Due",
+      "reminder": "Reminder",
+      "overdue": "overdue",
+      "completeTask": "Complete {title}",
+      "complete": "Complete",
+      "cancel": "Cancel task"
+    },
+    "forecast": {
+      "title": "Forecast and metrics",
+      "copy": "What the pipeline is expected to close, and how it converts, as of a cutoff.",
+      "cutoff": "Cutoff",
+      "groupBy": "Group forecast by",
+      "by": {
+        "pipeline": "Pipeline",
+        "owner": "Owner",
+        "source": "Source"
+      },
+      "metricsPipeline": "Metrics for",
+      "apply": "Update",
+      "asOf": "As of {cutoff}.",
+      "settled": "settled",
+      "provisional": "may still change",
+      "forecast": "Forecast",
+      "empty": "Nothing open or won as of this cutoff.",
+      "month": "Month",
+      "open": "Open",
+      "weighted": "Weighted",
+      "won": "Won",
+      "metrics": "Pipeline metrics",
+      "winRate": "Win rate",
+      "decided": "{won} won, {lost} lost",
+      "noMetrics": "No stage has been visited yet.",
+      "entered": "Entered",
+      "current": "Now",
+      "moved": "Moved on",
+      "wonExit": "Won",
+      "lostExit": "Lost",
+      "averageTime": "Average time",
+      "medianTime": "Median time",
+      "conversions": "Stage to stage",
+      "noConversions": "No move between stages yet.",
+      "lossReasons": "Loss reasons",
+      "noLosses": "No loss.",
+      "duration": {
+        "days": "{value} days",
+        "hours": "{value} hours",
+        "minutes": "{value} minutes"
+      },
+      "cutoffHelp": "Leave it empty for now."
+    },
+    "settings": {
+      "title": "CRM settings",
+      "copy": "Pipelines and their stages, sources and loss reasons. Nothing is deleted: what is in use is archived and keeps its history.",
+      "readOnly": "Only a CRM manager or administrator changes these settings.",
+      "failed": "The change was refused.",
+      "saved": "Saved.",
+      "pipelines": "Pipelines",
+      "pipelineName": "Pipeline name",
+      "firstStage": "First stage",
+      "probability": "Win probability (%)",
+      "createPipeline": "Create pipeline",
+      "archived": "archived",
+      "restore": "Restore",
+      "archive": "Archive",
+      "stageName": "Stage",
+      "addStage": "Add stage",
+      "save": "Save",
+      "moveUp": "Move {stage} up",
+      "moveDown": "Move {stage} down",
+      "sources": "Sources",
+      "loss-reasons": "Loss reasons",
+      "entryName": "Name",
+      "addEntry": "Add",
+      "noEntries": "Nothing here yet."
     }
   }
 }

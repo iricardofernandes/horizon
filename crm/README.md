@@ -7,9 +7,11 @@ An independently deployable NestJS service with its own database, its own contai
 its own lifecycle. It is reached through Kong at `/crm`, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 59 — accounts, contacts, owners, pipelines, opportunities, activities,
-tasks, notes, reminders, the conversion to a Sales quote, and the forecast and pipeline
-metrics.** The screens arrive in phase 60 ([CRM plan](../docs/crm-implementation-plan.md)).
+**Status: Phase L closed (phases 54 to 60).** Accounts, contacts, owners, pipelines,
+opportunities, activities, tasks, notes, reminders, the conversion to a Sales quote, and
+the forecast and pipeline metrics, with their screens in `web/` under `/app/crm/`.
+See the [CRM plan](../docs/crm-implementation-plan.md), the
+[API reference](../docs/crm-api.md) and the [threat model](../docs/crm-threat-model.md).
 
 ---
 

@@ -1,12 +1,13 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Board, BoardCard } from '@/components/ui/board'
 import { Button } from '@/components/ui/button'
 import { short } from '@/lib/format'
 import { useStatusLabel } from '@/lib/status'
+import { useUrlParam } from '@/lib/url-param'
 import { useDate, useMoney } from '@/lib/use-format'
 import { NewQuoteDialog } from './new-quote-dialog'
 import { PickDialog } from './pick-dialog'
@@ -49,6 +50,13 @@ export function SalesView({
   const t = useTranslations('sales')
   const [quote, setQuote] = useState<Quote | null>(null)
   const [shipment, setShipment] = useState<Shipment | null>(null)
+  // A link from another screen (CRM's conversion, Phase 60) opens the quote it names.
+  const openParam = useUrlParam('open')
+  useEffect(() => {
+    if (screen !== 'quotes' || !openParam) return
+    const named = data.quotes.find((row) => row.id === openParam)
+    if (named) setQuote(named)
+  }, [data.quotes, openParam, screen])
   const waiting = awaitingApproval(data.quotes, abilities.userId)
 
   return (

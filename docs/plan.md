@@ -2498,9 +2498,19 @@ declared cutoff.
 
 ## Phase 60 — CRM screens, golden path and release evidence
 
-**Planned.** Kanban and table pipeline, accounts and contacts, agenda and forecast in pt-BR
-and en, the CRM golden path, browser workflow and restore check. Phase L closes here.
-[Detailed work](crm-implementation-plan.md#60--crm-screens-golden-path-and-release-evidence).
+**Delivered on 2026-09-27. Phase L is closed.** The CRM screens run in pt-BR and en:
+- the pipeline board (drag or arrow keys) and table;
+- accounts and contacts, and the opportunity with its timeline and "convert to quote";
+- my agenda, forecast and metrics, and settings.
+
+Also delivered:
+- the CRM golden path through Kong (a foreign prospect and one without a document, to an
+  accepted quote with the attribution kept and a metrics rebuild);
+- the browser workflow and the restore check;
+- the threat model and the API reference.
+
+[Evidence](crm-phase60-evidence.md).
+[Detailed plan](crm-phase60-implementation-plan.md). [Detailed work](crm-implementation-plan.md#60--crm-screens-golden-path-and-release-evidence).
 
 ---
 

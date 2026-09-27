@@ -650,6 +650,9 @@ Split into phases 49–53: [services implementation plan](services-implementatio
 ### Phase L — CRM
 
 Split into phases 54–60: [CRM implementation plan](crm-implementation-plan.md).
+**Closed on 2026-09-27.** Both exit criteria are proven by the Phase 60 golden path, the
+browser workflow and the Phase 58–59 suites: see the
+[Phase 60 evidence](crm-phase60-evidence.md).
 
 **Deliverables**
 
@@ -786,3 +789,4 @@ The first executable backlog, in order, is:
 **Status:** items 1 to 12 are delivered as plan phases 14 to 21, Phase F as plan phases 22
 to 25, Phase G as 26 to 28, Phase H as 29 to 31 and Phase I as 32 to 38. Phase J is
 planned as phases 39 to 48 in the [fiscal implementation plan](fiscal-implementation-plan.md).
+Phase K is delivered as phases 49 to 53 and Phase L as phases 54 to 60.

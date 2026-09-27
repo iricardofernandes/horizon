@@ -1,6 +1,6 @@
 # CRM implementation plan — Phase L
 
-Status: **in progress** — Phases 54 to 59 delivered on 2026-09-27. This is the execution plan for Phase L of the
+Status: **closed on 2026-09-27** — Phases 54 to 60 delivered ([closing evidence](crm-phase60-evidence.md)). This is the execution plan for Phase L of the
 [ERP expansion plan](erp-expansion-plan.md#phase-l--crm), split into phases 54–60 of
 [plan.md](plan.md). Each numbered phase gets its own detailed plan before implementation,
 one local commit and an evidence record, as in Phases J and K.
@@ -251,6 +251,9 @@ Gaps:
 - A back-dated or replayed event cannot change a closed cutoff.
 
 ### 60 — CRM screens, golden path and release evidence
+
+[Detailed Phase 60 plan](crm-phase60-implementation-plan.md) ·
+[evidence](crm-phase60-evidence.md).
 
 **Work**
 1. Screens in pt-BR and en:
