@@ -114,3 +114,36 @@ export const serviceDeliveryLines = pgTable(
   },
   (table) => [primaryKey({ columns: [table.tenantId, table.entryId] })],
 )
+
+/** The receivable a delivery raised, as Financial reported it (Phase 53). */
+export const serviceDeliveryEffects = pgTable(
+  'service_delivery_effects',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    deliveryId: uuid('delivery_id').notNull(),
+    receivableTitleId: uuid('receivable_title_id').notNull(),
+    receivablePostedAt: timestamp('receivable_posted_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    receivableReversedAt: timestamp('receivable_reversed_at', { withTimezone: true, mode: 'date' }),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.deliveryId] })],
+)
+
+/** The NFS-e of one delivered line, as Fiscal reported it (Phase 53). */
+export const serviceDeliveryLineNfse = pgTable(
+  'service_delivery_line_nfse',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    entryId: uuid('entry_id').notNull(),
+    documentId: uuid('document_id').notNull(),
+    status: text('status').notNull(),
+    observedAt: timestamp('observed_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.entryId] })],
+)

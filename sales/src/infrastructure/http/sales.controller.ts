@@ -389,12 +389,34 @@ export class SalesController {
   @Get('service-orders/:id')
   @RequireSalesAction('read')
   async serviceOrder(@Param('id') id: string, @Req() request: SalesRequest) {
-    const order = await this.runtime.database.findServiceOrderSnapshot(
+    const found = await this.runtime.database.findServiceOrderWithEffects(
       tenantOf(request),
       uuidOf(id, 'service order'),
     )
-    if (!order) throw new NotFoundException('Service order was not found')
-    return order
+    if (!found) throw new NotFoundException('Service order was not found')
+    const { order, effects } = found
+    // What each delivery raised, as Financial and Fiscal reported it (Phase 53).
+    return {
+      ...order,
+      deliveries: order.deliveries.map((delivery) => {
+        const receivable = effects.receivables.get(delivery.id)
+        return {
+          ...delivery,
+          receivable: {
+            titleId: receivable?.receivableTitleId ?? null,
+            postedAt: receivable?.receivablePostedAt ?? null,
+            reversedAt: receivable?.receivableReversedAt ?? null,
+          },
+          entries: delivery.entries.map((entry) => {
+            const nfse = effects.nfse.get(entry.entryId)
+            return {
+              ...entry,
+              nfse: { documentId: nfse?.documentId ?? null, status: nfse?.status ?? null },
+            }
+          }),
+        }
+      }),
+    }
   }
 
   /** Services sold directly, without a proposal (ADR 0056). */

@@ -50,6 +50,7 @@ import {
   billedEffectsRepository,
   billingGaps,
   billingRunsRepository,
+  deliveryEffectsOf,
   findRun,
   listRuns,
 } from './contract-billing-store'
@@ -331,6 +332,20 @@ export class SalesDatabase extends SalesUnitOfWork {
 
   async listServiceOrderSnapshots(tenantId: string) {
     return this.inTenant(tenantId, () => listServiceOrderSnapshots(this.currentTransaction()))
+  }
+
+  /** A service order with what each of its deliveries raised downstream (Phase 53). */
+  async findServiceOrderWithEffects(tenantId: string, serviceOrderId: string) {
+    return this.inTenant(tenantId, async () => {
+      const tx = this.currentTransaction()
+      const order = await findServiceOrderSnapshot(tx, serviceOrderId)
+      if (!order) return null
+      const effects = await deliveryEffectsOf(
+        tx,
+        order.deliveries.map((delivery) => delivery.id),
+      )
+      return { order, effects }
+    })
   }
 
   async findServiceOrderSnapshot(tenantId: string, serviceOrderId: string) {

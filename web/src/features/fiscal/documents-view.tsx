@@ -3,13 +3,14 @@
 import { Eye } from '@phosphor-icons/react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeading, PanelHeading } from '@/components/ui/headings'
 import { SelectField } from '@/components/ui/select-field'
 import { Empty, LoadingState, Notice } from '@/components/ui/state'
 import { readJson, SessionExpiredError } from '@/lib/api'
+import { useUrlParam } from '@/lib/url-param'
 import { useDateTime } from '@/lib/use-format'
 import { DocumentDialog } from './document-dialog'
 import { SimulationLabel } from './simulation-label'
@@ -40,6 +41,24 @@ export function DocumentsView() {
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState<DocumentSummary | null>(null)
+  // A link from another screen names the document to open (Phase 53).
+  const openParam = useUrlParam('open')
+  const linked = useRef(false)
+  useEffect(() => {
+    if (linked.current || !openParam) return
+    linked.current = true
+    const found = rows.find((row) => row.id === openParam)
+    if (found) {
+      setOpen(found)
+      return
+    }
+    void readJson<DocumentPage>('fiscal.documents.find', `${FISCAL_API}/documents?limit=100`)
+      .then((page) => {
+        const match = page.data.find((row) => row.id === openParam)
+        if (match) setOpen(match)
+      })
+      .catch(() => undefined)
+  }, [openParam, rows])
 
   const load = useCallback(
     async (after?: string) => {

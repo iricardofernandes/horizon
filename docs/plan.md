@@ -2402,9 +2402,20 @@ billed line, however often a month is re-run or its events replayed.
 
 ## Phase 53 — Service screens, golden path and release evidence
 
-**Planned.** Screens for service orders, contracts and billing runs in pt-BR and en, the
-services golden path, browser workflow, restore check and runbook. Phase K closes here.
-[Detailed work](services-implementation-plan.md#53--service-screens-golden-path-and-release-evidence).
+**Delivered on 2026-09-27; Phase K is closed** (the NFS-e is issued in simulation).
+- **Screens, in pt-BR and en:** service orders, contracts and contract billing, and each
+  customer's services.
+- **Effects:** every delivery and billed period shows its receivable and NFS-e, with links
+  that open the title and the document.
+- **Evidence on the local stack:**
+  - a golden path: proposal → service order → delivery → receivable and NFS-e, then
+    contract → two billed months → amendment → re-run with no duplicate → credit;
+  - a browser workflow;
+  - a restore check of the service data and its guards.
+- **Documentation:** the runbook, a threat model and an API reference.
+
+[Evidence](services-phase53-evidence.md).
+[Detailed plan](services-phase53-implementation-plan.md). [Detailed work](services-implementation-plan.md#53--service-screens-golden-path-and-release-evidence).
 
 ---
 

@@ -2,7 +2,8 @@
 
 - Status: accepted; Phase 49 implements the service lines and the goods-only sales order,
   Phase 50 the service order, its deliveries and their receivable and NFS-e, Phase 51
-  recurring contracts, Phase 52 period billing, billing runs and credits
+  recurring contracts, Phase 52 period billing, billing runs and credits, Phase 53 the
+  screens and release evidence (Phase K closed)
 - Date: 2026-09-26
 
 ## Context
@@ -105,3 +106,7 @@ person can act on.
   - Sales follows both effects through their owners' events, so it can report billed
     periods left without a receivable or an NFS-e without calling either module.
   - Substitution (105102) stays out: a credit leaves nothing to substitute with.
+- **Phase 53: screens and closing.**
+  - Deliveries get their effects the way billed periods do: Sales follows the receivable
+    and the NFS-e into tables of their own.
+  - The screens read only Sales, and link to the Financial title and the Fiscal document.

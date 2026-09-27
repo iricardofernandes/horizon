@@ -631,6 +631,9 @@ per-phase deliverables, dependencies, evidence gates and an official-source regi
 ### Phase K — services and recurring contracts
 
 Split into phases 49–53: [services implementation plan](services-implementation-plan.md).
+**Closed on 2026-09-27** (NFS-e in simulation). Both exit criteria are proven by the Phase
+53 golden path and the Phase 50–52 suites: see the
+[Phase 53 evidence](services-phase53-evidence.md).
 
 **Deliverables**
 

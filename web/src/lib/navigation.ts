@@ -6,6 +6,7 @@ import {
   Books,
   Briefcase,
   Calculator,
+  CalendarCheck,
   ChartBar,
   CheckSquareOffset,
   ClipboardText,
@@ -19,6 +20,7 @@ import {
   Package,
   PaperPlaneTilt,
   Receipt,
+  Repeat,
   SealCheck,
   ShieldCheck,
   ShoppingCart,
@@ -27,6 +29,7 @@ import {
   Van,
   Warehouse,
   WebhooksLogo,
+  Wrench,
 } from '@phosphor-icons/react'
 
 export type RoleAssignment = { module: string; role: string }
@@ -112,6 +115,27 @@ export const navigation: readonly NavigationGroup[] = [
         href: '/app/sales/deliveries',
         labelKey: 'shipments',
         icon: Van,
+        module: 'sales',
+        demo: false,
+      },
+      {
+        href: '/app/sales/service-orders',
+        labelKey: 'serviceOrders',
+        icon: Wrench,
+        module: 'sales',
+        demo: false,
+      },
+      {
+        href: '/app/sales/contracts',
+        labelKey: 'contracts',
+        icon: Repeat,
+        module: 'sales',
+        demo: false,
+      },
+      {
+        href: '/app/sales/billing',
+        labelKey: 'contractBilling',
+        icon: CalendarCheck,
         module: 'sales',
         demo: false,
       },

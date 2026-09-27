@@ -1,8 +1,37 @@
-# Runbook do faturamento de contratos
+# Runbook de serviços e do faturamento de contratos
 
-Operação das rodadas de faturamento de contratos de serviço (fase 52). A
-[fase 53](services-implementation-plan.md#53--service-screens-golden-path-and-release-evidence)
-acrescenta as telas e completa este runbook.
+Operação das ordens de serviço, dos contratos e das rodadas de faturamento (fases 50 a 53,
+[ADR 0056](adr/0056-services-are-delivered-by-service-orders-inside-sales.md)). A
+referência das rotas está em [services-api.md](services-api.md), e os riscos em
+[services-threat-model.md](services-threat-model.md).
+
+## Telas
+
+Todas ficam no grupo Vendas e exigem um papel no Sales. Criar, decidir e faturar pedem
+`admin` ou `representative`; `viewer` só lê.
+
+| Tela | Para quê |
+|---|---|
+| **Ordens de serviço** (`/app/sales/service-orders`) | Quadro por etapa. O detalhe mostra o que foi vendido, entregue e o que falta, e cada entrega com o título e a NFS-e. Abrir, iniciar, registrar entrega, aceitar, cancelar a ordem ou uma entrega. |
+| **Contratos** (`/app/sales/contracts`) | Lista com a situação de hoje. O detalhe tem quatro abas: resumo e decisões, revisões (aditivo e renovação), cronograma (faturar um período devido) e faturados (título, NFS-e e crédito). |
+| **Faturamento de contratos** (`/app/sales/billing`) | Prévia e rodada de um mês, rodadas recentes e os períodos que esperam título ou NFS-e. |
+| **Clientes** → **Serviços** | As ordens de serviço e os contratos de um cliente. |
+
+"Ver no Financeiro" abre o título lançado, ou procura a referência (`SV-…` ou `CT-…`) na
+lista de contas a receber quando ele ainda é rascunho. "Ver documento" abre a NFS-e na tela
+de documentos do Fiscal. Um título de entrega cancelada ou de período creditado que nunca
+foi lançado aparece como "retirado".
+
+## Operação do dia a dia
+
+1. **Serviço avulso:** a proposta aceita vira ordem de serviço (ou a ordem é aberta direto).
+   Registre cada entrega no dia em que o trabalho foi feito. O cliente aceita no fim.
+2. **Contrato:** crie o rascunho, confira o cronograma e ative. Mudanças valem a partir de
+   um período futuro ainda não faturado.
+3. **Todo mês:** abra "Faturamento de contratos", veja a prévia do mês e fature. Resolva as
+   recusas (abaixo) e fature de novo: o que já foi faturado aparece como pulado.
+4. **Semanalmente:** confira os períodos esperando título ou NFS-e. Na política `review`,
+   as NFS-e esperam alguém validar e emitir na lista do Fiscal.
 
 ## Onde olhar primeiro
 
@@ -81,3 +110,20 @@ Financeiro, o título é retirado (rascunho), estornado (lançado sem baixa) ou 
 (com baixa). No Fiscal, a NFS-e é cancelada pelo evento 101101, com motivo 2 ou 1. Fora do
 prazo municipal, segue o
 [FiscalServiceCancellationRefused](fiscal-operations-runbook.md#fiscalservicecancellationrefused).
+
+## Evidências e restauração
+
+- `node scripts/phase53-golden-path.mjs` percorre os dois fluxos pela API:
+  - proposta → ordem de serviço → entrega → título e NFS-e;
+  - contrato → dois meses faturados → aditivo → rodada repetida sem duplicar → crédito.
+- `node web/scripts/services-workflow.e2e.mjs` faz o mesmo pelas telas, em pt-BR e en.
+- `scripts/phase53-restore-check.sh [tenant]` restaura um dump do `horizon_sales` num
+  PostgreSQL novo. Ele compara o digest de cada tabela de serviço do tenant, vivo contra
+  restaurado, e confirma que as guardas continuam valendo:
+  - período, linha, entrega e item de rodada recusam reescrita;
+  - revisões só aceitam inclusão;
+  - outro tenant não vê nada.
+
+  Os efeitos que o Sales acompanha (título lançado e NFS-e) são projeções. Se o backup do
+  Sales for mais antigo que o do Financeiro ou o do Fiscal, republicar os eventos dos
+  donos os reconstrói.

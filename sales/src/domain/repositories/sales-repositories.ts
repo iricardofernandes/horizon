@@ -65,10 +65,21 @@ export abstract class BillingRunsRepository {
   abstract complete(runId: string, at: Date): Promise<boolean>
 }
 
-/** What the owners did with a billed period, followed from their events (Phase 52). */
+/**
+ * What the owners did with a billed period (Phase 52) or a service delivery (Phase 53),
+ * followed from their events.
+ */
 export abstract class BilledEffectsRepository {
   abstract receivablePosted(billedPeriodId: string, titleId: string, at: Date): Promise<boolean>
+  abstract deliveryReceivablePosted(deliveryId: string, titleId: string, at: Date): Promise<boolean>
+  /** Marks the reversal on whichever billed period or delivery raised the title. */
   abstract receivableReversed(titleId: string, at: Date): Promise<boolean>
+  abstract deliveryNfseObserved(
+    entryId: string,
+    documentId: string,
+    outcome: NfseOutcome,
+    at: Date,
+  ): Promise<boolean>
   abstract nfseObserved(
     entryId: string,
     documentId: string,

@@ -79,6 +79,13 @@ and removes a temporary webhook subscription, checks every screen for document o
 at 390 px, and requires one Jaeger trace containing `web`, `gateway`, `sales`, `inventory`
 and `webhooks`.
 
+`npm run test:browser:services` (Phase 53) signs in to the fiscal validation workspace and
+works a service order, a contract, a billing run and a credit through the screens. It
+checks each delivery's and billed period's receivable and NFS-e, follows the NFS-e link
+into the Fiscal documents, and reads the service screens again in English. The receivables
+screen opens `?open=<titleId>` and searches `?search=<text>`; the Fiscal documents screen
+opens `?open=<documentId>`.
+
 ## Accessibility baseline
 
 The phase 10 baseline is WCAG 2.2 AA for the delivered screens: semantic landmarks and

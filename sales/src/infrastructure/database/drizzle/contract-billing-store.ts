@@ -98,6 +98,8 @@ export function billedEffectsRepository(
 ): BilledEffectsRepository {
   const periods = schema.contractBilledPeriods
   const lines = schema.contractBilledPeriodLines
+  const deliveries = schema.serviceDeliveryEffects
+  const deliveryNfse = schema.serviceDeliveryLineNfse
   return {
     receivablePosted: async (billedPeriodId, titleId, at) => {
       const updated = await tx
@@ -113,6 +115,19 @@ export function billedEffectsRepository(
         .returning({ id: periods.id })
       return updated.length > 0
     },
+    deliveryReceivablePosted: async (deliveryId, titleId, at) => {
+      const [delivery] = await tx
+        .select({ id: schema.serviceDeliveries.id })
+        .from(schema.serviceDeliveries)
+        .where(eq(schema.serviceDeliveries.id, deliveryId))
+      if (!delivery) return false
+      const inserted = await tx
+        .insert(deliveries)
+        .values({ tenantId, deliveryId, receivableTitleId: titleId, receivablePostedAt: at })
+        .onConflictDoNothing()
+        .returning({ id: deliveries.deliveryId })
+      return inserted.length > 0
+    },
     receivableReversed: async (titleId, at) => {
       const updated = await tx
         .update(periods)
@@ -125,7 +140,36 @@ export function billedEffectsRepository(
           ),
         )
         .returning({ id: periods.id })
-      return updated.length > 0
+      const reversed = await tx
+        .update(deliveries)
+        .set({ receivableReversedAt: at })
+        .where(
+          and(
+            eq(deliveries.tenantId, tenantId),
+            eq(deliveries.receivableTitleId, titleId),
+            isNull(deliveries.receivableReversedAt),
+          ),
+        )
+        .returning({ id: deliveries.deliveryId })
+      return updated.length + reversed.length > 0
+    },
+    deliveryNfseObserved: async (entryId, documentId, outcome, at) => {
+      const [line] = await tx
+        .select({ entryId: schema.serviceDeliveryLines.entryId })
+        .from(schema.serviceDeliveryLines)
+        .where(eq(schema.serviceDeliveryLines.entryId, entryId))
+      if (!line) return false
+      // An older observation never overwrites a newer one: a cancellation stays cancelled.
+      const written = await tx
+        .insert(deliveryNfse)
+        .values({ tenantId, entryId, documentId, status: outcome, observedAt: at })
+        .onConflictDoUpdate({
+          target: [deliveryNfse.tenantId, deliveryNfse.entryId],
+          set: { documentId, status: outcome, observedAt: at },
+          setWhere: lte(deliveryNfse.observedAt, at),
+        })
+        .returning({ entryId: deliveryNfse.entryId })
+      return written.length > 0
     },
     nfseObserved: async (entryId, documentId, outcome, at) => {
       // An older observation never overwrites a newer one: a cancellation stays cancelled.
@@ -266,4 +310,32 @@ function outcomeOf(value: string): RunOutcome {
 function reasonOf(value: string): NonNullable<RunItem['reason']> {
   if (!REASONS.includes(value)) throw new Error('Invalid persisted billing run reason')
   return value as NonNullable<RunItem['reason']>
+}
+
+/** What each delivery of a service order raised downstream, as its owners reported. */
+export async function deliveryEffectsOf(tx: Transaction, deliveryIds: readonly string[]) {
+  if (deliveryIds.length === 0) return { receivables: new Map(), nfse: new Map() }
+  const receivables = await tx
+    .select()
+    .from(schema.serviceDeliveryEffects)
+    .where(inArray(schema.serviceDeliveryEffects.deliveryId, [...deliveryIds]))
+  const nfse = await tx
+    .select({
+      entryId: schema.serviceDeliveryLineNfse.entryId,
+      documentId: schema.serviceDeliveryLineNfse.documentId,
+      status: schema.serviceDeliveryLineNfse.status,
+    })
+    .from(schema.serviceDeliveryLineNfse)
+    .innerJoin(
+      schema.serviceDeliveryLines,
+      and(
+        eq(schema.serviceDeliveryLines.tenantId, schema.serviceDeliveryLineNfse.tenantId),
+        eq(schema.serviceDeliveryLines.entryId, schema.serviceDeliveryLineNfse.entryId),
+      ),
+    )
+    .where(inArray(schema.serviceDeliveryLines.deliveryId, [...deliveryIds]))
+  return {
+    receivables: new Map(receivables.map((row) => [row.deliveryId, row])),
+    nfse: new Map(nfse.map((row) => [row.entryId, row])),
+  }
 }

@@ -2881,3 +2881,96 @@ tbody tr.reconciliation-selected td {
   margin-top: 4px;
   color: var(--color-text-muted);
 }
+
+/* Services: service orders, contracts and billing (Phase 53). */
+.badge-in_progress,
+.badge-scheduled,
+.badge-running,
+.badge-due,
+.badge-awaiting-nfse,
+.badge-skipped {
+  background: var(--amber-3);
+  color: var(--amber-11);
+}
+.badge-completed,
+.badge-billed,
+.badge-authorized {
+  background: var(--jade-3);
+  color: var(--jade-11);
+}
+.badge-refused,
+.badge-withdrawn,
+.badge-suspended,
+.badge-credited,
+.badge-ended {
+  background: var(--red-3);
+  color: var(--red-11);
+}
+.service-effect {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.service-effect a {
+  font-size: 12px;
+  font-weight: 600;
+}
+.inline-reason {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.inline-reason .ui-input {
+  min-width: 180px;
+}
+/* The negotiated price takes a row of its own, under the service and its quantity. */
+.service-line-priced > :nth-child(3) {
+  grid-column: 1 / 3;
+}
+.service-deliver,
+.contract-decisions,
+.contract-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.contract-dialog {
+  width: min(1040px, calc(100vw - 32px));
+}
+.contract-tab {
+  padding-top: 16px;
+}
+.contract-suspensions,
+.customer-services-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+.checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.billing-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.billing-totals {
+  color: var(--sage-11);
+  font-size: 13px;
+}
+.billing-run {
+  margin-top: 16px;
+}
+.customer-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

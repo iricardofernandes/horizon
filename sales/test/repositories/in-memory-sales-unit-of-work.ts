@@ -398,6 +398,19 @@ class InMemoryBilledEffects extends BilledEffectsRepository {
     this.effects.set(`receivable:${billedPeriodId}`, { titleId, at })
     return Promise.resolve(true)
   }
+  deliveryReceivablePosted(deliveryId: string, titleId: string, at: Date): Promise<boolean> {
+    this.effects.set(`delivery-receivable:${deliveryId}`, { titleId, at })
+    return Promise.resolve(true)
+  }
+  deliveryNfseObserved(
+    entryId: string,
+    documentId: string,
+    outcome: string,
+    at: Date,
+  ): Promise<boolean> {
+    this.effects.set(`delivery-nfse:${entryId}`, { documentId, outcome, at })
+    return Promise.resolve(true)
+  }
   receivableReversed(titleId: string, at: Date): Promise<boolean> {
     this.effects.set(`reversed:${titleId}`, at)
     return Promise.resolve(true)

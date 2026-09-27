@@ -452,6 +452,12 @@ contract, whether the period was billed, skipped (already billed, suspended, can
 due yet, nothing to bill) or refused (customer inactive, service unavailable). A run is
 started under an idempotency key and resumed after a stop, and never bills a period twice.
 
+### service effects
+What Financial and Fiscal did with a delivery or a billed period — its receivable, posted or
+reversed, and the NFS-e of each line — as Sales follows it from their events (Phase 53).
+The service screens show them and link to the title and the document; Sales never asks
+either module (ADR 0048).
+
 ### period credit
 The whole of a billed period, taken back because the service was not provided or was
 billed in error. The period stays, marked credited; its receivable is withdrawn or

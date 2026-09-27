@@ -189,6 +189,8 @@ try {
   await setLanguage(page, 'English')
   await page.getByRole('link', { name: 'Issued documents' }).click()
   await page.getByRole('heading', { name: 'Issued documents', exact: true }).waitFor()
+  // The newest documents may all be NFS-e by now; the model filter finds an NF-e.
+  await chooseOption(page, page.getByRole('combobox', { name: 'Model' }), 'NF-e 55')
   await page.getByRole('button', { name: /^Open NF-e 55 number/ }).first().click()
   const englishDialog = page.getByRole('dialog', { name: /^NF-e 55 number/ })
   await englishDialog.getByText('Simulation — no fiscal value').waitFor()

@@ -85,9 +85,9 @@ refusals.
 | `catalog.price.changed` | Refreshes the current price projection; confirmed order snapshots never change. |
 | `inventory.stock.reserved` | Advances the order to confirmed. |
 | `inventory.stock.reservation-rejected` | Fails the order with the reported shortfall. |
-| `financial.receivable.posted` | For origin `sales-contract-period`, records the posted receivable on the billed period. |
-| `financial.receivable.reversed` | Records the reversal on the billed period that raised the title, if any. |
-| `fiscal.service-document.simulation-outcome` | For a `contract-period` source key, records the NFS-e outcome on the billed line. |
+| `financial.receivable.posted` | For origin `sales-contract-period` or `sales-service-delivery`, records the posted receivable on the billed period or the delivery. |
+| `financial.receivable.reversed` | Records the reversal on the billed period or delivery that raised the title, if any. |
+| `fiscal.service-document.simulation-outcome` | For a `contract-period` or `service-delivery` source key, records the NFS-e outcome on the billed or delivered line. |
 
 Every published event is written to the `outbox` table inside the same transaction as
 the state change it describes, and relayed by a poller using `FOR UPDATE SKIP LOCKED`
@@ -152,8 +152,8 @@ registered and erased in `parties/`, so they are read here and written nowhere (
 | `POST` | `/quotes/:id/expire` | Record that nobody answered in time. |
 | `POST` | `/quotes/:id/order` | Convert the accepted offer: its goods into a sales order (a `fulfillmentWarehouseId` is required only then) and its services into a service order. Answers `orderId` and `serviceOrderId`, either of which may be `null`. |
 | `GET` | `/service-orders` | List recent service orders with their deliveries. |
-| `GET` | `/service-orders/:id` | Read one service order: lines with delivered quantities, deliveries, billed total. |
 | `POST` | `/service-orders` | Open a service order directly: service items only, priced from the Catalog projection. |
+| `GET` | `/service-orders/:id` | Read one service order: lines with delivered quantities, deliveries, billed total, and each delivery's receivable and each delivered line's NFS-e as Financial and Fiscal reported them (Phase 53). |
 | `POST` | `/service-orders/:id/start` | Start the work. |
 | `POST` | `/service-orders/:id/deliveries` | Record delivered work (`lines`, or everything still owed; `performedOn`, the local day it was done). The delivery that completes the work completes the order. |
 | `POST` | `/service-orders/:id/accept` | Record the customer's acceptance of completed work. |

@@ -1725,3 +1725,110 @@ it('isolates billed periods and runs by tenant, and lets the relay only count th
     await gauges.onModuleDestroy()
   }
 })
+
+it('follows the receivable and NFS-e of each delivery, and keeps them apart per tenant', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service', 30000n)
+  const customerId = await serviceCustomer(tenantId)
+  const opened = await new OpenServiceOrderUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId,
+    lines: [{ lineId: randomUUID(), itemId: service, quantity: '1' }],
+  })
+  if (opened.isLeft()) throw opened.value
+  const { serviceOrderId } = opened.value
+  const decide = new DecideServiceOrderUseCase(database, clock)
+  expect((await decide.start(commandOf(tenantId), serviceOrderId)).isRight()).toBe(true)
+  const delivered = await new DeliverServiceUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    serviceOrderId,
+  })
+  if (delivered.isLeft()) throw delivered.value
+  const { deliveryId } = delivered.value
+  const [entry] = await administrator`select entry_id from service_delivery_lines
+    where delivery_id = ${deliveryId}`
+
+  const handlers = new SalesModuleEventHandlers(database, clock).handlers
+  const titleId = randomUUID()
+  const posted = envelope(tenantId, 'financial.receivable.posted', {
+    titleId,
+    partyId: customerId,
+    documentNumber: 'SV-00000001',
+    origin: { type: 'sales-service-delivery', documentId: deliveryId },
+    categoryId: randomUUID(),
+    issuedOn: today(),
+    competenceOn: today(),
+    total: { amount: '30000', currency: 'BRL' },
+    installments: [{ number: 1, dueOn: today(), amount: { amount: '30000', currency: 'BRL' } }],
+    allocations: [],
+    postedAt: new Date().toISOString(),
+  })
+  await handlers['financial.receivable.posted']?.(posted)
+  await handlers['financial.receivable.posted']?.({ ...posted, eventId: randomUUID() })
+  const documentId = randomUUID()
+  const outcome = (status: 'authorized' | 'cancelled', observedAt: string) =>
+    envelope(tenantId, 'fiscal.service-document.simulation-outcome', {
+      documentId,
+      rootDocumentId: documentId,
+      revision: 1,
+      serviceOriginId: randomUUID(),
+      sourceKey: {
+        module: 'sales',
+        documentType: 'service-delivery',
+        id: entry?.entry_id,
+        period: today().slice(0, 7),
+      },
+      municipalityCode: '3550308',
+      competence: today().slice(0, 7),
+      model: 'nfse',
+      environment: 'simulation',
+      simulated: true,
+      adapterVersion: 'nfse-simulator/1',
+      statusDigest: 'c'.repeat(64),
+      observedAt,
+      ...(status === 'authorized'
+        ? {
+            outcome: 'authorized',
+            authorityReference: 'NFSE-9',
+            protocolDigest: 'd'.repeat(64),
+            substitutesDocumentId: null,
+          }
+        : {
+            outcome: 'cancelled',
+            authorityReference: 'NFSE-9',
+            protocolDigest: 'e'.repeat(64),
+            cancellation: { kind: 'event-101101' },
+          }),
+    })
+  const later = new Date().toISOString()
+  const earlier = new Date(Date.now() - 60_000).toISOString()
+  await handlers['fiscal.service-document.simulation-outcome']?.(outcome('cancelled', later))
+  // An older authorization arriving late never hides the cancellation.
+  await handlers['fiscal.service-document.simulation-outcome']?.(outcome('authorized', earlier))
+  await handlers['financial.receivable.reversed']?.(
+    envelope(tenantId, 'financial.receivable.reversed', {
+      titleId,
+      partyId: customerId,
+      reversedAt: later,
+      reason: 'Serviço não prestado',
+    }),
+  )
+
+  const found = await database.findServiceOrderWithEffects(tenantId, serviceOrderId)
+  expect(found?.effects.receivables.get(deliveryId)).toMatchObject({ receivableTitleId: titleId })
+  expect(found?.effects.receivables.get(deliveryId)?.receivableReversedAt).toBeInstanceOf(Date)
+  expect(found?.effects.nfse.get(String(entry?.entry_id))).toMatchObject({
+    documentId,
+    status: 'cancelled',
+  })
+
+  const other = randomUUID()
+  await database.provisionTenant(other)
+  expect(await database.findServiceOrderWithEffects(other, serviceOrderId)).toBeNull()
+  await application.begin(async (tx) => {
+    await tx`select set_config('app.current_tenant', ${other}, true)`
+    for (const table of ['service_delivery_effects', 'service_delivery_line_nfse'])
+      expect(await tx`select 1 from ${tx(table)}`).toHaveLength(0)
+  })
+})

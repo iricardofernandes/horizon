@@ -96,18 +96,19 @@ export class SalesModuleEventHandlers {
     )
   }
 
-  /** The receivable a billed period raised was posted (Phase 52). */
+  /** The receivable a billed period (Phase 52) or a delivery (Phase 53) raised was posted. */
   private async receivablePosted(event: EventEnvelope): Promise<void> {
     const parsed = financialReceivablePosted.envelope.parse(event)
-    const { origin } = parsed.payload
-    if (origin.type !== 'sales-contract-period') return
-    await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'financial'), (scope) =>
-      scope.billedEffects.receivablePosted(
-        origin.documentId,
-        parsed.payload.titleId,
-        new Date(parsed.payload.postedAt),
-      ),
-    )
+    const { origin, titleId } = parsed.payload
+    const at = new Date(parsed.payload.postedAt)
+    if (origin.type === 'sales-contract-period')
+      await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'financial'), (scope) =>
+        scope.billedEffects.receivablePosted(origin.documentId, titleId, at),
+      )
+    if (origin.type === 'sales-service-delivery')
+      await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'financial'), (scope) =>
+        scope.billedEffects.deliveryReceivablePosted(origin.documentId, titleId, at),
+      )
   }
 
   /** A receivable was reversed; if a billed period raised it, the period shows it. */
@@ -121,20 +122,21 @@ export class SalesModuleEventHandlers {
     )
   }
 
-  /** The NFS-e of a billed contract line was authorized, rejected or cancelled. */
+  /** The NFS-e of a billed contract line or a delivered line was authorized, rejected or cancelled. */
   private async serviceDocumentOutcome(event: EventEnvelope): Promise<void> {
     const parsed = fiscalServiceDocumentOutcome.envelope.parse(event)
     const { payload } = parsed
     const key = payload.sourceKey
-    if (key?.module !== 'sales' || key.documentType !== 'contract-period') return
-    await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'fiscal'), (scope) =>
-      scope.billedEffects.nfseObserved(
-        key.id,
-        payload.documentId,
-        payload.outcome,
-        new Date(payload.observedAt),
-      ),
-    )
+    if (key?.module !== 'sales') return
+    const at = new Date(payload.observedAt)
+    if (key.documentType === 'contract-period')
+      await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'fiscal'), (scope) =>
+        scope.billedEffects.nfseObserved(key.id, payload.documentId, payload.outcome, at),
+      )
+    if (key.documentType === 'service-delivery')
+      await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'fiscal'), (scope) =>
+        scope.billedEffects.deliveryNfseObserved(key.id, payload.documentId, payload.outcome, at),
+      )
   }
 
   private async stockReserved(event: EventEnvelope): Promise<void> {

@@ -1,6 +1,6 @@
 # Services implementation plan — Phase K
 
-Status: **in progress** — Phases 49 to 52 delivered on 2026-09-26; Phase 53 planned. This is the execution plan for Phase K of the
+Status: **delivered** — Phases 49 to 52 on 2026-09-26 and Phase 53 on 2026-09-27; Phase K is closed (NFS-e in simulation). This is the execution plan for Phase K of the
 [ERP expansion plan](erp-expansion-plan.md#phase-k--services-and-recurring-contracts),
 split into phases 49–53 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phase J.
@@ -200,6 +200,9 @@ Gaps:
 - A credit reverses title and NFS-e and keeps the period.
 
 ### 53 — Service screens, golden path and release evidence
+
+[Detailed Phase 53 plan](services-phase53-implementation-plan.md) ·
+[evidence](services-phase53-evidence.md).
 
 **Work**
 1. Screens in pt-BR and en:

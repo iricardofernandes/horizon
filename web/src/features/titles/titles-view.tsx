@@ -2,10 +2,11 @@
 
 import { Tabs } from '@base-ui/react/tabs'
 import { useTranslations } from 'next-intl'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useStatusLabel } from '@/lib/status'
+import { useUrlParam } from '@/lib/url-param'
 import { useDate, useMoney } from '@/lib/use-format'
 import { ApprovalPolicyDialog } from './approval-policy-dialog'
 import { CreateTitleDialog } from './create-title-dialog'
@@ -49,6 +50,18 @@ export function TitlesView({
   const [view, setView] = useState<TitleView>('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  // A link from another screen names the title to open, or what to search for (Phase 53).
+  const openParam = useUrlParam('open')
+  const searchParam = useUrlParam('search')
+  useEffect(() => {
+    if (searchParam) setQuery(searchParam)
+  }, [searchParam])
+  const linked = useRef(false)
+  useEffect(() => {
+    if (linked.current || !openParam || !data.titles.some((row) => row.id === openParam)) return
+    linked.current = true
+    setSelected(openParam)
+  }, [openParam, data.titles])
   const normalized = query.trim().toLocaleLowerCase()
   const rows = data.titles.filter(
     (row) =>

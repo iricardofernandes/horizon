@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/ui/text-field'
 import { kindOfTaxId, maskedTaxId, type Party } from '@/features/parties/party'
+import { CustomerServicesDialog } from '@/features/services/customer-services-dialog'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 
@@ -125,7 +126,10 @@ export function CustomersView({
                   <td>
                     <Badge status={customer.status} label={statusLabel(customer.status)} />
                   </td>
-                  <td>
+                  <td className="customer-actions">
+                    {customer.status !== 'erased' ? (
+                      <CustomerServicesDialog customerId={customer.id} name={customer.legalName} />
+                    ) : null}
                     {customer.status === 'active' ? (
                       <EraseCustomerDialog
                         customer={customer}
