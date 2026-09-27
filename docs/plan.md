@@ -2335,6 +2335,38 @@ No homologation or production row is enabled, so Phase J is closed for simulatio
 [Detailed implementation plan](fiscal-phase48-implementation-plan.md).
 [Detailed work and exit evidence](fiscal-implementation-plan.md#48--operator-screens-rollout-and-support-evidence).
 
+## Phase 49 — Service lines and service decisions
+
+**Planned.** ADR 0056 fixes the Phase K boundary (inside `sales/`), who owns each effect,
+the identity of a billed period and the NFS-e issuance policy. Quotes and orders carry
+service lines that never reserve or ship stock, and the service fiscal profile gets a
+screen. [Detailed work](services-implementation-plan.md#49--service-lines-and-service-decisions).
+
+## Phase 50 — Service orders and execution
+
+**Planned.** A service order moves through its stages. A delivery publishes one fact
+that Financial turns into one receivable and Fiscal into one NFS-e draft; a cancellation
+reverses both. [Detailed work](services-implementation-plan.md#50--service-orders-and-execution).
+
+## Phase 51 — Recurring contracts
+
+**Planned.** Contracts with recurrence, effective-dated amendments, renewal, suspension
+and cancellation, and a schedule of billable periods that never rewrites a billed one.
+[Detailed work](services-implementation-plan.md#51--recurring-contracts).
+
+## Phase 52 — Period billing and batch runs
+
+**Planned.** Billing a period freezes it and publishes one fact per contract and month.
+Batch runs have preview, idempotent commit and restart. Credits are linked to the billed
+period. Run metrics and alerts are added.
+[Detailed work](services-implementation-plan.md#52--period-billing-and-batch-runs).
+
+## Phase 53 — Service screens, golden path and release evidence
+
+**Planned.** Screens for service orders, contracts and billing runs in pt-BR and en, the
+services golden path, browser workflow, restore check and runbook. Phase K closes here.
+[Detailed work](services-implementation-plan.md#53--service-screens-golden-path-and-release-evidence).
+
 ---
 
 ## Standing rules across all phases
