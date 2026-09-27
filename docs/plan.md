@@ -2417,6 +2417,49 @@ billed line, however often a month is re-run or its events replayed.
 [Evidence](services-phase53-evidence.md).
 [Detailed plan](services-phase53-implementation-plan.md). [Detailed work](services-implementation-plan.md#53--service-screens-golden-path-and-release-evidence).
 
+## Phase 54 — Parties without a Brazilian document, and CRM decisions
+
+**Planned.** ADR 0057 fixes the Phase L decisions. A party's document becomes typed
+(`cpf`, `cnpj`, `foreign` or `none`), and its contact fields become optional, so a foreign
+company or a prospect with no CPF can be registered. Party events get a v2 that every
+consumer accepts. [Detailed work](crm-implementation-plan.md#54--parties-without-a-brazilian-document-and-crm-decisions).
+
+## Phase 55 — The CRM module, accounts and contacts
+
+**Planned.** `crm/` joins the platform with its roles. Accounts are projected from parties.
+Contacts are encrypted per person and shredded on erasure.
+[Detailed work](crm-implementation-plan.md#55--the-crm-module-accounts-and-contacts).
+
+## Phase 56 — Pipelines and opportunities
+
+**Planned.** Configurable pipelines and stages, sources and loss reasons. Opportunities are
+owned, moved, won, lost and reopened, each change kept as an append-only event.
+[Detailed work](crm-implementation-plan.md#56--pipelines-and-opportunities).
+
+## Phase 57 — Activities, tasks, notes and reminders
+
+**Planned.** Activities, tasks with reminders that fire once, append-only notes, the agenda
+and a timeline per account and opportunity.
+[Detailed work](crm-implementation-plan.md#57--activities-tasks-notes-and-reminders).
+
+## Phase 58 — Conversion to quote and attribution
+
+**Planned.** Sales projects open opportunities, and a quote freezes the source and owner
+of its opportunity. An accepted quote wins the opportunity. CRM never writes to Sales.
+[Detailed work](crm-implementation-plan.md#58--conversion-to-quote-and-attribution).
+
+## Phase 59 — Forecast and pipeline metrics rebuilt from history
+
+**Planned.** Weighted forecast and conversion metrics, rebuilt from opportunity events and
+compared against the live projection at a declared cutoff.
+[Detailed work](crm-implementation-plan.md#59--forecast-and-pipeline-metrics-rebuilt-from-history).
+
+## Phase 60 — CRM screens, golden path and release evidence
+
+**Planned.** Kanban and table pipeline, accounts and contacts, agenda and forecast in pt-BR
+and en, the CRM golden path, browser workflow and restore check. Phase L closes here.
+[Detailed work](crm-implementation-plan.md#60--crm-screens-golden-path-and-release-evidence).
+
 ---
 
 ## Standing rules across all phases

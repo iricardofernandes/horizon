@@ -649,6 +649,8 @@ Split into phases 49–53: [services implementation plan](services-implementatio
 
 ### Phase L — CRM
 
+Split into phases 54–60: [CRM implementation plan](crm-implementation-plan.md).
+
 **Deliverables**
 
 - Implement `crm/` with accounts backed by Party ids, multiple contacts, opportunities,
