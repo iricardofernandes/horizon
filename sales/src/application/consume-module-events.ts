@@ -3,7 +3,10 @@ import {
   catalogItemDeactivated,
   catalogPriceChanged,
   type EventEnvelope,
+  financialReceivablePosted,
+  financialReceivableReversed,
   fiscalDocumentProductionOutcome,
+  fiscalServiceDocumentOutcome,
   inventoryStockReservationRejected,
   inventoryStockReserved,
   partyErased,
@@ -49,6 +52,9 @@ export class SalesModuleEventHandlers {
       'parties.party.registered': (event) => this.partyRegistered(event),
       'parties.party.updated': (event) => this.partyUpdated(event),
       'parties.party.erased': (event) => this.partyErased(event),
+      'financial.receivable.posted': (event) => this.receivablePosted(event),
+      'financial.receivable.reversed': (event) => this.receivableReversed(event),
+      'fiscal.service-document.simulation-outcome': (event) => this.serviceDocumentOutcome(event),
       ...(options.enableProductionReleaseEvents
         ? {
             'fiscal.document.production-outcome': (event: EventEnvelope) =>
@@ -87,6 +93,47 @@ export class SalesModuleEventHandlers {
     if (price.isLeft()) throw price.value
     await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'catalog'), (scope) =>
       scope.catalogItems.recordPrice(parsed.payload.itemId, price.value),
+    )
+  }
+
+  /** The receivable a billed period raised was posted (Phase 52). */
+  private async receivablePosted(event: EventEnvelope): Promise<void> {
+    const parsed = financialReceivablePosted.envelope.parse(event)
+    const { origin } = parsed.payload
+    if (origin.type !== 'sales-contract-period') return
+    await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'financial'), (scope) =>
+      scope.billedEffects.receivablePosted(
+        origin.documentId,
+        parsed.payload.titleId,
+        new Date(parsed.payload.postedAt),
+      ),
+    )
+  }
+
+  /** A receivable was reversed; if a billed period raised it, the period shows it. */
+  private async receivableReversed(event: EventEnvelope): Promise<void> {
+    const parsed = financialReceivableReversed.envelope.parse(event)
+    await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'financial'), (scope) =>
+      scope.billedEffects.receivableReversed(
+        parsed.payload.titleId,
+        new Date(parsed.payload.reversedAt),
+      ),
+    )
+  }
+
+  /** The NFS-e of a billed contract line was authorized, rejected or cancelled. */
+  private async serviceDocumentOutcome(event: EventEnvelope): Promise<void> {
+    const parsed = fiscalServiceDocumentOutcome.envelope.parse(event)
+    const { payload } = parsed
+    const key = payload.sourceKey
+    if (key?.module !== 'sales' || key.documentType !== 'contract-period') return
+    await this.unitOfWork.processEvent(parsed.tenantId, received(parsed, 'fiscal'), (scope) =>
+      scope.billedEffects.nfseObserved(
+        key.id,
+        payload.documentId,
+        payload.outcome,
+        new Date(payload.observedAt),
+      ),
     )
   }
 
@@ -174,7 +221,7 @@ export class SalesModuleEventHandlers {
 
 function received(
   event: EventEnvelope,
-  sourceModule: 'catalog' | 'inventory' | 'parties' | 'fiscal',
+  sourceModule: 'catalog' | 'inventory' | 'parties' | 'fiscal' | 'financial',
 ) {
   return { sourceModule, eventId: event.eventId, eventType: event.eventType }
 }

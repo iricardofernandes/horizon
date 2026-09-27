@@ -51,6 +51,8 @@ Every registry entry is deactivated, never deleted: documents keep what they use
 | Consumes | `sales.shipment.returned` | Withdraws what that delivery made owed, and expects it again |
 | Consumes | `sales.service.delivered` | Raises one **effective** receivable per service delivery (origin `sales-service-delivery`, `SV-…`), with the delivery's installments |
 | Consumes | `sales.service.delivery-cancelled` | Withdraws the draft, reverses a posted receivable with no settlement in force, or flags a settled one for a person |
+| Consumes | `sales.contract-period.billed` | Raises one **effective** receivable per billed contract period (origin `sales-contract-period`, `CT-…`), with the period's installments |
+| Consumes | `sales.contract-period.credited` | Withdraws, reverses or flags that receivable, as for a cancelled delivery |
 | Consumes | `sales.order.cancelled` | Cancels the order's forecast if it was never posted |
 | Publishes | `financial.receivable.posted`, `.reversed` | A claim on a customer began or was undone |
 | Publishes | `financial.payable.posted`, `.reversed` | An obligation to a supplier began or was undone |

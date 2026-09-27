@@ -8,6 +8,8 @@ import {
   procurementOrderClosed,
   procurementReceiptRecorded,
   procurementReceiptReturned,
+  salesContractPeriodBilled,
+  salesContractPeriodCredited,
   salesOrderCancelled,
   salesOrderConfirmed,
   salesServiceDelivered,
@@ -31,7 +33,9 @@ import {
   WithdrawReceivableOfShipmentUseCase,
 } from './use-cases/follow-sales-and-parties'
 import {
+  RecordReceivableFromContractPeriodUseCase,
   RecordReceivableFromServiceDeliveryUseCase,
+  WithdrawReceivableOfCreditedPeriodUseCase,
   WithdrawReceivableOfServiceDeliveryUseCase,
 } from './use-cases/follow-services'
 
@@ -49,6 +53,8 @@ export class FinancialModuleEventHandlers {
   private readonly withdrawForecast: WithdrawPayableForecastUseCase
   private readonly receivableFromService: RecordReceivableFromServiceDeliveryUseCase
   private readonly withdrawServiceReceivable: WithdrawReceivableOfServiceDeliveryUseCase
+  private readonly receivableFromPeriod: RecordReceivableFromContractPeriodUseCase
+  private readonly withdrawPeriodReceivable: WithdrawReceivableOfCreditedPeriodUseCase
 
   constructor(
     private readonly unitOfWork: FinancialUnitOfWork,
@@ -64,6 +70,8 @@ export class FinancialModuleEventHandlers {
     this.withdrawForecast = new WithdrawPayableForecastUseCase(clock)
     this.receivableFromService = new RecordReceivableFromServiceDeliveryUseCase(clock)
     this.withdrawServiceReceivable = new WithdrawReceivableOfServiceDeliveryUseCase(clock)
+    this.receivableFromPeriod = new RecordReceivableFromContractPeriodUseCase(clock)
+    this.withdrawPeriodReceivable = new WithdrawReceivableOfCreditedPeriodUseCase(clock)
     this.handlers = {
       'parties.party.registered': (event) => this.partyRegistered(event),
       'parties.party.updated': (event) => this.partyUpdated(event),
@@ -73,6 +81,8 @@ export class FinancialModuleEventHandlers {
       'sales.shipment.dispatched': (event) => this.shipmentDispatched(event),
       'sales.shipment.returned': (event) => this.shipmentReturned(event),
       'sales.service.delivered': (event) => this.serviceDelivered(event),
+      'sales.contract-period.billed': (event) => this.periodBilled(event),
+      'sales.contract-period.credited': (event) => this.periodCredited(event),
       'sales.service.delivery-cancelled': (event) => this.serviceDeliveryCancelled(event),
       'procurement.order.approved': (event) => this.purchaseApproved(event),
       'procurement.order.cancelled': (event) => this.purchaseWithdrawn(event, 'cancelled'),
@@ -168,6 +178,45 @@ export class FinancialModuleEventHandlers {
         this.withdrawServiceReceivable.executeInScope(scope, {
           serviceOrderId: payload.serviceOrderId,
           deliveryId: payload.deliveryId,
+          reason: payload.reason,
+        }),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
+  }
+
+  /** A contract period was billed: what it billed is owed, once per period (Phase 52). */
+  private async periodBilled(event: EventEnvelope): Promise<void> {
+    const parsed = salesContractPeriodBilled.envelope.parse(event)
+    const { payload } = parsed
+    const outcome = await this.unitOfWork.processEvent(
+      parsed.tenantId,
+      received(parsed, 'sales'),
+      (scope) =>
+        this.receivableFromPeriod.executeInScope(scope, {
+          contractId: payload.contractId,
+          billedPeriodId: payload.billedPeriodId,
+          customerId: payload.customerId,
+          competence: payload.competence,
+          issuedOn: payload.issuedOn,
+          value: payload.value,
+          installments: payload.installments,
+        }),
+    )
+    if (outcome.processed && outcome.value.isLeft()) throw outcome.value.value
+  }
+
+  /** A billed period was credited: its receivable is withdrawn or reversed. */
+  private async periodCredited(event: EventEnvelope): Promise<void> {
+    const parsed = salesContractPeriodCredited.envelope.parse(event)
+    const { payload } = parsed
+    const outcome = await this.unitOfWork.processEvent(
+      parsed.tenantId,
+      received(parsed, 'sales'),
+      (scope) =>
+        this.withdrawPeriodReceivable.executeInScope(scope, {
+          contractId: payload.contractId,
+          billedPeriodId: payload.billedPeriodId,
+          reasonCode: payload.reasonCode,
           reason: payload.reason,
         }),
     )

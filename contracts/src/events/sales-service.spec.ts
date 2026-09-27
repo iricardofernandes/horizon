@@ -115,3 +115,55 @@ describe('sales contract event contracts', () => {
     ).toBe(false)
   })
 })
+
+describe('sales contract period event contracts', () => {
+  const period = {
+    contractId: randomUUID(),
+    billedPeriodId: randomUUID(),
+    customerId: randomUUID(),
+    competence: '2026-10',
+  }
+
+  it('bills a period once with its frozen lines, installments and run', async () => {
+    const { salesContractPeriodBilled } = await import('./sales')
+    const billed = {
+      ...period,
+      revision: 2,
+      startsOn: '2026-10-01',
+      endsOn: '2026-10-31',
+      issuedOn: '2026-10-05',
+      lines: delivered.lines,
+      value: brl('142500'),
+      installments: [{ number: 1, dueOn: '2026-10-20', amount: brl('142500') }],
+      runId: null,
+      billedBy: 'user:operator',
+    }
+    expect(salesContractPeriodBilled.payload.safeParse(billed).success).toBe(true)
+    expect(
+      salesContractPeriodBilled.payload.safeParse({ ...billed, runId: randomUUID() }).success,
+    ).toBe(true)
+    expect(salesContractPeriodBilled.payload.safeParse({ ...billed, lines: [] }).success).toBe(
+      false,
+    )
+    expect(
+      salesContractPeriodBilled.payload.safeParse({ ...billed, competence: '2026-10-01' }).success,
+    ).toBe(false)
+  })
+
+  it('credits a billed period with a reason code, and names the receivable origin', async () => {
+    const { salesContractPeriodCredited } = await import('./sales')
+    const credited = {
+      ...period,
+      entryIds: [randomUUID()],
+      reasonCode: 'not-provided',
+      reason: 'O posto ficou fechado no mês',
+      creditedOn: '2026-10-20',
+    }
+    expect(salesContractPeriodCredited.payload.safeParse(credited).success).toBe(true)
+    expect(
+      salesContractPeriodCredited.payload.safeParse({ ...credited, reasonCode: 'other' }).success,
+    ).toBe(false)
+    const origin = { type: 'sales-contract-period', documentId: period.billedPeriodId }
+    expect(financialReceivablePosted.payload.shape.origin.safeParse(origin).success).toBe(true)
+  })
+})

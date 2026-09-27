@@ -73,6 +73,8 @@ import {
   salesContractActivated,
   salesContractAmended,
   salesContractCancelled,
+  salesContractPeriodBilled,
+  salesContractPeriodCredited,
   salesContractSuspended,
   salesFiscalOriginFrozen,
   salesFiscalOriginRecorded,
@@ -196,6 +198,8 @@ export const EVENTS: readonly EventDefinition[] = [
   salesContractAmended,
   salesContractSuspended,
   salesContractCancelled,
+  salesContractPeriodBilled,
+  salesContractPeriodCredited,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

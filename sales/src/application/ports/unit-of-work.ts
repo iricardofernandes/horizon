@@ -1,6 +1,8 @@
 import type { Either } from '@/core/either'
 import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type {
+  BilledEffectsRepository,
+  BillingRunsRepository,
   CatalogItemsRepository,
   CustomersRepository,
   QuotesRepository,
@@ -22,6 +24,7 @@ export interface AuditRecord {
     | 'catalog-item'
     | 'service-order'
     | 'contract'
+    | 'billing-run'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -70,6 +73,8 @@ export interface SalesScope {
   readonly shipments: ShipmentsRepository
   readonly serviceOrders: ServiceOrdersRepository
   readonly contracts: ServiceContractsRepository
+  readonly billingRuns: BillingRunsRepository
+  readonly billedEffects: BilledEffectsRepository
   readonly fiscalDispatchGate: FiscalDispatchGate
   readonly audit: AuditTrail
 }

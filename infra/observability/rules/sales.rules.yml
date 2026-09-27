@@ -1,0 +1,29 @@
+# Sales billing alerts (Phase 52). Each alert describes a symptom; the runbook anchor
+# names the action. Thresholds are local defaults: the deployment owner sets production
+# values. Series are aggregated because resource labels (host, pid) change on restart.
+# Tested by `promtool test rules infra/observability/rules/sales.rules.test.yml`.
+groups:
+  - name: sales-billing
+    rules:
+      - alert: SalesBillingRefusals
+        expr: sum by (reason) (increase(sales_contract_billing_outcomes_total{outcome="refused"}[1h])) > 0
+        labels: { severity: warning, module: sales }
+        annotations:
+          summary: 'A billing run refused contracts because of {{ $labels.reason }}'
+          runbook: docs/services-billing-runbook.md#salesbillingrefusals
+
+      - alert: SalesPeriodsWithoutReceivable
+        expr: max(sales_contract_periods_without_receivable) > 0
+        for: 30m
+        labels: { severity: warning, module: sales }
+        annotations:
+          summary: 'Billed contract periods past the threshold still have no posted receivable'
+          runbook: docs/services-billing-runbook.md#salesperiodswithoutreceivable
+
+      - alert: SalesPeriodsWithoutNfse
+        expr: max(sales_contract_periods_without_nfse) > 0
+        for: 30m
+        labels: { severity: warning, module: sales }
+        annotations:
+          summary: 'Billed contract periods past the threshold still have no authorized NFS-e'
+          runbook: docs/services-billing-runbook.md#salesperiodswithoutnfse

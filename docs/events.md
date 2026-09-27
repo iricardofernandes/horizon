@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.39.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.40.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -841,6 +841,43 @@ Somebody asked for something to be bought and sent the request for a decision. A
 
 ## `sales`
 
+### `sales.contract-period.billed` — v1
+
+One period of a service contract was billed, with the revision, lines and amounts in force for it, now frozen. A contract bills each competence month once: Financial raises one receivable keyed by `billedPeriodId`, and Fiscal issues one NFS-e per line keyed by `entryId` and the competence month. Nothing moves stock.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `contractId` | string | yes | Service contract identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `billedPeriodId` | string | yes | One billed period of a service contract. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `customerId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `competence` | string | yes | YYYY-MM of the period's first month. pattern `^\d{4}-(0[1-9]|1[0-2])$` |
+| `revision` | integer | yes | — |
+| `startsOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `endsOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `issuedOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `lines` | array | yes | — |
+| `value` | object | yes | — |
+| `installments` | array | yes | — |
+| `runId` | any | yes | — |
+| `billedBy` | string | yes | min length 1. max length 255 |
+### `sales.contract-period.credited` — v1
+
+A billed contract period was credited in full: the service was not provided, or it was billed in error. The period stays in the record, marked credited, and is never billed again; Financial withdraws or reverses its receivable and Fiscal cancels the NFS-e of each line, or shows why it cannot.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `contractId` | string | yes | Service contract identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `billedPeriodId` | string | yes | One billed period of a service contract. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `customerId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `competence` | string | yes | pattern `^\d{4}-(0[1-9]|1[0-2])$` |
+| `entryIds` | array | yes | — |
+| `reasonCode` | `not-provided` \| `billing-error` | yes | — |
+| `reason` | string | yes | min length 1. max length 500 |
+| `creditedOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
 ### `sales.contract.activated` — v1
 
 A service contract took effect with its first revision. Its periods follow the recurrence from the start date; nothing is billed until a period is billed.

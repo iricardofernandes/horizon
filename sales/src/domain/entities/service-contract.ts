@@ -7,8 +7,21 @@ import {
   SalesContractActivatedEvent,
   SalesContractAmendedEvent,
   SalesContractCancelledEvent,
+  SalesContractPeriodBilledEvent,
+  SalesContractPeriodCreditedEvent,
   SalesContractSuspendedEvent,
 } from '../events/sales-events'
+import {
+  type BilledPeriod,
+  billedLines,
+  billedSnapshot,
+  billingOf,
+  type CreditReason,
+  competenceStart,
+  type PeriodBilling,
+  skipMessage,
+  totalOf,
+} from '../services/contract-billing'
 import {
   addMonths,
   type ContractLine,
@@ -24,6 +37,7 @@ import {
   type Suspension,
   scheduleOf,
 } from '../services/contract-schedule'
+import { scheduleFrom } from '../services/fulfilment'
 import type { BusinessDate, Currency, PaymentTerms, Reason } from '../value-objects/sales-values'
 
 export const CONTRACT_STAGES = ['draft', 'active', 'discarded'] as const
@@ -46,6 +60,8 @@ interface ServiceContractProps {
   stage: ContractStage
   revisions: readonly ContractRevision[]
   suspensions: readonly Suspension[]
+  /** Every period billed so far, frozen as it was billed (Phase 52). */
+  billedPeriods: readonly BilledPeriod[]
   cancellation: {
     readonly from: BusinessDate
     readonly reason: Reason
@@ -133,6 +149,7 @@ export class ServiceContract extends AggregateRoot<ServiceContractProps> {
           stage: 'draft',
           revisions: [revision],
           suspensions: [],
+          billedPeriods: [],
           cancellation: null,
           createdBy: input.createdBy,
           activatedAt: null,
@@ -171,6 +188,132 @@ export class ServiceContract extends AggregateRoot<ServiceContractProps> {
 
   revisions(): readonly ContractRevision[] {
     return this.props.revisions
+  }
+
+  billedPeriods(): readonly BilledPeriod[] {
+    return this.props.billedPeriods
+  }
+
+  /** The lines a period of this revision bills, to check them before billing. */
+  revisionNumbered(number: number): ContractRevision | null {
+    return this.props.revisions.find((revision) => revision.number === number) ?? null
+  }
+
+  /**
+   * Whether the period of a competence month can be billed on `today`, or why not; null
+   * when no period of this contract starts in that month.
+   */
+  billingFor(competence: string, today: BusinessDate): PeriodBilling | null {
+    if (this.props.stage !== 'active') return null
+    const first = competenceStart(competence)
+    const [period] = this.schedule({ from: first, to: first })
+    if (period?.competence !== competence) return null
+    return billingOf(period, this.props.billedPeriods, today)
+  }
+
+  /**
+   * Bill the period of a competence month: its revision, lines, amounts and installments
+   * are frozen, and `sales.contract-period.billed` is published once.
+   */
+  bill(
+    input: {
+      readonly competence: string
+      readonly today: BusinessDate
+      readonly actor: string
+      readonly runId: string | null
+      readonly billedPeriodId: string
+      readonly entryId: () => string
+    },
+    now: Date,
+  ): Either<ConflictError, BilledPeriod> {
+    const billing = this.billingFor(input.competence, input.today)
+    if (!billing)
+      return left(new ConflictError(`the contract has no period to bill in ${input.competence}`))
+    if (billing.kind === 'skip') return left(new ConflictError(skipMessage(billing.reason)))
+    const { period } = billing
+    const revision = this.revisionNumbered(period.revision)
+    if (!revision) return left(new ConflictError('the contract has no revision in force'))
+    const lines = billedLines(revision, input.entryId)
+    const value = totalOf(lines, this.props.currency)
+    const billed: BilledPeriod = {
+      id: input.billedPeriodId,
+      competence: period.competence,
+      revision: period.revision,
+      startsOn: period.startsOn,
+      endsOn: period.endsOn,
+      issuedOn: period.billingOn,
+      lines,
+      value,
+      installments: scheduleFrom(this.props.paymentTerms, value, period.billingOn),
+      runId: input.runId,
+      billedBy: input.actor,
+      billedAt: now,
+      credit: null,
+    }
+    this.props.billedPeriods = [...this.props.billedPeriods, billed]
+    this.touch(now)
+    this.addDomainEvent(
+      new SalesContractPeriodBilledEvent(this.id, this.props.tenantId, now, {
+        customerId: this.props.customerId,
+        billedPeriodId: billed.id,
+        competence: billed.competence,
+        revision: billed.revision,
+        startsOn: billed.startsOn,
+        endsOn: billed.endsOn,
+        issuedOn: billed.issuedOn,
+        lines: billed.lines,
+        value: billed.value,
+        installments: billed.installments,
+        runId: billed.runId,
+        billedBy: billed.billedBy,
+      }),
+    )
+    return right(billed)
+  }
+
+  /**
+   * Credit a billed period in full. The period stays, marked credited, and is never
+   * billed again; what it raised downstream is withdrawn by its owners.
+   */
+  credit(
+    input: Change & {
+      readonly competence: string
+      readonly reasonCode: CreditReason
+      readonly reason: Reason
+    },
+    now: Date,
+  ): Either<ConflictError, BilledPeriod> {
+    const billed = this.props.billedPeriods.find(
+      (candidate) => candidate.competence === input.competence,
+    )
+    if (!billed) return left(new ConflictError(`${input.competence} was not billed`))
+    if (billed.credit) return left(new ConflictError(`${input.competence} was already credited`))
+    const credited: BilledPeriod = {
+      ...billed,
+      credit: {
+        reasonCode: input.reasonCode,
+        reason: input.reason,
+        creditedOn: input.today,
+        by: input.actor,
+        at: now,
+      },
+    }
+    this.props.billedPeriods = this.props.billedPeriods.map((candidate) =>
+      candidate.id === billed.id ? credited : candidate,
+    )
+    this.touch(now)
+    this.addDomainEvent(
+      new SalesContractPeriodCreditedEvent(this.id, this.props.tenantId, now, {
+        customerId: this.props.customerId,
+        billedPeriodId: billed.id,
+        competence: billed.competence,
+        entryIds: billed.lines.map((line) => line.entryId),
+        reasonCode: input.reasonCode,
+        reason: input.reason.value,
+        creditedOn: input.today,
+      }),
+    )
+    return right(credited)
   }
 
   statusOn(day: BusinessDate): ContractStatus {
@@ -461,6 +604,7 @@ export class ServiceContract extends AggregateRoot<ServiceContractProps> {
         createdBy: suspension.createdBy,
         createdAt: suspension.createdAt,
       })),
+      billedPeriods: this.props.billedPeriods.map(billedSnapshot),
     })
   }
 
@@ -477,6 +621,10 @@ export class ServiceContract extends AggregateRoot<ServiceContractProps> {
     if (day.isBefore(today))
       return left(
         new ConflictError('a period that has begun keeps what it had; choose a later period'),
+      )
+    if (this.props.billedPeriods.some((billed) => !billed.startsOn.isBefore(day)))
+      return left(
+        new ConflictError('a period from then on is already billed; choose a later period'),
       )
     if (this.props.endsOn?.isBefore(day))
       return left(new ConflictError('the contract has ended by then; renew it first'))

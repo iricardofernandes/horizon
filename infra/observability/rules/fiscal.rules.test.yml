@@ -166,3 +166,34 @@ tests:
       - eval_time: 5m
         alertname: FiscalImportsUnmatched
         exp_alerts: []
+
+  - name: a blocked service intake waits an hour before it is reported
+    interval: 1m
+    input_series:
+      - series: 'fiscal_service_intakes_blocked{host_name="a"}'
+        values: '1x90'
+      - series: 'fiscal_service_intakes_cancellation_refused{host_name="a"}'
+        values: '0 0 1x10'
+      - series: 'fiscal_queue_pending{host_name="a"}'
+        values: '0x90'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FiscalServiceIntakesBlocked
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: FiscalServiceIntakesBlocked
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal }
+            exp_annotations:
+              summary: A service billed in Sales has waited an hour for its NFS-e, blocked
+              runbook: docs/fiscal-operations-runbook.md#fiscalserviceintakesblocked
+      - eval_time: 1m
+        alertname: FiscalServiceCancellationRefused
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: FiscalServiceCancellationRefused
+        exp_alerts:
+          - exp_labels: { severity: warning, module: fiscal }
+            exp_annotations:
+              summary: The NFS-e of a service withdrawn in Sales could no longer be cancelled
+              runbook: docs/fiscal-operations-runbook.md#fiscalservicecancellationrefused

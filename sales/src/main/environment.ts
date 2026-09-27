@@ -18,6 +18,8 @@ const environmentSchema = z.object({
   OUTBOX_POLL_INTERVAL_MS: positive.min(100).default(1000),
   OUTBOX_BATCH_SIZE: positive.max(1000).default(100),
   QUOTE_DEFAULT_VALIDITY_DAYS: positive.default(15),
+  /** A billed period older than this without a receivable or an NFS-e is reported. */
+  CONTRACT_BILLING_GAP_SECONDS: positive.default(259_200),
   CUSTOMER_BLIND_INDEX_KEY: z.string().regex(/^[0-9a-f]{64}$/),
 })
 

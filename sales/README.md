@@ -32,6 +32,7 @@ are all exercised by the phase 7 E2E flow.
 - **Sales orders** and their lines, including the price snapshotted at confirmation. A sales order is a **goods order**: a service item is refused when an order is placed or an accepted proposal is converted, before anything reaches Inventory (ADR 0056). Services are delivered by service orders (Phase 50).
 - **Service orders** (Phase 50) — services sold directly or converted from an accepted proposal, `scheduled` → `in_progress` → `completed` → `accepted` (or `cancelled` with a reason), delivered in **deliveries**. A delivery is billed once when it is recorded; a cancelled delivery stays in the record and its work is owed again. A service order has no warehouse and never reaches Inventory.
 - **Service contracts** (Phase 51) — services sold for a recurring fee: monthly, quarterly or yearly periods from the first of a month, in immutable **revisions** that apply from a period start. Amendments, suspensions, resumptions and cancellations only take effect at a period that has not begun; a renewal adds a revision the day after the end, for the original term, optionally readjusted. `GET /contracts/:id/schedule` answers which periods are billable, with which revision and for how much.
+- **Period billing** (Phase 52) — a contract period is billed once, from its billing day, and frozen as it was billed: revision, lines, amounts and installments. A **billing run** for a competence month has a preview and records, per contract, whether it billed, skipped or refused the period and why; it is started under an `Idempotency-Key` and resumed after a stop. A **credit** takes back a whole billed period, which stays in the record. A change can no longer take effect at a billed period. Sales follows each billed period's receivable and NFS-e from their owners' events, and `GET /contract-billing/overview` lists what is still missing.
 - **Order lifecycle** — draft, placed, confirmed, cancelled — and the invariants of each transition.
 - **Shipments** — what is being picked for a customer, what left, and what came back, each carrying its share of the order's total.
 - **Fulfilment state** — how much of the order has reached the customer, and what it still has to deliver.
@@ -71,6 +72,8 @@ refusals.
 | `sales.contract.amended` | A revision applies from a period start: an amendment, or a renewal that extends the end. |
 | `sales.contract.suspended` | Periods from a start (until a resumption, when known) are not billed. Published again with the resumption. |
 | `sales.contract.cancelled` | No period is billed from a start on; earlier periods are untouched. |
+| `sales.contract-period.billed` | A contract period was billed: one receivable in `financial/` keyed by `billedPeriodId`, one NFS-e per line in `fiscal/` keyed by the line's `entryId` and the competence month. |
+| `sales.contract-period.credited` | A billed period was credited in full: its receivable is withdrawn or reversed and its NFS-e cancelled (reason 2 when not provided, 1 when billed in error). |
 | `sales.service.delivery-cancelled` | A delivery was not provided after all: its receivable is withdrawn or reversed and its NFS-e cancelled. |
 
 ### Consumed
@@ -82,6 +85,9 @@ refusals.
 | `catalog.price.changed` | Refreshes the current price projection; confirmed order snapshots never change. |
 | `inventory.stock.reserved` | Advances the order to confirmed. |
 | `inventory.stock.reservation-rejected` | Fails the order with the reported shortfall. |
+| `financial.receivable.posted` | For origin `sales-contract-period`, records the posted receivable on the billed period. |
+| `financial.receivable.reversed` | Records the reversal on the billed period that raised the title, if any. |
+| `fiscal.service-document.simulation-outcome` | For a `contract-period` source key, records the NFS-e outcome on the billed line. |
 
 Every published event is written to the `outbox` table inside the same transaction as
 the state change it describes, and relayed by a poller using `FOR UPDATE SKIP LOCKED`
@@ -164,6 +170,15 @@ registered and erased in `parties/`, so they are read here and written nowhere (
 | `POST` | `/contracts/:id/cancel` | Stop billing from a period start (a draft is simply discarded). |
 | `POST` | `/contracts/:id/renewals` | Renew for the original term, with an optional readjustment in basis points. |
 | `POST` | `/contracts/renewals` | Renew every self-renewing contract whose last period has begun; repeating it renews nothing twice. |
+| `GET` | `/contracts/:id/billed-periods` | The periods billed so far, frozen, with their credit, receivable and NFS-e per line. |
+| `POST` | `/contracts/:id/periods/:competence/bill` | Bill one period now, outside a run; refused with the reason it cannot be billed. |
+| `POST` | `/contracts/:id/periods/:competence/credit` | Credit a billed period in full (`reasonCode` `not-provided` or `billing-error`, and a `reason`). |
+| `POST` | `/billing-runs/preview` | What a run of a `competence` month would bill, skip and refuse, and why; writes nothing. |
+| `POST` | `/billing-runs` | Run a month: renews due contracts, then bills contract by contract. The same key finds the same run and finishes what is pending. |
+| `POST` | `/billing-runs/:id/resume` | Carry on with a run that stopped midway. |
+| `GET` | `/billing-runs?competence=` | Recent runs with their totals. |
+| `GET` | `/billing-runs/:id` | One run and what it did to each contract. |
+| `GET` | `/contract-billing/overview` | Recent runs, and billed periods past the threshold (`CONTRACT_BILLING_GAP_SECONDS`, 3 days by default) without a posted receivable or an authorized NFS-e. |
 | `GET` | `/shipments` | Every delivery on its way out, newest first: the warehouse's board. |
 | `GET` | `/orders/:id/shipments` | Everything being picked, packed or gone for one order. |
 | `GET` | `/shipments/:id` | Read one delivery and what is in it. |
@@ -177,7 +192,7 @@ registered and erased in `parties/`, so they are read here and written nowhere (
 | `POST` | `/orders` | Place an order and start the Inventory choreography. |
 
 Every command that creates a document — a quote, a version of one, an order, a conversion,
-a service order, a delivery — requires an `Idempotency-Key` header and runs at most once
+a service order, a delivery, a contract, a billed period, a credit, a billing run — requires an `Idempotency-Key` header and runs at most once
 under it (ADR 0028). A retry is recognised by its key and its body, whatever request id the
 gateway gives it. A decision
 on a document that already exists does not: repeating it is refused by the document's own

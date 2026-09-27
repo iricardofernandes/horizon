@@ -6,6 +6,12 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { SalesModuleEventHandlers } from '@/application/consume-module-events'
 import { ApplyStockReservedUseCase } from '@/application/use-cases/apply-reservation-outcome'
+import {
+  BillPeriodUseCase,
+  CreditPeriodUseCase,
+  ProcessBillingRunUseCase,
+  StartBillingRunUseCase,
+} from '@/application/use-cases/contract-billing'
 import { ConvertQuoteUseCase } from '@/application/use-cases/convert-quote'
 import {
   DecideQuoteUseCase,
@@ -44,6 +50,7 @@ import {
 } from '@/domain/value-objects/sales-values'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
+import { BillingGauges } from '@/infrastructure/observability/billing-metrics'
 import { e2ePostgresContainer } from './setup-e2e'
 
 const clock = { now: () => new Date() }
@@ -1407,4 +1414,314 @@ it('renews a due contract by itself once, with no gap in its periods', async () 
   const [revision] = await administrator`select kind, created_by from service_contract_revisions
     where contract_id = ${contractId} and revision = 2`
   expect(revision).toEqual({ kind: 'renewal', created_by: 'system:contract-renewal' })
+})
+
+/** A monthly contract from last month, billed on the 1st, activated. */
+async function billableContract(tenantId: string, service: string, customerId: string) {
+  const created = await new CreateContractUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId,
+    lines: [{ lineId: randomUUID(), itemId: service, quantity: '2' }],
+    recurrence: 'monthly',
+    startsOn: monthStart(-1),
+    billingDay: 1,
+    paymentTermDays: [10],
+  })
+  if (created.isLeft()) throw created.value
+  const activated = await new DecideContractUseCase(database, clock).activate(
+    commandOf(tenantId),
+    created.value.contractId,
+  )
+  if (activated.isLeft()) throw activated.value
+  return created.value.contractId
+}
+
+function billingRuns() {
+  const process = new ProcessBillingRunUseCase(database, clock)
+  const start = (processing: Pick<ProcessBillingRunUseCase, 'execute'> = process) =>
+    new StartBillingRunUseCase(
+      database,
+      clock,
+      new RenewDueContractsUseCase(database, clock),
+      processing,
+    )
+  return { process, start }
+}
+
+function envelope(tenantId: string, eventType: string, payload: unknown) {
+  return {
+    eventId: randomUUID(),
+    tenantId,
+    eventType,
+    eventVersion: 1,
+    occurredAt: new Date().toISOString(),
+    traceId: randomBytes(16).toString('hex'),
+    payload,
+  }
+}
+
+it('bills a month once however it is re-run or resumed, and credits a period in place', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service', 30000n)
+  const customerId = await serviceCustomer(tenantId)
+  const first = await billableContract(tenantId, service, customerId)
+  const second = await billableContract(tenantId, service, customerId)
+  const month = monthStart(0).slice(0, 7)
+  const { process, start } = billingRuns()
+  const context = { tenantId, actor: 'user:billing', requestId: null }
+
+  // The run stops after one contract, as a crash would leave it.
+  const key = randomUUID()
+  const stopsAfterOne = {
+    execute: (runContext: typeof context, runId: string) =>
+      process.execute(runContext, runId, { limit: 1 }),
+  }
+  const stopped = await start(stopsAfterOne).execute({
+    context: { ...context, idempotencyKey: key },
+    competence: month,
+  })
+  if (stopped.isLeft()) throw stopped.value
+  expect(stopped.value.status).toBe('running')
+  expect(stopped.value.items.map((item) => item.outcome).sort()).toEqual(['billed', 'pending'])
+  // The same key finds the same run and finishes it.
+  const resumed = await start().execute({
+    context: { ...context, idempotencyKey: key },
+    competence: month,
+  })
+  if (resumed.isLeft()) throw resumed.value
+  expect(resumed.value).toMatchObject({ id: stopped.value.id, status: 'completed' })
+  expect(resumed.value.items.map((item) => item.outcome)).toEqual(['billed', 'billed'])
+  // A new run of the same month bills nothing, and says why.
+  const rerun = await start().execute({ context: commandOf(tenantId), competence: month })
+  if (rerun.isLeft()) throw rerun.value
+  expect(rerun.value.items.map((item) => item.reason)).toEqual(['already-billed', 'already-billed'])
+  const single = await new BillPeriodUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    contractId: first,
+    competence: month,
+  })
+  expect(single.isLeft()).toBe(true)
+  // Last month is still there to bill.
+  const earlier = await start().execute({
+    context: commandOf(tenantId),
+    competence: monthStart(-1).slice(0, 7),
+  })
+  if (earlier.isLeft()) throw earlier.value
+  expect(earlier.value.items.map((item) => item.outcome)).toEqual(['billed', 'billed'])
+
+  const billed = await administrator`select payload from outbox where tenant_id = ${tenantId}
+    and event_type = 'sales.contract-period.billed' order by created_at`
+  expect(billed).toHaveLength(4)
+  const keys = billed.map((row) => `${row.payload.contractId}/${row.payload.competence}`)
+  expect(new Set(keys).size).toBe(4)
+  const current = billed.filter((row) => row.payload.competence === month)
+  expect(current.map((row) => row.payload.runId)).toEqual([stopped.value.id, stopped.value.id])
+  expect(current[0]?.payload).toMatchObject({
+    startsOn: monthStart(0),
+    issuedOn: monthStart(0),
+    value: { amount: '60000', currency: 'BRL' },
+    installments: [{ number: 1, amount: { amount: '60000' } }],
+  })
+
+  // A later change never reaches the billed month.
+  const amended = await new AmendContractUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    contractId: first,
+    effectiveFrom: monthStart(0),
+    lines: [{ lineId: randomUUID(), itemId: service, quantity: '1' }],
+    recurrence: 'monthly',
+    reason: 'Tentativa de mudar o mês faturado',
+  })
+  expect(amended.isLeft()).toBe(true)
+
+  // The owners report back; what is still missing shows as a gap.
+  const [period] = await administrator`select id from contract_billed_periods
+    where contract_id = ${first} and competence = ${month}`
+  const [line] = await administrator`select entry_id from contract_billed_period_lines
+    where billed_period_id = ${period?.id}`
+  const soon = new Date(Date.now() + 60_000)
+  const gapsBefore = await database.billingGaps(tenantId, soon)
+  expect(gapsBefore).toHaveLength(4)
+  const handlers = new SalesModuleEventHandlers(database, clock).handlers
+  const titleId = randomUUID()
+  await handlers['financial.receivable.posted']?.(
+    envelope(tenantId, 'financial.receivable.posted', {
+      titleId,
+      partyId: customerId,
+      documentNumber: 'CT-00000001',
+      origin: { type: 'sales-contract-period', documentId: period?.id },
+      categoryId: randomUUID(),
+      issuedOn: monthStart(0),
+      competenceOn: monthStart(0),
+      total: { amount: '60000', currency: 'BRL' },
+      installments: [
+        { number: 1, dueOn: monthStart(1), amount: { amount: '60000', currency: 'BRL' } },
+      ],
+      allocations: [],
+      postedAt: new Date().toISOString(),
+    }),
+  )
+  const documentId = randomUUID()
+  await handlers['fiscal.service-document.simulation-outcome']?.(
+    envelope(tenantId, 'fiscal.service-document.simulation-outcome', {
+      documentId,
+      rootDocumentId: documentId,
+      revision: 1,
+      serviceOriginId: randomUUID(),
+      sourceKey: {
+        module: 'sales',
+        documentType: 'contract-period',
+        id: line?.entry_id,
+        period: month,
+      },
+      municipalityCode: '3550308',
+      competence: month,
+      model: 'nfse',
+      environment: 'simulation',
+      simulated: true,
+      adapterVersion: 'nfse-simulator/1',
+      statusDigest: 'a'.repeat(64),
+      observedAt: new Date().toISOString(),
+      outcome: 'authorized',
+      authorityReference: 'NFSE-1',
+      protocolDigest: 'b'.repeat(64),
+      substitutesDocumentId: null,
+    }),
+  )
+  const gapsAfter = await database.billingGaps(tenantId, soon)
+  expect(gapsAfter.map((gap) => gap.billedPeriodId)).not.toContain(period?.id)
+  const withEffects = await database.findContractWithEffects(tenantId, first)
+  expect(withEffects?.effects.periods.get(String(period?.id))).toMatchObject({
+    receivableTitleId: titleId,
+  })
+  expect(withEffects?.effects.lines.get(String(line?.entry_id))).toMatchObject({
+    nfseDocumentId: documentId,
+    nfseStatus: 'authorized',
+  })
+
+  // A credit keeps the period, marked credited, and publishes the lines it withdraws.
+  const credit = new CreditPeriodUseCase(database, clock)
+  const credited = await credit.execute({
+    context: commandOf(tenantId),
+    contractId: second,
+    competence: month,
+    reasonCode: 'not-provided',
+    reason: 'O posto ficou fechado no mês',
+  })
+  if (credited.isLeft()) throw credited.value
+  const [creditEvent] = await administrator`select payload from outbox
+    where tenant_id = ${tenantId} and event_type = 'sales.contract-period.credited'`
+  expect(creditEvent?.payload).toMatchObject({
+    contractId: second,
+    billedPeriodId: credited.value.billedPeriodId,
+    reasonCode: 'not-provided',
+    competence: month,
+  })
+  const [kept] = await administrator`select value, credit_reason_code from contract_billed_periods
+    where id = ${credited.value.billedPeriodId}`
+  expect(kept).toEqual({ value: '60000', credit_reason_code: 'not-provided' })
+  expect(
+    (
+      await credit.execute({
+        context: commandOf(tenantId),
+        contractId: second,
+        competence: month,
+        reasonCode: 'billing-error',
+        reason: 'De novo',
+      })
+    ).isLeft(),
+  ).toBe(true)
+
+  // What was billed, credited and decided is never rewritten.
+  await expect(
+    administrator`update contract_billed_periods set value = 1 where id = ${period?.id}`,
+  ).rejects.toThrow(/never changes what it billed/)
+  await expect(
+    administrator`update contract_billed_periods set credit_reason = 'Outro motivo'
+      where id = ${credited.value.billedPeriodId}`,
+  ).rejects.toThrow(/never rewritten/)
+  await expect(
+    administrator`update contract_billed_period_lines set amount = 1
+      where billed_period_id = ${period?.id}`,
+  ).rejects.toThrow(/never changes what it billed/)
+  await expect(
+    administrator`update contract_billing_run_items set outcome = 'skipped',
+      reason = 'suspended' where run_id = ${stopped.value.id}`,
+  ).rejects.toThrow(/decided once/)
+  await expect(
+    administrator`insert into contract_billed_periods (id, tenant_id, contract_id, competence,
+        revision, starts_on, ends_on, issued_on, currency, value, installments, billed_by,
+        billed_at)
+      select gen_random_uuid(), tenant_id, contract_id, competence, revision, starts_on,
+        ends_on, issued_on, currency, value, installments, billed_by, billed_at
+      from contract_billed_periods where id = ${period?.id}`,
+  ).rejects.toThrow(/contract_billed_periods_once/)
+})
+
+it('isolates billed periods and runs by tenant, and lets the relay only count them', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service', 30000n)
+  const contractId = await billableContract(tenantId, service, await serviceCustomer(tenantId))
+  const billed = await new BillPeriodUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    contractId,
+    competence: monthStart(0).slice(0, 7),
+  })
+  if (billed.isLeft()) throw billed.value
+  const run = await billingRuns()
+    .start()
+    .execute({ context: commandOf(tenantId), competence: monthStart(-1).slice(0, 7) })
+  if (run.isLeft()) throw run.value
+
+  const other = randomUUID()
+  await database.provisionTenant(other)
+  expect(await database.findBillingRun(other, run.value.id)).toBeNull()
+  expect(await database.listBillingRuns(other, null)).toEqual([])
+  expect(await database.billingGaps(other, new Date(Date.now() + 60_000))).toEqual([])
+  const foreign = await new CreditPeriodUseCase(database, clock).execute({
+    context: commandOf(other),
+    contractId,
+    competence: monthStart(0).slice(0, 7),
+    reasonCode: 'not-provided',
+    reason: 'Tentativa de outro tenant',
+  })
+  expect(foreign.isLeft()).toBe(true)
+  await application.begin(async (tx) => {
+    await tx`select set_config('app.current_tenant', ${other}, true)`
+    for (const table of [
+      'contract_billed_periods',
+      'contract_billed_period_lines',
+      'contract_billing_runs',
+      'contract_billing_run_items',
+    ])
+      expect(await tx`select 1 from ${tx(table)}`).toHaveLength(0)
+    const changed = await tx`update contract_billed_periods set receivable_posted_at = now()`
+    expect(changed.count).toBe(0)
+  })
+
+  const container = e2ePostgresContainer()
+  const relayUrl = `postgres://horizon_relay:test@${container.getHost()}:${container.getMappedPort(5432)}/horizon_test`
+  const relay = postgres(relayUrl, { max: 1 })
+  try {
+    await expect(relay`select tenant_id from contract_billed_periods`).rejects.toThrow(
+      /permission denied/,
+    )
+    await expect(relay`select amount from contract_billed_period_lines`).rejects.toThrow(
+      /permission denied/,
+    )
+    await expect(relay`select * from contract_billing_runs`).rejects.toThrow(/permission denied/)
+  } finally {
+    await relay.end()
+  }
+  const gauges = new BillingGauges({ databaseUrl: relayUrl, thresholdSeconds: 1 })
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 1_100))
+    const counted = await gauges.refresh()
+    expect(counted?.withoutReceivable).toBeGreaterThanOrEqual(2)
+    expect(counted?.withoutNfse).toBeGreaterThanOrEqual(2)
+  } finally {
+    await gauges.onModuleDestroy()
+  }
 })

@@ -97,3 +97,18 @@ groups:
         annotations:
           summary: 'A Fiscal source package was imported {{ $value }} days ago'
           runbook: docs/fiscal-operations-runbook.md#fiscalsourcepackagestale
+
+      - alert: FiscalServiceIntakesBlocked
+        expr: max(fiscal_service_intakes_blocked) > 0
+        for: 1h
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: A service billed in Sales has waited an hour for its NFS-e, blocked
+          runbook: docs/fiscal-operations-runbook.md#fiscalserviceintakesblocked
+
+      - alert: FiscalServiceCancellationRefused
+        expr: max(fiscal_service_intakes_cancellation_refused) > 0
+        labels: { severity: warning, module: fiscal }
+        annotations:
+          summary: The NFS-e of a service withdrawn in Sales could no longer be cancelled
+          runbook: docs/fiscal-operations-runbook.md#fiscalservicecancellationrefused

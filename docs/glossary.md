@@ -442,7 +442,20 @@ ever edited, so a period that has begun keeps what it had.
 
 ### billed period
 One competence month of a contract, billed once and never rewritten. A correction is a
-linked credit (ADR 0042, ADR 0056).
+linked credit (ADR 0042, ADR 0056). It freezes the revision, lines, amounts and
+installments it was billed with, and each of its lines has its own entry id, the unit an
+NFS-e is issued for.
+
+### billing run
+A pass over every contract with a period in one competence month. It records, per
+contract, whether the period was billed, skipped (already billed, suspended, cancelled, not
+due yet, nothing to bill) or refused (customer inactive, service unavailable). A run is
+started under an idempotency key and resumed after a stop, and never bills a period twice.
+
+### period credit
+The whole of a billed period, taken back because the service was not provided or was
+billed in error. The period stays, marked credited; its receivable is withdrawn or
+reversed and its NFS-e cancelled.
 
 ## Purchasing
 

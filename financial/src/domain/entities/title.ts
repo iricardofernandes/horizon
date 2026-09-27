@@ -49,7 +49,7 @@ export const MAX_TITLE_INSTALLMENTS = 120
  * The document this title came from, when it came from one.
  *
  * A sales order and a purchase order raise a forecast; a goods receipt and a shipment
- * raise what is actually owed for what moved, and a delivered service what it billed. The identifier is the document's own, so a
+ * raise what is actually owed for what moved, and a delivered service or a billed contract period what it billed. The identifier is the document's own, so a
  * redelivery of the event that announced it always resolves to the same title.
  */
 export const TITLE_ORIGINS = [
@@ -59,6 +59,7 @@ export const TITLE_ORIGINS = [
   'purchase-receipt',
   'sales-shipment',
   'sales-service-delivery',
+  'sales-contract-period',
 ] as const
 export type TitleOriginType = (typeof TITLE_ORIGINS)[number]
 

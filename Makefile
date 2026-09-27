@@ -132,9 +132,9 @@ up-fiscal: infra/.env infra/keys/public kong-config ## Start the optional Fiscal
 .PHONY: test-alerts
 test-alerts: ## Check and unit-test the Prometheus alert rules with promtool
 	@docker run --rm -v "$(CURDIR)/infra/observability/rules":/rules -w /rules \
-		--entrypoint promtool prom/prometheus:v3.7.3 check rules fiscal.rules.yml
+		--entrypoint promtool prom/prometheus:v3.7.3 check rules fiscal.rules.yml sales.rules.yml
 	@docker run --rm -v "$(CURDIR)/infra/observability/rules":/rules -w /rules \
-		--entrypoint promtool prom/prometheus:v3.7.3 test rules fiscal.rules.test.yml
+		--entrypoint promtool prom/prometheus:v3.7.3 test rules fiscal.rules.test.yml sales.rules.test.yml
 
 .PHONY: down
 down: ## Stop the platform, keeping data

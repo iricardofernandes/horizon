@@ -246,3 +246,85 @@ describe('following delivered services', () => {
     expect((await titlesOf(tenantId, fact.deliveryId))[0]).toMatchObject({ status: 'cancelled' })
   })
 })
+
+function billedPeriod(partyId: string) {
+  return {
+    contractId: randomUUID(),
+    billedPeriodId: randomUUID(),
+    customerId: partyId,
+    competence: '2026-09',
+    revision: 1,
+    startsOn: '2026-09-01',
+    endsOn: '2026-09-30',
+    issuedOn: '2026-09-05',
+    lines: delivered(partyId, '90000').lines,
+    value: brl('90000'),
+    installments: [{ number: 1, dueOn: '2026-09-20', amount: brl('90000') }],
+    runId: randomUUID(),
+    billedBy: 'user:operator',
+  }
+}
+
+function credited(fact: ReturnType<typeof billedPeriod>) {
+  return {
+    contractId: fact.contractId,
+    billedPeriodId: fact.billedPeriodId,
+    customerId: fact.customerId,
+    competence: fact.competence,
+    entryIds: fact.lines.map((line) => line.entryId),
+    reasonCode: 'billing-error',
+    reason: 'Faturado com o posto errado',
+    creditedOn: '2026-09-21',
+  }
+}
+
+describe('following billed contract periods', () => {
+  it('raises one receivable per billed period, and withdraws it on a credit', async () => {
+    const { tenantId, partyId } = await workspace()
+    const fact = billedPeriod(partyId)
+    const eventId = randomUUID()
+    await deliver(tenantId, 'sales.contract-period.billed', fact, eventId)
+    await deliver(tenantId, 'sales.contract-period.billed', fact, eventId)
+    await deliver(tenantId, 'sales.contract-period.billed', fact)
+    const titles = await titlesOf(tenantId, fact.billedPeriodId)
+    expect(titles).toHaveLength(1)
+    expect(titles[0]).toMatchObject({
+      status: 'draft',
+      stage: 'effective',
+      document_number: `CT-${fact.billedPeriodId.slice(-8).toUpperCase()}`,
+    })
+    const listed = await database.listTitles(tenantId, 'receivable', {
+      view: 'draft',
+      today: '2026-09-20',
+      limit: 10,
+      offset: 0,
+    })
+    expect(listed.data[0]).toMatchObject({
+      total: '90000',
+      origin: { type: 'sales-contract-period', documentId: fact.billedPeriodId },
+    })
+
+    await deliver(tenantId, 'sales.contract-period.credited', credited(fact))
+    await deliver(tenantId, 'sales.contract-period.credited', credited(fact))
+    expect((await titlesOf(tenantId, fact.billedPeriodId))[0]).toMatchObject({
+      status: 'cancelled',
+    })
+    const [withdrawal] = await administrator`select action from audit_log
+      where tenant_id = ${tenantId} and subject_id = ${String(titles[0]?.id)}
+      order by sequence desc limit 1`
+    expect(withdrawal?.action).toBe('receivable.withdrawn-with-credit')
+  })
+
+  it('retries a credit that arrives before its billed period', async () => {
+    const { tenantId, partyId } = await workspace()
+    const fact = billedPeriod(partyId)
+    await expect(
+      deliver(tenantId, 'sales.contract-period.credited', credited(fact)),
+    ).rejects.toThrow(/has not been raised yet/)
+    await deliver(tenantId, 'sales.contract-period.billed', fact)
+    await deliver(tenantId, 'sales.contract-period.credited', credited(fact))
+    expect((await titlesOf(tenantId, fact.billedPeriodId))[0]).toMatchObject({
+      status: 'cancelled',
+    })
+  })
+})

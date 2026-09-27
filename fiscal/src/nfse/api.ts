@@ -35,6 +35,8 @@ import type { FiscalServiceOrigins } from './service-origins'
 import type { FiscalServiceProfiles } from './service-profiles'
 import type { FiscalServiceSubstitutions } from './substitution'
 
+const COMPETENCE = /^\d{4}-(0[1-9]|1[0-2])$/
+
 export type ServiceDependencies = {
   profiles: Pick<FiscalServiceProfiles, 'create' | 'list'>
   registry: Pick<FiscalNfseRegistry, 'importVersion' | 'review' | 'resolve'>
@@ -143,12 +145,18 @@ export async function handleServiceRoute(
     if (url.pathname === '/service-intakes' && request.method === 'GET') {
       if (!service.intakes) return unconfigured(response)
       const status = url.searchParams.get('status')
+      const documentType = url.searchParams.get('documentType')
+      const period = url.searchParams.get('period')
       json(
         response,
         200,
         fiscalServiceIntakeListSchema.parse({
           data: await service.intakes.list(tenantId, {
             status: status ? fiscalServiceIntakeStatusSchema.parse(status) : undefined,
+            documentType: documentType
+              ? z.enum(['service-delivery', 'contract-period']).parse(documentType)
+              : undefined,
+            period: period ? z.string().regex(COMPETENCE).parse(period) : undefined,
           }),
         }),
       )

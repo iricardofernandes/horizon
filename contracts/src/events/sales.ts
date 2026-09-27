@@ -344,3 +344,48 @@ export const salesContractCancelled = defineEvent({
     reason: z.string().trim().min(1).max(500),
   }),
 })
+
+const billedPeriodId = uuidSchema.describe('One billed period of a service contract')
+
+export const CONTRACT_CREDIT_REASONS = ['not-provided', 'billing-error'] as const
+
+export const salesContractPeriodBilled = defineEvent({
+  type: 'sales.contract-period.billed',
+  version: 1,
+  description:
+    'One period of a service contract was billed, with the revision, lines and amounts in force for it, now frozen. A contract bills each competence month once: Financial raises one receivable keyed by `billedPeriodId`, and Fiscal issues one NFS-e per line keyed by `entryId` and the competence month. Nothing moves stock.',
+  payload: z.object({
+    contractId,
+    billedPeriodId,
+    customerId: uuidSchema,
+    competence: competenceSchema.describe("YYYY-MM of the period's first month"),
+    revision: contractRevision,
+    startsOn: dateSchema,
+    endsOn: dateSchema,
+    /** The billing day: the issue date, from which the installments fall due. */
+    issuedOn: dateSchema,
+    lines: z.array(deliveredServiceLineSchema).min(1),
+    value: moneySchema,
+    installments: z.array(installmentSchema).min(1),
+    /** The billing run that billed it, or null when a person billed it alone. */
+    runId: uuidSchema.nullable(),
+    billedBy: z.string().min(1).max(255),
+  }),
+})
+
+export const salesContractPeriodCredited = defineEvent({
+  type: 'sales.contract-period.credited',
+  version: 1,
+  description:
+    'A billed contract period was credited in full: the service was not provided, or it was billed in error. The period stays in the record, marked credited, and is never billed again; Financial withdraws or reverses its receivable and Fiscal cancels the NFS-e of each line, or shows why it cannot.',
+  payload: z.object({
+    contractId,
+    billedPeriodId,
+    customerId: uuidSchema,
+    competence: competenceSchema,
+    entryIds: z.array(uuidSchema).min(1),
+    reasonCode: z.enum(CONTRACT_CREDIT_REASONS),
+    reason: z.string().trim().min(1).max(500),
+    creditedOn: dateSchema,
+  }),
+})

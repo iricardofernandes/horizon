@@ -1,6 +1,6 @@
 # Services implementation plan — Phase K
 
-Status: **in progress** — Phases 49, 50 and 51 delivered on 2026-09-26; phases 52–53 planned. This is the execution plan for Phase K of the
+Status: **in progress** — Phases 49 to 52 delivered on 2026-09-26; Phase 53 planned. This is the execution plan for Phase K of the
 [ERP expansion plan](erp-expansion-plan.md#phase-k--services-and-recurring-contracts),
 split into phases 49–53 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phase J.
@@ -165,6 +165,9 @@ Gaps:
 - Renewal continues the schedule with no gap and no overlap.
 
 ### 52 — Period billing and batch runs
+
+[Detailed Phase 52 plan](services-phase52-implementation-plan.md) ·
+[evidence](services-phase52-evidence.md).
 
 **Work**
 1. **Billing a period:**

@@ -2,7 +2,7 @@
 
 - Status: accepted; Phase 49 implements the service lines and the goods-only sales order,
   Phase 50 the service order, its deliveries and their receivable and NFS-e, Phase 51
-  recurring contracts
+  recurring contracts, Phase 52 period billing, billing runs and credits
 - Date: 2026-09-26
 
 ## Context
@@ -96,3 +96,12 @@ person can act on.
   a month, named by their first month (the competence). A contract changes only by
   insert-only revisions, suspensions and a cancellation that take effect at a period that
   has not begun, so a billed period's revision and amount never change.
+- **Phase 52: billing.**
+  - A billed period is an entity of the contract, unique per contract and competence,
+    whose facts never change. Its credit covers the whole period and is written once.
+  - A change can no longer take effect at a billed period.
+  - Financial keys the receivable by the billed period (`sales-contract-period`). Fiscal
+    keys one intake per billed line (`sales` / `contract-period` / entry id / competence).
+  - Sales follows both effects through their owners' events, so it can report billed
+    periods left without a receivable or an NFS-e without calling either module.
+  - Substitution (105102) stays out: a credit leaves nothing to substitute with.

@@ -127,6 +127,16 @@ export function startSupportGauges(
     (t) => t.importsBlocked,
   )
   gauge(
+    'fiscal_service_intakes_blocked',
+    'Services billed in Sales whose NFS-e is blocked until a person acts.',
+    (t) => t.serviceIntakesBlocked,
+  )
+  gauge(
+    'fiscal_service_intakes_cancellation_refused',
+    'Services withdrawn in Sales whose NFS-e could no longer be cancelled.',
+    (t) => t.serviceIntakesCancellationRefused,
+  )
+  gauge(
     'fiscal_outbox_undelivered',
     'Committed Fiscal events not yet published.',
     (t) => t.outboxUndelivered,

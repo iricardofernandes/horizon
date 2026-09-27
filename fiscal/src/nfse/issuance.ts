@@ -88,9 +88,10 @@ export class FiscalServiceIssuance {
     const document = await this.documents.get(command.tenantId, command.documentId)
     if (!document) throw new Error('Fiscal document not found')
     if (document.status !== 'ready') throw new Error('Fiscal document is not ready')
-    // A delivery cancelled in Sales withdrew this draft (Phase 50): it is never issued.
+    // A delivery cancelled or a period credited in Sales withdrew this draft: it is never
+    // issued (Phases 50 and 52).
     if (await this.withdrawnInSales(command.tenantId, command.documentId))
-      throw new Error('Fiscal document is blocked: its service delivery was cancelled in Sales')
+      throw new Error('Fiscal document is blocked: its service was withdrawn in Sales')
     if (document.model !== 'nfse' || document.environment !== 'simulation')
       throw new Error('Fiscal capability is unsupported')
     const evidence = await this.readReadiness(command.tenantId, command.documentId)

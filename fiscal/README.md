@@ -143,6 +143,23 @@ lists them. `sales.service.delivery-cancelled` withdraws the intake:
 
 `scripts/phase50-smoke.mjs` runs the services smoke through Kong.
 
+### Contract periods billed in Sales (Phase 52)
+
+`sales.contract-period.billed` is worked exactly like a delivery. Each billed line is one
+intake, with `sourceKey` `sales` / `contract-period` / entry id / competence month and the
+first day of the period as the competence date. The intake names `billedPeriodId` and
+`contractId` instead of `deliveryId` and `serviceOrderId`.
+
+`sales.contract-period.credited` withdraws the intakes of the period. The cancellation
+takes reason 2 when the service was not provided and reason 1 when it was billed in error.
+
+`GET /service-intakes` filters by `documentType` (`service-delivery` or `contract-period`)
+and `period`, so the intakes of one billing month can be listed. The gauges
+`fiscal_service_intakes_blocked` and `fiscal_service_intakes_cancellation_refused` feed the
+alerts `FiscalServiceIntakesBlocked` and `FiscalServiceCancellationRefused`.
+
+`scripts/phase52-smoke.mjs` runs the billing smoke through Kong.
+
 ### Operator reads, metrics and support (Phase 48)
 
 - `GET /documents` is the operator worklist:

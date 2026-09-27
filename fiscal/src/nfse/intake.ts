@@ -82,7 +82,12 @@ export class FiscalServiceIntakes {
 
   async list(
     tenantId: string,
-    filter: { status?: Status | undefined; limit?: number } = {},
+    filter: {
+      status?: Status | undefined
+      documentType?: 'service-delivery' | 'contract-period' | undefined
+      period?: string | undefined
+      limit?: number
+    } = {},
   ): Promise<FiscalServiceIntake[]> {
     z.uuid().parse(tenantId)
     const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200)
@@ -90,6 +95,8 @@ export class FiscalServiceIntakes {
       tenantId,
       (tx) => tx`select * from fiscal_service_intakes where tenant_id = ${tenantId}
         ${filter.status ? tx`and status = ${filter.status}` : tx``}
+        ${filter.documentType ? tx`and source_document_type = ${filter.documentType}` : tx``}
+        ${filter.period ? tx`and period = ${filter.period}` : tx``}
         order by created_at desc, id desc limit ${limit}`,
     )
     return rows.map(readIntake)
@@ -179,10 +186,10 @@ export class FiscalServiceIntakes {
           competenceDate: dateOf(intake.competence_date),
           amount: { amount: String(intake.amount_minor), currency: 'BRL' },
           description: String(intake.description),
-          reason: `Serviço entregue no Sales (entrega ${intake.delivery_id})`,
+          reason: originReason(intake),
           sourceKey: {
             module: 'sales',
-            documentType: 'service-delivery',
+            documentType: String(intake.source_document_type),
             id: String(intake.entry_id),
             period: String(intake.period),
           },
@@ -291,16 +298,16 @@ export class FiscalServiceIntakes {
     }
   }
 
-  /** Undo the NFS-e of a cancelled delivery, or say why it cannot be undone. */
+  /** Undo the NFS-e of a cancelled delivery or a credited period, or say why it cannot be. */
   private async withdraw(tenantId: string, intake: Row): Promise<Step> {
-    if (!intake.document_id) return withdrawn('The delivery was cancelled before any NFS-e')
+    if (!intake.document_id) return withdrawn('The service was withdrawn in Sales before any NFS-e')
     const documentId = String(intake.document_id)
     const document = await this.dependencies.documents.get(tenantId, documentId)
     if (!document) throw new Error('Fiscal document not found')
     switch (document.status) {
       case 'draft':
       case 'ready':
-        return withdrawn('The draft was withdrawn: the delivery was cancelled before issuance')
+        return withdrawn('The draft was withdrawn: the service was withdrawn before issuance')
       case 'rejected':
       case 'cancelled':
         return withdrawn(`The NFS-e is ${document.status}; nothing is left to undo`)
@@ -322,8 +329,7 @@ export class FiscalServiceIntakes {
         documentId,
         idempotencyKey: `sales-service-cancel-${intake.entry_id}`,
         actorId: ACTOR,
-        reasonCode: '2',
-        reason: `Serviço não prestado: ${intake.withdrawal_reason}`.slice(0, 255),
+        ...cancellationOf(intake),
       })
     } catch (error) {
       if (error instanceof ServiceCancellationWindowElapsed)
@@ -377,6 +383,21 @@ export class FiscalServiceIntakes {
   }
 }
 
+/** What the origin says about where it came from in Sales. */
+function originReason(intake: Row): string {
+  if (intake.source_document_type === 'contract-period')
+    return `Período ${intake.period} do contrato ${intake.contract_id} faturado no Sales`
+  return `Serviço entregue no Sales (entrega ${intake.delivery_id})`
+}
+
+/** The 101101 reason a withdrawal asked for: 2, not provided (the default), or 1, in error. */
+function cancellationOf(intake: Row): { reasonCode: '1' | '2'; reason: string } {
+  const text = String(intake.withdrawal_reason)
+  if (intake.withdrawal_code === '1')
+    return { reasonCode: '1', reason: `Erro na emissão: ${text}`.slice(0, 255) }
+  return { reasonCode: '2', reason: `Serviço não prestado: ${text}`.slice(0, 255) }
+}
+
 function blocked(reason: string): Step {
   return { status: 'blocked', reason: reason.slice(0, 1000) }
 }
@@ -408,8 +429,10 @@ function readIntake(row: Row): FiscalServiceIntake {
       id: row.entry_id,
       period: row.period,
     },
-    deliveryId: row.delivery_id,
-    serviceOrderId: row.service_order_id,
+    deliveryId: row.delivery_id ?? null,
+    serviceOrderId: row.service_order_id ?? null,
+    billedPeriodId: row.billed_period_id ?? null,
+    contractId: row.contract_id ?? null,
     customerId: row.customer_id,
     serviceItemId: row.service_item_id,
     competenceDate: dateOf(row.competence_date),

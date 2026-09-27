@@ -2385,10 +2385,20 @@ idempotent.
 
 ## Phase 52 — Period billing and batch runs
 
-**Planned.** Billing a period freezes it and publishes one fact per contract and month.
-Batch runs have preview, idempotent commit and restart. Credits are linked to the billed
-period. Run metrics and alerts are added.
-[Detailed work](services-implementation-plan.md#52--period-billing-and-batch-runs).
+**Delivered on 2026-09-26.** A contract period is billed once, frozen with its revision,
+lines, amounts and installments. Financial raises one receivable and Fiscal one NFS-e per
+billed line, however often a month is re-run or its events replayed.
+- **Billing runs:** a run for a competence month has a preview, commits under an
+  idempotency key and resumes after a stop. It lists each contract as billed, skipped or
+  refused, with the reason.
+- **Credits:** a credit covers a whole billed period. It withdraws or reverses the
+  receivable and cancels the NFS-e by 101101, and the period is kept.
+- **Changes:** a change can no longer take effect at a billed period.
+- **Follow-up:** Sales follows the receivable and the NFS-e of each billed period. Metrics
+  and alerts flag refusals, billed periods left without either, and blocked Fiscal intakes.
+
+[Evidence](services-phase52-evidence.md).
+[Detailed plan](services-phase52-implementation-plan.md). [Detailed work](services-implementation-plan.md#52--period-billing-and-batch-runs).
 
 ## Phase 53 — Service screens, golden path and release evidence
 

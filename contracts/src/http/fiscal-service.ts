@@ -224,12 +224,20 @@ export const fiscalServiceIntakeStatusSchema = z.enum([
   'cancellation-refused',
 ])
 
-/** One delivered service line on its way to an NFS-e, and where it stopped if it did. */
+/**
+ * One billed service line on its way to an NFS-e, and where it stopped if it did.
+ *
+ * A delivered line (`sourceKey.documentType` `service-delivery`) names its delivery and
+ * service order; a billed contract period (`contract-period`, 0.40.0) names the billed
+ * period and the contract instead.
+ */
 export const fiscalServiceIntakeSchema = z.strictObject({
   id: uuidSchema,
   sourceKey: fiscalServiceSourceKeySchema,
-  deliveryId: uuidSchema,
-  serviceOrderId: uuidSchema,
+  deliveryId: uuidSchema.nullable(),
+  serviceOrderId: uuidSchema.nullable(),
+  billedPeriodId: uuidSchema.nullable().optional(),
+  contractId: uuidSchema.nullable().optional(),
   customerId: uuidSchema,
   serviceItemId: uuidSchema,
   competenceDate: dateSchema,

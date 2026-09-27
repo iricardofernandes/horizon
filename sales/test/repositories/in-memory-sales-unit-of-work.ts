@@ -17,6 +17,8 @@ import type { ServiceContract } from '@/domain/entities/service-contract'
 import type { ServiceOrder } from '@/domain/entities/service-order'
 import type { Shipment } from '@/domain/entities/shipment'
 import {
+  BilledEffectsRepository,
+  BillingRunsRepository,
   type CatalogItemProjection,
   CatalogItemsRepository,
   CustomersRepository,
@@ -28,6 +30,7 @@ import {
   ServiceOrdersRepository,
   ShipmentsRepository,
 } from '@/domain/repositories/sales-repositories'
+import type { BillingRun, RunItem } from '@/domain/services/contract-billing'
 
 class InMemoryOrders extends SalesOrdersRepository {
   constructor(
@@ -303,6 +306,24 @@ class InMemoryContracts extends ServiceContractsRepository {
     this.events.push(...contract.pullDomainEvents())
     return Promise.resolve()
   }
+  read(id: string): Promise<ServiceContract | null> {
+    return this.findById(id)
+  }
+  inForce(from: string, to: string): Promise<readonly string[]> {
+    return Promise.resolve(
+      this.records
+        .filter((contract) => {
+          const snapshot = contract.toSnapshot()
+          return (
+            contract.tenantId === this.tenantId &&
+            snapshot.stage === 'active' &&
+            snapshot.startsOn <= to &&
+            (snapshot.endsOn === null || snapshot.endsOn >= from)
+          )
+        })
+        .map((contract) => contract.id.toString()),
+    )
+  }
   renewable(horizon: string): Promise<readonly string[]> {
     return Promise.resolve(
       this.records
@@ -318,8 +339,79 @@ class InMemoryContracts extends ServiceContractsRepository {
   }
 }
 
+class InMemoryBillingRuns extends BillingRunsRepository {
+  constructor(private readonly records: Map<string, BillingRun>) {
+    super()
+  }
+  create(run: BillingRun): Promise<void> {
+    this.records.set(run.id, run)
+    return Promise.resolve()
+  }
+  findById(id: string): Promise<BillingRun | null> {
+    return Promise.resolve(this.records.get(id) ?? null)
+  }
+  pending(runId: string, limit: number): Promise<readonly string[]> {
+    const run = this.records.get(runId)
+    return Promise.resolve(
+      (run?.items ?? [])
+        .filter((item) => item.outcome === 'pending')
+        .slice(0, limit)
+        .map((item) => item.contractId),
+    )
+  }
+  claim(runId: string, contractId: string): Promise<boolean> {
+    const item = this.records.get(runId)?.items.find((each) => each.contractId === contractId)
+    return Promise.resolve(item?.outcome === 'pending')
+  }
+  decide(
+    runId: string,
+    contractId: string,
+    decision: Pick<RunItem, 'outcome' | 'reason' | 'billedPeriodId'>,
+    at: Date,
+  ): Promise<void> {
+    const run = this.records.get(runId)
+    if (run)
+      this.records.set(runId, {
+        ...run,
+        items: run.items.map((item) =>
+          item.contractId === contractId && item.outcome === 'pending'
+            ? { ...item, ...decision, decidedAt: at }
+            : item,
+        ),
+      })
+    return Promise.resolve()
+  }
+  complete(runId: string, at: Date): Promise<boolean> {
+    const run = this.records.get(runId)
+    if (run?.status !== 'running' || run.items.some((item) => item.outcome === 'pending'))
+      return Promise.resolve(false)
+    this.records.set(runId, { ...run, status: 'completed', finishedAt: at })
+    return Promise.resolve(true)
+  }
+}
+
+class InMemoryBilledEffects extends BilledEffectsRepository {
+  constructor(private readonly effects: Map<string, unknown>) {
+    super()
+  }
+  receivablePosted(billedPeriodId: string, titleId: string, at: Date): Promise<boolean> {
+    this.effects.set(`receivable:${billedPeriodId}`, { titleId, at })
+    return Promise.resolve(true)
+  }
+  receivableReversed(titleId: string, at: Date): Promise<boolean> {
+    this.effects.set(`reversed:${titleId}`, at)
+    return Promise.resolve(true)
+  }
+  nfseObserved(entryId: string, documentId: string, outcome: string, at: Date): Promise<boolean> {
+    this.effects.set(`nfse:${entryId}`, { documentId, outcome, at })
+    return Promise.resolve(true)
+  }
+}
+
 export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
   readonly contracts: ServiceContract[] = []
+  readonly billingRuns = new Map<string, BillingRun>()
+  readonly billedEffects = new Map<string, unknown>()
   readonly serviceOrders: ServiceOrder[] = []
   readonly orders: SalesOrder[] = []
   readonly catalogItems: CatalogItemProjection[] = []
@@ -472,6 +564,8 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
       shipments: new InMemoryShipments(tenantId, this.shipments),
       serviceOrders: new InMemoryServiceOrders(tenantId, this.serviceOrders, this.events),
       contracts: new InMemoryContracts(tenantId, this.contracts, this.events),
+      billingRuns: new InMemoryBillingRuns(this.billingRuns),
+      billedEffects: new InMemoryBilledEffects(this.billedEffects),
       audit: new InMemoryAudit(this.auditRecords),
     })
   }

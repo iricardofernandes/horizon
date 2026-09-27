@@ -5,6 +5,7 @@ import type { SalesOrder } from '../entities/sales-order'
 import type { ServiceContract } from '../entities/service-contract'
 import type { ServiceOrder } from '../entities/service-order'
 import type { Shipment } from '../entities/shipment'
+import type { BillingRun, NfseOutcome, RunItem } from '../services/contract-billing'
 import type { LineDescription, Money } from '../value-objects/sales-values'
 
 /** What the Catalog says an item is; null for an item projected before Phase 49. */
@@ -34,11 +35,46 @@ export abstract class ServiceOrdersRepository {
 
 /** Services sold for a recurring fee, in effective-dated revisions (Phase 51). */
 export abstract class ServiceContractsRepository {
+  /** Loads the contract to change it, holding it until the transaction ends. */
   abstract findById(id: string): Promise<ServiceContract | null>
+  /** Loads the contract to read it, without holding it. */
+  abstract read(id: string): Promise<ServiceContract | null>
   abstract create(contract: ServiceContract): Promise<void>
   abstract save(contract: ServiceContract): Promise<void>
   /** Active, self-renewing contracts ending by `horizon`: candidates the domain decides on. */
   abstract renewable(horizon: string): Promise<readonly string[]>
+  /** Active contracts in force at some point of `[from, to]`: a billing run's candidates. */
+  abstract inForce(from: string, to: string): Promise<readonly string[]>
+}
+
+/** Billing runs and what they did to each contract (Phase 52). */
+export abstract class BillingRunsRepository {
+  abstract create(run: BillingRun): Promise<void>
+  abstract findById(id: string): Promise<BillingRun | null>
+  /** Contracts of the run still waiting for a decision, oldest first. */
+  abstract pending(runId: string, limit: number): Promise<readonly string[]>
+  /** Locks one item; false when it was already decided. */
+  abstract claim(runId: string, contractId: string): Promise<boolean>
+  abstract decide(
+    runId: string,
+    contractId: string,
+    decision: Pick<RunItem, 'outcome' | 'reason' | 'billedPeriodId'>,
+    at: Date,
+  ): Promise<void>
+  /** Closes a running run when nothing is pending; true only for the call that closed it. */
+  abstract complete(runId: string, at: Date): Promise<boolean>
+}
+
+/** What the owners did with a billed period, followed from their events (Phase 52). */
+export abstract class BilledEffectsRepository {
+  abstract receivablePosted(billedPeriodId: string, titleId: string, at: Date): Promise<boolean>
+  abstract receivableReversed(titleId: string, at: Date): Promise<boolean>
+  abstract nfseObserved(
+    entryId: string,
+    documentId: string,
+    outcome: NfseOutcome,
+    at: Date,
+  ): Promise<boolean>
 }
 
 /** A projection fed by `parties/`; Sales never registers a customer itself (ADR 0040). */

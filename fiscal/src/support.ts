@@ -32,6 +32,10 @@ export type FiscalSupportTotals = {
   outboxUndelivered: number
   outboxOldestSeconds: number
   sourcePackageMaxAgeDays: number | null
+  /** Billed services from Sales waiting on something a person must fix (Phases 50 and 52). */
+  serviceIntakesBlocked: number
+  /** Withdrawn services whose NFS-e could not be cancelled any more. */
+  serviceIntakesCancellationRefused: number
 }
 
 export type SupportCommandResult = {
@@ -163,6 +167,7 @@ export class FiscalSupport {
   /** Sums the tenants the worker serves; used by the metric gauges. */
   async totals(tenantIds: readonly string[], now = new Date()): Promise<FiscalSupportTotals> {
     const overviews = await Promise.all(tenantIds.map((tenantId) => this.overview(tenantId, now)))
+    const intakes = await Promise.all(tenantIds.map((tenantId) => this.intakeCounts(tenantId)))
     const certificates = overviews.flatMap((overview) => overview.certificates)
     const packages = overviews.flatMap((overview) => overview.sourcePackages)
     const sum = (read: (overview: FiscalSupportOverview) => number) =>
@@ -186,7 +191,23 @@ export class FiscalSupport {
       sourcePackageMaxAgeDays: packages.length
         ? Math.max(...packages.map((item) => item.ageDays))
         : null,
+      serviceIntakesBlocked: intakes.reduce((total, counts) => total + counts.blocked, 0),
+      serviceIntakesCancellationRefused: intakes.reduce(
+        (total, counts) => total + counts.refused,
+        0,
+      ),
     }
+  }
+
+  private async intakeCounts(tenantId: string): Promise<{ blocked: number; refused: number }> {
+    const [row] = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select
+          count(*) filter (where status = 'blocked')::int as blocked,
+          count(*) filter (where status = 'cancellation-refused')::int as refused
+        from fiscal_service_intakes where tenant_id = ${tenantId}`
+    })
+    return { blocked: Number(row?.blocked ?? 0), refused: Number(row?.refused ?? 0) }
   }
 
   /**

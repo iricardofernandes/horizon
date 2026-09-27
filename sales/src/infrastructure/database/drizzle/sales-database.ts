@@ -45,6 +45,14 @@ import {
   TaxId,
   TrackingCode,
 } from '@/domain/value-objects/sales-values'
+import {
+  billedEffectsOf,
+  billedEffectsRepository,
+  billingGaps,
+  billingRunsRepository,
+  findRun,
+  listRuns,
+} from './contract-billing-store'
 import * as schema from './schema'
 import { findContract, listContracts, serviceContractsRepository } from './service-contracts-store'
 import {
@@ -337,6 +345,28 @@ export class SalesDatabase extends SalesUnitOfWork {
 
   async findContract(tenantId: string, contractId: string) {
     return this.inTenant(tenantId, () => findContract(this.currentTransaction(), contractId))
+  }
+
+  /** A contract with what each of its billed periods raised downstream. */
+  async findContractWithEffects(tenantId: string, contractId: string) {
+    return this.inTenant(tenantId, async () => {
+      const tx = this.currentTransaction()
+      const contract = await findContract(tx, contractId)
+      if (!contract) return null
+      return { contract, effects: await billedEffectsOf(tx, contractId) }
+    })
+  }
+
+  async listBillingRuns(tenantId: string, competence: string | null) {
+    return this.inTenant(tenantId, () => listRuns(this.currentTransaction(), competence))
+  }
+
+  async findBillingRun(tenantId: string, runId: string) {
+    return this.inTenant(tenantId, () => findRun(this.currentTransaction(), runId))
+  }
+
+  async billingGaps(tenantId: string, before: Date) {
+    return this.inTenant(tenantId, () => billingGaps(this.currentTransaction(), before))
   }
 
   async close(): Promise<void> {
@@ -1087,6 +1117,8 @@ function makeScope(
     contracts: serviceContractsRepository(tx, tenantId, (contract) =>
       publishAll(tx, tenantId, contract),
     ),
+    billingRuns: billingRunsRepository(tx, tenantId),
+    billedEffects: billedEffectsRepository(tx, tenantId),
     customers: {
       findById: async (id) => {
         const [row] = await tx

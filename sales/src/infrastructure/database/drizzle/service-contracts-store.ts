@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { Either } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
@@ -8,6 +8,11 @@ import {
   ServiceContract,
 } from '@/domain/entities/service-contract'
 import type { ServiceContractsRepository } from '@/domain/repositories/sales-repositories'
+import {
+  type BilledPeriod,
+  CREDIT_REASONS,
+  type CreditReason,
+} from '@/domain/services/contract-billing'
 import {
   type ContractRevision,
   RECURRENCES,
@@ -41,12 +46,14 @@ export function serviceContractsRepository(
   }
   return {
     findById: (id) => loadContract(tx, id, true),
+    read: (id) => loadContract(tx, id, false),
     create: async (contract) => {
       const row = contract.toSnapshot()
       assertTenant(row.tenantId)
       await tx.insert(schema.serviceContracts).values(contractRow(row))
       await writeRevisions(tx, tenantId, row, new Set())
       await writeSuspensions(tx, tenantId, row, new Map())
+      await writeBilledPeriods(tx, tenantId, row, new Map())
       await publish(contract)
     },
     save: async (contract) => {
@@ -77,6 +84,19 @@ export function serviceContractsRepository(
         row,
         new Map(suspensions.map((stored) => [stored.id, stored.until])),
       )
+      const billed = await tx
+        .select({
+          id: schema.contractBilledPeriods.id,
+          credit: schema.contractBilledPeriods.creditReasonCode,
+        })
+        .from(schema.contractBilledPeriods)
+        .where(eq(schema.contractBilledPeriods.contractId, row.id))
+      await writeBilledPeriods(
+        tx,
+        tenantId,
+        row,
+        new Map(billed.map((stored) => [stored.id, stored.credit])),
+      )
       await publish(contract)
     },
     renewable: async (horizon) => {
@@ -96,6 +116,20 @@ export function serviceContractsRepository(
         )
         .orderBy(asc(schema.serviceContracts.endsOn))
         .limit(500)
+      return rows.map((row) => row.id)
+    },
+    inForce: async (from, to) => {
+      const rows = await tx
+        .select({ id: schema.serviceContracts.id })
+        .from(schema.serviceContracts)
+        .where(
+          and(
+            eq(schema.serviceContracts.stage, 'active'),
+            lte(schema.serviceContracts.startsOn, to),
+            or(isNull(schema.serviceContracts.endsOn), gte(schema.serviceContracts.endsOn, from)),
+          ),
+        )
+        .orderBy(asc(schema.serviceContracts.createdAt), asc(schema.serviceContracts.id))
       return rows.map((row) => row.id)
     },
   }
@@ -144,6 +178,7 @@ async function loadContract(
     .orderBy(asc(schema.serviceContractSuspensions.fromDate))
   const currency = restored(Currency.create(row.currency))
   const date = (value: string) => restored(BusinessDate.create(value))
+  const billedPeriods = await loadBilledPeriods(tx, row.id, currency)
   return ServiceContract.rehydrate(
     {
       tenantId: row.tenantId,
@@ -187,6 +222,7 @@ async function loadContract(
         createdBy: suspension.createdBy,
         createdAt: suspension.createdAt,
       })),
+      billedPeriods,
       cancellation:
         row.cancelledFrom && row.cancellationReason && row.cancelledBy && row.cancelledAt
           ? {
@@ -301,6 +337,132 @@ async function writeSuspensions(
             eq(schema.serviceContractSuspensions.id, suspension.id),
           ),
         )
+  }
+}
+
+async function loadBilledPeriods(
+  tx: Transaction,
+  contractId: string,
+  currency: Currency,
+): Promise<readonly BilledPeriod[]> {
+  const periods = await tx
+    .select()
+    .from(schema.contractBilledPeriods)
+    .where(eq(schema.contractBilledPeriods.contractId, contractId))
+    .orderBy(asc(schema.contractBilledPeriods.startsOn))
+  if (periods.length === 0) return []
+  const lines = await tx
+    .select()
+    .from(schema.contractBilledPeriodLines)
+    .where(
+      inArray(
+        schema.contractBilledPeriodLines.billedPeriodId,
+        periods.map((period) => period.id),
+      ),
+    )
+    .orderBy(asc(schema.contractBilledPeriodLines.position))
+  const date = (value: string) => restored(BusinessDate.create(value))
+  const money = (amount: bigint) => Money.fromAmount(amount, currency)
+  return periods.map((period): BilledPeriod => {
+    const credit = period.creditReasonCode
+      ? {
+          reasonCode: oneOf<CreditReason>(CREDIT_REASONS, period.creditReasonCode),
+          reason: restored(Reason.create(period.creditReason ?? '')),
+          creditedOn: date(period.creditedOn ?? ''),
+          by: period.creditedBy ?? '',
+          at: period.creditedAt ?? period.billedAt,
+        }
+      : null
+    return {
+      id: period.id,
+      competence: period.competence,
+      revision: period.revision,
+      startsOn: date(period.startsOn),
+      endsOn: date(period.endsOn),
+      issuedOn: date(period.issuedOn),
+      value: money(period.value),
+      installments: period.installments.map((installment) => ({
+        number: installment.number,
+        dueOn: date(installment.dueOn),
+        amount: money(BigInt(installment.amount)),
+      })),
+      runId: period.runId,
+      billedBy: period.billedBy,
+      billedAt: period.billedAt,
+      credit,
+      lines: lines
+        .filter((line) => line.billedPeriodId === period.id)
+        .map((line) => ({
+          entryId: line.entryId,
+          lineId: line.lineId,
+          itemId: line.itemId,
+          description: restored(LineDescription.create(line.description)),
+          quantity: Quantity.fromMicros(line.quantity),
+          unitPrice: money(line.unitPrice),
+          lineTotal: money(line.amount),
+          amount: money(line.amount),
+        })),
+    }
+  })
+}
+
+/** Inserts the periods billed since the load, and records a credit on one that had none. */
+async function writeBilledPeriods(
+  tx: Transaction,
+  tenantId: string,
+  row: Snapshot,
+  stored: ReadonlyMap<string, string | null>,
+): Promise<void> {
+  for (const period of row.billedPeriods) {
+    if (stored.has(period.id)) {
+      if (stored.get(period.id) === null && period.credit)
+        await tx
+          .update(schema.contractBilledPeriods)
+          .set({
+            creditReasonCode: period.credit.reasonCode,
+            creditReason: period.credit.reason,
+            creditedOn: period.credit.creditedOn,
+            creditedBy: period.credit.by,
+            creditedAt: period.credit.at,
+          })
+          .where(
+            and(
+              eq(schema.contractBilledPeriods.tenantId, tenantId),
+              eq(schema.contractBilledPeriods.id, period.id),
+            ),
+          )
+      continue
+    }
+    await tx.insert(schema.contractBilledPeriods).values({
+      id: period.id,
+      tenantId,
+      contractId: row.id,
+      competence: period.competence,
+      revision: period.revision,
+      startsOn: period.startsOn,
+      endsOn: period.endsOn,
+      issuedOn: period.issuedOn,
+      currency: row.currency,
+      value: BigInt(period.value),
+      installments: period.installments,
+      runId: period.runId,
+      billedBy: period.billedBy,
+      billedAt: period.billedAt,
+    })
+    await tx.insert(schema.contractBilledPeriodLines).values(
+      period.lines.map((line, position) => ({
+        tenantId,
+        entryId: line.entryId,
+        billedPeriodId: period.id,
+        lineId: line.lineId,
+        itemId: line.itemId,
+        description: line.description,
+        quantity: restored(Quantity.create(line.quantity)).micros,
+        unitPrice: BigInt(line.unitPrice),
+        amount: BigInt(line.amount),
+        position,
+      })),
+    )
   }
 }
 

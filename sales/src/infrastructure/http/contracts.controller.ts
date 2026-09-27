@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common'
 import { z } from 'zod'
 import type { ServiceContract } from '@/domain/entities/service-contract'
+import { billedSnapshot, CREDIT_REASONS } from '@/domain/services/contract-billing'
 import { RECURRENCES } from '@/domain/services/contract-schedule'
 import { BusinessDate } from '@/domain/value-objects/sales-values'
 import { SalesRuntime } from '@/main/sales-runtime'
@@ -65,6 +66,14 @@ const suspendInput = z.strictObject({ from: day, until: day.optional(), reason }
 const resumeInput = z.strictObject({ at: day })
 const cancelInput = z.strictObject({ from: day.optional(), reason })
 const scheduleQuery = z.strictObject({ from: day.optional(), to: day.optional() })
+const creditInput = z.strictObject({ reasonCode: z.enum(CREDIT_REASONS), reason })
+const competence = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+
+function competenceOf(value: string): string {
+  const parsed = competence.safeParse(value)
+  if (!parsed.success) throw new BadRequestException('Invalid competence month')
+  return parsed.data
+}
 
 function contractId(value: string): string {
   const parsed = z.uuid().safeParse(value)
@@ -111,6 +120,7 @@ export class ContractsController {
     const to = BusinessDate.create(range.to ?? BusinessDate.of(new Date()).plusDays(366).value)
     if (from.isLeft() || to.isLeft() || to.value.isBefore(from.value))
       throw new BadRequestException('Invalid schedule range')
+    const billed = new Map(contract.billedPeriods().map((period) => [period.competence, period]))
     return {
       contractId: snapshot.id,
       currency: snapshot.currency,
@@ -124,8 +134,82 @@ export class ContractsController {
         amount: period.amount.amount.toString(),
         billable: period.billable,
         excluded: period.excluded,
+        billedPeriodId: billed.get(period.competence)?.id ?? null,
+        credited: Boolean(billed.get(period.competence)?.credit),
       })),
     }
+  }
+
+  /** The periods billed so far, frozen, with what their receivable and NFS-e became. */
+  @Get(':id/billed-periods')
+  @RequireSalesAction('read')
+  async billedPeriods(@Param('id') id: string, @Req() request: SalesRequest) {
+    const found = await this.runtime.database.findContractWithEffects(
+      tenantOf(request),
+      contractId(id),
+    )
+    if (!found) throw new NotFoundException('Contract was not found')
+    const { contract, effects } = found
+    return {
+      contractId: contract.id.toString(),
+      currency: contract.toSnapshot().currency,
+      periods: contract.billedPeriods().map((period) => {
+        const snapshot = billedSnapshot(period)
+        const effect = effects.periods.get(period.id)
+        return {
+          ...snapshot,
+          receivable: {
+            titleId: effect?.receivableTitleId ?? null,
+            postedAt: effect?.receivablePostedAt ?? null,
+            reversedAt: effect?.receivableReversedAt ?? null,
+          },
+          lines: snapshot.lines.map((line) => {
+            const nfse = effects.lines.get(line.entryId)
+            return {
+              ...line,
+              nfse: { documentId: nfse?.nfseDocumentId ?? null, status: nfse?.nfseStatus ?? null },
+            }
+          }),
+        }
+      }),
+    }
+  }
+
+  /** Bill one period now, outside any run; refused with the reason it cannot be billed. */
+  @Post(':id/periods/:competence/bill')
+  @RequireSalesAction('manage')
+  async bill(
+    @Param('id') id: string,
+    @Param('competence') month: string,
+    @Req() request: SalesRequest,
+  ) {
+    return this.unwrap(
+      await this.runtime.billPeriod.execute({
+        context: idempotent(request),
+        contractId: contractId(id),
+        competence: competenceOf(month),
+      }),
+    )
+  }
+
+  /** Credit a billed period in full; the period stays, marked credited. */
+  @Post(':id/periods/:competence/credit')
+  @RequireSalesAction('manage')
+  async credit(
+    @Param('id') id: string,
+    @Param('competence') month: string,
+    @Body() body: unknown,
+    @Req() request: SalesRequest,
+  ) {
+    const input = parsed(creditInput, body, 'credit')
+    return this.unwrap(
+      await this.runtime.creditPeriod.execute({
+        ...input,
+        context: idempotent(request),
+        contractId: contractId(id),
+        competence: competenceOf(month),
+      }),
+    )
   }
 
   @Post()

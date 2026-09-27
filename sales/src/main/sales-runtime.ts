@@ -1,5 +1,12 @@
 import { type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
 import { SalesModuleEventHandlers } from '@/application/consume-module-events'
+import {
+  BillPeriodUseCase,
+  CreditPeriodUseCase,
+  PreviewBillingRunUseCase,
+  ProcessBillingRunUseCase,
+  StartBillingRunUseCase,
+} from '@/application/use-cases/contract-billing'
 import { ConvertQuoteUseCase } from '@/application/use-cases/convert-quote'
 import {
   DecideQuoteUseCase,
@@ -29,6 +36,7 @@ import {
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
+import { openTelemetryBillingMetrics } from '@/infrastructure/observability/billing-metrics'
 import type { SalesEnvironment } from './environment'
 
 export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
@@ -52,6 +60,13 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
   readonly renewContract: RenewContractUseCase
   readonly renewDueContracts: RenewDueContractsUseCase
   readonly decideContract: DecideContractUseCase
+  readonly billPeriod: BillPeriodUseCase
+  readonly creditPeriod: CreditPeriodUseCase
+  readonly previewBillingRun: PreviewBillingRunUseCase
+  readonly processBillingRun: ProcessBillingRunUseCase
+  readonly startBillingRun: StartBillingRunUseCase
+  /** How old a billed period may be before a missing receivable or NFS-e is reported. */
+  readonly billingGapSeconds: number
   readonly accessTokens: AccessTokenVerifier
 
   constructor(config: SalesEnvironment) {
@@ -96,6 +111,21 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
     this.renewContract = new RenewContractUseCase(this.database, clock)
     this.renewDueContracts = new RenewDueContractsUseCase(this.database, clock)
     this.decideContract = new DecideContractUseCase(this.database, clock)
+    this.billPeriod = new BillPeriodUseCase(this.database, clock)
+    this.creditPeriod = new CreditPeriodUseCase(this.database, clock)
+    this.previewBillingRun = new PreviewBillingRunUseCase(this.database, clock)
+    this.processBillingRun = new ProcessBillingRunUseCase(
+      this.database,
+      clock,
+      openTelemetryBillingMetrics,
+    )
+    this.startBillingRun = new StartBillingRunUseCase(
+      this.database,
+      clock,
+      this.renewDueContracts,
+      this.processBillingRun,
+    )
+    this.billingGapSeconds = config.CONTRACT_BILLING_GAP_SECONDS
   }
 
   onModuleInit(): Promise<void> {

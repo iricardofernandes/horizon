@@ -604,3 +604,83 @@ export class SalesContractCancelledEvent extends SalesEvent {
     }
   }
 }
+
+export class SalesContractPeriodBilledEvent extends SalesEvent {
+  readonly eventType = 'sales.contract-period.billed'
+  constructor(
+    contractId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly period: ContractFacts & {
+      billedPeriodId: string
+      competence: string
+      revision: number
+      startsOn: BusinessDate
+      endsOn: BusinessDate
+      issuedOn: BusinessDate
+      lines: readonly DeliveredServiceLine[]
+      value: Money
+      installments: readonly AgreedInstallment[]
+      runId: string | null
+      billedBy: string
+    },
+  ) {
+    super(contractId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      contractId: this.aggregateId.toString(),
+      billedPeriodId: this.period.billedPeriodId,
+      customerId: this.period.customerId,
+      competence: this.period.competence,
+      revision: this.period.revision,
+      startsOn: this.period.startsOn.value,
+      endsOn: this.period.endsOn.value,
+      issuedOn: this.period.issuedOn.value,
+      lines: this.period.lines.map((line) => ({
+        entryId: line.entryId,
+        lineId: line.lineId,
+        itemId: line.itemId,
+        description: line.description.value,
+        quantity: line.quantity.toString(),
+        unitPrice: moneyPayload(line.unitPrice),
+        amount: moneyPayload(line.amount),
+      })),
+      value: moneyPayload(this.period.value),
+      installments: this.period.installments.map(installmentPayload),
+      runId: this.period.runId,
+      billedBy: this.period.billedBy,
+    }
+  }
+}
+
+export class SalesContractPeriodCreditedEvent extends SalesEvent {
+  readonly eventType = 'sales.contract-period.credited'
+  constructor(
+    contractId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly credit: ContractFacts & {
+      billedPeriodId: string
+      competence: string
+      entryIds: readonly string[]
+      reasonCode: string
+      reason: string
+      creditedOn: BusinessDate
+    },
+  ) {
+    super(contractId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      contractId: this.aggregateId.toString(),
+      billedPeriodId: this.credit.billedPeriodId,
+      customerId: this.credit.customerId,
+      competence: this.credit.competence,
+      entryIds: [...this.credit.entryIds],
+      reasonCode: this.credit.reasonCode,
+      reason: this.credit.reason,
+      creditedOn: this.credit.creditedOn.value,
+    }
+  }
+}

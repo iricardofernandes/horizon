@@ -1,0 +1,63 @@
+# promtool test rules infra/observability/rules/sales.rules.test.yml
+rule_files:
+  - sales.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: a refused contract is reported with its reason, once per hour of refusals
+    interval: 1m
+    input_series:
+      - series: 'sales_contract_billing_outcomes_total{outcome="refused",reason="customer-inactive"}'
+        values: '0 0 1 1 1'
+      - series: 'sales_contract_billing_outcomes_total{outcome="billed",reason="none"}'
+        values: '0 5 10 15 20'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: SalesBillingRefusals
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: SalesBillingRefusals
+        exp_alerts:
+          - exp_labels: { severity: warning, module: sales, reason: customer-inactive }
+            exp_annotations:
+              summary: 'A billing run refused contracts because of customer-inactive'
+              runbook: docs/services-billing-runbook.md#salesbillingrefusals
+
+  - name: billed periods without their effects fire only after the hold time
+    interval: 1m
+    input_series:
+      - series: 'sales_contract_periods_without_receivable{host_name="a"}'
+        values: '2x40'
+      - series: 'sales_contract_periods_without_nfse{host_name="a"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: SalesPeriodsWithoutReceivable
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: SalesPeriodsWithoutReceivable
+        exp_alerts:
+          - exp_labels: { severity: warning, module: sales }
+            exp_annotations:
+              summary: 'Billed contract periods past the threshold still have no posted receivable'
+              runbook: docs/services-billing-runbook.md#salesperiodswithoutreceivable
+      - eval_time: 31m
+        alertname: SalesPeriodsWithoutNfse
+        exp_alerts: []
+
+  - name: a restart does not duplicate or hide the gauge
+    interval: 1m
+    input_series:
+      - series: 'sales_contract_periods_without_nfse{host_name="old"}'
+        values: '1x10 _x30'
+      - series: 'sales_contract_periods_without_nfse{host_name="new"}'
+        values: '_x10 1x30'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: SalesPeriodsWithoutNfse
+        exp_alerts:
+          - exp_labels: { severity: warning, module: sales }
+            exp_annotations:
+              summary: 'Billed contract periods past the threshold still have no authorized NFS-e'
+              runbook: docs/services-billing-runbook.md#salesperiodswithoutnfse

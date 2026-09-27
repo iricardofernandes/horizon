@@ -172,6 +172,36 @@ há 15 minutos.
 2. Se mudou, importe e revise o pacote novo antes da próxima liberação de adaptador. Não
    altere um pacote já usado; documentos antigos recalculam com a versão que usaram.
 
+### FiscalServiceIntakesBlocked
+
+**Sintoma:** um serviço faturado no Sales (entrega de ordem de serviço ou período de
+contrato) espera há uma hora pela NFS-e, bloqueado.
+
+**Ação:**
+1. Liste as entradas bloqueadas: `GET /fiscal/service-intakes?status=blocked`. Para um mês
+   de contratos, filtre por `documentType=contract-period&period=AAAA-MM`. O campo `reason`
+   diz o que falta.
+2. Corrija a causa no lugar certo:
+   - `SERVICE_PROFILE_MISSING`: crie a revisão do perfil fiscal do serviço;
+   - município sem suporte ou sem estabelecimento: configure a capacidade NFS-e;
+   - perfil do cliente ou do emitente ausente: complete o cadastro de origem;
+   - E0015: a competência ainda não começou no fuso do emitente, então é só esperar.
+3. Peça nova tentativa: `POST /fiscal/service-intakes/{id}/retry`. Sem isso, o worker tenta
+   de novo sozinho, com espera crescente de até uma hora.
+
+### FiscalServiceCancellationRefused
+
+**Sintoma:** um serviço foi retirado no Sales (entrega cancelada ou período creditado), mas
+a NFS-e já estava fora do prazo municipal de cancelamento.
+
+**Ação:**
+1. Encontre a entrada em `GET /fiscal/service-intakes?status=cancellation-refused`. O
+   `reason` traz o prazo que expirou.
+2. A NFS-e continua autorizada. O ajuste é uma decisão fiscal fora do sistema: por exemplo,
+   uma nota de crédito ou o procedimento do município. Registre a decisão.
+3. O título do Financeiro já foi retirado ou estornado pelo crédito, ou está sinalizado para
+   revisão se havia baixa.
+
 ## Restauração de artefatos
 
 Banco e objetos são restaurados **juntos**. Os artefatos são cifrados com uma chave

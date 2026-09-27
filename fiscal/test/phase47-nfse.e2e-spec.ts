@@ -736,7 +736,7 @@ describe('Phase 50 services delivered in Sales', () => {
       withdrawalRequested: true,
     })
     await validate(tenant, documentId)
-    await expect(issue(tenant, documentId)).rejects.toThrow(/cancelled in Sales/)
+    await expect(issue(tenant, documentId)).rejects.toThrow(/withdrawn in Sales/)
     await expect(
       scoped(tenant.tenantId, (tx) => tx`update fiscal_service_intakes set status = 'pending'`),
     ).rejects.toThrow(/only moves forward/)
@@ -794,7 +794,130 @@ describe('Phase 50 services delivered in Sales', () => {
   })
 })
 
-function intakesOf(tenant: Tenant) {
+describe('Phase 52 contract periods billed in Sales', () => {
+  it('issues one NFS-e per billed line, however the period is replayed, and cancels it on a credit', async () => {
+    const tenant = await seedTenant()
+    await policies.set({
+      tenantId: tenant.tenantId,
+      establishmentId: tenant.establishmentId,
+      actorId: 'reviewer:phase52-test',
+      request: { mode: 'automatic', series: 8, reason: 'Emissão automática revisada no teste' },
+    })
+    const fact = billedFact(tenant)
+    const eventId = randomUUID()
+    expect(await receive(tenant, 'sales.contract-period.billed', fact, eventId)).toBe('applied')
+    expect(await receive(tenant, 'sales.contract-period.billed', fact, eventId)).toBe('duplicate')
+    expect(await receive(tenant, 'sales.contract-period.billed', fact)).toBe('applied')
+    // A delivery in the same month lists apart from the contract's periods.
+    await receive(tenant, 'sales.service.delivered', deliveredFact(tenant, 1))
+
+    const reasonCodes: string[] = []
+    const intakes = intakesOf(tenant, {
+      request: (input) => {
+        reasonCodes.push(input.reasonCode)
+        return tenant.cancellation.request(input)
+      },
+    })
+    while (await intakes.processOne(tenant.tenantId));
+    await work(tenant, 'authorized')
+    await work(tenant, 'authorized')
+    const listed = await intakes.list(tenant.tenantId, {
+      documentType: 'contract-period',
+      period: '2026-09',
+    })
+    expect(listed).toHaveLength(1)
+    expect(listed[0]).toMatchObject({
+      status: 'issuing',
+      sourceKey: { module: 'sales', documentType: 'contract-period', period: '2026-09' },
+      billedPeriodId: fact.billedPeriodId,
+      contractId: fact.contractId,
+      deliveryId: null,
+      serviceOrderId: null,
+      competenceDate: '2026-09-01',
+    })
+    expect(await intakes.list(tenant.tenantId, { period: '2026-08' })).toEqual([])
+    const documentId = String(listed[0]?.documentId)
+    expect(await serviceDocuments.get(tenant.tenantId, documentId)).toMatchObject({
+      status: 'authorized',
+      series: 8,
+    })
+    const [origin] = await scoped(
+      tenant.tenantId,
+      (tx) => tx`select source_document_type, source_id from fiscal_service_origins
+        where source_document_type = 'contract-period'`,
+    )
+    expect(origin).toMatchObject({
+      source_document_type: 'contract-period',
+      source_id: fact.lines[0]?.entryId,
+    })
+
+    await expect(
+      receive(tenant, 'sales.contract-period.credited', {
+        ...creditedFact(fact),
+        billedPeriodId: randomUUID(),
+      }),
+    ).rejects.toThrow(/has not been received yet/)
+    await receive(tenant, 'sales.contract-period.credited', creditedFact(fact))
+    while (await intakes.processOne(tenant.tenantId));
+    await work(tenant, 'authorized')
+    await forceDue(tenant)
+    while (await intakes.processOne(tenant.tenantId));
+    expect((await serviceDocuments.get(tenant.tenantId, documentId))?.status).toBe('cancelled')
+    expect(reasonCodes).toEqual(['1'])
+    const [withdrawn] = await intakes.list(tenant.tenantId, { documentType: 'contract-period' })
+    expect(withdrawn).toMatchObject({ status: 'withdrawn', withdrawalRequested: true })
+    const cancelled = (await outbox(tenant)).filter(
+      (row) =>
+        row.payload.outcome === 'cancelled' &&
+        row.payload.sourceKey?.documentType === 'contract-period',
+    )
+    expect(cancelled).toHaveLength(1)
+    await expect(
+      scoped(
+        tenant.tenantId,
+        (tx) => tx`update fiscal_service_intakes set withdrawal_code = '2'
+          where billed_period_id = ${fact.billedPeriodId}`,
+      ),
+    ).rejects.toThrow(/only moves forward/)
+  })
+})
+
+function billedFact(tenant: Tenant) {
+  const delivered = deliveredFact(tenant, 1)
+  return {
+    contractId: randomUUID(),
+    billedPeriodId: randomUUID(),
+    customerId: tenant.recipientId,
+    competence: '2026-09',
+    revision: 1,
+    startsOn: '2026-09-01',
+    endsOn: '2026-09-30',
+    issuedOn: '2026-09-05',
+    lines: delivered.lines,
+    value: delivered.value,
+    installments: delivered.installments,
+    runId: randomUUID(),
+    billedBy: 'user:operator',
+  }
+}
+
+function creditedFact(fact: ReturnType<typeof billedFact>) {
+  return {
+    contractId: fact.contractId,
+    billedPeriodId: fact.billedPeriodId,
+    customerId: fact.customerId,
+    competence: fact.competence,
+    entryIds: fact.lines.map((line) => line.entryId),
+    reasonCode: 'billing-error',
+    reason: 'Faturado com o posto errado',
+    creditedOn: '2026-09-21',
+  }
+}
+
+function intakesOf(
+  tenant: Tenant,
+  cancellation: Pick<Tenant['cancellation'], 'request'> = tenant.cancellation,
+) {
   const intakes = new FiscalServiceIntakes(url, {
     projections,
     capabilities,
@@ -804,7 +927,7 @@ function intakesOf(tenant: Tenant) {
     readiness,
     policies,
     issuance: tenant.issuance,
-    cancellation: tenant.cancellation,
+    cancellation,
   })
   services.push(intakes)
   return intakes
