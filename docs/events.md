@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.44.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.45.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -143,6 +143,23 @@ A catalog item was placed in a product family as one combination of attributes.
 
 ## `crm`
 
+### `crm.opportunity.converted` — v1
+
+A Sales quote for the opportunity was accepted: the opportunity is won at the quote total, with the owner and source it had. Sent once per opportunity; crm.opportunity.won is also sent when it was not won already.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `opportunityId` | string | yes | The opportunity, stable across every event. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `accountId` | string | yes | The account, which is the party id. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `quoteId` | string | yes | The accepted version. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `quoteRoot` | string | yes | The offer every version of the quote shares. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `quoteVersion` | integer | yes | — |
+| `value` | object | yes | The accepted quote total |
+| `ownerId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `sourceId` | any | yes | — |
+| `closedOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
 ### `crm.opportunity.created` — v1
 
 An opportunity was opened on an account, in a pipeline stage, owned by a user, with an expected value and close date.
@@ -1201,6 +1218,7 @@ The customer agreed to this version of the offer. Nothing is committed and no st
 | `version` | integer | yes | — |
 | `customerId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
 | `total` | object | yes | — |
+| `attribution` | any | no | — |
 ### `sales.quote.rejected` — v1
 
 The customer declined this version of the offer, with the reason they gave. A refusal is worth as much to the record as a yes.
@@ -1214,6 +1232,7 @@ The customer declined this version of the offer, with the reason they gave. A re
 | `version` | integer | yes | — |
 | `customerId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
 | `reason` | string | yes | min length 1. max length 500 |
+| `attribution` | any | no | — |
 ### `sales.quote.sent` — v1
 
 This version of an offer was put in front of the customer, priced and dated. A quote sent is never rewritten: negotiating produces a new version beside it, sharing the same root.
@@ -1228,6 +1247,7 @@ This version of an offer was put in front of the customer, priced and dated. A q
 | `customerId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
 | `total` | object | yes | — |
 | `expiresAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
+| `attribution` | any | no | — |
 ### `sales.service.delivered` — v1
 
 Work of a service order was delivered to the customer, in part or in full, on the day it was performed. Each delivery is published once and billed once: Financial raises one receivable keyed by `deliveryId`, and Fiscal issues one NFS-e per line keyed by `entryId` and the competence month. Nothing moves stock.

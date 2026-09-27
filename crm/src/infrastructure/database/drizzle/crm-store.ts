@@ -32,6 +32,7 @@ import {
   Segment,
   Tags,
 } from '@/domain/value-objects/crm-values'
+import { opportunityQuotesRepository } from './quote-links-store'
 import { type AccountSealer, KeyRing, recordRepositories } from './record-store'
 import * as schema from './schema'
 
@@ -215,6 +216,14 @@ export function mapOpportunity(row: typeof schema.opportunities.$inferSelect): O
       lossReasonId: row.lossReasonId,
       lossNote: row.lossNote,
       closedOn: row.closedOn,
+      conversion:
+        row.convertedQuoteId && row.convertedQuoteRoot && row.convertedQuoteVersion
+          ? {
+              quoteId: row.convertedQuoteId,
+              quoteRoot: row.convertedQuoteRoot,
+              quoteVersion: row.convertedQuoteVersion,
+            }
+          : null,
       version: row.version,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -248,6 +257,9 @@ function opportunityRow(opportunity: Opportunity) {
     lossReasonId: state.lossReasonId,
     lossNote: state.lossNote,
     closedOn: state.closedOn,
+    convertedQuoteId: state.conversion?.quoteId ?? null,
+    convertedQuoteRoot: state.conversion?.quoteRoot ?? null,
+    convertedQuoteVersion: state.conversion?.quoteVersion ?? null,
     version: state.version,
     updatedAt: state.updatedAt,
   }
@@ -603,6 +615,7 @@ export function makeScope(tx: Transaction, tenantId: string, sealers: Sealers): 
         await appendHistory(opportunity)
       },
     },
+    quotes: opportunityQuotesRepository(tx, tenantId),
     ...recordRepositories(
       tx,
       tenantId,

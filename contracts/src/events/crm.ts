@@ -118,6 +118,24 @@ export const crmOpportunityReopened = defineEvent({
   }),
 })
 
+export const crmOpportunityConverted = defineEvent({
+  type: 'crm.opportunity.converted',
+  version: 1,
+  description:
+    'A Sales quote for the opportunity was accepted: the opportunity is won at the quote total, with the owner and source it had. Sent once per opportunity; crm.opportunity.won is also sent when it was not won already.',
+  payload: z.strictObject({
+    opportunityId,
+    accountId,
+    quoteId: uuidSchema.describe('The accepted version'),
+    quoteRoot: uuidSchema.describe('The offer every version of the quote shares'),
+    quoteVersion: z.number().int().positive(),
+    value: moneySchema.describe('The accepted quote total'),
+    ownerId: uuidSchema,
+    sourceId: uuidSchema.nullable(),
+    closedOn: dateSchema,
+  }),
+})
+
 /**
  * A task's reminder came due (Phase 57). Published once per armed reminder, even across
  * scheduler restarts, so a webhook can alert the assignee. The title is never published:

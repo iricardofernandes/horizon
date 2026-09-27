@@ -2474,9 +2474,15 @@ destroyed with its party.
 
 ## Phase 58 — Conversion to quote and attribution
 
-**Planned.** Sales projects open opportunities, and a quote freezes the source and owner
-of its opportunity. An accepted quote wins the opportunity. CRM never writes to Sales.
-[Detailed work](crm-implementation-plan.md#58--conversion-to-quote-and-attribution).
+**Delivered on 2026-09-27.** Sales projects opportunities from `crm.opportunity.*`.
+- A quote may name an opportunity. Sales freezes its owner and source on the first
+  version, every version keeps them, and `sales.quote.*` carry them (contracts 0.45.0).
+- An accepted quote converts the opportunity once: won at the quote total, published as
+  `crm.opportunity.converted`, and never reopened.
+- CRM never writes to Sales, and Sales takes no attribution from a request.
+
+[Evidence](crm-phase58-evidence.md).
+[Detailed plan](crm-phase58-implementation-plan.md). [Detailed work](crm-implementation-plan.md#58--conversion-to-quote-and-attribution).
 
 ## Phase 59 — Forecast and pipeline metrics rebuilt from history
 

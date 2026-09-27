@@ -23,6 +23,7 @@ import {
   CatalogItemsRepository,
   CustomersRepository,
   type ItemKind,
+  type OpportunityProjectionsRepository,
   QuotesRepository,
   SalesEventsRepository,
   SalesOrdersRepository,
@@ -421,7 +422,60 @@ class InMemoryBilledEffects extends BilledEffectsRepository {
   }
 }
 
+interface ProjectedOpportunity {
+  accountId: string
+  ownerId: string | null
+  ownerAsOf: number | null
+  sourceId: string | null
+  sourceAsOf: number | null
+  status: 'open' | 'won' | 'lost' | null
+  statusAsOf: number | null
+}
+
+/** Field by field, as the SQL upsert: a field moves only for a fact at least as recent. */
+function projectOpportunities(
+  tenantId: string,
+  store: Map<string, ProjectedOpportunity>,
+): OpportunityProjectionsRepository {
+  return {
+    find: async (id) => {
+      const row = store.get(`${tenantId}:${id}`)
+      return row
+        ? {
+            id,
+            accountId: row.accountId,
+            ownerId: row.ownerId,
+            sourceId: row.sourceId,
+            status: row.status,
+          }
+        : null
+    },
+    record: async (update) => {
+      const key = `${tenantId}:${update.id}`
+      const row = store.get(key) ?? {
+        accountId: update.accountId,
+        ownerId: null,
+        ownerAsOf: null,
+        sourceId: null,
+        sourceAsOf: null,
+        status: null,
+        statusAsOf: null,
+      }
+      const at = update.at.getTime()
+      const newer = (asOf: number | null) => asOf === null || at >= asOf
+      if (update.ownerId !== undefined && newer(row.ownerAsOf))
+        Object.assign(row, { ownerId: update.ownerId, ownerAsOf: at })
+      if (update.sourceId !== undefined && newer(row.sourceAsOf))
+        Object.assign(row, { sourceId: update.sourceId, sourceAsOf: at })
+      if (update.status !== undefined && newer(row.statusAsOf))
+        Object.assign(row, { status: update.status, statusAsOf: at })
+      store.set(key, row)
+    },
+  }
+}
+
 export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
+  readonly opportunities = new Map<string, ProjectedOpportunity>()
   readonly contracts: ServiceContract[] = []
   readonly billingRuns = new Map<string, BillingRun>()
   readonly billedEffects = new Map<string, unknown>()
@@ -574,6 +628,7 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
       }),
       customers: new InMemoryCustomers(tenantId, this.customers),
       quotes: new InMemoryQuotes(tenantId, this.quotes, this.events),
+      opportunities: projectOpportunities(tenantId, this.opportunities),
       shipments: new InMemoryShipments(tenantId, this.shipments),
       serviceOrders: new InMemoryServiceOrders(tenantId, this.serviceOrders, this.events),
       contracts: new InMemoryContracts(tenantId, this.contracts, this.events),

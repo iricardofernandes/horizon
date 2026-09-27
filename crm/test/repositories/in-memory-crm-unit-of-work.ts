@@ -17,7 +17,7 @@ import type { Note, NoteRevision } from '@/domain/entities/note'
 import type { Opportunity, RecordedFact } from '@/domain/entities/opportunity'
 import type { Pipeline } from '@/domain/entities/pipeline'
 import type { Task } from '@/domain/entities/task'
-import type { Owner } from '@/domain/repositories/crm-repositories'
+import type { Owner, QuoteLink } from '@/domain/repositories/crm-repositories'
 
 /**
  * Tenant-scoped in-memory CRM (ADR 0014). Keys stand in for the contact data keys: an
@@ -37,6 +37,8 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
   readonly notes = new Map<string, Note>()
   /** Every revision each note had written, as the append-only table would hold it. */
   readonly noteRevisions = new Map<string, NoteRevision[]>()
+  /** One link per offer, keyed by opportunity and quote root, as the table holds them. */
+  readonly quoteLinks = new Map<string, QuoteLink>()
   /** Accounts whose record key exists and was not destroyed. */
   readonly accountKeys = new Set<string>()
   readonly published: DomainEvent[] = []
@@ -138,6 +140,19 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
           this.keepNote(note)
         },
         save: async (note) => this.keepNote(note),
+      },
+      quotes: {
+        record: async (link) => {
+          const key = `${tenantId}:${link.opportunityId}:${link.quoteRoot}`
+          const known = this.quoteLinks.get(key)
+          const rank = (status: QuoteLink['status']) => (status === 'sent' ? 1 : 2)
+          const moves =
+            !known ||
+            link.quoteVersion > known.quoteVersion ||
+            (link.quoteVersion === known.quoteVersion && rank(link.status) > rank(known.status))
+          if (moves)
+            this.quoteLinks.set(key, { ...link, total: link.total ?? known?.total ?? null })
+        },
       },
       audit: { append: async (record) => void this.audit.push({ ...record, tenantId }) },
     })

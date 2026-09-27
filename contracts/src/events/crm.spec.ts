@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
+  crmOpportunityConverted,
   crmOpportunityCreated,
   crmOpportunityLost,
   crmOpportunityReopened,
@@ -70,6 +71,26 @@ describe('task events', () => {
     expect(
       crmTaskDue.payload.safeParse({ ...due, subject: { type: 'quote', id: randomUUID() } })
         .success,
+    ).toBe(false)
+  })
+})
+
+describe('conversion', () => {
+  it('carries the accepted quote, its value and the attribution', () => {
+    const converted = {
+      opportunityId: randomUUID(),
+      accountId: randomUUID(),
+      quoteId: randomUUID(),
+      quoteRoot: randomUUID(),
+      quoteVersion: 2,
+      value: { amount: '2800000', currency: 'BRL' },
+      ownerId: randomUUID(),
+      sourceId: randomUUID(),
+      closedOn: '2026-09-27',
+    }
+    expect(crmOpportunityConverted.payload.safeParse(converted).success).toBe(true)
+    expect(
+      crmOpportunityConverted.payload.safeParse({ ...converted, quoteVersion: 0 }).success,
     ).toBe(false)
   })
 })

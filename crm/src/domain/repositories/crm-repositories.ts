@@ -94,3 +94,23 @@ export abstract class NotesRepository {
   /** Appends the new revisions; nothing already written changes. */
   abstract save(note: Note): Promise<void>
 }
+
+/** A Sales quote made for an opportunity, as CRM last heard of it (Phase 58). */
+export interface QuoteLink {
+  readonly opportunityId: string
+  readonly quoteRoot: string
+  readonly quoteId: string
+  readonly quoteVersion: number
+  readonly status: 'sent' | 'accepted' | 'rejected'
+  /** A rejection does not repeat the total; the one already known is kept. */
+  readonly total: { readonly amount: string; readonly currency: string } | null
+  readonly seenAt: Date
+}
+
+export abstract class OpportunityQuotesRepository {
+  /**
+   * Keep the latest version of each offer and what happened to it: an older version, or an
+   * earlier state of the same version, never overwrites what is already known.
+   */
+  abstract record(link: QuoteLink): Promise<void>
+}

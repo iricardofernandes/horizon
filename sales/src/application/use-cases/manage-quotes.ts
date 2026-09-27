@@ -3,7 +3,12 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
-import { Quote, type QuoteLine, type QuoteTerms } from '@/domain/entities/quote'
+import {
+  Quote,
+  type QuoteAttribution,
+  type QuoteLine,
+  type QuoteTerms,
+} from '@/domain/entities/quote'
 import {
   CarrierName,
   type Currency,
@@ -61,12 +66,15 @@ export class WriteQuoteUseCase {
     context: IdempotentContext
     customerId: string
     quote: QuoteRequest
+    /** The CRM opportunity the offer is for; its owner and source come from Sales's projection. */
+    opportunityId?: string | undefined
   }): Outcome<{ quoteId: string; expiresAt: Date; total: string }> {
-    const { context } = request
-    return once(this.unitOfWork, context, 'quote.write', request.quote, async (scope) => {
-      const customer = await scope.customers.findById(request.customerId)
-      if (!customer) return left(new ResourceNotFoundError('customer was not found'))
-      if (!customer.isActive()) return left(new ConflictError('customer is no longer active'))
+    const { context, opportunityId } = request
+    // A quote without an opportunity keeps the fingerprint it always had.
+    const asked = opportunityId ? { ...request.quote, opportunityId } : request.quote
+    return once(this.unitOfWork, context, 'quote.write', asked, async (scope) => {
+      const attribution = await offeredTo(scope, request.customerId, opportunityId)
+      if (attribution.isLeft()) return left(attribution.value)
       const priced = await priceLines(scope, request.quote.lines)
       if (priced.isLeft()) return left(priced.value)
       const [first] = priced.value
@@ -83,6 +91,7 @@ export class WriteQuoteUseCase {
         terms: terms.value,
         expiresAt: new Date(now.getTime() + this.validityDays * 86_400_000),
         now,
+        attribution: attribution.value,
       })
       if (quote.isLeft()) return left(quote.value)
       await scope.quotes.create(quote.value)
@@ -96,6 +105,7 @@ export class WriteQuoteUseCase {
           lines: request.quote.lines.length,
           total: quote.value.total().amount,
           discount: terms.value.discount.amount,
+          ...(attribution.value ? { attribution: attribution.value } : {}),
         },
       })
       return right({
@@ -105,6 +115,45 @@ export class WriteQuoteUseCase {
       })
     })
   }
+}
+
+/**
+ * Whom the offer is for: an active customer and, when the quote names one, the attribution
+ * of its opportunity.
+ */
+async function offeredTo(
+  scope: SalesScope,
+  customerId: string,
+  opportunityId: string | undefined,
+): Promise<Either<QuoteError, QuoteAttribution | null>> {
+  const customer = await scope.customers.findById(customerId)
+  if (!customer) return left(new ResourceNotFoundError('customer was not found'))
+  if (!customer.isActive()) return left(new ConflictError('customer is no longer active'))
+  return opportunityId ? attributionOf(scope, opportunityId, customerId) : right(null)
+}
+
+/**
+ * The owner and source a quote freezes, read from Sales's own projection of the CRM
+ * opportunity (Phase 58). The opportunity must be open and belong to the quote's customer:
+ * the account id is the party id, which is the customer id.
+ */
+async function attributionOf(
+  scope: SalesScope,
+  opportunityId: string,
+  customerId: string,
+): Promise<Either<QuoteError, QuoteAttribution>> {
+  const opportunity = await scope.opportunities.find(opportunityId)
+  if (!opportunity || opportunity.ownerId === null || opportunity.status === null)
+    return left(new ResourceNotFoundError('opportunity is not known to Sales yet'))
+  if (opportunity.accountId !== customerId)
+    return left(new InvalidInputError('/opportunityId', 'belongs to another customer'))
+  if (opportunity.status !== 'open')
+    return left(new ConflictError(`the opportunity is ${opportunity.status}`))
+  return right({
+    opportunityId,
+    ownerId: opportunity.ownerId,
+    sourceId: opportunity.sourceId,
+  })
 }
 
 /**

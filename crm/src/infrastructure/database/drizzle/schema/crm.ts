@@ -207,6 +207,10 @@ export const opportunities = pgTable('opportunities', {
   lossReasonId: uuid('loss_reason_id'),
   lossNote: text('loss_note'),
   closedOn: date('closed_on', { mode: 'string' }),
+  /** The accepted Sales quote it converted into (Phase 58). */
+  convertedQuoteId: uuid('converted_quote_id'),
+  convertedQuoteRoot: uuid('converted_quote_root'),
+  convertedQuoteVersion: integer('converted_quote_version'),
   version: integer('version').notNull(),
   createdAt: instant('created_at').notNull(),
   updatedAt: instant('updated_at').notNull(),
@@ -309,4 +313,23 @@ export const noteRevisions = pgTable(
     writtenAt: instant('written_at').notNull(),
   },
   (table) => [primaryKey({ columns: [table.tenantId, table.noteId, table.revision] })],
+)
+
+/** The Sales quotes made for an opportunity, one row per offer (Phase 58). */
+export const opportunityQuotes = pgTable(
+  'opportunity_quotes',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    opportunityId: uuid('opportunity_id').notNull(),
+    quoteRoot: uuid('quote_root').notNull(),
+    quoteId: uuid('quote_id').notNull(),
+    quoteVersion: integer('quote_version').notNull(),
+    status: text('status').notNull(),
+    totalAmount: bigint('total_amount', { mode: 'bigint' }),
+    currency: text('currency'),
+    seenAt: instant('seen_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.opportunityId, table.quoteRoot] })],
 )

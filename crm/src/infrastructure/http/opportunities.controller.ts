@@ -218,7 +218,7 @@ export class OpportunitiesController {
       id(opportunityId),
     )
     if (!detail) throw new NotFoundException('Opportunity was not found')
-    return { ...detail.opportunity, history: detail.history }
+    return { ...detail.opportunity, history: detail.history, quotes: detail.quotes }
   }
 
   @Post('opportunities')

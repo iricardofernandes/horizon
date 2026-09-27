@@ -60,6 +60,20 @@ export type OpportunityFact =
       readonly stageId: string
       readonly probabilityBps: number
     }
+  | {
+      /** A Sales quote for it was accepted (Phase 58): won at the quote's total. */
+      readonly type: 'converted'
+      readonly quote: QuoteConversion
+      readonly value: Amount
+      readonly closedOn: string
+    }
+
+/** The accepted quote an opportunity converted into. */
+export interface QuoteConversion {
+  readonly quoteId: string
+  readonly quoteRoot: string
+  readonly quoteVersion: number
+}
 
 export interface RecordedFact {
   readonly sequence: number
@@ -84,6 +98,8 @@ export interface OpportunityState {
   readonly lossReasonId: string | null
   readonly lossNote: string | null
   readonly closedOn: string | null
+  /** Set once, by an accepted quote; a converted opportunity is never reopened. */
+  readonly conversion: QuoteConversion | null
   readonly version: number
   readonly createdAt: Date
   readonly updatedAt: Date
@@ -104,6 +120,7 @@ export function applyFact(
       lossReasonId: null,
       lossNote: null,
       closedOn: null,
+      conversion: null,
       version: sequence,
       createdAt: occurredAt,
       updatedAt: occurredAt,
@@ -139,6 +156,17 @@ export function applyFact(
         closedOn: null,
         lossReasonId: null,
         lossNote: null,
+      }
+    case 'converted':
+      return {
+        ...next,
+        status: 'won',
+        // Won by hand earlier, it keeps the day it was won; otherwise it closes now.
+        closedOn: state.status === 'won' && state.closedOn ? state.closedOn : fact.closedOn,
+        lossReasonId: null,
+        lossNote: null,
+        expectedValue: { ...fact.value },
+        conversion: { ...fact.quote },
       }
   }
 }
@@ -319,6 +347,12 @@ export class Opportunity extends AggregateRoot<{ tenantId: string; state: Opport
   reopen(stage: Stage, actor: string, now: Date): Refusal {
     const status = this.props.state.status
     if (status === 'open') return left(new ConflictError('the opportunity is already open'))
+    if (this.props.state.conversion)
+      return left(
+        new ConflictError(
+          'an opportunity won by an accepted quote is not reopened; open a new one',
+        ),
+      )
     this.record(
       {
         type: 'reopened',
@@ -330,6 +364,27 @@ export class Opportunity extends AggregateRoot<{ tenantId: string; state: Opport
       now,
     )
     return right(undefined)
+  }
+
+  /**
+   * An accepted quote wins the opportunity at the quote's total, whatever it was: open,
+   * lost (the loss stays in the history) or already won by hand. It converts once; a
+   * later accepted quote, or the same one again, changes nothing (Phase 58).
+   */
+  convert(
+    quote: QuoteConversion & { value: Amount },
+    closedOn: BusinessDate,
+    actor: string,
+    now: Date,
+  ): boolean {
+    if (this.props.state.conversion) return false
+    const { value, ...conversion } = quote
+    this.record(
+      { type: 'converted', quote: conversion, value: { ...value }, closedOn: closedOn.value },
+      actor,
+      now,
+    )
+    return true
   }
 
   toSnapshot(): Readonly<OpportunitySnapshot> {
@@ -368,6 +423,17 @@ export class Opportunity extends AggregateRoot<{ tenantId: string; state: Opport
       previous.expectedCloseOn === now.expectedCloseOn
     )
       return
+    // A conversion that closed the opportunity is also a win, for whoever reads closures.
+    if (recorded.fact.type === 'converted' && previous?.status !== 'won')
+      this.addDomainEvent(
+        new OpportunityPublished(
+          this.id,
+          this.props.tenantId,
+          { type: 'won', closedOn: recorded.fact.closedOn },
+          now,
+          recorded.occurredAt,
+        ),
+      )
     this.addDomainEvent(
       new OpportunityPublished(
         this.id,

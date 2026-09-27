@@ -5,6 +5,7 @@ import type {
   BillingRunsRepository,
   CatalogItemsRepository,
   CustomersRepository,
+  OpportunityProjectionsRepository,
   QuotesRepository,
   SalesEventsRepository,
   SalesOrdersRepository,
@@ -70,6 +71,7 @@ export interface SalesScope {
   readonly events: SalesEventsRepository
   readonly customers: CustomersRepository
   readonly quotes: QuotesRepository
+  readonly opportunities: OpportunityProjectionsRepository
   readonly shipments: ShipmentsRepository
   readonly serviceOrders: ServiceOrdersRepository
   readonly contracts: ServiceContractsRepository

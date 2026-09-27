@@ -68,6 +68,17 @@ export class OpportunityPublished implements DomainEvent {
         return closure
       case 'lost':
         return { ...closure, lossReasonId: fact.lossReasonId }
+      case 'converted':
+        return {
+          ...about,
+          quoteId: fact.quote.quoteId,
+          quoteRoot: fact.quote.quoteRoot,
+          quoteVersion: fact.quote.quoteVersion,
+          value: { ...state.expectedValue },
+          ownerId: state.ownerId,
+          sourceId: state.sourceId,
+          closedOn: state.closedOn,
+        }
       case 'reopened':
         return {
           ...about,

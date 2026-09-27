@@ -189,5 +189,24 @@ export async function opportunityDetail(tx: Transaction, id: string) {
     .from(schema.opportunityEvents)
     .where(eq(schema.opportunityEvents.opportunityId, id))
     .orderBy(asc(schema.opportunityEvents.sequence))
-  return { opportunity: mapOpportunity(row).toSnapshot(), history: history.map(mapFact) }
+  const quotes = await tx
+    .select()
+    .from(schema.opportunityQuotes)
+    .where(eq(schema.opportunityQuotes.opportunityId, id))
+    .orderBy(asc(schema.opportunityQuotes.seenAt))
+  return {
+    opportunity: mapOpportunity(row).toSnapshot(),
+    history: history.map(mapFact),
+    quotes: quotes.map((quote) => ({
+      quoteRoot: quote.quoteRoot,
+      quoteId: quote.quoteId,
+      quoteVersion: quote.quoteVersion,
+      status: quote.status,
+      total:
+        quote.totalAmount === null || quote.currency === null
+          ? null
+          : { amount: quote.totalAmount.toString(), currency: quote.currency },
+      seenAt: quote.seenAt,
+    })),
+  }
 }

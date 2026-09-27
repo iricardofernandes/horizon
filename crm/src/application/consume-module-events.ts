@@ -5,6 +5,9 @@ import {
   partyRegisteredV2,
   partyUpdated,
   partyUpdatedV2,
+  salesQuoteAccepted,
+  salesQuoteRejected,
+  salesQuoteSent,
   userDisabled,
   userRegistered,
 } from '@horizon/contracts'
@@ -13,9 +16,10 @@ import type { DocumentType, PartyKind } from '@/domain/value-objects/crm-values'
 import type { EventHandler } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { Clock } from './ports/clock'
 import type { CrmUnitOfWork } from './ports/unit-of-work'
+import { FollowQuoteUseCase } from './use-cases/follow-quotes'
 import { ForgetPartyUseCase, ProjectPartyUseCase } from './use-cases/project-parties'
 
-type SourceModule = 'parties' | 'identity'
+type SourceModule = 'parties' | 'identity' | 'sales'
 
 /** A v1 party had a CPF or a CNPJ, which its kind decides (ADR 0040). */
 function v1DocumentOf(kind: PartyKind | null): DocumentType | null {
@@ -31,6 +35,7 @@ export class CrmModuleEventHandlers {
   readonly handlers: Readonly<Record<string, EventHandler>>
   private readonly projectParty: ProjectPartyUseCase
   private readonly forgetParty: ForgetPartyUseCase
+  private readonly followQuote: FollowQuoteUseCase
 
   constructor(
     private readonly unitOfWork: CrmUnitOfWork,
@@ -38,12 +43,16 @@ export class CrmModuleEventHandlers {
   ) {
     this.projectParty = new ProjectPartyUseCase(clock)
     this.forgetParty = new ForgetPartyUseCase(clock)
+    this.followQuote = new FollowQuoteUseCase(clock)
     this.handlers = {
       'parties.party.registered': (event) => this.partyRegistered(event),
       'parties.party.updated': (event) => this.partyUpdated(event),
       'parties.party.erased': (event) => this.partyErased(event),
       'identity.user.registered': (event) => this.userRegistered(event),
       'identity.user.disabled': (event) => this.userDisabled(event),
+      'sales.quote.sent': (event) => this.quote(event),
+      'sales.quote.accepted': (event) => this.quote(event),
+      'sales.quote.rejected': (event) => this.quote(event),
     }
   }
 
@@ -99,6 +108,35 @@ export class CrmModuleEventHandlers {
     }
     await this.unitOfWork.processEvent(envelope.tenantId, received(envelope, 'parties'), (scope) =>
       this.projectParty.executeInScope(scope, { ...party, partyId }),
+    )
+  }
+
+  /** A quote made for an opportunity links to it; an accepted one converts it (Phase 58). */
+  private async quote(event: EventEnvelope): Promise<void> {
+    const occurredAt = new Date(event.occurredAt)
+    const fact =
+      event.eventType === 'sales.quote.rejected'
+        ? (({ payload }) => ({ ...payload, status: 'rejected' as const, total: null }))(
+            salesQuoteRejected.envelope.parse(event),
+          )
+        : event.eventType === 'sales.quote.accepted'
+          ? (({ payload }) => ({ ...payload, status: 'accepted' as const }))(
+              salesQuoteAccepted.envelope.parse(event),
+            )
+          : (({ payload }) => ({ ...payload, status: 'sent' as const }))(
+              salesQuoteSent.envelope.parse(event),
+            )
+    if (!fact.attribution) return
+    await this.unitOfWork.processEvent(event.tenantId, received(event, 'sales'), (scope) =>
+      this.followQuote.executeInScope(scope, {
+        status: fact.status,
+        quoteId: fact.quoteId,
+        quoteRoot: fact.quoteRoot,
+        quoteVersion: fact.version,
+        total: fact.total,
+        occurredAt,
+        attribution: fact.attribution,
+      }),
     )
   }
 

@@ -235,6 +235,13 @@ Workspace lists: where an account or opportunity came from, and why an opportuni
 lost. Entries are archived, never deleted, and a name is unique among the active entries
 of its list.
 
+### attribution and conversion
+A quote made for an opportunity carries its **attribution**: the opportunity, and the owner
+and source Sales read from its own projection when the offer's first version was written.
+Every later version keeps them, and no request can set them. When such a quote is accepted,
+CRM **converts** the opportunity: won at the quote's total, with the quote recorded, and
+never reopened after that.
+
 ### activity
 A call, meeting, email or visit that happened with an account, attached to the account,
 one of its contacts or one of its opportunities, and naming the contacts who took part.

@@ -3,7 +3,12 @@ import { AggregateRoot } from '@/core/entities/aggregate-root'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
-import { QuoteAcceptedEvent, QuoteRejectedEvent, QuoteSentEvent } from '../events/sales-events'
+import {
+  QuoteAcceptedEvent,
+  type QuoteAttribution,
+  QuoteRejectedEvent,
+  QuoteSentEvent,
+} from '../events/sales-events'
 import type {
   CarrierName,
   Currency,
@@ -83,10 +88,14 @@ interface QuoteProps {
   orderId: string | null
   /** The service order its service lines became (ADR 0056). */
   serviceOrderId: string | null
+  /** The opportunity it was made for, frozen on the first version (Phase 58). */
+  attribution: QuoteAttribution | null
   sentAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
+
+export type { QuoteAttribution }
 
 export interface QuoteInput {
   readonly tenantId: string
@@ -96,6 +105,8 @@ export interface QuoteInput {
   readonly terms: QuoteTerms
   readonly expiresAt: Date
   readonly now: Date
+  /** Resolved by Sales from its own projection, never from the request. */
+  readonly attribution?: QuoteAttribution | null
 }
 
 /**
@@ -135,6 +146,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
           closure: null,
           orderId: null,
           serviceOrderId: null,
+          attribution: input.attribution ?? null,
           sentAt: null,
           createdAt: input.now,
           updatedAt: input.now,
@@ -178,6 +190,10 @@ export class Quote extends AggregateRoot<QuoteProps> {
 
   get expiresAt(): Date {
     return this.props.expiresAt
+  }
+
+  get attribution(): QuoteAttribution | null {
+    return this.props.attribution
   }
 
   lines(): readonly QuoteLine[] {
@@ -306,6 +322,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
         quoteRoot: this.props.rootId,
         version: this.props.version,
         customerId: this.props.customerId,
+        attribution: this.props.attribution,
         total: this.total(),
       }),
     )
@@ -324,6 +341,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
         quoteRoot: this.props.rootId,
         version: this.props.version,
         customerId: this.props.customerId,
+        attribution: this.props.attribution,
         reason: reason.value,
       }),
     )
@@ -405,6 +423,8 @@ export class Quote extends AggregateRoot<QuoteProps> {
           closure: null,
           orderId: null,
           serviceOrderId: null,
+          // Every version of an offer keeps the attribution the first one froze.
+          attribution: this.props.attribution,
           sentAt: null,
           createdAt: now,
           updatedAt: now,
@@ -442,6 +462,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
     closureReason: string | null
     orderId: string | null
     serviceOrderId: string | null
+    attribution: QuoteAttribution | null
     sentAt: Date | null
     createdAt: Date
     updatedAt: Date
@@ -483,6 +504,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
       closureReason: this.props.closure?.value ?? null,
       orderId: this.props.orderId,
       serviceOrderId: this.props.serviceOrderId,
+      attribution: this.props.attribution ? { ...this.props.attribution } : null,
       sentAt: this.props.sentAt,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,
@@ -506,6 +528,7 @@ export class Quote extends AggregateRoot<QuoteProps> {
         quoteRoot: this.props.rootId,
         version: this.props.version,
         customerId: this.props.customerId,
+        attribution: this.props.attribution,
         total: this.total(),
         expiresAt: this.props.expiresAt,
       }),

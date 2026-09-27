@@ -1,6 +1,6 @@
 # CRM implementation plan — Phase L
 
-Status: **in progress** — Phases 54 to 57 delivered on 2026-09-27. This is the execution plan for Phase L of the
+Status: **in progress** — Phases 54 to 58 delivered on 2026-09-27. This is the execution plan for Phase L of the
 [ERP expansion plan](erp-expansion-plan.md#phase-l--crm), split into phases 54–60 of
 [plan.md](plan.md). Each numbered phase gets its own detailed plan before implementation,
 one local commit and an evidence record, as in Phases J and K.
@@ -201,6 +201,9 @@ Gaps:
 - Correcting a note keeps the earlier text.
 
 ### 58 — Conversion to quote and attribution
+
+[Detailed Phase 58 plan](crm-phase58-implementation-plan.md) ·
+[evidence](crm-phase58-evidence.md).
 
 **Work**
 1. Sales projects open opportunities from `crm.opportunity.*`.

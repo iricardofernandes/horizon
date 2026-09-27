@@ -2,6 +2,13 @@ import {
   catalogItemCreated,
   catalogItemDeactivated,
   catalogPriceChanged,
+  crmOpportunityConverted,
+  crmOpportunityCreated,
+  crmOpportunityLost,
+  crmOpportunityOwnerChanged,
+  crmOpportunityReopened,
+  crmOpportunityRevised,
+  crmOpportunityWon,
   type EventEnvelope,
   financialReceivablePosted,
   financialReceivableReversed,
@@ -15,6 +22,7 @@ import {
   partyUpdated,
   partyUpdatedV2,
 } from '@horizon/contracts'
+import type { OpportunityFactUpdate } from '@/domain/repositories/sales-repositories'
 import { Currency, LineDescription, Money } from '@/domain/value-objects/sales-values'
 import type { EventHandler } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { Clock } from './ports/clock'
@@ -54,6 +62,13 @@ export class SalesModuleEventHandlers {
       'parties.party.registered': (event) => this.partyRegistered(event),
       'parties.party.updated': (event) => this.partyUpdated(event),
       'parties.party.erased': (event) => this.partyErased(event),
+      'crm.opportunity.created': (event) => this.opportunity(event),
+      'crm.opportunity.revised': (event) => this.opportunity(event),
+      'crm.opportunity.owner-changed': (event) => this.opportunity(event),
+      'crm.opportunity.won': (event) => this.opportunity(event),
+      'crm.opportunity.lost': (event) => this.opportunity(event),
+      'crm.opportunity.reopened': (event) => this.opportunity(event),
+      'crm.opportunity.converted': (event) => this.opportunity(event),
       'financial.receivable.posted': (event) => this.receivablePosted(event),
       'financial.receivable.reversed': (event) => this.receivableReversed(event),
       'fiscal.service-document.simulation-outcome': (event) => this.serviceDocumentOutcome(event),
@@ -214,6 +229,18 @@ export class SalesModuleEventHandlers {
     )
   }
 
+  /**
+   * What a CRM opportunity fact says about the owner, the source and the status, as of the
+   * fact's instant (Phase 58). Sales keeps only what a quote's attribution needs.
+   */
+  private async opportunity(event: EventEnvelope): Promise<void> {
+    const update = opportunityUpdateOf(event)
+    await this.unitOfWork.provisionTenant(event.tenantId)
+    await this.unitOfWork.processEvent(event.tenantId, received(event, 'crm'), (scope) =>
+      scope.opportunities.record(update),
+    )
+  }
+
   /** A party may be the first thing a workspace ever tells Sales about. */
   private async project(
     envelope: EventEnvelope,
@@ -230,9 +257,64 @@ export class SalesModuleEventHandlers {
   }
 }
 
+function opportunityUpdateOf(event: EventEnvelope): OpportunityFactUpdate {
+  const at = new Date(event.occurredAt)
+  switch (event.eventType) {
+    case 'crm.opportunity.created': {
+      const { payload } = crmOpportunityCreated.envelope.parse(event)
+      return {
+        id: payload.opportunityId,
+        accountId: payload.accountId,
+        at,
+        ownerId: payload.ownerId,
+        sourceId: payload.sourceId,
+        status: 'open',
+      }
+    }
+    case 'crm.opportunity.revised': {
+      const { payload } = crmOpportunityRevised.envelope.parse(event)
+      return {
+        id: payload.opportunityId,
+        accountId: payload.accountId,
+        at,
+        sourceId: payload.sourceId,
+      }
+    }
+    case 'crm.opportunity.owner-changed': {
+      const { payload } = crmOpportunityOwnerChanged.envelope.parse(event)
+      return {
+        id: payload.opportunityId,
+        accountId: payload.accountId,
+        at,
+        ownerId: payload.toOwnerId,
+      }
+    }
+    case 'crm.opportunity.reopened': {
+      const { payload } = crmOpportunityReopened.envelope.parse(event)
+      return { id: payload.opportunityId, accountId: payload.accountId, at, status: 'open' }
+    }
+    default: {
+      const { payload } =
+        event.eventType === 'crm.opportunity.won'
+          ? crmOpportunityWon.envelope.parse(event)
+          : event.eventType === 'crm.opportunity.lost'
+            ? crmOpportunityLost.envelope.parse(event)
+            : crmOpportunityConverted.envelope.parse(event)
+      return {
+        id: payload.opportunityId,
+        accountId: payload.accountId,
+        at,
+        ownerId: payload.ownerId,
+        sourceId: payload.sourceId,
+        status: event.eventType === 'crm.opportunity.lost' ? 'lost' : 'won',
+      }
+    }
+  }
+}
+
 function received(
   event: EventEnvelope,
-  sourceModule: 'catalog' | 'inventory' | 'parties' | 'fiscal' | 'financial',
+  sourceModule: 'catalog' | 'inventory' | 'parties' | 'fiscal' | 'financial' | 'crm',
 ) {
   return { sourceModule, eventId: event.eventId, eventType: event.eventType }
 }

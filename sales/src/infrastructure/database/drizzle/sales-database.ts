@@ -54,6 +54,7 @@ import {
   findRun,
   listRuns,
 } from './contract-billing-store'
+import { opportunityProjectionsRepository } from './opportunity-projections-store'
 import * as schema from './schema'
 import { findContract, listContracts, serviceContractsRepository } from './service-contracts-store'
 import {
@@ -696,6 +697,14 @@ function mapQuote(
       closure: row.closureReason ? restored(Reason.create(row.closureReason)) : null,
       orderId: row.orderId,
       serviceOrderId: row.serviceOrderId,
+      attribution:
+        row.opportunityId && row.attributedOwnerId
+          ? {
+              opportunityId: row.opportunityId,
+              ownerId: row.attributedOwnerId,
+              sourceId: row.attributedSourceId,
+            }
+          : null,
       sentAt: row.sentAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -825,6 +834,10 @@ function quoteRow(row: ReturnType<Quote['toSnapshot']>) {
     closureReason: row.closureReason,
     orderId: row.orderId,
     serviceOrderId: row.serviceOrderId,
+    // Frozen on the first version and never updated: `save` leaves these columns alone.
+    opportunityId: row.attribution?.opportunityId ?? null,
+    attributedOwnerId: row.attribution?.ownerId ?? null,
+    attributedSourceId: row.attribution?.sourceId ?? null,
     sentAt: row.sentAt,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
@@ -1129,6 +1142,7 @@ function makeScope(
     serviceOrders: serviceOrdersRepository(tx, tenantId, (order) =>
       publishAll(tx, tenantId, order),
     ),
+    opportunities: opportunityProjectionsRepository(tx, tenantId),
     contracts: serviceContractsRepository(tx, tenantId, (contract) =>
       publishAll(tx, tenantId, contract),
     ),

@@ -8,6 +8,7 @@ import {
   catalogVariantAssigned,
 } from './catalog'
 import {
+  crmOpportunityConverted,
   crmOpportunityCreated,
   crmOpportunityLost,
   crmOpportunityOwnerChanged,
@@ -222,6 +223,7 @@ export const EVENTS: readonly EventDefinition[] = [
   crmOpportunityWon,
   crmOpportunityLost,
   crmOpportunityReopened,
+  crmOpportunityConverted,
   crmTaskDue,
 ] as const
 

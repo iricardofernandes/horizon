@@ -335,6 +335,21 @@ export class SalesOrderCancelledEvent extends SalesEvent {
   }
 }
 
+/**
+ * The opportunity a quote was made for, with the owner and source Sales froze on the
+ * offer's first version (Phase 58).
+ */
+export interface QuoteAttribution {
+  readonly opportunityId: string
+  readonly ownerId: string
+  readonly sourceId: string | null
+}
+
+/** Only a quote made for an opportunity says so; the others keep their payload as it was. */
+function attributionPayload(attribution: QuoteAttribution | null) {
+  return attribution ? { attribution: { ...attribution } } : {}
+}
+
 export class QuoteSentEvent extends SalesEvent {
   readonly eventType = 'sales.quote.sent'
   constructor(
@@ -344,6 +359,7 @@ export class QuoteSentEvent extends SalesEvent {
     private readonly quote: {
       quoteRoot: string
       version: number
+      attribution: QuoteAttribution | null
       customerId: string
       total: Money
       expiresAt: Date
@@ -356,6 +372,7 @@ export class QuoteSentEvent extends SalesEvent {
       quoteId: this.aggregateId.toString(),
       quoteRoot: this.quote.quoteRoot,
       version: this.quote.version,
+      ...attributionPayload(this.quote.attribution),
       customerId: this.quote.customerId,
       total: moneyPayload(this.quote.total),
       expiresAt: this.quote.expiresAt.toISOString(),
@@ -372,6 +389,7 @@ export class QuoteAcceptedEvent extends SalesEvent {
     private readonly quote: {
       quoteRoot: string
       version: number
+      attribution: QuoteAttribution | null
       customerId: string
       total: Money
     },
@@ -383,6 +401,7 @@ export class QuoteAcceptedEvent extends SalesEvent {
       quoteId: this.aggregateId.toString(),
       quoteRoot: this.quote.quoteRoot,
       version: this.quote.version,
+      ...attributionPayload(this.quote.attribution),
       customerId: this.quote.customerId,
       total: moneyPayload(this.quote.total),
     }
@@ -398,6 +417,7 @@ export class QuoteRejectedEvent extends SalesEvent {
     private readonly quote: {
       quoteRoot: string
       version: number
+      attribution: QuoteAttribution | null
       customerId: string
       reason: string
     },
@@ -409,6 +429,7 @@ export class QuoteRejectedEvent extends SalesEvent {
       quoteId: this.aggregateId.toString(),
       quoteRoot: this.quote.quoteRoot,
       version: this.quote.version,
+      ...attributionPayload(this.quote.attribution),
       customerId: this.quote.customerId,
       reason: this.quote.reason,
     }

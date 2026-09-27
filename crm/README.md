@@ -7,9 +7,9 @@ An independently deployable NestJS service with its own database, its own contai
 its own lifecycle. It is reached through Kong at `/crm`, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 57 — accounts, contacts, owners, pipelines, opportunities, activities,
-tasks, notes and reminders.** The hand-off to a quote arrives in phase 58
-([CRM plan](../docs/crm-implementation-plan.md)).
+**Status: phase 58 — accounts, contacts, owners, pipelines, opportunities, activities,
+tasks, notes, reminders and the conversion to a Sales quote.** Forecast and metrics arrive
+in phase 59 ([CRM plan](../docs/crm-implementation-plan.md)).
 
 ---
 
@@ -38,6 +38,11 @@ tasks, notes and reminders.** The hand-off to a quote arrives in phase 58
   completed or cancelled; a note is corrected by appending a revision. Their free text is
   sealed under a key of the account, destroyed with its party; erasing the party also
   cancels its open tasks.
+- **Quotes and conversion** — CRM follows the Sales quotes made for an opportunity from
+  `sales.quote.*` and keeps the latest version of each offer. An accepted quote converts
+  the opportunity once: won at the quote's total, with the quote recorded, even if it was
+  lost or won by hand. A converted opportunity is never reopened. CRM never calls or writes
+  Sales.
 - **Reminders** — a scheduler in this service sends each armed reminder once as
   `crm.task.due`, even across restarts or with several instances; rescheduling a task
   arms it again.
@@ -54,10 +59,13 @@ tasks, notes and reminders.** The hand-off to a quote arrives in phase 58
 ## Events
 
 Consumed: `parties.party.registered` and `updated` (v1 and v2), `parties.party.erased`,
-`identity.user.registered` and `identity.user.disabled`. Published: `crm.opportunity.created`,
+`identity.user.registered` and `identity.user.disabled`, and `sales.quote.sent`,
+`accepted` and `rejected` when they carry an attribution. Published: `crm.opportunity.created`,
 `revised`, `stage-changed`, `owner-changed`, `won`, `lost` and `reopened` (v1) — with the
 stage probability, owner, source and value at that moment, never the title or contacts.
 A revision that changed only the title or contacts is kept in the history, not published.
+`crm.opportunity.converted` (v1) names the accepted quote, its total, the owner and the
+source; `crm.opportunity.won` is sent with it when the opportunity was not won already.
 `crm.task.due` (v1) names the task, its account and subject, the assignee and the due and
 reminder instants — never the title.
 
@@ -75,7 +83,7 @@ reminder instants — never the title.
 | `GET /pipelines`, `GET /pipelines/{id}`, `GET /sources`, `GET /loss-reasons` (`?archived=include`) | read |
 | `POST /pipelines`, `PUT /pipelines/{id}`, `PATCH /pipelines/{id}/status`, `POST /pipelines/{id}/stages`, `PATCH /pipelines/{id}/stages/{stageId}`, `PUT /pipelines/{id}/stage-order` | configure |
 | `POST /sources`, `PATCH /sources/{id}`, `POST /loss-reasons`, `PATCH /loss-reasons/{id}` | configure |
-| `GET /opportunities?pipelineId=&stageId=&status=&ownerId=&accountId=`, `GET /opportunities/{id}` (with its history) | read |
+| `GET /opportunities?pipelineId=&stageId=&status=&ownerId=&accountId=`, `GET /opportunities/{id}` (with its history, its quotes and its conversion) | read |
 | `POST /opportunities` (requires `Idempotency-Key`), `PUT /opportunities/{id}`, `POST /opportunities/{id}/stage`, `…/win`, `…/lose`, `…/reopen` | write |
 | `POST /opportunities/{id}/owner` | assign |
 | `POST /activities` (requires `Idempotency-Key`), `PUT /activities/{id}` | write |

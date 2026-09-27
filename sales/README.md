@@ -28,6 +28,7 @@ are all exercised by the phase 7 E2E flow.
 - **The customer projection** — parties holding the `customer` role, fed by `parties/` events (ADR 0040). Sales no longer registers or erases customers.
 - **Quotes** — priced offers with an expiry, negotiated in versions: a sent quote is never rewritten, and the version that answers it supersedes it while sharing its identifier.
 - **Discount approval** — how deep a discount a seller may give alone, and the four-eyes rule for anything deeper.
+- **Attribution** — a quote may name a CRM opportunity. Sales checks it against its own projection of `crm.opportunity.*` (known, open, of the same customer) and freezes the owner and source it read there on the first version; every later version keeps them, and the quote events carry them (Phase 58). A request can name the opportunity but never describe it.
 - **Commercial terms** — the seller, discount, freight, carrier, payment terms and notes, on the quote and on the order it becomes.
 - **Sales orders** and their lines, including the price snapshotted at confirmation. A sales order is a **goods order**: a service item is refused when an order is placed or an accepted proposal is converted, before anything reaches Inventory (ADR 0056). Services are delivered by service orders (Phase 50).
 - **Service orders** (Phase 50) — services sold directly or converted from an accepted proposal, `scheduled` → `in_progress` → `completed` → `accepted` (or `cancelled` with a reason), delivered in **deliveries**. A delivery is billed once when it is recorded; a cancelled delivery stays in the record and its work is owed again. A service order has no warehouse and never reaches Inventory.
@@ -64,8 +65,8 @@ refusals.
 | `sales.invoicing.requested` | A delivery is ready to be invoiced — an invoice is written for what was shipped. Consumed by `fiscal/` when it exists. |
 | `sales.shipment.dispatched` | Goods left for the customer: the stock comes out of its hold and the delivery's share of the order becomes owed. |
 | `sales.shipment.returned` | A delivery came back: the goods and what they made owed both go back. |
-| `sales.quote.sent` | This version of an offer was put in front of the customer. |
-| `sales.quote.accepted` | The customer agreed to it. Nothing is committed until it is converted. |
+| `sales.quote.sent` | This version of an offer was put in front of the customer. Carries `attribution` when the quote was made for an opportunity. |
+| `sales.quote.accepted` | The customer agreed to it. Nothing is committed until it is converted. CRM converts the attributed opportunity. |
 | `sales.quote.rejected` | The customer declined it, with the reason they gave. |
 | `sales.service.delivered` | Work of a service order was delivered: one receivable per delivery in `financial/`, one NFS-e per delivered line in `fiscal/` (keyed by the line's `entryId` and competence month). |
 | `sales.contract.activated` | A service contract took effect with its first revision. |
@@ -87,6 +88,7 @@ refusals.
 | `inventory.stock.reservation-rejected` | Fails the order with the reported shortfall. |
 | `financial.receivable.posted` | For origin `sales-contract-period` or `sales-service-delivery`, records the posted receivable on the billed period or the delivery. |
 | `financial.receivable.reversed` | Records the reversal on the billed period or delivery that raised the title, if any. |
+| `crm.opportunity.created`, `revised`, `owner-changed`, `won`, `lost`, `reopened`, `converted` | Keeps the opportunity projection a quote's attribution is read from: account, owner, source and status, each set only by a fact at least as recent as the last one. |
 | `fiscal.service-document.simulation-outcome` | For a `contract-period` or `service-delivery` source key, records the NFS-e outcome on the billed or delivered line. |
 
 Every published event is written to the `outbox` table inside the same transaction as
@@ -142,7 +144,7 @@ registered and erased in `parties/`, so they are read here and written nowhere (
 | `GET` | `/customers` | List the workspace customer directory, projected from `parties/`. |
 | `GET` | `/quotes` | List recent commercial quotes. |
 | `GET` | `/quotes/:id` | Read a quote and its priced lines. |
-| `POST` | `/quotes` | Write a quote using current Catalog projections. |
+| `POST` | `/quotes` | Write a quote using current Catalog projections. An optional `opportunityId` attributes it to a CRM opportunity; the owner and source come from Sales's projection, never from the body. |
 | `POST` | `/quotes/:id/revise` | Correct a draft, or answer a sent offer with a new version of it. |
 | `POST` | `/quotes/:id/send` | Put the offer in front of the customer, or ask for the discount to be approved. |
 | `POST` | `/quotes/:id/approve` | Grant a discount somebody else asked for. |

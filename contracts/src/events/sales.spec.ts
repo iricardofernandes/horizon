@@ -191,3 +191,37 @@ describe('sales event contracts', () => {
     expect(salesShipmentReturned.payload.safeParse({ ...payload, reason: ' ' }).success).toBe(false)
   })
 })
+
+describe('quote attribution', () => {
+  const sent = {
+    quoteId: randomUUID(),
+    quoteRoot: randomUUID(),
+    version: 2,
+    customerId: randomUUID(),
+    total: { amount: '1000', currency: 'BRL' },
+    expiresAt: '2026-10-27T12:00:00.000Z',
+  }
+
+  it('is optional, so a quote that names no opportunity is unchanged', () => {
+    expect(salesQuoteSent.payload.safeParse(sent).success).toBe(true)
+    expect(salesQuoteSent.payload.safeParse({ ...sent, attribution: null }).success).toBe(true)
+  })
+
+  it('names the opportunity, its owner and its source, and nothing more', () => {
+    const attribution = { opportunityId: randomUUID(), ownerId: randomUUID(), sourceId: null }
+    expect(salesQuoteSent.payload.safeParse({ ...sent, attribution }).success).toBe(true)
+    expect(
+      salesQuoteAccepted.payload.safeParse({
+        ...sent,
+        attribution: { ...attribution, title: 'Renovação' },
+      }).success,
+    ).toBe(false)
+    expect(
+      salesQuoteRejected.payload.safeParse({
+        ...sent,
+        reason: 'Preço',
+        attribution: { opportunityId: randomUUID() },
+      }).success,
+    ).toBe(false)
+  })
+})

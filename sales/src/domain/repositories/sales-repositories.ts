@@ -102,6 +102,34 @@ export abstract class ShipmentsRepository {
   abstract save(shipment: Shipment): Promise<void>
 }
 
+/** A CRM opportunity as Sales knows it from `crm.opportunity.*` (Phase 58). */
+export interface OpportunityView {
+  readonly id: string
+  readonly accountId: string
+  readonly ownerId: string | null
+  readonly sourceId: string | null
+  readonly status: 'open' | 'won' | 'lost' | null
+}
+
+/**
+ * What one opportunity fact says, as of its instant. A field left `undefined` is one the
+ * fact does not speak about; `sourceId: null` says the opportunity has no source.
+ */
+export interface OpportunityFactUpdate {
+  readonly id: string
+  readonly accountId: string
+  readonly at: Date
+  readonly ownerId?: string
+  readonly sourceId?: string | null
+  readonly status?: 'open' | 'won' | 'lost'
+}
+
+export abstract class OpportunityProjectionsRepository {
+  abstract find(id: string): Promise<OpportunityView | null>
+  /** Apply a fact field by field; a field already set by a later fact is kept. */
+  abstract record(update: OpportunityFactUpdate): Promise<void>
+}
+
 export abstract class QuotesRepository {
   abstract findById(id: string): Promise<Quote | null>
   abstract create(quote: Quote): Promise<void>

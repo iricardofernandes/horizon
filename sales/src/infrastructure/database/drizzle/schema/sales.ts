@@ -197,6 +197,10 @@ export const quotes = pgTable(
     closureReason: text('closure_reason'),
     orderId: uuid('order_id'),
     serviceOrderId: uuid('service_order_id'),
+    /** The opportunity the offer was made for, with the owner and source frozen then. */
+    opportunityId: uuid('opportunity_id'),
+    attributedOwnerId: uuid('attributed_owner_id'),
+    attributedSourceId: uuid('attributed_source_id'),
     sentAt: timestamp('sent_at', { withTimezone: true, mode: 'date' }),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),

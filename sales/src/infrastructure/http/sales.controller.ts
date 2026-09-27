@@ -57,8 +57,11 @@ const quoteTerms = z.strictObject({
   notes: z.string().max(500).optional(),
 })
 
+// The opportunity is named, never described: its owner and source come from Sales's own
+// projection, so a body carrying them is refused (Phase 58).
 const createQuoteInput = z.strictObject({
   customerId: z.uuid(),
+  opportunityId: z.uuid().optional(),
   lines: quoteLines,
   terms: quoteTerms.optional(),
 })
@@ -188,6 +191,7 @@ export class SalesController {
       await this.runtime.writeQuote.execute({
         context: idempotent(request),
         customerId: parsed.data.customerId,
+        opportunityId: parsed.data.opportunityId,
         quote: { lines: parsed.data.lines, terms: parsed.data.terms },
       }),
     )

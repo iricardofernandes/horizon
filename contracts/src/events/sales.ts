@@ -139,6 +139,19 @@ export const salesFiscalOriginFrozen = defineEvent({
   }),
 })
 
+/**
+ * The opportunity an offer was made for, with its owner and source as Sales froze them on
+ * the offer's first version (Phase 58). Absent or null when the quote names no opportunity.
+ */
+const quoteAttribution = z
+  .strictObject({
+    opportunityId: uuidSchema,
+    ownerId: uuidSchema.describe('Who owned the opportunity when the offer was first made'),
+    sourceId: uuidSchema.nullable(),
+  })
+  .nullable()
+  .optional()
+
 export const salesQuoteSent = defineEvent({
   type: 'sales.quote.sent',
   version: 1,
@@ -151,6 +164,7 @@ export const salesQuoteSent = defineEvent({
     customerId: uuidSchema,
     total: moneySchema,
     expiresAt: instantSchema,
+    attribution: quoteAttribution,
   }),
 })
 
@@ -165,6 +179,7 @@ export const salesQuoteAccepted = defineEvent({
     version: quoteVersion,
     customerId: uuidSchema,
     total: moneySchema,
+    attribution: quoteAttribution,
   }),
 })
 
@@ -179,6 +194,7 @@ export const salesQuoteRejected = defineEvent({
     version: quoteVersion,
     customerId: uuidSchema,
     reason: z.string().trim().min(1).max(500),
+    attribution: quoteAttribution,
   }),
 })
 
