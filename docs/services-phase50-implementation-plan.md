@@ -246,4 +246,3 @@ After this phase:
   while the Fiscal worker advanced an intake could have its due time overwritten by that
   step's record. The record now keeps such a withdrawal due at once, with an e2e that
   cancels from inside the draft step.
-

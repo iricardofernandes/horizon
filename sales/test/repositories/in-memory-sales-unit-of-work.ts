@@ -13,6 +13,7 @@ import type { DomainEvent } from '@/core/events/domain-event'
 import type { Customer } from '@/domain/entities/customer'
 import type { Quote } from '@/domain/entities/quote'
 import type { SalesOrder } from '@/domain/entities/sales-order'
+import type { ServiceContract } from '@/domain/entities/service-contract'
 import type { ServiceOrder } from '@/domain/entities/service-order'
 import type { Shipment } from '@/domain/entities/shipment'
 import {
@@ -23,6 +24,7 @@ import {
   QuotesRepository,
   SalesEventsRepository,
   SalesOrdersRepository,
+  ServiceContractsRepository,
   ServiceOrdersRepository,
   ShipmentsRepository,
 } from '@/domain/repositories/sales-repositories'
@@ -275,7 +277,49 @@ class InMemoryServiceOrders extends ServiceOrdersRepository {
   }
 }
 
+class InMemoryContracts extends ServiceContractsRepository {
+  constructor(
+    private readonly tenantId: string,
+    private readonly records: ServiceContract[],
+    private readonly events: DomainEvent[],
+  ) {
+    super()
+  }
+  findById(id: string): Promise<ServiceContract | null> {
+    return Promise.resolve(
+      this.records.find(
+        (contract) => contract.tenantId === this.tenantId && contract.id.toString() === id,
+      ) ?? null,
+    )
+  }
+  create(contract: ServiceContract): Promise<void> {
+    if (contract.tenantId !== this.tenantId) throw new Error('tenant mismatch')
+    this.records.push(contract)
+    this.events.push(...contract.pullDomainEvents())
+    return Promise.resolve()
+  }
+  save(contract: ServiceContract): Promise<void> {
+    if (contract.tenantId !== this.tenantId) throw new Error('tenant mismatch')
+    this.events.push(...contract.pullDomainEvents())
+    return Promise.resolve()
+  }
+  renewable(horizon: string): Promise<readonly string[]> {
+    return Promise.resolve(
+      this.records
+        .filter(
+          (contract) =>
+            contract.tenantId === this.tenantId &&
+            contract.autoRenew &&
+            contract.endsOn !== null &&
+            contract.endsOn.value <= horizon,
+        )
+        .map((contract) => contract.id.toString()),
+    )
+  }
+}
+
 export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
+  readonly contracts: ServiceContract[] = []
   readonly serviceOrders: ServiceOrder[] = []
   readonly orders: SalesOrder[] = []
   readonly catalogItems: CatalogItemProjection[] = []
@@ -427,6 +471,7 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
       quotes: new InMemoryQuotes(tenantId, this.quotes, this.events),
       shipments: new InMemoryShipments(tenantId, this.shipments),
       serviceOrders: new InMemoryServiceOrders(tenantId, this.serviceOrders, this.events),
+      contracts: new InMemoryContracts(tenantId, this.contracts, this.events),
       audit: new InMemoryAudit(this.auditRecords),
     })
   }

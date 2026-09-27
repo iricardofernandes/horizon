@@ -278,3 +278,69 @@ export const salesServiceDeliveryCancelled = defineEvent({
     reason: z.string().trim().min(1).max(500),
   }),
 })
+
+const contractId = uuidSchema.describe('Service contract identifier')
+const contractRevision = z.number().int().positive()
+const recurrenceSchema = z.enum(['monthly', 'quarterly', 'yearly'])
+
+export const salesContractActivated = defineEvent({
+  type: 'sales.contract.activated',
+  version: 1,
+  description:
+    'A service contract took effect with its first revision. Its periods follow the recurrence from the start date; nothing is billed until a period is billed.',
+  payload: z.object({
+    contractId,
+    customerId: uuidSchema,
+    revision: contractRevision,
+    recurrence: recurrenceSchema,
+    startsOn: dateSchema,
+    endsOn: dateSchema.nullable(),
+    billingDay: z.number().int().min(1).max(28),
+    autoRenew: z.boolean(),
+  }),
+})
+
+export const salesContractAmended = defineEvent({
+  type: 'sales.contract.amended',
+  version: 1,
+  description:
+    'A service contract gained a revision that applies from a period start: an amendment, or a renewal that extends its end. Periods before it keep the revision they had.',
+  payload: z.object({
+    contractId,
+    customerId: uuidSchema,
+    revision: contractRevision,
+    kind: z.enum(['amendment', 'renewal']),
+    effectiveFrom: dateSchema,
+    recurrence: recurrenceSchema,
+    endsOn: dateSchema.nullable(),
+    readjustmentBasisPoints: z.number().int().min(-10_000).max(100_000).nullable(),
+  }),
+})
+
+export const salesContractSuspended = defineEvent({
+  type: 'sales.contract.suspended',
+  version: 1,
+  description:
+    'A service contract is suspended from a period start, until the period it resumes at when known. Suspended periods are not billed. Published again when the resumption is set.',
+  payload: z.object({
+    contractId,
+    customerId: uuidSchema,
+    suspensionId: uuidSchema,
+    from: dateSchema,
+    until: dateSchema.nullable(),
+    reason: z.string().trim().min(1).max(500),
+  }),
+})
+
+export const salesContractCancelled = defineEvent({
+  type: 'sales.contract.cancelled',
+  version: 1,
+  description:
+    'A service contract stops from a period start. No later period is billed; periods before it are never touched.',
+  payload: z.object({
+    contractId,
+    customerId: uuidSchema,
+    effectiveFrom: dateSchema,
+    reason: z.string().trim().min(1).max(500),
+  }),
+})

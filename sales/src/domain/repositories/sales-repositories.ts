@@ -2,6 +2,7 @@ import type { DomainEvent } from '@/core/events/domain-event'
 import type { Customer } from '../entities/customer'
 import type { Quote } from '../entities/quote'
 import type { SalesOrder } from '../entities/sales-order'
+import type { ServiceContract } from '../entities/service-contract'
 import type { ServiceOrder } from '../entities/service-order'
 import type { Shipment } from '../entities/shipment'
 import type { LineDescription, Money } from '../value-objects/sales-values'
@@ -29,6 +30,15 @@ export abstract class ServiceOrdersRepository {
   abstract findById(id: string): Promise<ServiceOrder | null>
   abstract create(order: ServiceOrder): Promise<void>
   abstract save(order: ServiceOrder): Promise<void>
+}
+
+/** Services sold for a recurring fee, in effective-dated revisions (Phase 51). */
+export abstract class ServiceContractsRepository {
+  abstract findById(id: string): Promise<ServiceContract | null>
+  abstract create(contract: ServiceContract): Promise<void>
+  abstract save(contract: ServiceContract): Promise<void>
+  /** Active, self-renewing contracts ending by `horizon`: candidates the domain decides on. */
+  abstract renewable(horizon: string): Promise<readonly string[]>
 }
 
 /** A projection fed by `parties/`; Sales never registers a customer itself (ADR 0040). */

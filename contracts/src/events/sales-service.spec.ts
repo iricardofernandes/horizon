@@ -65,3 +65,53 @@ describe('sales service event contracts', () => {
     expect(parsed.success).toBe(true)
   })
 })
+
+describe('sales contract event contracts', () => {
+  const contract = { contractId: randomUUID(), customerId: randomUUID() }
+  it('activates, amends, suspends and cancels with dates and revisions', async () => {
+    const {
+      salesContractActivated,
+      salesContractAmended,
+      salesContractCancelled,
+      salesContractSuspended,
+    } = await import('./sales')
+    expect(
+      salesContractActivated.payload.safeParse({
+        ...contract,
+        revision: 1,
+        recurrence: 'monthly',
+        startsOn: '2026-10-01',
+        endsOn: '2027-09-30',
+        billingDay: 5,
+        autoRenew: true,
+      }).success,
+    ).toBe(true)
+    expect(
+      salesContractAmended.payload.safeParse({
+        ...contract,
+        revision: 2,
+        kind: 'renewal',
+        effectiveFrom: '2027-10-01',
+        recurrence: 'monthly',
+        endsOn: '2028-09-30',
+        readjustmentBasisPoints: 450,
+      }).success,
+    ).toBe(true)
+    expect(
+      salesContractSuspended.payload.safeParse({
+        ...contract,
+        suspensionId: randomUUID(),
+        from: '2026-12-01',
+        until: null,
+        reason: 'Férias coletivas do cliente',
+      }).success,
+    ).toBe(true)
+    expect(
+      salesContractCancelled.payload.safeParse({
+        ...contract,
+        effectiveFrom: '2027-01-01',
+        reason: '',
+      }).success,
+    ).toBe(false)
+  })
+})

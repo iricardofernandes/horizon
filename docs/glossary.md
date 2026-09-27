@@ -430,6 +430,16 @@ Fiscal's record of one delivered service line on its way to an NFS-e: an origin,
 and — under the `automatic` policy — the issued document. When something stops it, it is
 **blocked** with the reason, and retried.
 
+### service contract
+Services sold for a recurring fee. Its **periods** start on the first of a month and last
+one, three or twelve months; each is named by its first month, the competence it will be
+billed under. What it bills lives in immutable **revisions**.
+
+### contract revision
+One version of what a contract bills — lines, quantities, prices, recurrence — in force
+from a period start until a later revision. An amendment or a renewal adds one; none is
+ever edited, so a period that has begun keeps what it had.
+
 ### billed period
 One competence month of a contract, billed once and never rewritten. A correction is a
 linked credit (ADR 0042, ADR 0056).

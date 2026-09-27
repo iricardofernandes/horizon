@@ -2370,9 +2370,18 @@ goods and a service order of its services; a service order can also be opened di
 
 ## Phase 51 — Recurring contracts
 
-**Planned.** Contracts with recurrence, effective-dated amendments, renewal, suspension
-and cancellation, and a schedule of billable periods that never rewrites a billed one.
-[Detailed work](services-implementation-plan.md#51--recurring-contracts).
+**Delivered on 2026-09-26.** Sales holds service contracts:
+- the recurrence is monthly, quarterly or yearly, from the first of a month;
+- prices can be negotiated;
+- a contract changes only through insert-only revisions: amendments and renewals, with a
+  readjustment when renewed;
+- suspensions, resumptions and cancellations are effective-dated.
+
+Every change takes effect at a period that has not begun. A period schedule read tells
+which periods are billable, with which revision and amount. Automatic renewal is
+idempotent.
+[Evidence](services-phase51-evidence.md).
+[Detailed plan](services-phase51-implementation-plan.md). [Detailed work](services-implementation-plan.md#51--recurring-contracts).
 
 ## Phase 52 — Period billing and batch runs
 

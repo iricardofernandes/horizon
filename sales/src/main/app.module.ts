@@ -1,6 +1,7 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { SalesAuthGuard } from '@/infrastructure/http/authorization'
+import { ContractsController } from '@/infrastructure/http/contracts.controller'
 import { SalesController } from '@/infrastructure/http/sales.controller'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { SalesEnvironment } from './environment'
@@ -41,6 +42,11 @@ export class AppModule {
             batchSize: config.OUTBOX_BATCH_SIZE,
           }),
       })
-    return { module: AppModule, controllers: [SalesController], providers, exports: [SalesRuntime] }
+    return {
+      module: AppModule,
+      controllers: [SalesController, ContractsController],
+      providers,
+      exports: [SalesRuntime],
+    }
   }
 }

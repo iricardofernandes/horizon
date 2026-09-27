@@ -1,7 +1,8 @@
 # 56. Services are delivered by service orders inside Sales, and billed once per period
 
 - Status: accepted; Phase 49 implements the service lines and the goods-only sales order,
-  Phase 50 the service order, its deliveries and their receivable and NFS-e
+  Phase 50 the service order, its deliveries and their receivable and NFS-e, Phase 51
+  recurring contracts
 - Date: 2026-09-26
 
 ## Context
@@ -91,3 +92,7 @@ person can act on.
 - **A separate `services/` module now.** It would duplicate the customer projection,
   price lists, proposals and payment terms, plus the full module wiring, before any
   aggregate needs its own boundary.
+- **Phase 51: contracts.** Periods are calendar months, quarters or years from the first of
+  a month, named by their first month (the competence). A contract changes only by
+  insert-only revisions, suspensions and a cancellation that take effect at a period that
+  has not begun, so a billed period's revision and amount never change.

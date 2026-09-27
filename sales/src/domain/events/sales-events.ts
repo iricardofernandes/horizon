@@ -493,3 +493,114 @@ export class SalesServiceDeliveryCancelledEvent extends SalesEvent {
     }
   }
 }
+
+type ContractFacts = { customerId: string }
+
+export class SalesContractActivatedEvent extends SalesEvent {
+  readonly eventType = 'sales.contract.activated'
+  constructor(
+    contractId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly contract: ContractFacts & {
+      revision: number
+      recurrence: string
+      startsOn: BusinessDate
+      endsOn: BusinessDate | null
+      billingDay: number
+      autoRenew: boolean
+    },
+  ) {
+    super(contractId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      contractId: this.aggregateId.toString(),
+      customerId: this.contract.customerId,
+      revision: this.contract.revision,
+      recurrence: this.contract.recurrence,
+      startsOn: this.contract.startsOn.value,
+      endsOn: this.contract.endsOn?.value ?? null,
+      billingDay: this.contract.billingDay,
+      autoRenew: this.contract.autoRenew,
+    }
+  }
+}
+
+export class SalesContractAmendedEvent extends SalesEvent {
+  readonly eventType = 'sales.contract.amended'
+  constructor(
+    contractId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly amendment: ContractFacts & {
+      revision: number
+      kind: 'amendment' | 'renewal'
+      effectiveFrom: BusinessDate
+      recurrence: string
+      endsOn: BusinessDate | null
+      readjustmentBasisPoints: number | null
+    },
+  ) {
+    super(contractId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      contractId: this.aggregateId.toString(),
+      customerId: this.amendment.customerId,
+      revision: this.amendment.revision,
+      kind: this.amendment.kind,
+      effectiveFrom: this.amendment.effectiveFrom.value,
+      recurrence: this.amendment.recurrence,
+      endsOn: this.amendment.endsOn?.value ?? null,
+      readjustmentBasisPoints: this.amendment.readjustmentBasisPoints,
+    }
+  }
+}
+
+export class SalesContractSuspendedEvent extends SalesEvent {
+  readonly eventType = 'sales.contract.suspended'
+  constructor(
+    contractId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly suspension: ContractFacts & {
+      suspensionId: string
+      from: BusinessDate
+      until: BusinessDate | null
+      reason: string
+    },
+  ) {
+    super(contractId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      contractId: this.aggregateId.toString(),
+      customerId: this.suspension.customerId,
+      suspensionId: this.suspension.suspensionId,
+      from: this.suspension.from.value,
+      until: this.suspension.until?.value ?? null,
+      reason: this.suspension.reason,
+    }
+  }
+}
+
+export class SalesContractCancelledEvent extends SalesEvent {
+  readonly eventType = 'sales.contract.cancelled'
+  constructor(
+    contractId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly cancellation: ContractFacts & { effectiveFrom: BusinessDate; reason: string },
+  ) {
+    super(contractId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      contractId: this.aggregateId.toString(),
+      customerId: this.cancellation.customerId,
+      effectiveFrom: this.cancellation.effectiveFrom.value,
+      reason: this.cancellation.reason,
+    }
+  }
+}

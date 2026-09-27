@@ -70,6 +70,10 @@ import {
   procurementRequisitionSubmitted,
 } from './procurement'
 import {
+  salesContractActivated,
+  salesContractAmended,
+  salesContractCancelled,
+  salesContractSuspended,
   salesFiscalOriginFrozen,
   salesFiscalOriginRecorded,
   salesInvoicingRequested,
@@ -188,6 +192,10 @@ export const EVENTS: readonly EventDefinition[] = [
   salesShipmentReturned,
   salesServiceDelivered,
   salesServiceDeliveryCancelled,
+  salesContractActivated,
+  salesContractAmended,
+  salesContractSuspended,
+  salesContractCancelled,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

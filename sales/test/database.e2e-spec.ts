@@ -15,6 +15,13 @@ import {
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
 import { ForgetPartyUseCase, ProjectPartyUseCase } from '@/application/use-cases/project-parties'
 import {
+  AmendContractUseCase,
+  CreateContractUseCase,
+  DecideContractUseCase,
+  RenewContractUseCase,
+  RenewDueContractsUseCase,
+} from '@/application/use-cases/service-contracts'
+import {
   DecideServiceOrderUseCase,
   DeliverServiceUseCase,
   OpenServiceOrderUseCase,
@@ -29,6 +36,7 @@ import type { Either } from '@/core/either'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { Customer } from '@/domain/entities/customer'
 import {
+  type BusinessDate,
   CustomerEmail,
   CustomerName,
   CustomerPhone,
@@ -1232,4 +1240,171 @@ it('isolates service orders and their deliveries by tenant', async () => {
     lines: [{ lineId: randomUUID(), itemId: good, quantity: '1' }],
   })
   expect(refused.isLeft()).toBe(true)
+})
+
+function firstStart(contract: { revisions(): readonly { effectiveFrom: BusinessDate }[] }) {
+  const [first] = contract.revisions()
+  if (!first) throw new Error('a contract has its first revision')
+  return first.effectiveFrom
+}
+
+/** The first day of the month `months` from the current UTC month. */
+function monthStart(months: number): string {
+  const day = clock.now()
+  return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + months, 1))
+    .toISOString()
+    .slice(0, 10)
+}
+
+it('keeps a contract in insert-only revisions and publishes each change', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service', 80000n)
+  const customerId = await serviceCustomer(tenantId)
+  const created = await new CreateContractUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId,
+    lines: [{ lineId: randomUUID(), itemId: service, quantity: '1' }],
+    recurrence: 'monthly',
+    startsOn: monthStart(1),
+    endsOn: monthStart(13),
+    billingDay: 10,
+    autoRenew: true,
+  })
+  // An end date on the first of a month ends mid-period: refused.
+  expect(created.isLeft()).toBe(true)
+  const endsOn = new Date(Date.parse(`${monthStart(13)}T00:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10)
+  const contract = await new CreateContractUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId,
+    lines: [{ lineId: randomUUID(), itemId: service, quantity: '1' }],
+    recurrence: 'monthly',
+    startsOn: monthStart(1),
+    endsOn,
+    billingDay: 10,
+    autoRenew: true,
+  })
+  if (contract.isLeft()) throw contract.value
+  const { contractId } = contract.value
+  const decide = new DecideContractUseCase(database, clock)
+  expect((await decide.activate(commandOf(tenantId), contractId)).isRight()).toBe(true)
+  const amended = await new AmendContractUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    contractId,
+    effectiveFrom: monthStart(3),
+    lines: [{ lineId: randomUUID(), itemId: service, quantity: '2', unitPrice: '75000' }],
+    recurrence: 'monthly',
+    reason: 'Dois postos de atendimento',
+  })
+  if (amended.isLeft()) throw amended.value
+  expect(
+    (
+      await decide.suspend(commandOf(tenantId), contractId, {
+        from: monthStart(5),
+        reason: 'Obra no cliente',
+      })
+    ).isRight(),
+  ).toBe(true)
+  expect((await decide.resume(commandOf(tenantId), contractId, monthStart(7))).isRight()).toBe(true)
+  const renewed = await new RenewContractUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    contractId,
+    readjustmentBasisPoints: 300,
+    reason: 'Renovação anual com reajuste',
+  })
+  if (renewed.isLeft()) throw renewed.value
+
+  const read = await database.findContract(tenantId, contractId)
+  if (!read) throw new Error('the contract vanished')
+  const periods = read.schedule({
+    from: firstStart(read),
+    to: firstStart(read).plusDays(800),
+  })
+  expect(periods).toHaveLength(24)
+  expect(periods.map((period) => period.revision).slice(0, 3)).toEqual([1, 1, 2])
+  expect(periods.filter((period) => period.excluded === 'suspended')).toHaveLength(2)
+  expect(periods[12]?.amount.amount).toBe(154500n)
+
+  const events = await administrator`select event_type from outbox
+    where tenant_id = ${tenantId} and event_type like 'sales.contract.%' order by created_at`
+  expect(events.map((row) => row.event_type)).toEqual([
+    'sales.contract.activated',
+    'sales.contract.amended',
+    'sales.contract.suspended',
+    'sales.contract.suspended',
+    'sales.contract.amended',
+  ])
+  // What a revision billed is never rewritten, and a resumption is written once.
+  await expect(
+    application.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      await tx`update service_contract_revision_lines set unit_price = 1`
+    }),
+  ).rejects.toThrow(/permission denied/)
+  await expect(
+    administrator`update service_contract_suspensions set until_date = until_date + 31
+      where contract_id = ${contractId}`,
+  ).rejects.toThrow(/only gains its resumption/)
+
+  // Another tenant sees none of it.
+  const other = randomUUID()
+  await database.provisionTenant(other)
+  expect(await database.findContract(other, contractId)).toBeNull()
+  expect((await decide.activate(commandOf(other), contractId)).isLeft()).toBe(true)
+  await application.begin(async (tx) => {
+    await tx`select set_config('app.current_tenant', ${other}, true)`
+    for (const table of [
+      'service_contracts',
+      'service_contract_revisions',
+      'service_contract_revision_lines',
+      'service_contract_suspensions',
+    ])
+      expect(await tx`select 1 from ${tx(table)}`).toHaveLength(0)
+  })
+})
+
+it('renews a due contract by itself once, with no gap in its periods', async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const service = await projectItem(tenantId, 'service', 30000n)
+  const customerId = await serviceCustomer(tenantId)
+  const contract = await new CreateContractUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    customerId,
+    lines: [{ lineId: randomUUID(), itemId: service, quantity: '1' }],
+    recurrence: 'monthly',
+    startsOn: monthStart(-2),
+    endsOn: new Date(Date.parse(`${monthStart(1)}T00:00:00Z`) - 86_400_000)
+      .toISOString()
+      .slice(0, 10),
+    billingDay: 1,
+    autoRenew: true,
+  })
+  if (contract.isLeft()) throw contract.value
+  const { contractId } = contract.value
+  expect(
+    (
+      await new DecideContractUseCase(database, clock).activate(commandOf(tenantId), contractId)
+    ).isRight(),
+  ).toBe(true)
+  const renew = new RenewDueContractsUseCase(database, clock)
+  const context = { tenantId, actor: 'user:operator', requestId: null }
+  expect((await renew.execute(context)).renewed).toEqual([contractId])
+  expect((await renew.execute(context)).renewed).toEqual([])
+  const read = await database.findContract(tenantId, contractId)
+  if (!read) throw new Error('the contract vanished')
+  const periods = read.schedule({
+    from: firstStart(read),
+    to: firstStart(read).plusDays(200),
+  })
+  expect(periods).toHaveLength(6)
+  for (const [index, period] of periods.entries()) {
+    const next = periods[index + 1]
+    if (next) expect(period.endsOn.plusDays(1).value).toBe(next.startsOn.value)
+  }
+  const [revision] = await administrator`select kind, created_by from service_contract_revisions
+    where contract_id = ${contractId} and revision = 2`
+  expect(revision).toEqual({ kind: 'renewal', created_by: 'system:contract-renewal' })
 })

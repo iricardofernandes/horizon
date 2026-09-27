@@ -8,6 +8,13 @@ import {
 } from '@/application/use-cases/manage-quotes'
 import { PlaceOrderUseCase } from '@/application/use-cases/place-order'
 import {
+  AmendContractUseCase,
+  CreateContractUseCase,
+  DecideContractUseCase,
+  RenewContractUseCase,
+  RenewDueContractsUseCase,
+} from '@/application/use-cases/service-contracts'
+import {
   DecideServiceOrderUseCase,
   DeliverServiceUseCase,
   OpenServiceOrderUseCase,
@@ -40,6 +47,11 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
   readonly openServiceOrder: OpenServiceOrderUseCase
   readonly deliverService: DeliverServiceUseCase
   readonly decideServiceOrder: DecideServiceOrderUseCase
+  readonly createContract: CreateContractUseCase
+  readonly amendContract: AmendContractUseCase
+  readonly renewContract: RenewContractUseCase
+  readonly renewDueContracts: RenewDueContractsUseCase
+  readonly decideContract: DecideContractUseCase
   readonly accessTokens: AccessTokenVerifier
 
   constructor(config: SalesEnvironment) {
@@ -79,6 +91,11 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
     this.openServiceOrder = new OpenServiceOrderUseCase(this.database, clock)
     this.deliverService = new DeliverServiceUseCase(this.database, clock)
     this.decideServiceOrder = new DecideServiceOrderUseCase(this.database, clock)
+    this.createContract = new CreateContractUseCase(this.database, clock)
+    this.amendContract = new AmendContractUseCase(this.database, clock)
+    this.renewContract = new RenewContractUseCase(this.database, clock)
+    this.renewDueContracts = new RenewDueContractsUseCase(this.database, clock)
+    this.decideContract = new DecideContractUseCase(this.database, clock)
   }
 
   onModuleInit(): Promise<void> {

@@ -46,6 +46,7 @@ import {
   TrackingCode,
 } from '@/domain/value-objects/sales-values'
 import * as schema from './schema'
+import { findContract, listContracts, serviceContractsRepository } from './service-contracts-store'
 import {
   findServiceOrderSnapshot,
   listServiceOrderSnapshots,
@@ -328,6 +329,14 @@ export class SalesDatabase extends SalesUnitOfWork {
     return this.inTenant(tenantId, () =>
       findServiceOrderSnapshot(this.currentTransaction(), serviceOrderId),
     )
+  }
+
+  async listContracts(tenantId: string) {
+    return this.inTenant(tenantId, () => listContracts(this.currentTransaction()))
+  }
+
+  async findContract(tenantId: string, contractId: string) {
+    return this.inTenant(tenantId, () => findContract(this.currentTransaction(), contractId))
   }
 
   async close(): Promise<void> {
@@ -1074,6 +1083,9 @@ function makeScope(
     audit: auditTrail(tx, tenantId),
     serviceOrders: serviceOrdersRepository(tx, tenantId, (order) =>
       publishAll(tx, tenantId, order),
+    ),
+    contracts: serviceContractsRepository(tx, tenantId, (contract) =>
+      publishAll(tx, tenantId, contract),
     ),
     customers: {
       findById: async (id) => {
