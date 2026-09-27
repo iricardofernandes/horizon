@@ -17,6 +17,12 @@ describe('CRM role map', () => {
     expect(permits(as('admin'), 'erase')).toBe(true)
   })
 
+  it('leaves pipelines and lists to managers and admins', () => {
+    expect(permits(as('manager'), 'configure')).toBe(true)
+    expect(permits(as('admin'), 'configure')).toBe(true)
+    expect(permits(as('representative'), 'configure')).toBe(false)
+  })
+
   it('ignores roles of other modules', () => {
     expect(permits([{ module: 'sales', role: 'admin' }], 'read')).toBe(false)
   })

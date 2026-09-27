@@ -17,7 +17,13 @@ import {
   accountDetail,
   contactDetail,
   listAccounts,
+  listEntries,
+  listOpportunities,
   listOwners,
+  listPipelines,
+  type OpportunityFilter,
+  opportunityDetail,
+  pipelineDetail,
 } from './crm-reads'
 import { ContactSealer, makeScope, type Transaction } from './crm-store'
 import * as schema from './schema'
@@ -130,6 +136,26 @@ export class CrmDatabase extends CrmUnitOfWork {
 
   contactDetail(tenantId: string, id: string) {
     return this.read(tenantId, (tx) => contactDetail(tx, this.#sealer, id))
+  }
+
+  listPipelines(tenantId: string, includeArchived: boolean) {
+    return this.read(tenantId, (tx) => listPipelines(tx, includeArchived))
+  }
+
+  pipelineDetail(tenantId: string, id: string) {
+    return this.read(tenantId, (tx) => pipelineDetail(tx, id))
+  }
+
+  listEntries(tenantId: string, kind: string, includeArchived: boolean) {
+    return this.read(tenantId, (tx) => listEntries(tx, kind, includeArchived))
+  }
+
+  listOpportunities(tenantId: string, filter: OpportunityFilter) {
+    return this.read(tenantId, (tx) => listOpportunities(tx, filter))
+  }
+
+  opportunityDetail(tenantId: string, id: string) {
+    return this.read(tenantId, (tx) => opportunityDetail(tx, id))
   }
 
   listOwners(tenantId: string) {

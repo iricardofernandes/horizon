@@ -3,14 +3,17 @@ import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type {
   AccountsRepository,
   ContactsRepository,
+  ListEntriesRepository,
+  OpportunitiesRepository,
   OwnersRepository,
+  PipelinesRepository,
 } from '@/domain/repositories/crm-repositories'
 
 /** One line in the tenant's hash-chained audit log (ADR 0025). Never a contact's values. */
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'account' | 'contact'
+  readonly subjectType: 'account' | 'contact' | 'pipeline' | 'list-entry' | 'opportunity'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -26,6 +29,9 @@ export interface CrmScope {
   readonly accounts: AccountsRepository
   readonly contacts: ContactsRepository
   readonly owners: OwnersRepository
+  readonly pipelines: PipelinesRepository
+  readonly lists: ListEntriesRepository
+  readonly opportunities: OpportunitiesRepository
   readonly audit: AuditTrail
 }
 

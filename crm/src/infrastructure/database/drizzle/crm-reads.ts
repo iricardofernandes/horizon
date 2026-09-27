@@ -1,7 +1,15 @@
-import { and, asc, count, eq, ilike, or, type SQL, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, or, type SQL, sql } from 'drizzle-orm'
 import type { AccountSnapshot } from '@/domain/entities/account'
 import type { ContactSnapshot } from '@/domain/entities/contact'
-import { type ContactSealer, mapAccount, type Transaction } from './crm-store'
+import {
+  type ContactSealer,
+  mapAccount,
+  mapFact,
+  mapListEntry,
+  mapOpportunity,
+  mapPipeline,
+  type Transaction,
+} from './crm-store'
 import * as schema from './schema'
 
 export interface AccountFilter {
@@ -87,4 +95,99 @@ export function listOwners(tx: Transaction) {
     })
     .from(schema.owners)
     .orderBy(asc(schema.owners.registeredAt), asc(schema.owners.userId))
+}
+
+export async function listPipelines(tx: Transaction, includeArchived: boolean) {
+  const rows = await tx
+    .select()
+    .from(schema.pipelines)
+    .where(includeArchived ? undefined : eq(schema.pipelines.archived, false))
+    .orderBy(asc(schema.pipelines.name), asc(schema.pipelines.id))
+  if (!rows.length) return []
+  const stages = await tx
+    .select()
+    .from(schema.pipelineStages)
+    .where(
+      inArray(
+        schema.pipelineStages.pipelineId,
+        rows.map((row) => row.id),
+      ),
+    )
+  return rows.map((row) =>
+    mapPipeline(
+      row,
+      stages.filter((stage) => stage.pipelineId === row.id),
+    ).toSnapshot(),
+  )
+}
+
+export async function pipelineDetail(tx: Transaction, id: string) {
+  const [row] = await tx.select().from(schema.pipelines).where(eq(schema.pipelines.id, id)).limit(1)
+  if (!row) return null
+  const stages = await tx
+    .select()
+    .from(schema.pipelineStages)
+    .where(eq(schema.pipelineStages.pipelineId, id))
+  return mapPipeline(row, stages).toSnapshot()
+}
+
+export async function listEntries(tx: Transaction, kind: string, includeArchived: boolean) {
+  const rows = await tx
+    .select()
+    .from(schema.listEntries)
+    .where(
+      and(
+        eq(schema.listEntries.kind, kind),
+        includeArchived ? undefined : eq(schema.listEntries.archived, false),
+      ),
+    )
+    .orderBy(asc(schema.listEntries.name), asc(schema.listEntries.id))
+  return rows.map((row) => mapListEntry(row).toSnapshot())
+}
+
+export interface OpportunityFilter {
+  readonly pipelineId: string | null
+  readonly stageId: string | null
+  readonly status: string | null
+  readonly ownerId: string | null
+  readonly accountId: string | null
+  readonly limit: number
+  readonly offset: number
+}
+
+export async function listOpportunities(tx: Transaction, filter: OpportunityFilter) {
+  const conditions = [
+    filter.pipelineId ? eq(schema.opportunities.pipelineId, filter.pipelineId) : undefined,
+    filter.stageId ? eq(schema.opportunities.stageId, filter.stageId) : undefined,
+    filter.status ? eq(schema.opportunities.status, filter.status) : undefined,
+    filter.ownerId ? eq(schema.opportunities.ownerId, filter.ownerId) : undefined,
+    filter.accountId ? eq(schema.opportunities.accountId, filter.accountId) : undefined,
+  ].filter((condition) => condition !== undefined)
+  const where = conditions.length ? and(...conditions) : undefined
+  const [rows, [total]] = await Promise.all([
+    tx
+      .select()
+      .from(schema.opportunities)
+      .where(where)
+      .orderBy(asc(schema.opportunities.expectedCloseOn), desc(schema.opportunities.updatedAt))
+      .limit(filter.limit)
+      .offset(filter.offset),
+    tx.select({ value: count() }).from(schema.opportunities).where(where),
+  ])
+  return { data: rows.map((row) => mapOpportunity(row).toSnapshot()), total: total?.value ?? 0 }
+}
+
+export async function opportunityDetail(tx: Transaction, id: string) {
+  const [row] = await tx
+    .select()
+    .from(schema.opportunities)
+    .where(eq(schema.opportunities.id, id))
+    .limit(1)
+  if (!row) return null
+  const history = await tx
+    .select()
+    .from(schema.opportunityEvents)
+    .where(eq(schema.opportunityEvents.opportunityId, id))
+    .orderBy(asc(schema.opportunityEvents.sequence))
+  return { opportunity: mapOpportunity(row).toSnapshot(), history: history.map(mapFact) }
 }

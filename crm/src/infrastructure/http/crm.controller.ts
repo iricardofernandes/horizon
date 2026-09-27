@@ -35,10 +35,14 @@ const contactInput = z.strictObject({
 const profileInput = z
   .strictObject({
     ownerId: z.uuid().nullable().optional(),
+    sourceId: z.uuid().nullable().optional(),
     segment: optionalText(80),
     tags: z.array(z.string().max(40)).max(20).optional(),
   })
-  .refine((body) => Object.keys(body).length > 0, 'send at least one of ownerId, segment, tags')
+  .refine(
+    (body) => Object.keys(body).length > 0,
+    'send at least one of ownerId, sourceId, segment, tags',
+  )
 
 const accountQuery = z.object({
   search: z.string().trim().max(160).optional(),

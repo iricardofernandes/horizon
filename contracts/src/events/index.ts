@@ -7,6 +7,15 @@ import {
   catalogPriceChanged,
   catalogVariantAssigned,
 } from './catalog'
+import {
+  crmOpportunityCreated,
+  crmOpportunityLost,
+  crmOpportunityOwnerChanged,
+  crmOpportunityReopened,
+  crmOpportunityRevised,
+  crmOpportunityStageChanged,
+  crmOpportunityWon,
+} from './crm'
 import type { EventDefinition } from './define'
 import {
   financialPayablePosted,
@@ -103,6 +112,7 @@ import {
 } from './treasury'
 
 export * from './catalog'
+export * from './crm'
 export * from './define'
 export * from './financial'
 export * from './fiscal'
@@ -204,6 +214,13 @@ export const EVENTS: readonly EventDefinition[] = [
   salesContractCancelled,
   salesContractPeriodBilled,
   salesContractPeriodCredited,
+  crmOpportunityCreated,
+  crmOpportunityRevised,
+  crmOpportunityStageChanged,
+  crmOpportunityOwnerChanged,
+  crmOpportunityWon,
+  crmOpportunityLost,
+  crmOpportunityReopened,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

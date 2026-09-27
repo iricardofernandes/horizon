@@ -7,6 +7,16 @@ import {
   EraseContactUseCase,
   ReviseContactUseCase,
 } from '@/application/use-cases/manage-contacts'
+import {
+  ChangeOpportunityUseCase,
+  CreateOpportunityUseCase,
+} from '@/application/use-cases/manage-opportunities'
+import {
+  ChangeListEntryUseCase,
+  ChangePipelineUseCase,
+  CreateListEntryUseCase,
+  CreatePipelineUseCase,
+} from '@/application/use-cases/manage-pipelines'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { CrmDatabase } from '@/infrastructure/database/drizzle/crm-database'
@@ -21,6 +31,12 @@ export class CrmRuntime implements OnModuleInit, OnModuleDestroy {
   readonly reviseContact: ReviseContactUseCase
   readonly changeContactStatus: ChangeContactStatusUseCase
   readonly eraseContact: EraseContactUseCase
+  readonly createPipeline: CreatePipelineUseCase
+  readonly changePipeline: ChangePipelineUseCase
+  readonly createListEntry: CreateListEntryUseCase
+  readonly changeListEntry: ChangeListEntryUseCase
+  readonly createOpportunity: CreateOpportunityUseCase
+  readonly changeOpportunity: ChangeOpportunityUseCase
   readonly eventHandlers: CrmModuleEventHandlers
 
   constructor(config: CrmEnvironment) {
@@ -40,6 +56,12 @@ export class CrmRuntime implements OnModuleInit, OnModuleDestroy {
     this.reviseContact = new ReviseContactUseCase(this.database, clock)
     this.changeContactStatus = new ChangeContactStatusUseCase(this.database, clock)
     this.eraseContact = new EraseContactUseCase(this.database, clock)
+    this.createPipeline = new CreatePipelineUseCase(this.database, clock)
+    this.changePipeline = new ChangePipelineUseCase(this.database, clock)
+    this.createListEntry = new CreateListEntryUseCase(this.database, clock)
+    this.changeListEntry = new ChangeListEntryUseCase(this.database, clock)
+    this.createOpportunity = new CreateOpportunityUseCase(this.database, clock)
+    this.changeOpportunity = new ChangeOpportunityUseCase(this.database, clock)
     this.eventHandlers = new CrmModuleEventHandlers(this.database, clock)
   }
 

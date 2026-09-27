@@ -2448,9 +2448,16 @@ module and the roles `admin`, `manager`, `representative` and `viewer` (contract
 
 ## Phase 56 — Pipelines and opportunities
 
-**Planned.** Configurable pipelines and stages, sources and loss reasons. Opportunities are
-owned, moved, won, lost and reopened, each change kept as an append-only event.
-[Detailed work](crm-implementation-plan.md#56--pipelines-and-opportunities).
+**Delivered on 2026-09-27.** Pipelines have ordered stages, each with a win probability.
+Stages and pipelines are archived, never deleted. Sources and loss reasons are
+workspace lists, and accounts gain a source.
+- An opportunity is revised, moved, reassigned, won, lost with a reason and reopened.
+- Its append-only history is the source of truth, and the record is rebuilt from it.
+- Each fact is published as `crm.opportunity.*` (contracts 0.43.0), without the title or
+  the contacts.
+
+[Evidence](crm-phase56-evidence.md).
+[Detailed plan](crm-phase56-implementation-plan.md). [Detailed work](crm-implementation-plan.md#56--pipelines-and-opportunities).
 
 ## Phase 57 — Activities, tasks, notes and reminders
 

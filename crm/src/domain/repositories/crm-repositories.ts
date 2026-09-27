@@ -1,5 +1,9 @@
 import type { Account } from '../entities/account'
 import type { Contact } from '../entities/contact'
+import type { ListEntry } from '../entities/list-entry'
+import type { Opportunity, RecordedFact } from '../entities/opportunity'
+import type { Pipeline } from '../entities/pipeline'
+import type { ListKind } from '../value-objects/crm-values'
 
 export abstract class AccountsRepository {
   abstract findById(id: string): Promise<Account | null>
@@ -31,4 +35,27 @@ export abstract class OwnersRepository {
   /** Known from now on; a registration never re-enables a user already disabled. */
   abstract register(userId: string, at: Date): Promise<void>
   abstract disable(userId: string, at: Date): Promise<void>
+}
+
+export abstract class PipelinesRepository {
+  abstract findById(id: string): Promise<Pipeline | null>
+  abstract create(pipeline: Pipeline): Promise<void>
+  abstract save(pipeline: Pipeline): Promise<void>
+}
+
+export abstract class ListEntriesRepository {
+  abstract findById(id: string): Promise<ListEntry | null>
+  /** An active entry of the list with this name, compared without case. */
+  abstract findActiveByName(kind: ListKind, name: string): Promise<ListEntry | null>
+  abstract create(entry: ListEntry): Promise<void>
+  abstract save(entry: ListEntry): Promise<void>
+}
+
+export abstract class OpportunitiesRepository {
+  abstract findById(id: string): Promise<Opportunity | null>
+  /** The full history, in order: what the current state is the fold of. */
+  abstract history(id: string): Promise<readonly RecordedFact[]>
+  /** Appends the pending facts to the history and writes their fold, in one transaction. */
+  abstract create(opportunity: Opportunity): Promise<void>
+  abstract save(opportunity: Opportunity): Promise<void>
 }

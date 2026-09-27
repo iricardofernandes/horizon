@@ -1,6 +1,8 @@
 import {
   bigint,
   boolean,
+  date,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -32,6 +34,7 @@ export const accounts = pgTable('accounts', {
   documentCountry: text('document_country'),
   partyActive: boolean('party_active').notNull(),
   ownerId: uuid('owner_id'),
+  sourceId: uuid('source_id'),
   segment: text('segment'),
   tags: text('tags').array().notNull(),
   status: text('status').notNull(),
@@ -144,4 +147,84 @@ export const inbox = pgTable(
     receivedAt: instant('received_at').notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.sourceModule, table.eventId] })],
+)
+
+/** A sequence of open stages; won and lost are the opportunity's outcome (Phase 56). */
+export const pipelines = pgTable('pipelines', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  name: text('name').notNull(),
+  archived: boolean('archived').notNull(),
+  createdAt: instant('created_at').notNull(),
+  updatedAt: instant('updated_at').notNull(),
+})
+
+export const pipelineStages = pgTable('pipeline_stages', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  pipelineId: uuid('pipeline_id').notNull(),
+  name: text('name').notNull(),
+  probabilityBps: integer('probability_bps').notNull(),
+  position: integer('position').notNull(),
+  archived: boolean('archived').notNull(),
+})
+
+/** Sources and loss reasons: archived, never deleted. */
+export const listEntries = pgTable('list_entries', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  kind: text('kind').notNull(),
+  name: text('name').notNull(),
+  archived: boolean('archived').notNull(),
+  createdAt: instant('created_at').notNull(),
+  updatedAt: instant('updated_at').notNull(),
+})
+
+/** The latest fold of an opportunity's history; the history is the source of truth. */
+export const opportunities = pgTable('opportunities', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
+  accountId: uuid('account_id').notNull(),
+  title: text('title').notNull(),
+  contactIds: uuid('contact_ids').array().notNull(),
+  ownerId: uuid('owner_id').notNull(),
+  sourceId: uuid('source_id'),
+  expectedAmount: bigint('expected_amount', { mode: 'bigint' }).notNull(),
+  currency: text('currency').notNull(),
+  expectedCloseOn: date('expected_close_on', { mode: 'string' }).notNull(),
+  pipelineId: uuid('pipeline_id').notNull(),
+  stageId: uuid('stage_id').notNull(),
+  probabilityBps: integer('probability_bps').notNull(),
+  status: text('status').notNull(),
+  lossReasonId: uuid('loss_reason_id'),
+  lossNote: text('loss_note'),
+  closedOn: date('closed_on', { mode: 'string' }),
+  version: integer('version').notNull(),
+  createdAt: instant('created_at').notNull(),
+  updatedAt: instant('updated_at').notNull(),
+})
+
+/** Append-only: every fact of every opportunity, in order (Phase 56). */
+export const opportunityEvents = pgTable(
+  'opportunity_events',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    opportunityId: uuid('opportunity_id').notNull(),
+    sequence: integer('sequence').notNull(),
+    type: text('type').notNull(),
+    fact: jsonb('fact').$type<Record<string, unknown>>().notNull(),
+    actor: text('actor').notNull(),
+    occurredAt: instant('occurred_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.opportunityId, table.sequence] })],
 )

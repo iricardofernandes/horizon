@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, desc, eq, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, ne, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { AuditRecord, AuditTrail, CrmScope } from '@/application/ports/unit-of-work'
 import { canonicalJson } from '@/core/audit/canonical-json'
@@ -9,6 +9,14 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
 import { Account, type AccountStatus } from '@/domain/entities/account'
 import { Contact, type ContactStatus } from '@/domain/entities/contact'
+import { ListEntry } from '@/domain/entities/list-entry'
+import {
+  Opportunity,
+  type OpportunityFact,
+  type OpportunityStatus,
+  type RecordedFact,
+} from '@/domain/entities/opportunity'
+import { Pipeline } from '@/domain/entities/pipeline'
 import type { SecretBox } from '@/domain/services/secret-box'
 import {
   ContactEmail,
@@ -16,8 +24,11 @@ import {
   ContactPhone,
   type DocumentType,
   JobTitle,
+  LabelName,
   type LawfulBasis,
+  type ListKind,
   type PartyKind,
+  Probability,
   Segment,
   Tags,
 } from '@/domain/value-objects/crm-values'
@@ -50,6 +61,7 @@ export function mapAccount(row: typeof schema.accounts.$inferSelect): Account {
         active: row.partyActive,
       },
       ownerId: row.ownerId,
+      sourceId: row.sourceId,
       segment: row.segment === null ? null : restored(Segment.create(row.segment)),
       tags: restored(Tags.of(row.tags)),
       status: row.status as AccountStatus,
@@ -71,6 +83,7 @@ function accountRow(account: Account) {
     documentCountry: snapshot.documentCountry,
     partyActive: snapshot.partyActive,
     ownerId: snapshot.ownerId,
+    sourceId: snapshot.sourceId,
     segment: snapshot.segment,
     tags: [...snapshot.tags],
     status: snapshot.status,
@@ -145,6 +158,100 @@ export class ContactSealer {
   }
 }
 
+export function mapPipeline(
+  row: typeof schema.pipelines.$inferSelect,
+  stages: readonly (typeof schema.pipelineStages.$inferSelect)[],
+): Pipeline {
+  return Pipeline.rehydrate(
+    {
+      tenantId: row.tenantId,
+      name: restored(LabelName.create(row.name)),
+      stages: [...stages]
+        .sort((a, b) => a.position - b.position)
+        .map((stage) => ({
+          id: stage.id,
+          name: restored(LabelName.create(stage.name)),
+          probability: restored(Probability.create(stage.probabilityBps)),
+          archived: stage.archived,
+        })),
+      archived: row.archived,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
+export function mapListEntry(row: typeof schema.listEntries.$inferSelect): ListEntry {
+  return ListEntry.rehydrate(
+    {
+      tenantId: row.tenantId,
+      kind: row.kind as ListKind,
+      name: restored(LabelName.create(row.name)),
+      archived: row.archived,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
+export function mapOpportunity(row: typeof schema.opportunities.$inferSelect): Opportunity {
+  return Opportunity.rehydrate(
+    row.tenantId,
+    {
+      accountId: row.accountId,
+      title: row.title,
+      contactIds: row.contactIds,
+      ownerId: row.ownerId,
+      sourceId: row.sourceId,
+      expectedValue: { amount: row.expectedAmount.toString(), currency: row.currency },
+      expectedCloseOn: row.expectedCloseOn,
+      pipelineId: row.pipelineId,
+      stageId: row.stageId,
+      probabilityBps: row.probabilityBps,
+      status: row.status as OpportunityStatus,
+      lossReasonId: row.lossReasonId,
+      lossNote: row.lossNote,
+      closedOn: row.closedOn,
+      version: row.version,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    },
+    new UniqueEntityID(row.id),
+  )
+}
+
+export function mapFact(row: typeof schema.opportunityEvents.$inferSelect): RecordedFact {
+  return {
+    sequence: row.sequence,
+    fact: row.fact as unknown as OpportunityFact,
+    actor: row.actor,
+    occurredAt: row.occurredAt,
+  }
+}
+
+function opportunityRow(opportunity: Opportunity) {
+  const { state } = opportunity
+  return {
+    title: state.title,
+    contactIds: [...state.contactIds],
+    ownerId: state.ownerId,
+    sourceId: state.sourceId,
+    expectedAmount: BigInt(state.expectedValue.amount),
+    currency: state.expectedValue.currency,
+    expectedCloseOn: state.expectedCloseOn,
+    stageId: state.stageId,
+    probabilityBps: state.probabilityBps,
+    status: state.status,
+    lossReasonId: state.lossReasonId,
+    lossNote: state.lossNote,
+    closedOn: state.closedOn,
+    version: state.version,
+    updatedAt: state.updatedAt,
+  }
+}
+
 async function publish(tx: Transaction, tenantId: string, event: DomainEvent): Promise<void> {
   if (event.tenantId !== tenantId) throw new Error('Event tenant does not match transaction')
   const id = new UniqueEntityID().toString()
@@ -213,6 +320,23 @@ export function makeScope(tx: Transaction, tenantId: string, sealer: ContactSeal
   }
   const flush = async (aggregate: { pullDomainEvents(): readonly DomainEvent[] }) => {
     for (const event of aggregate.pullDomainEvents()) await publish(tx, tenantId, event)
+  }
+  /** The history first, then what it publishes: both in the command's transaction. */
+  const appendHistory = async (opportunity: Opportunity) => {
+    const facts = opportunity.pullRecordedFacts()
+    if (facts.length)
+      await tx.insert(schema.opportunityEvents).values(
+        facts.map((recorded) => ({
+          tenantId,
+          opportunityId: opportunity.id.toString(),
+          sequence: recorded.sequence,
+          type: recorded.fact.type,
+          fact: { ...recorded.fact } as Record<string, unknown>,
+          actor: recorded.actor,
+          occurredAt: recorded.occurredAt,
+        })),
+      )
+    await flush(opportunity)
   }
   return {
     tenantId,
@@ -330,6 +454,135 @@ export function makeScope(tx: Transaction, tenantId: string, sealer: ContactSeal
             set: { active: false, disabledAt: at },
             where: eq(schema.owners.active, true),
           })
+      },
+    },
+    pipelines: {
+      findById: async (id) => {
+        const [row] = await tx
+          .select()
+          .from(schema.pipelines)
+          .where(eq(schema.pipelines.id, id))
+          .limit(1)
+          .for('update')
+        if (!row) return null
+        const stages = await tx
+          .select()
+          .from(schema.pipelineStages)
+          .where(eq(schema.pipelineStages.pipelineId, id))
+        return mapPipeline(row, stages)
+      },
+      create: async (pipeline) => {
+        assertTenant(pipeline)
+        const snapshot = pipeline.toSnapshot()
+        await tx.insert(schema.pipelines).values({
+          id: snapshot.id,
+          tenantId,
+          name: snapshot.name,
+          archived: snapshot.archived,
+          createdAt: snapshot.createdAt,
+          updatedAt: snapshot.updatedAt,
+        })
+        await tx
+          .insert(schema.pipelineStages)
+          .values(snapshot.stages.map((stage) => ({ ...stage, tenantId, pipelineId: snapshot.id })))
+      },
+      save: async (pipeline) => {
+        assertTenant(pipeline)
+        const snapshot = pipeline.toSnapshot()
+        await tx
+          .update(schema.pipelines)
+          .set({ name: snapshot.name, archived: snapshot.archived, updatedAt: snapshot.updatedAt })
+          .where(eq(schema.pipelines.id, snapshot.id))
+        // Stages are never deleted: each is inserted once and updated after that.
+        for (const stage of snapshot.stages)
+          await tx
+            .insert(schema.pipelineStages)
+            .values({ ...stage, tenantId, pipelineId: snapshot.id })
+            .onConflictDoUpdate({
+              target: schema.pipelineStages.id,
+              set: {
+                name: stage.name,
+                probabilityBps: stage.probabilityBps,
+                position: stage.position,
+                archived: stage.archived,
+              },
+            })
+      },
+    },
+    lists: {
+      findById: async (id) => {
+        const [row] = await tx
+          .select()
+          .from(schema.listEntries)
+          .where(eq(schema.listEntries.id, id))
+          .limit(1)
+        return row ? mapListEntry(row) : null
+      },
+      findActiveByName: async (kind, name) => {
+        const [row] = await tx
+          .select()
+          .from(schema.listEntries)
+          .where(
+            and(
+              eq(schema.listEntries.kind, kind),
+              eq(schema.listEntries.archived, false),
+              sql`lower(${schema.listEntries.name}) = lower(${name})`,
+            ),
+          )
+          .limit(1)
+        return row ? mapListEntry(row) : null
+      },
+      create: async (entry) => {
+        assertTenant(entry)
+        await tx.insert(schema.listEntries).values({ ...entry.toSnapshot(), tenantId })
+      },
+      save: async (entry) => {
+        assertTenant(entry)
+        const snapshot = entry.toSnapshot()
+        await tx
+          .update(schema.listEntries)
+          .set({ name: snapshot.name, archived: snapshot.archived, updatedAt: snapshot.updatedAt })
+          .where(eq(schema.listEntries.id, snapshot.id))
+      },
+    },
+    opportunities: {
+      findById: async (id) => {
+        const [row] = await tx
+          .select()
+          .from(schema.opportunities)
+          .where(eq(schema.opportunities.id, id))
+          .limit(1)
+          .for('update')
+        return row ? mapOpportunity(row) : null
+      },
+      history: async (id) => {
+        const rows = await tx
+          .select()
+          .from(schema.opportunityEvents)
+          .where(eq(schema.opportunityEvents.opportunityId, id))
+          .orderBy(asc(schema.opportunityEvents.sequence))
+        return rows.map(mapFact)
+      },
+      create: async (opportunity) => {
+        assertTenant(opportunity)
+        const { state } = opportunity
+        await tx.insert(schema.opportunities).values({
+          id: opportunity.id.toString(),
+          tenantId,
+          accountId: state.accountId,
+          pipelineId: state.pipelineId,
+          createdAt: state.createdAt,
+          ...opportunityRow(opportunity),
+        })
+        await appendHistory(opportunity)
+      },
+      save: async (opportunity) => {
+        assertTenant(opportunity)
+        await tx
+          .update(schema.opportunities)
+          .set(opportunityRow(opportunity))
+          .where(eq(schema.opportunities.id, opportunity.id.toString()))
+        await appendHistory(opportunity)
       },
     },
     audit: auditTrail(tx, tenantId),

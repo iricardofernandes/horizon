@@ -27,6 +27,8 @@ export interface PartyFacts {
 /** What CRM itself says about the account: who looks after it and how it is grouped. */
 export interface AccountProfile {
   readonly ownerId: string | null
+  /** Where the account came from, from the workspace's source list (Phase 56). */
+  readonly sourceId: string | null
   readonly segment: Segment | null
   readonly tags: Tags
 }
@@ -34,6 +36,7 @@ export interface AccountProfile {
 interface AccountProps {
   tenantId: string
   ownerId: string | null
+  sourceId: string | null
   segment: Segment | null
   tags: Tags
   party: PartyFacts
@@ -53,6 +56,7 @@ export interface AccountSnapshot {
   readonly documentCountry: string | null
   readonly partyActive: boolean
   readonly ownerId: string | null
+  readonly sourceId: string | null
   readonly segment: string | null
   readonly tags: readonly string[]
   readonly status: AccountStatus
@@ -85,6 +89,7 @@ export class Account extends AggregateRoot<AccountProps> {
         tenantId: props.tenantId,
         party: props.party,
         ownerId: null,
+        sourceId: null,
         segment: null,
         tags: Tags.none(),
         status: statusOf(props.party),
@@ -142,6 +147,10 @@ export class Account extends AggregateRoot<AccountProps> {
       this.props.ownerId = profile.ownerId
       changed.push('ownerId')
     }
+    if (profile.sourceId !== undefined && profile.sourceId !== this.props.sourceId) {
+      this.props.sourceId = profile.sourceId
+      changed.push('sourceId')
+    }
     if (profile.segment !== undefined && !sameSegment(profile.segment, this.props.segment)) {
       this.props.segment = profile.segment
       changed.push('segment')
@@ -180,6 +189,7 @@ export class Account extends AggregateRoot<AccountProps> {
       documentCountry: this.props.party.documentCountry,
       partyActive: this.props.party.active,
       ownerId: this.props.ownerId,
+      sourceId: this.props.sourceId,
       segment: this.props.segment?.value ?? null,
       tags: [...this.props.tags.values],
       status: this.props.status,

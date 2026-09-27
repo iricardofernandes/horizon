@@ -218,6 +218,23 @@ party registry. Its name, job title, email and phone are sealed under a key of i
 and shredded with it; it records the lawful basis (`contract`, `legitimate-interest`,
 `consent`) for holding them.
 
+### pipeline and stage
+The sequence of open stages an opportunity moves through, each with its win probability
+in basis points. Won and lost are the opportunity's outcomes, not stages. A stage in use
+is archived rather than deleted: its opportunities stay and can leave it, but none can
+enter it.
+
+### opportunity
+A sale being pursued on an account: title, contacts, owner, source, expected value and
+close date, pipeline and stage. Its append-only history is the source of truth; the
+record is the fold of that history, and each fact is published as `crm.opportunity.*`
+without the title or the contacts.
+
+### source and loss reason
+Workspace lists: where an account or opportunity came from, and why an opportunity was
+lost. Entries are archived, never deleted, and a name is unique among the active entries
+of its list.
+
 ### owner
 The workspace user who looks after an account. CRM knows owners only as user ids and
 whether they are active; a disabled user keeps the accounts it owns but receives no new

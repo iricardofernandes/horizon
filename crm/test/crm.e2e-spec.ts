@@ -5,7 +5,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { CrmModuleEventHandlers } from '@/application/consume-module-events'
 import { UpdateAccountProfileUseCase } from '@/application/use-cases/manage-accounts'
 import { CreateContactUseCase, EraseContactUseCase } from '@/application/use-cases/manage-contacts'
+import {
+  ChangeOpportunityUseCase,
+  CreateOpportunityUseCase,
+} from '@/application/use-cases/manage-opportunities'
+import {
+  ChangePipelineUseCase,
+  CreateListEntryUseCase,
+  CreatePipelineUseCase,
+} from '@/application/use-cases/manage-pipelines'
 import type { Either } from '@/core/either'
+import { foldHistory } from '@/domain/entities/opportunity'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { CrmDatabase } from '@/infrastructure/database/drizzle/crm-database'
 import { auditHash } from '@/infrastructure/database/drizzle/crm-store'
@@ -296,5 +306,192 @@ describe('accounts and contacts on PostgreSQL', () => {
     expect((await list({ role: 'customer' })).total).toBe(1)
     expect((await list({ status: 'erased' })).total).toBe(0)
     expect((await list({ ownerId: randomUUID() })).total).toBe(0)
+  })
+})
+
+describe('pipelines and opportunities on PostgreSQL', () => {
+  async function sales() {
+    const { tenantId, partyId, contactId } = await workspace()
+    const ownerId = randomUUID()
+    await deliver(
+      tenantId,
+      'identity.user.registered',
+      { tenantId, userId: ownerId, registeredAt: new Date().toISOString() },
+      1,
+    )
+    const keyed = () => ({ tenantId, actor: 'ana', requestId: null, idempotencyKey: randomUUID() })
+    const { pipelineId } = valid(
+      await new CreatePipelineUseCase(database, clock).execute({
+        context: keyed(),
+        name: 'Vendas',
+        stages: [
+          { name: 'Qualificação', probabilityBps: 1000 },
+          { name: 'Proposta', probabilityBps: 5000 },
+          { name: 'Negociação', probabilityBps: 8000 },
+        ],
+      }),
+    )
+    const stages =
+      (await database.pipelineDetail(tenantId, pipelineId))?.stages.map((stage) => stage.id) ?? []
+    const lists = new CreateListEntryUseCase(database, clock)
+    const { entryId: sourceId } = valid(
+      await lists.execute({ context: keyed(), kind: 'source', name: 'Indicação' }),
+    )
+    const { entryId: reasonId } = valid(
+      await lists.execute({ context: keyed(), kind: 'loss-reason', name: 'Preço' }),
+    )
+    const request = {
+      accountId: partyId,
+      ownerId,
+      pipelineId,
+      stageId: stages[0] as string,
+      terms: {
+        title: 'Renovação Acme 2027',
+        contactIds: [contactId],
+        sourceId,
+        expectedValue: { amount: '1500000', currency: 'BRL' },
+        expectedCloseOn: '2026-12-15',
+      },
+    }
+    const { opportunityId } = valid(
+      await new CreateOpportunityUseCase(database, clock).execute({ ...request, context: keyed() }),
+    )
+    return {
+      tenantId,
+      partyId,
+      ownerId,
+      pipelineId,
+      stages,
+      sourceId,
+      reasonId,
+      opportunityId,
+      request,
+      keyed,
+    }
+  }
+
+  it('rebuilds an opportunity from its stored history, which cannot be rewritten', async () => {
+    const world = await sales()
+    const change = new ChangeOpportunityUseCase(database, clock)
+    const request = {
+      context: { tenantId: world.tenantId, actor: 'ana', requestId: null },
+      opportunityId: world.opportunityId,
+    }
+    valid(await change.move({ ...request, stageId: world.stages[1] as string }))
+    valid(await change.lose({ ...request, lossReasonId: world.reasonId, note: 'Caro' }))
+    valid(await change.reopen({ ...request, stageId: world.stages[2] as string }))
+    valid(await change.lose({ ...request, lossReasonId: world.reasonId }))
+    const detail = await database.opportunityDetail(world.tenantId, world.opportunityId)
+    if (!detail) throw new Error('missing opportunity')
+    expect(detail.history.map((recorded) => recorded.fact.type)).toEqual([
+      'created',
+      'stage-changed',
+      'lost',
+      'reopened',
+      'lost',
+    ])
+    const { id: _, tenantId: __, ...state } = detail.opportunity
+    expect(foldHistory(detail.history)).toEqual(state)
+    expect(state).toMatchObject({
+      status: 'lost',
+      lossReasonId: world.reasonId,
+      lossNote: null,
+      version: 5,
+    })
+    await expect(
+      administrator`update opportunity_events set actor = 'x' where opportunity_id = ${world.opportunityId}`,
+    ).rejects.toThrow(/append-only/)
+    await expect(
+      administrator`delete from opportunity_events where opportunity_id = ${world.opportunityId}`,
+    ).rejects.toThrow(/append-only/)
+  })
+
+  it('publishes each fact to the outbox without the title or the contacts', async () => {
+    const world = await sales()
+    const change = new ChangeOpportunityUseCase(database, clock)
+    valid(
+      await change.win({
+        context: { tenantId: world.tenantId, actor: 'ana', requestId: null },
+        opportunityId: world.opportunityId,
+      }),
+    )
+    const events = await administrator`select event_type, payload from outbox
+      where tenant_id = ${world.tenantId} and event_type like 'crm.opportunity.%' order by created_at`
+    expect(events.map((event) => event.event_type)).toEqual([
+      'crm.opportunity.created',
+      'crm.opportunity.won',
+    ])
+    expect(events[1]?.payload).toMatchObject({
+      value: { amount: '1500000', currency: 'BRL' },
+      sourceId: world.sourceId,
+    })
+    expect(JSON.stringify(events)).not.toMatch(/Renovação|contactIds/)
+  })
+
+  it('keeps opportunities on an archived stage, and reorders stages in one transaction', async () => {
+    const world = await sales()
+    const change = new ChangePipelineUseCase(database, clock)
+    const context = { tenantId: world.tenantId, actor: 'ana', requestId: null }
+    valid(
+      await change.execute({
+        context,
+        pipelineId: world.pipelineId,
+        change: { kind: 'revise-stage', stageId: world.stages[0] as string, archived: true },
+      }),
+    )
+    const [row] =
+      await administrator`select stage_id, status from opportunities where id = ${world.opportunityId}`
+    expect(row).toEqual({ stage_id: world.stages[0], status: 'open' })
+    valid(
+      await change.execute({
+        context,
+        pipelineId: world.pipelineId,
+        change: { kind: 'reorder', stageIds: [...world.stages].reverse() },
+      }),
+    )
+    const stages = (await database.pipelineDetail(world.tenantId, world.pipelineId))?.stages
+    expect(stages?.map((stage) => stage.id)).toEqual([...world.stages].reverse())
+    expect(stages?.[2]).toMatchObject({ archived: true, position: 2 })
+    const refused = await new CreateOpportunityUseCase(database, clock).execute({
+      ...world.request,
+      context: world.keyed(),
+    })
+    expect(refused.value).toMatchObject({ title: 'Conflict' })
+  })
+
+  it('opens an opportunity once per idempotency key, even concurrently', async () => {
+    const world = await sales()
+    const create = new CreateOpportunityUseCase(database, clock)
+    const context = world.keyed()
+    const [first, second] = await Promise.all([
+      create.execute({ ...world.request, context }),
+      create.execute({ ...world.request, context }),
+    ])
+    expect(valid(first)).toEqual(valid(second))
+    const [count] =
+      await administrator`select count(*)::int as n from opportunities where tenant_id = ${world.tenantId}`
+    expect(count?.n).toBe(2)
+  })
+
+  it('never shows one tenant another tenant’s pipelines, lists or opportunities', async () => {
+    const world = await sales()
+    const intruder = randomUUID()
+    for (const table of [
+      'pipelines',
+      'pipeline_stages',
+      'list_entries',
+      'opportunities',
+      'opportunity_events',
+    ]) {
+      const [owned] =
+        await administrator`select count(*)::int as n from ${administrator(table)} where tenant_id = ${world.tenantId}`
+      expect(owned?.n, table).toBeGreaterThan(0)
+      const visible = await application.begin(async (tx) => {
+        await tx`select set_config('app.current_tenant', ${intruder}, true)`
+        return tx`select count(*)::int as n from ${tx(table)}`
+      })
+      expect(visible[0]?.n, table).toBe(0)
+    }
+    expect(await database.opportunityDetail(intruder, world.opportunityId)).toBeNull()
   })
 })

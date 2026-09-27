@@ -11,6 +11,7 @@ import { audit, type CommandContext } from './commands'
 export interface AccountProfileInput {
   /** `null` leaves the account without an owner; absent leaves the owner as it is. */
   readonly ownerId?: string | null | undefined
+  readonly sourceId?: string | null | undefined
   readonly segment?: string | null | undefined
   readonly tags?: readonly string[] | undefined
 }
@@ -18,6 +19,7 @@ export interface AccountProfileInput {
 function profileOf(input: AccountProfileInput): Either<InvalidInputError, Partial<AccountProfile>> {
   const profile: { -readonly [K in keyof AccountProfile]?: AccountProfile[K] } = {}
   if (input.ownerId !== undefined) profile.ownerId = input.ownerId
+  if (input.sourceId !== undefined) profile.sourceId = input.sourceId
   if (input.segment !== undefined) {
     if (input.segment === null || !input.segment.trim()) profile.segment = null
     else {
@@ -43,6 +45,19 @@ async function ownerAvailable(
   const owner = await scope.owners.find(ownerId)
   if (!owner) return new InvalidInputError('/ownerId', 'is not a user of this workspace')
   if (!owner.active) return new InvalidInputError('/ownerId', 'is a disabled user')
+  return null
+}
+
+/** A source must be an active entry of the workspace's source list when it is chosen. */
+async function sourceAvailable(
+  scope: CrmScope,
+  sourceId: string | null | undefined,
+): Promise<InvalidInputError | null> {
+  if (sourceId === undefined || sourceId === null) return null
+  const source = await scope.lists.findById(sourceId)
+  if (source?.kind !== 'source')
+    return new InvalidInputError('/sourceId', 'is not a source of this workspace')
+  if (!source.isSelectable()) return new InvalidInputError('/sourceId', 'is an archived source')
   return null
 }
 
@@ -72,7 +87,9 @@ export class UpdateAccountProfileUseCase {
     return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
       const account = await scope.accounts.findById(request.accountId)
       if (!account) return left(new ResourceNotFoundError('account was not found'))
-      const refused = await ownerAvailable(scope, profile.value.ownerId)
+      const refused =
+        (await ownerAvailable(scope, profile.value.ownerId)) ??
+        (await sourceAvailable(scope, profile.value.sourceId))
       if (refused) return left(refused)
       const now = this.clock.now()
       const changed = account.describe(profile.value, now)

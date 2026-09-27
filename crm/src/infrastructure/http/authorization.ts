@@ -11,7 +11,7 @@ import type { CrmRuntime } from '@/main/crm-runtime'
 
 const PUBLIC = 'crm:public'
 const ACTION = 'crm:action'
-export type CrmAction = 'read' | 'write' | 'assign' | 'erase'
+export type CrmAction = 'read' | 'write' | 'assign' | 'erase' | 'configure'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
 export const RequireCrmAction = (action: CrmAction) => SetMetadata(ACTION, action)
 
@@ -33,13 +33,14 @@ export function tenantOf(request: CrmRequest): string {
 /**
  * The static role map for this module (ADR 0023).
  *
- * A representative works the accounts; deciding who looks after an account is a manager's
- * call; destroying a person's data is an administrator's. Visibility is tenant-wide: roles
+ * A representative works the accounts and opportunities; deciding who looks after them, and
+ * how pipelines and lists are set up, is a manager's call; destroying a person's data is
+ * an administrator's. Visibility is tenant-wide: roles
  * are module-scoped, so there is no "only my accounts" here (CRM plan, out of scope).
  */
 export const PERMITS: Readonly<Record<string, readonly CrmAction[]>> = {
-  admin: ['read', 'write', 'assign', 'erase'],
-  manager: ['read', 'write', 'assign'],
+  admin: ['read', 'write', 'assign', 'erase', 'configure'],
+  manager: ['read', 'write', 'assign', 'configure'],
   representative: ['read', 'write'],
   viewer: ['read'],
 }

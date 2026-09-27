@@ -141,3 +141,106 @@ export function lawfulBasisOf(value: string): Either<InvalidInputError, LawfulBa
 export function isAccountRole(role: string): role is AccountRole {
   return ACCOUNT_ROLES.includes(role as AccountRole)
 }
+
+/** A pipeline, a stage, a source or a loss reason, as a person names it in settings. */
+export class LabelName extends BoundedText {
+  static create(value: string, field = '/name'): Either<InvalidInputError, LabelName> {
+    const text = BoundedText.bounded(value, field, 1, 80)
+    return text.isLeft() ? left(text.value) : right(new LabelName({ value: text.value }))
+  }
+}
+
+/** What the opportunity is about ("Renovação 2027"). Never published: it may name a person. */
+export class OpportunityTitle extends BoundedText {
+  static create(value: string): Either<InvalidInputError, OpportunityTitle> {
+    const text = BoundedText.bounded(value, '/title', 2, 160)
+    return text.isLeft() ? left(text.value) : right(new OpportunityTitle({ value: text.value }))
+  }
+}
+
+/** A stage's chance of winning, in basis points: 2500 is 25% (ADR 0043). */
+export class Probability extends ValueObject<{ bps: number }> {
+  static create(value: number, field = '/probabilityBps'): Either<InvalidInputError, Probability> {
+    if (!Number.isInteger(value) || value < 0 || value > 10_000)
+      return left(
+        new InvalidInputError(field, 'must be an integer between 0 and 10000 basis points'),
+      )
+    return right(new Probability({ bps: value }))
+  }
+
+  get bps(): number {
+    return this.props.bps
+  }
+
+  protected componentsOf(): readonly unknown[] {
+    return [this.props.bps]
+  }
+}
+
+/**
+ * Money as integer minor units with an explicit currency (ADR 0010). An opportunity's
+ * value is an expectation, never negative.
+ */
+export class Money extends ValueObject<{ amount: bigint; currency: string }> {
+  static create(
+    amount: string,
+    currency: string,
+    field = '/expectedValue',
+  ): Either<InvalidInputError, Money> {
+    if (!/^\d{1,18}$/.test(amount))
+      return left(
+        new InvalidInputError(
+          `${field}/amount`,
+          'must be a non-negative integer count of minor units',
+        ),
+      )
+    if (!/^[A-Z]{3}$/.test(currency))
+      return left(new InvalidInputError(`${field}/currency`, 'must be an ISO 4217 code'))
+    return right(new Money({ amount: BigInt(amount), currency }))
+  }
+
+  get amount(): bigint {
+    return this.props.amount
+  }
+
+  get currency(): string {
+    return this.props.currency
+  }
+
+  toJSON(): { amount: string; currency: string } {
+    return { amount: this.props.amount.toString(), currency: this.props.currency }
+  }
+
+  protected componentsOf(): readonly unknown[] {
+    return [this.props.amount, this.props.currency]
+  }
+}
+
+/** A business date (ADR 0011): `YYYY-MM-DD`, never an instant. */
+export class BusinessDate extends ValueObject<{ value: string }> {
+  static create(
+    value: string,
+    field = '/expectedCloseOn',
+  ): Either<InvalidInputError, BusinessDate> {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+    const parsed = match ? new Date(`${value}T00:00:00Z`) : null
+    if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value)
+      return left(new InvalidInputError(field, 'must be a calendar date, YYYY-MM-DD'))
+    return right(new BusinessDate({ value }))
+  }
+
+  static of(instant: Date): BusinessDate {
+    return new BusinessDate({ value: instant.toISOString().slice(0, 10) })
+  }
+
+  get value(): string {
+    return this.props.value
+  }
+
+  protected componentsOf(): readonly unknown[] {
+    return [this.props.value]
+  }
+}
+
+export const LIST_KINDS = ['source', 'loss-reason'] as const
+export type ListKind = (typeof LIST_KINDS)[number]

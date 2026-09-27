@@ -7,8 +7,8 @@ An independently deployable NestJS service with its own database, its own contai
 its own lifecycle. It is reached through Kong at `/crm`, never directly, and it shares no
 source with any other module (ADR 0001).
 
-**Status: phase 55 — accounts, contacts and owners.** Opportunities and pipelines arrive
-in phase 56, activities and tasks in phase 57 ([CRM plan](../docs/crm-implementation-plan.md)).
+**Status: phase 56 — accounts, contacts, owners, pipelines and opportunities.** Activities
+and tasks arrive in phase 57 ([CRM plan](../docs/crm-implementation-plan.md)).
 
 ---
 
@@ -23,6 +23,14 @@ in phase 56, activities and tasks in phase 57 ([CRM plan](../docs/crm-implementa
   erasing the contact, or its account's party, destroys that key (ADR 0026).
 - **Owners** — the workspace's users as ids and an active flag, fed by
   `identity.user.registered` and `identity.user.disabled`. No name or email is kept.
+- **Pipelines** — ordered open stages with a win probability in basis points; stages and
+  pipelines are archived, never deleted. Won and lost are outcomes, not stages.
+- **Sources and loss reasons** — workspace lists, archived rather than deleted; an
+  account and an opportunity carry a source.
+- **Opportunities** — an account, contacts, owner, source, expected value and close date,
+  pipeline and stage; moved, revised, reassigned, won, lost with a reason and reopened.
+  The append-only history (`opportunity_events`) is the source of truth, and the record is
+  its fold.
 - **Audit** — every command appends to the tenant's hash chain (ADR 0025), with field
   names and never contact values.
 
@@ -36,8 +44,10 @@ in phase 56, activities and tasks in phase 57 ([CRM plan](../docs/crm-implementa
 ## Events
 
 Consumed: `parties.party.registered` and `updated` (v1 and v2), `parties.party.erased`,
-`identity.user.registered` and `identity.user.disabled`. Published: none yet — the outbox
-and relay are wired for the `crm.opportunity.*` events of phase 56.
+`identity.user.registered` and `identity.user.disabled`. Published: `crm.opportunity.created`,
+`revised`, `stage-changed`, `owner-changed`, `won`, `lost` and `reopened` (v1) — with the
+stage probability, owner, source and value at that moment, never the title or contacts.
+A revision that changed only the title or contacts is kept in the history, not published.
 
 ## HTTP API
 
@@ -50,11 +60,18 @@ and relay are wired for the `crm.opportunity.*` events of phase 56.
 | `GET /contacts/{id}`, `PUT /contacts/{id}`, `PATCH /contacts/{id}/status` | read / write |
 | `DELETE /contacts/{id}` — crypto-shredding | erase |
 | `GET /owners` | read |
+| `GET /pipelines`, `GET /pipelines/{id}`, `GET /sources`, `GET /loss-reasons` (`?archived=include`) | read |
+| `POST /pipelines`, `PUT /pipelines/{id}`, `PATCH /pipelines/{id}/status`, `POST /pipelines/{id}/stages`, `PATCH /pipelines/{id}/stages/{stageId}`, `PUT /pipelines/{id}/stage-order` | configure |
+| `POST /sources`, `PATCH /sources/{id}`, `POST /loss-reasons`, `PATCH /loss-reasons/{id}` | configure |
+| `GET /opportunities?pipelineId=&stageId=&status=&ownerId=&accountId=`, `GET /opportunities/{id}` (with its history) | read |
+| `POST /opportunities` (requires `Idempotency-Key`), `PUT /opportunities/{id}`, `POST /opportunities/{id}/stage`, `…/win`, `…/lose`, `…/reopen` | write |
+| `POST /opportunities/{id}/owner` | assign |
 
 ## Authorization
 
-`crm:admin` reads, writes, assigns owners and erases contacts; `crm:manager` reads,
-writes and assigns; `crm:representative` reads and writes; `crm:viewer` reads.
+`crm:admin` reads, writes, assigns owners, configures pipelines and lists, and erases
+contacts; `crm:manager` does all of that but erase; `crm:representative` reads and writes;
+`crm:viewer` reads.
 Visibility is tenant-wide: roles are module-scoped (ADR 0023).
 
 ## Running it

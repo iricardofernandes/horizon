@@ -8,8 +8,12 @@ import type {
 } from '@/application/ports/unit-of-work'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import type { DomainEvent } from '@/core/events/domain-event'
 import type { Account } from '@/domain/entities/account'
 import type { Contact } from '@/domain/entities/contact'
+import type { ListEntry } from '@/domain/entities/list-entry'
+import type { Opportunity, RecordedFact } from '@/domain/entities/opportunity'
+import type { Pipeline } from '@/domain/entities/pipeline'
 import type { Owner } from '@/domain/repositories/crm-repositories'
 
 /**
@@ -21,6 +25,11 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
   readonly contacts = new Map<string, Contact>()
   readonly keys = new Set<string>()
   readonly owners = new Map<string, Owner>()
+  readonly pipelines = new Map<string, Pipeline>()
+  readonly lists = new Map<string, ListEntry>()
+  readonly opportunities = new Map<string, Opportunity>()
+  readonly history = new Map<string, RecordedFact[]>()
+  readonly published: DomainEvent[] = []
   readonly audit: (AuditRecord & { tenantId: string })[] = []
   readonly consumed = new Set<string>()
   readonly receipts = new Map<string, { command: string; fingerprint: string; response: unknown }>()
@@ -60,8 +69,39 @@ export class InMemoryCrmUnitOfWork implements CrmUnitOfWork {
         disable: async (userId) =>
           void this.owners.set(`${tenantId}:${userId}`, { userId, active: false }),
       },
+      pipelines: {
+        findById: async (id) => mine(this.pipelines.get(id)),
+        create: async (pipeline) => void this.pipelines.set(pipeline.id.toString(), pipeline),
+        save: async (pipeline) => void this.pipelines.set(pipeline.id.toString(), pipeline),
+      },
+      lists: {
+        findById: async (id) => mine(this.lists.get(id)),
+        findActiveByName: async (kind, name) =>
+          [...this.lists.values()].find(
+            (entry) =>
+              entry.belongsTo(tenantId) &&
+              entry.kind === kind &&
+              entry.isSelectable() &&
+              entry.name.value.toLowerCase() === name.toLowerCase(),
+          ) ?? null,
+        create: async (entry) => void this.lists.set(entry.id.toString(), entry),
+        save: async (entry) => void this.lists.set(entry.id.toString(), entry),
+      },
+      opportunities: {
+        findById: async (id) => mine(this.opportunities.get(id)),
+        history: async (id) => [...(this.history.get(id) ?? [])],
+        create: async (opportunity) => this.keepOpportunity(opportunity),
+        save: async (opportunity) => this.keepOpportunity(opportunity),
+      },
       audit: { append: async (record) => void this.audit.push({ ...record, tenantId }) },
     })
+  }
+
+  private keepOpportunity(opportunity: Opportunity): void {
+    const id = opportunity.id.toString()
+    this.opportunities.set(id, opportunity)
+    this.history.set(id, [...(this.history.get(id) ?? []), ...opportunity.pullRecordedFacts()])
+    this.published.push(...opportunity.pullDomainEvents())
   }
 
   async once<E, T>(

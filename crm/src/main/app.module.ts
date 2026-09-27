@@ -2,6 +2,7 @@ import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { CrmAuthGuard } from '@/infrastructure/http/authorization'
 import { CrmController } from '@/infrastructure/http/crm.controller'
+import { OpportunitiesController } from '@/infrastructure/http/opportunities.controller'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import { CrmRuntime } from './crm-runtime'
 import type { CrmEnvironment } from './environment'
@@ -43,7 +44,7 @@ export class AppModule {
       })
     return {
       module: AppModule,
-      controllers: [CrmController],
+      controllers: [CrmController, OpportunitiesController],
       providers,
       exports: [CrmRuntime],
     }

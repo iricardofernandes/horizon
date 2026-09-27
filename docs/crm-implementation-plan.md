@@ -1,6 +1,6 @@
 # CRM implementation plan — Phase L
 
-Status: **in progress** — Phases 54 and 55 delivered on 2026-09-27. This is the execution plan for Phase L of the
+Status: **in progress** — Phases 54 to 56 delivered on 2026-09-27. This is the execution plan for Phase L of the
 [ERP expansion plan](erp-expansion-plan.md#phase-l--crm), split into phases 54–60 of
 [plan.md](plan.md). Each numbered phase gets its own detailed plan before implementation,
 one local commit and an evidence record, as in Phases J and K.
@@ -154,6 +154,9 @@ Gaps:
 
 ### 56 — Pipelines and opportunities
 
+[Detailed Phase 56 plan](crm-phase56-implementation-plan.md) ·
+[evidence](crm-phase56-evidence.md).
+
 **Work**
 1. Configurable pipelines:
    - ordered stages, each with a win probability in basis points;
@@ -270,8 +273,8 @@ Additive, versioned in `@horizon/contracts` and pinned by every consumer (ADR 00
 - **Events:**
   - `parties.party.registered` and `parties.party.updated` v2 (typed document kind,
     nullable contact fields);
-  - `crm.opportunity.created`, `stage-changed`, `owner-changed`, `won`, `lost`,
-    `reopened` and `converted`;
+  - `crm.opportunity.created`, `revised`, `stage-changed`, `owner-changed`, `won`,
+    `lost` and `reopened` (Phase 56), and `converted` (Phase 58);
   - `crm.task.due`;
   - `sales.quote.*` with optional attribution.
 - **Module and roles:** `crm` with `admin`, `manager`, `representative` and `viewer`.

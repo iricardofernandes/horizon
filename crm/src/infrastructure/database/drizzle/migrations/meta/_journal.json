@@ -8,6 +8,13 @@
       "when": 1790510400000,
       "tag": "0000_crm",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790514000000,
+      "tag": "0001_opportunities",
+      "breakpoints": true
     }
   ]
 }
