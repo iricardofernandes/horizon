@@ -1,9 +1,20 @@
 import { type Either, left, right } from '@/core/either'
 import { AccountDisabledError } from '@/domain/errors/account-disabled-error'
+import { MfaEnrollmentRequiredError } from '@/domain/errors/mfa-errors'
 import { TenantSuspendedError } from '@/domain/errors/tenant-suspended-error'
 import { WorkspaceSelectionExpiredError } from '@/domain/errors/workspace-selection-expired-error'
+import {
+  type AuthMethod,
+  enrollBy,
+  hasSecondFactor,
+  type MfaPolicy,
+  mfaRequiredFor,
+  NO_MFA_POLICY,
+} from '@/domain/mfa/mfa-policy'
+import { deviceLabel, ipPrefix } from '@/domain/mfa/session-meta'
 import type { AccountsRepository } from '@/domain/repositories/accounts-repository'
 import type { Clock } from '../ports/clock'
+import type { MfaChallenges, MfaPolicies } from '../ports/mfa'
 import type { UnitOfWork } from '../ports/unit-of-work'
 import type { WorkspaceSelections } from '../ports/workspace-selections'
 import type { IssuedSession } from '../services/session-issuer'
@@ -60,6 +71,18 @@ export class BeginWorkspaceSwitchUseCase {
   }
 }
 
+/** What the workspace MFA policy needs at sign-in (Phase 67). */
+export interface WorkspaceMfaGate {
+  readonly policies: MfaPolicies
+  readonly challenges: MfaChallenges
+}
+
+type SelectFailure =
+  | WorkspaceSelectionExpiredError
+  | AccountDisabledError
+  | TenantSuspendedError
+  | MfaEnrollmentRequiredError
+
 export class SelectWorkspaceUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWork,
@@ -67,23 +90,22 @@ export class SelectWorkspaceUseCase {
     private readonly selections: WorkspaceSelections,
     private readonly sessions: SessionIssuer,
     private readonly clock: Clock,
+    private readonly mfa?: WorkspaceMfaGate,
   ) {}
 
   async execute(request: {
     selectionToken: string
     tenantId: string
     sourceIp?: string | null
+    userAgent?: string | null
     requestId?: string | null
-  }): Promise<
-    Either<
-      WorkspaceSelectionExpiredError | AccountDisabledError | TenantSuspendedError,
-      IssuedSession
-    >
-  > {
-    const accountId = await this.selections.consume(request.selectionToken)
-    if (accountId === null) return left(new WorkspaceSelectionExpiredError())
+  }): Promise<Either<SelectFailure, IssuedSession & { readonly enrollBy?: Date }>> {
+    const grant = await this.selections.consumeGrant(request.selectionToken)
+    if (grant === null) return left(new WorkspaceSelectionExpiredError())
+    const accountId = grant.accountId
     const membership = await this.accounts.findMembership(accountId, request.tenantId)
     if (membership === null) return left(new WorkspaceSelectionExpiredError())
+    const policy = this.mfa ? await this.mfa.policies.find(membership.tenantId) : NO_MFA_POLICY
 
     return this.unitOfWork.inTenant(membership.tenantId, async (scope) => {
       const tenant = await scope.tenants.findById(membership.tenantId)
@@ -93,6 +115,9 @@ export class SelectWorkspaceUseCase {
         return left(new AccountDisabledError('this workspace membership has been disabled'))
 
       const now = this.clock.now()
+      const deadline = this.enrollmentDeadline(policy, user.claims().roles, grant.amr)
+      if (deadline !== null && now.getTime() >= deadline.getTime())
+        return left(await this.enrollmentRequired(accountId))
       user.recordSuccessfulLogin(now)
       await scope.users.save(user)
       await scope.audit.append({
@@ -104,7 +129,31 @@ export class SelectWorkspaceUseCase {
         sourceIp: request.sourceIp ?? null,
         occurredAt: now,
       })
-      return right(await this.sessions.open(user, now))
+      const session = await this.sessions.open(user, now, {
+        device: deviceLabel(request.userAgent),
+        ipPrefix: ipPrefix(request.sourceIp),
+        amr: grant.amr as AuthMethod[],
+        authTime: grant.authTime ?? now,
+      })
+      return right(deadline ? { ...session, enrollBy: deadline } : session)
     })
+  }
+
+  /** When a person the policy covers must have a second factor by; null when not covered. */
+  private enrollmentDeadline(
+    policy: MfaPolicy,
+    roles: readonly { role: string }[],
+    amr: readonly string[],
+  ): Date | null {
+    if (!this.mfa || !mfaRequiredFor(policy, roles) || hasSecondFactor(amr)) return null
+    return enrollBy(policy)
+  }
+
+  private async enrollmentRequired(accountId: string): Promise<MfaEnrollmentRequiredError> {
+    const enrollment = await (this.mfa as WorkspaceMfaGate).challenges.issue(
+      accountId,
+      'enrollment',
+    )
+    return new MfaEnrollmentRequiredError(enrollment.token, enrollment.expiresAt)
   }
 }

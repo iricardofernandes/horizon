@@ -387,6 +387,14 @@ export const navigation: readonly NavigationGroup[] = [
         demo: false,
       },
       {
+        href: '/app/settings/security',
+        labelKey: 'security',
+        icon: ShieldCheck,
+        // Everyone's own second factors and sessions (Phase 67).
+        module: null,
+        demo: false,
+      },
+      {
         href: '/app/jobs',
         labelKey: 'jobs',
         icon: ListChecks,

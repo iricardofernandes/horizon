@@ -88,6 +88,16 @@ services:
       retries: 20
       start_period: 300s
 
+  # Mailpit catches Identity's invitation mail (Phase 67): SMTP on 1025, the inbox on 8025.
+  mailpit:
+    <<: *restart
+    image: axllent/mailpit:v1.27@sha256:e22dce5b36f93c77082e204a3942fb6b283b7896e057458400a4c88344c3df68
+    container_name: horizon-mailpit
+    networks: [horizon]
+    ports:
+      - '${HORIZON_MAILPIT_SMTP_PORT:-1025}:1025'
+      - '${HORIZON_MAILPIT_UI_PORT:-8025}:8025'
+
   # ---------------------------------------------------------------- data
   postgres:
     <<: *restart

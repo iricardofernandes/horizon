@@ -100,6 +100,12 @@ services:
       API_KEY_ENV: dev
       DATA_SUBJECT_KEY_MODE: table
       BLIND_INDEX_KEY_PATH: /keys/blind-index.key
+      # Phase 67: TOTP secrets are sealed with this; invitations go out through Mailpit.
+      MFA_SEAL_SECRET: ${HORIZON_MFA_SEAL_SECRET:-local-mfa-seal-secret-change-me-0123456789}
+      SMTP_URL: smtp://mailpit:1025
+      MAIL_FROM: Horizon <no-reply@horizon.local>
+      WEB_URL: http://localhost:${HORIZON_WEB_PORT:-3000}
+      WEBAUTHN_RP_ID: localhost
     volumes:
       # Read-only, and gitignored on the host. In the Terraform definition these come
       # from AWS Secrets Manager instead (ADR 0018).

@@ -23,6 +23,9 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(runtimeModule, { bufferLogs: true })
   app.useLogger(app.get(Logger))
   app.enableShutdownHooks()
+  // Kong and the web server sit in front: the address a session shows is the client's,
+  // taken from X-Forwarded-For as far as private-network proxies vouch for it (Phase 67).
+  app.getHttpAdapter().getInstance().set('trust proxy', 'loopback, linklocal, uniquelocal')
   const document = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()

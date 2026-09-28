@@ -24,14 +24,31 @@ export interface AuthenticateAccountRequest {
   readonly password: string
 }
 
+export interface WorkspaceChoice {
+  readonly selectionToken: string
+  readonly selectionExpiresAt: Date
+  readonly workspaces: readonly SelectableWorkspace[]
+}
+
+/** The password was right and the account has a second factor: it is asked next (Phase 67). */
+export interface SecondFactorChallenge {
+  readonly mfaRequired: true
+  readonly challengeToken: string
+  readonly challengeExpiresAt: Date
+  readonly methods: readonly ('totp' | 'recovery' | 'passkey')[]
+}
+
 export type AuthenticateAccountResponse = Either<
   InvalidCredentialsError | AccountDisabledError,
-  {
-    readonly selectionToken: string
-    readonly selectionExpiresAt: Date
-    readonly workspaces: readonly SelectableWorkspace[]
-  }
+  WorkspaceChoice | SecondFactorChallenge
 >
+
+/** How the account asks for its second factor, when it has one. */
+export interface SecondFactorGate {
+  methodsOf(accountId: string): Promise<readonly ('totp' | 'recovery' | 'passkey')[]>
+  hasActiveFactor(accountId: string): Promise<boolean>
+  issueChallenge(accountId: string): Promise<{ token: string; expiresAt: Date }>
+}
 
 /** Password first, tenant second. No tenant-bearing credential exists before selection. */
 export class AuthenticateAccountUseCase {
@@ -41,6 +58,7 @@ export class AuthenticateAccountUseCase {
     private readonly selections: WorkspaceSelections,
     private readonly policy: IdentityPolicy,
     private readonly clock: Clock,
+    private readonly secondFactor?: SecondFactorGate,
   ) {}
 
   async execute(request: AuthenticateAccountRequest): Promise<AuthenticateAccountResponse> {
@@ -79,7 +97,17 @@ export class AuthenticateAccountUseCase {
     const memberships = await this.accounts.listWorkspaces(account.id.toString())
     if (memberships.length === 0)
       return left(new AccountDisabledError('this account has no active workspace memberships'))
-    const selection = await this.selections.issue(account.id.toString())
+    const accountId = account.id.toString()
+    if (this.secondFactor && (await this.secondFactor.hasActiveFactor(accountId))) {
+      const challenge = await this.secondFactor.issueChallenge(accountId)
+      return right({
+        mfaRequired: true,
+        challengeToken: challenge.token,
+        challengeExpiresAt: challenge.expiresAt,
+        methods: await this.secondFactor.methodsOf(accountId),
+      })
+    }
+    const selection = await this.selections.issue(accountId, { amr: ['pwd'], authTime: now })
     return right({
       selectionToken: selection.token,
       selectionExpiresAt: selection.expiresAt,

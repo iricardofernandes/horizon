@@ -37,6 +37,21 @@ const environmentSchema = z
     DATA_SUBJECT_KEY_MODE: z.literal('table').default('table'),
     TRUST_GATEWAY_JWT: z.enum(['false']).default('false'),
     TENANT_ID_HASH_SALT: z.string().min(16),
+    /** Seals TOTP secrets at rest (Phase 67); 32 characters or more, never shared. */
+    MFA_SEAL_SECRET: z.string().min(32),
+    /** Where invitation links point, and the passkey origin. */
+    WEB_URL: z
+      .url()
+      .regex(/^https?:\/\//)
+      .default('http://localhost:3000'),
+    /** The passkey relying party: the web's host name. */
+    WEBAUTHN_RP_ID: z.string().min(1).default('localhost'),
+    /** Outbound mail (ADR 0061): Mailpit locally. `memory` keeps it in the process. */
+    SMTP_URL: z
+      .string()
+      .regex(/^(smtps?:\/\/.+|memory)$/)
+      .default('smtp://localhost:1025'),
+    MAIL_FROM: z.string().min(3).default('Horizon <no-reply@horizon.local>'),
   })
   .refine((env) => env.REFRESH_TOKEN_IDLE_TTL_SECONDS <= env.REFRESH_TOKEN_ABSOLUTE_TTL_SECONDS, {
     path: ['REFRESH_TOKEN_IDLE_TTL_SECONDS'],

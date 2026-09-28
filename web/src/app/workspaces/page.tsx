@@ -34,6 +34,10 @@ export default function WorkspacesPage() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(workspace),
     }).catch(() => null)
+    if (response?.status === 403) {
+      const body = (await response.json().catch(() => ({}))) as { enrollmentRequired?: boolean }
+      if (body.enrollmentRequired) return router.replace('/enroll')
+    }
     if (!response?.ok) {
       setBusy('')
       setError(t('selectError'))

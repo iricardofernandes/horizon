@@ -67,6 +67,8 @@ beforeAll(async () => {
   process.env.REDIS_URL = redis.getConnectionUrl()
   process.env.RABBITMQ_URL = rabbitmq.getAmqpUrl()
   process.env.TENANT_ID_HASH_SALT = randomUUID()
+  process.env.MFA_SEAL_SECRET = `${randomUUID()}${randomUUID()}`
+  process.env.SMTP_URL = 'memory'
 
   const migrationClient = postgresClient(process.env.DATABASE_MIGRATION_URL, { max: 1 })
   try {

@@ -9,6 +9,7 @@ import {
   AccessTokenSigner,
   type JsonWebKey,
   type MintedAccessToken,
+  type TokenContext,
   type VerifiedAccessToken,
 } from '@/application/ports/access-token-signer'
 import type { Clock } from '@/application/ports/clock'
@@ -41,6 +42,9 @@ const CLAIMS = z.object({
   iss: z.string().min(1),
   iat: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
+  sid: z.string().min(1).optional(),
+  amr: z.array(z.string().min(1)).max(8).optional(),
+  auth_time: z.number().int().nonnegative().optional(),
 })
 
 /**
@@ -90,11 +94,22 @@ export class EdDsaAccessTokenSigner extends AccessTokenSigner {
     })
   }
 
-  override async mint(claims: UserClaims, now: Date): Promise<MintedAccessToken> {
+  override async mint(
+    claims: UserClaims,
+    now: Date,
+    context?: TokenContext,
+  ): Promise<MintedAccessToken> {
     const issuedAtSeconds = Math.floor(now.getTime() / 1000)
     const expiresAtSeconds = issuedAtSeconds + this.ttlSeconds
     const jti = randomUUID()
-    const token = await new SignJWT({ tenant_id: claims.tenantId, roles: claims.roles })
+    const session = context
+      ? {
+          sid: context.sid,
+          amr: [...context.amr],
+          auth_time: Math.floor(context.authTime.getTime() / 1000),
+        }
+      : {}
+    const token = await new SignJWT({ tenant_id: claims.tenantId, roles: claims.roles, ...session })
       .setProtectedHeader({ alg: 'EdDSA', typ: 'JWT', kid: this.kid })
       // Kong OSS selects a configured credential by iss, not by JWKS (ADR 0036).
       .setIssuer(this.issuer(this.kid))
@@ -144,6 +159,9 @@ export class EdDsaAccessTokenSigner extends AccessTokenSigner {
         roles: claims.roles,
         jti: claims.jti,
         expiresAt: new Date(claims.exp * 1000),
+        amr: claims.amr ?? [],
+        ...(claims.sid === undefined ? {} : { sid: claims.sid }),
+        ...(claims.auth_time === undefined ? {} : { authTime: new Date(claims.auth_time * 1000) }),
       })
     } catch {
       return left(new InvalidAccessTokenError())

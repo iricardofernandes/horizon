@@ -16,6 +16,19 @@ export interface VerifiedAccessToken {
   readonly roles: readonly { module: string; role: string }[]
   readonly jti: string
   readonly expiresAt: Date
+  /** The session (refresh family); absent on API-key and service tokens. */
+  readonly sid?: string
+  /** How the person signed in (RFC 8176): `pwd`, plus `otp`, `hwk` or `rec`. */
+  readonly amr: readonly string[]
+  /** When the person last proved who they are; a step-up renews it. */
+  readonly authTime?: Date
+}
+
+/** What a session adds to a token: which session, and how and when it was proven. */
+export interface TokenContext {
+  readonly sid: string
+  readonly amr: readonly string[]
+  readonly authTime: Date
 }
 
 /** One JWKS entry. Public key material only — this is served to the world. */
@@ -39,7 +52,7 @@ export interface JsonWebKey {
  * entry, and only `JWT_ACTIVE_KID` signs.
  */
 export abstract class AccessTokenSigner {
-  abstract mint(claims: UserClaims, now: Date): Promise<MintedAccessToken>
+  abstract mint(claims: UserClaims, now: Date, context?: TokenContext): Promise<MintedAccessToken>
   abstract verify(token: string): Promise<Either<UseCaseError, VerifiedAccessToken>>
   abstract jwks(): readonly JsonWebKey[]
   abstract activeKid(): string

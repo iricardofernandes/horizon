@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { PageHeading, PanelHeading } from '@/components/ui/headings'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
+import { MfaPolicyPanel } from '@/features/security/mfa-policy-panel'
 import { apiError } from '@/lib/api'
 import { jsonHeaders } from '@/lib/http'
 import { tracedFetch } from '@/lib/telemetry'
@@ -97,6 +98,7 @@ export function WorkspaceView({
           setNotice={setNotice}
           workspace={workspace}
         />
+        <MfaPolicyPanel canManage={canManage} setNotice={setNotice} />
       </div>
     </section>
   )

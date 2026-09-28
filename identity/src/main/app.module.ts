@@ -6,6 +6,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core'
 import { LoggerModule } from 'nestjs-pino'
 
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
+import { AccessController } from '@/infrastructure/http/access.controller'
 import { AdministrationController } from '@/infrastructure/http/administration.controller'
 import { AuthController } from '@/infrastructure/http/auth.controller'
 import { IdentityAuthGuard } from '@/infrastructure/http/authorization'
@@ -92,6 +93,7 @@ export class AppModule {
         UsersController,
         WorkspaceController,
         AdministrationController,
+        AccessController,
         SystemController,
       ],
       providers,

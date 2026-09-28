@@ -9,10 +9,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
+import { useStepUp } from '@/features/security/step-up'
 import { jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 import { useDateTime } from '@/lib/use-format'
+import { InvitationsPanel, UserSessionsDialog } from './access-hardening'
 
 type ModuleName =
   | 'identity'
@@ -94,6 +96,8 @@ export function AccessView({
   const statusLabel = useStatusLabel()
   const dateTime = useDateTime()
   const [query, setQuery] = useState('')
+  const { run, dialog } = useStepUp()
+  const [invitationsVersion, setInvitationsVersion] = useState(0)
   const normalized = query.trim().toLocaleLowerCase()
   const filtered = users.filter(
     (user) =>
@@ -111,7 +115,11 @@ export function AccessView({
           <p className="catalog-page-copy">{t('copy')}</p>
         </div>
         <div className="page-actions">
-          <CreateUserDialog onChanged={onChanged} setNotice={setNotice} />
+          <InviteDialog
+            onChanged={async () => setInvitationsVersion((value) => value + 1)}
+            run={run}
+            setNotice={setNotice}
+          />
         </div>
       </header>
 
@@ -172,7 +180,13 @@ export function AccessView({
                   </td>
                   <td>
                     <div className="row-actions">
-                      <ManageRolesDialog user={user} onChanged={onChanged} setNotice={setNotice} />
+                      <ManageRolesDialog
+                        onChanged={onChanged}
+                        run={run}
+                        setNotice={setNotice}
+                        user={user}
+                      />
+                      <UserSessionsDialog run={run} setNotice={setNotice} user={user} />
                       {user.status === 'active' && user.id !== currentUserId ? (
                         <DisableUserDialog
                           user={user}
@@ -194,11 +208,13 @@ export function AccessView({
           </div>
         ) : null}
       </div>
+      <InvitationsPanel key={invitationsVersion} setNotice={setNotice} />
+      {dialog}
     </section>
   )
 }
 
-function CreateUserDialog({ onChanged, setNotice }: MutationProps) {
+function InviteDialog({ onChanged, setNotice, run }: MutationProps & StepUpProps) {
   const t = useTranslations('access')
   const common = useTranslations('common')
   const [open, setOpen] = useState(false)
@@ -212,24 +228,25 @@ function CreateUserDialog({ onChanged, setNotice }: MutationProps) {
     const form = event.currentTarget
     const data = new FormData(form)
     const profile = String(data.get('profile') ?? 'viewer') as keyof typeof profiles
-    const response = await tracedFetch('identity.user.create', '/api/horizon/identity/users', {
-      method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify({
-        name: String(data.get('name') ?? '').trim(),
-        email: String(data.get('email') ?? '').trim(),
-        password: data.get('password'),
-        roles: profiles[profile],
+    const response = await run(() =>
+      tracedFetch('identity.invitation.create', '/api/horizon/identity/invitations', {
+        method: 'POST',
+        headers: jsonHeaders(),
+        body: JSON.stringify({
+          name: String(data.get('name') ?? '').trim(),
+          email: String(data.get('email') ?? '').trim(),
+          roles: profiles[profile],
+        }),
       }),
-    })
+    )
     if (!response.ok) {
-      setError(await apiError(response, t('createFailed')))
+      setError(await apiError(response, t('inviteFailed')))
       setBusy(false)
       return
     }
     form.reset()
     setOpen(false)
-    setNotice(t('created'))
+    setNotice(t('invited'))
     await onChanged()
     setBusy(false)
   }
@@ -238,26 +255,18 @@ function CreateUserDialog({ onChanged, setNotice }: MutationProps) {
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger className="ui-button ui-button-primary">
         <UserPlus aria-hidden="true" size={17} />
-        {t('create')}
+        {t('invite')}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />
         <Dialog.Popup className="ui-dialog-popup">
-          <DialogHeading title={t('createTitle')} description={t('createDescription')} />
+          <DialogHeading title={t('inviteTitle')} description={t('inviteDescription')} />
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
           <form className="dialog-form" onSubmit={submit}>
             <TextField label={t('name')} name="name" maxLength={200} required />
             <TextField label={t('email')} name="email" maxLength={254} required type="email" />
-            <TextField
-              description={t('passwordHelp')}
-              label={t('password')}
-              name="password"
-              minLength={12}
-              required
-              type="password"
-            />
             <SelectField
               label={t('profile')}
               name="profile"
@@ -268,7 +277,7 @@ function CreateUserDialog({ onChanged, setNotice }: MutationProps) {
               ]}
               required
             />
-            <FormActions busy={busy} error={error} label={t('create')} />
+            <FormActions busy={busy} error={error} label={t('invite')} />
           </form>
         </Dialog.Popup>
       </Dialog.Portal>
@@ -280,7 +289,8 @@ function ManageRolesDialog({
   user,
   onChanged,
   setNotice,
-}: MutationProps & { user: WorkspaceUser }) {
+  run,
+}: MutationProps & StepUpProps & { user: WorkspaceUser }) {
   const t = useTranslations('access')
   const common = useTranslations('common')
   const moduleName = useTranslations('modules')
@@ -294,10 +304,12 @@ function ManageRolesDialog({
   async function change(assignment: RoleAssignment, operation: 'grant' | 'revoke') {
     setBusy(true)
     setError('')
-    const response = await tracedFetch(
-      'identity.user.role',
-      `/api/horizon/identity/users/${user.id}/roles`,
-      { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ assignment, operation }) },
+    const response = await run(() =>
+      tracedFetch('identity.user.role', `/api/horizon/identity/users/${user.id}/roles`, {
+        method: 'POST',
+        headers: jsonHeaders(),
+        body: JSON.stringify({ assignment, operation }),
+      }),
     )
     if (!response.ok) {
       setError(await apiError(response, t('roleChangeFailed')))
@@ -448,6 +460,7 @@ function DisableUserDialog({
 }
 
 type MutationProps = { onChanged: () => Promise<void>; setNotice: (value: string) => void }
+export type StepUpProps = { run: (action: () => Promise<Response>) => Promise<Response> }
 
 function DialogHeading({ title, description }: { title: string; description: string }) {
   return (

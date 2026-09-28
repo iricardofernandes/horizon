@@ -17,7 +17,7 @@ import { z } from 'zod'
 
 import { IdentityRuntime } from '@/main/identity-runtime'
 import { RequestSchema } from './api-schema'
-import { ReadDuringDenylistOutage, RequirePermission } from './authorization'
+import { ReadDuringDenylistOutage, RequirePermission, RequireRecentAuth } from './authorization'
 import { actor, type IdentityHttpRequest, principal, requestMetadata } from './http-context'
 import { presentApiKey, presentSelf, presentUser, unwrap } from './presenters'
 
@@ -141,6 +141,7 @@ export class UsersController {
   @Post('users')
   @RequestSchema(registerUser)
   @RequirePermission('manage', 'Roles')
+  @RequireRecentAuth()
   async register(@Body() body: unknown, @Req() request: IdentityHttpRequest) {
     const input = registerUser.parse(body)
     return unwrap(
@@ -169,6 +170,7 @@ export class UsersController {
   @Post('users/:userId/roles')
   @RequestSchema(assignRole)
   @RequirePermission('manage', 'Roles')
+  @RequireRecentAuth()
   @HttpCode(200)
   async assignRole(
     @Param('userId') userId: string,

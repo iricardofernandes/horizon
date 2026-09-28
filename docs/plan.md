@@ -2615,9 +2615,19 @@ implemented by Parties, Catalog, Inventory and Financial.
 
 ## Phase 67 — Invitations, MFA, passkeys and sessions
 
-**Planned.** Invitations replace administrator-chosen passwords. TOTP with recovery codes, passkeys, a
-workspace MFA policy, and sessions a user and an administrator can see and revoke.
-[Detailed work](production-readiness-implementation-plan.md#67--invitations-mfa-passkeys-and-sessions).
+**Delivered on 2026-09-28.**
+- **Invitations:** mailed through Mailpit, single-use, valid for 72 hours. They replace
+  administrator-chosen passwords on the web.
+- **A second factor:** TOTP with ten recovery codes, or passkeys, asked after the
+  password. Wrong answers lock it out.
+- **Step-up** before API keys, roles, invitations and factor changes.
+- **A workspace MFA policy,** with a grace period.
+- **Sessions:** a person or an administrator sees and ends them, and their live tokens die
+  with them.
+- **A security drill** stores its results.
+
+[Plan](readiness-phase67-implementation-plan.md), [evidence](readiness-phase67-evidence.md),
+[drill](drills/2026-09-28-phase67-security-drill.json).
 
 ## Phase 68 — Segregation of duties, delegation and the audit screen
 

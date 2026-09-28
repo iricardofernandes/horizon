@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/ui/text-field'
+import { SecondFactorStep } from '@/features/security/second-factor-step'
+import type { SecondFactorMethod } from '@/lib/access'
 import { tracedFetch } from '@/lib/telemetry'
 
 export default function LoginPage() {
@@ -12,6 +14,7 @@ export default function LoginPage() {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [methods, setMethods] = useState<SecondFactorMethod[] | null>(null)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -29,6 +32,14 @@ export default function LoginPage() {
     setBusy(false)
     if (!response?.ok) {
       setError(t('error'))
+      return
+    }
+    const answer = (await response.json().catch(() => ({}))) as {
+      mfaRequired?: boolean
+      methods?: SecondFactorMethod[]
+    }
+    if (answer.mfaRequired) {
+      setMethods(answer.methods ?? ['totp'])
       return
     }
     router.replace('/workspaces')
@@ -54,45 +65,53 @@ export default function LoginPage() {
       </section>
 
       <section className="login-panel">
-        <form className="login-card" onSubmit={submit}>
-          <div>
-            <p className="eyebrow">{t('welcome')}</p>
-            <h2>{t('title')}</h2>
-            <p className="muted">{t('subtitle')}</p>
-          </div>
-          <TextField
-            autoComplete="email"
-            defaultValue="demo@horizon.local"
-            label={t('email')}
-            name="email"
-            required
-            type="email"
+        {methods ? (
+          <SecondFactorStep
+            methods={methods}
+            onCancel={() => setMethods(null)}
+            onDone={() => router.replace('/workspaces')}
           />
-          <TextField
-            autoComplete="current-password"
-            label={t('password')}
-            name="password"
-            required
-            type="password"
-          />
-          {error ? (
-            <p className="form-error" role="alert">
-              {error}
+        ) : (
+          <form className="login-card" onSubmit={submit}>
+            <div>
+              <p className="eyebrow">{t('welcome')}</p>
+              <h2>{t('title')}</h2>
+              <p className="muted">{t('subtitle')}</p>
+            </div>
+            <TextField
+              autoComplete="email"
+              defaultValue="demo@horizon.local"
+              label={t('email')}
+              name="email"
+              required
+              type="email"
+            />
+            <TextField
+              autoComplete="current-password"
+              label={t('password')}
+              name="password"
+              required
+              type="password"
+            />
+            {error ? (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <Button
+              className="wide"
+              disabled={busy}
+              focusableWhenDisabled
+              type="submit"
+              variant="primary"
+            >
+              {busy ? t('submitting') : t('submit')}
+            </Button>
+            <p className="demo-note">
+              {t('demoNote')} <code>Horizon-demo-2026!</code>
             </p>
-          ) : null}
-          <Button
-            className="wide"
-            disabled={busy}
-            focusableWhenDisabled
-            type="submit"
-            variant="primary"
-          >
-            {busy ? t('submitting') : t('submit')}
-          </Button>
-          <p className="demo-note">
-            {t('demoNote')} <code>Horizon-demo-2026!</code>
-          </p>
-        </form>
+          </form>
+        )}
       </section>
     </main>
   )

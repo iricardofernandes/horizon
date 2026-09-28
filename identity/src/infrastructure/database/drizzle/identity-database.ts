@@ -36,6 +36,7 @@ import { mapApiKey, mapDataSubjectKey, mapTenant, restored, tenantRow } from './
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
+export type SqlRun = (query: SQL) => Promise<Record<string, unknown>[]>
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 export interface IdentityDatabaseOptions {
@@ -155,6 +156,32 @@ export class IdentityDatabase extends UnitOfWork {
       if (plaintext === null) throw new Error('Company profile authentication failed')
       return JSON.parse(plaintext) as CompanyFiscalExport
     })
+  }
+
+  /**
+   * Raw SQL for the Phase 67 stores, each inside the context RLS expects: an account, a
+   * tenant, or nothing (for the directories every caller may read).
+   */
+  asAccount<T>(accountId: string, work: (run: SqlRun) => Promise<T>): Promise<T> {
+    return this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_account', ${accountId}, true)`)
+      return work(async (query) => [...(await tx.execute(query))] as Record<string, unknown>[])
+    })
+  }
+
+  asTenant<T>(tenantId: string, work: (run: SqlRun) => Promise<T>): Promise<T> {
+    if (this.#transactions.getStore())
+      throw new Error('Nested tenant transactions are not supported')
+    return this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
+      return work(async (query) => [...(await tx.execute(query))] as Record<string, unknown>[])
+    })
+  }
+
+  asAnyone<T>(work: (run: SqlRun) => Promise<T>): Promise<T> {
+    return this.#db.transaction(async (tx) =>
+      work(async (query) => [...(await tx.execute(query))] as Record<string, unknown>[]),
+    )
   }
 
   async ping(): Promise<void> {

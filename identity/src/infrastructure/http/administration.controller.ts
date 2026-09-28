@@ -16,7 +16,7 @@ import { z } from 'zod'
 
 import { IdentityRuntime } from '@/main/identity-runtime'
 import { RequestSchema } from './api-schema'
-import { RequirePermission } from './authorization'
+import { RequirePermission, RequireRecentAuth } from './authorization'
 import { actor, type IdentityHttpRequest, principal, requestMetadata } from './http-context'
 import { presentApiKey, presentUser, unwrap } from './presenters'
 
@@ -36,6 +36,7 @@ export class AdministrationController {
 
   @Post('api-keys')
   @RequestSchema(createApiKey)
+  @RequireRecentAuth()
   @Header('Cache-Control', 'no-store')
   async createApiKey(@Body() body: unknown, @Req() request: IdentityHttpRequest) {
     const input = createApiKey.parse(body)
@@ -55,6 +56,7 @@ export class AdministrationController {
   @Post('api-keys/:apiKeyId/rotate')
   @RequestSchema(rotateApiKey)
   @RequirePermission('manage', 'ApiKeys')
+  @RequireRecentAuth()
   @Header('Cache-Control', 'no-store')
   async rotateApiKey(
     @Param('apiKeyId') apiKeyId: string,
@@ -75,6 +77,7 @@ export class AdministrationController {
 
   @Delete('api-keys/:apiKeyId')
   @RequirePermission('manage', 'ApiKeys')
+  @RequireRecentAuth()
   @HttpCode(204)
   async revokeApiKey(@Param('apiKeyId') apiKeyId: string, @Req() request: IdentityHttpRequest) {
     unwrap(

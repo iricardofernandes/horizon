@@ -1,6 +1,6 @@
 # 61. Access hardening stays in Identity: invitations, MFA, passkeys and visible sessions
 
-- Status: accepted; Phase 67 implements it.
+- Status: accepted; implemented in Phase 67 ([evidence](../readiness-phase67-evidence.md)); passkey-only sign-in is left for later.
 - Date: 2026-09-27
 
 ## Context

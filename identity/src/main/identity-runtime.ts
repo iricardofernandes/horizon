@@ -4,6 +4,7 @@ import { Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
 import Redis from 'ioredis'
 
 import { IdentityPolicy } from '@/application/ports/identity-policy'
+import type { Mailer } from '@/application/ports/mfa'
 import { SessionIssuer } from '@/application/services/session-issuer'
 import { AssignRoleUseCase } from '@/application/use-cases/assign-role'
 import { AuthenticateAccountUseCase } from '@/application/use-cases/authenticate-account'
@@ -20,6 +21,12 @@ import { DisableUserUseCase } from '@/application/use-cases/disable-user'
 import { EraseDataSubjectUseCase } from '@/application/use-cases/erase-data-subject'
 import { ExportDataSubjectUseCase } from '@/application/use-cases/export-data-subject'
 import { ListUsersUseCase } from '@/application/use-cases/list-users'
+import { InvitationsUseCase } from '@/application/use-cases/mfa/invitations'
+import { MfaPolicyUseCase } from '@/application/use-cases/mfa/mfa-policy'
+import { SecondFactors } from '@/application/use-cases/mfa/second-factors'
+import { SessionsUseCase } from '@/application/use-cases/mfa/sessions'
+import { CompleteSignInUseCase, EnrollWithTokenUseCase } from '@/application/use-cases/mfa/sign-in'
+import { StepUpUseCase } from '@/application/use-cases/mfa/step-up'
 import { RefreshSessionUseCase } from '@/application/use-cases/refresh-session'
 import { RegisterUserUseCase } from '@/application/use-cases/register-user'
 import { RevokeApiKeyUseCase } from '@/application/use-cases/revoke-api-key'
@@ -31,6 +38,12 @@ import {
   SelectWorkspaceUseCase,
 } from '@/application/use-cases/select-workspace'
 import { VerifyAuditChainUseCase } from '@/application/use-cases/verify-audit-chain'
+import type { Actor } from '@/domain/audit/audit-entry'
+import {
+  RedisMfaChallenges,
+  RedisMfaLockout,
+  RedisSessionRegistry,
+} from '@/infrastructure/cache/redis-access'
 import { RedisRefreshTokenFamiliesRepository } from '@/infrastructure/cache/redis-refresh-token-families-repository'
 import { RedisTokenDenylist } from '@/infrastructure/cache/redis-token-denylist'
 import { RedisWorkspaceSelections } from '@/infrastructure/cache/redis-workspace-selections'
@@ -40,7 +53,14 @@ import { CryptoSecretGenerator } from '@/infrastructure/cryptography/crypto-secr
 import { EdDsaAccessTokenSigner } from '@/infrastructure/cryptography/ed-dsa-access-token-signer'
 import { HmacTokenDigest } from '@/infrastructure/cryptography/hmac-token-digest'
 import { SystemClock } from '@/infrastructure/cryptography/system-clock'
+import { WebAuthnPasskeys } from '@/infrastructure/cryptography/webauthn-passkeys'
+import {
+  SqlFactorStore,
+  SqlInvitationStore,
+  SqlMfaPolicies,
+} from '@/infrastructure/database/drizzle/access-store'
 import { IdentityDatabase } from '@/infrastructure/database/drizzle/identity-database'
+import { MemoryMailer, SmtpMailer } from '@/infrastructure/mail/smtp-mailer'
 import type { IdentityEnvironment } from './environment'
 
 class ConfiguredIdentityPolicy extends IdentityPolicy {
@@ -97,6 +117,16 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
   readonly choosePreferredLocale: ChoosePreferredLocaleUseCase
   readonly describeCompany: DescribeCompanyUseCase
   readonly readWorkspace: ReadWorkspaceUseCase
+  readonly secondFactors: SecondFactors
+  readonly challenges: RedisMfaChallenges
+  readonly completeSignIn: CompleteSignInUseCase
+  readonly enrollWithToken: EnrollWithTokenUseCase
+  readonly stepUp: StepUpUseCase
+  readonly sessions: SessionsUseCase
+  readonly invitations: InvitationsUseCase
+  readonly mfaPolicy: MfaPolicyUseCase
+  /** The outbound mail port; a `MemoryMailer` when `SMTP_URL=memory`. */
+  readonly mailer: Mailer
 
   constructor(readonly config: IdentityEnvironment) {
     const hexKey = readFileSync(config.BLIND_INDEX_KEY_PATH, 'utf8').trim()
@@ -139,8 +169,35 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
       config.WORKSPACE_SELECTION_TTL_SECONDS,
     )
     this.denylist = new RedisTokenDenylist(this.redis)
-    const sessions = new SessionIssuer(this.signer, families, digest, box, secrets, policy)
+    const registry = new RedisSessionRegistry(this.redis)
+    const sessions = new SessionIssuer(
+      this.signer,
+      families,
+      digest,
+      box,
+      secrets,
+      policy,
+      registry,
+    )
     const db = this.database
+    const lockout = new RedisMfaLockout(this.redis)
+    this.challenges = new RedisMfaChallenges(this.redis)
+    const factorStore = new SqlFactorStore(db)
+    const policies = new SqlMfaPolicies(db)
+    this.secondFactors = new SecondFactors(
+      factorStore,
+      lockout,
+      new WebAuthnPasskeys(config.WEBAUTHN_RP_ID, config.WEB_URL),
+      box,
+      digest,
+      config.MFA_SEAL_SECRET,
+      clock,
+    )
+    const secondFactorGate = {
+      hasActiveFactor: (accountId: string) => this.secondFactors.hasActiveFactor(accountId),
+      methodsOf: (accountId: string) => this.secondFactors.methodsOf(accountId),
+      issueChallenge: (accountId: string) => this.challenges.issue(accountId, 'login'),
+    }
     this.createTenant = new CreateTenantUseCase(db, db.directory, hasher, secrets, clock)
     this.authenticateUser = new AuthenticateUserUseCase(
       db,
@@ -156,6 +213,7 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
       workspaceSelections,
       policy,
       clock,
+      secondFactorGate,
     )
     this.listSelectableWorkspaces = new ListSelectableWorkspacesUseCase(
       db.accounts,
@@ -168,6 +226,7 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
       workspaceSelections,
       sessions,
       clock,
+      { policies, challenges: this.challenges },
     )
     this.authenticateApiKey = new AuthenticateApiKeyUseCase(db, hasher, clock)
     this.refreshSession = new RefreshSessionUseCase(
@@ -194,6 +253,63 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
     this.choosePreferredLocale = new ChoosePreferredLocaleUseCase(db.accounts, db, clock)
     this.describeCompany = new DescribeCompanyUseCase(db, clock)
     this.readWorkspace = new ReadWorkspaceUseCase(db)
+    this.completeSignIn = new CompleteSignInUseCase(
+      this.challenges,
+      this.secondFactors,
+      workspaceSelections,
+      db.accounts,
+      clock,
+    )
+    this.enrollWithToken = new EnrollWithTokenUseCase(this.challenges, this.secondFactors)
+    this.stepUp = new StepUpUseCase(
+      db,
+      db.accounts,
+      hasher,
+      this.secondFactors,
+      lockout,
+      this.signer,
+      registry,
+      clock,
+    )
+    this.sessions = new SessionsUseCase(db, families, registry, this.denylist, clock)
+    this.mailer =
+      config.SMTP_URL === 'memory'
+        ? new MemoryMailer()
+        : new SmtpMailer(config.SMTP_URL, config.MAIL_FROM)
+    this.invitations = new InvitationsUseCase(
+      db,
+      new SqlInvitationStore(db),
+      this.mailer,
+      digest,
+      secrets,
+      this.registerUser,
+      db.accounts,
+      hasher,
+      clock,
+      config.WEB_URL,
+    )
+    this.mfaPolicy = new MfaPolicyUseCase(db, policies, clock)
+  }
+
+  /** An access change, in the tenant's chain; never a secret, code or token (Phase 67). */
+  async audit(
+    context: { tenantId: string; actor: Actor; requestId: string | null },
+    action: string,
+    subjectType: string,
+    subjectId: string,
+    after: Record<string, unknown>,
+  ): Promise<void> {
+    await this.database.inTenant(context.tenantId, (scope) =>
+      scope.audit.append({
+        actor: context.actor,
+        subjectType,
+        subjectId,
+        action,
+        after,
+        requestId: context.requestId,
+        occurredAt: new Date(),
+      }),
+    )
   }
 
   /** The global account a workspace membership belongs to, when one has been linked. */

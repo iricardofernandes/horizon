@@ -70,6 +70,10 @@ const payload = {
   jti: randomUUID(),
   iat: now,
   exp: now + ttl,
+  // A password sign-in just now (Phase 67), so routes that ask for a recent sign-in accept
+  // it for ten minutes; one that needs a second factor still refuses it.
+  amr: ['pwd'],
+  auth_time: now,
 }
 
 const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`

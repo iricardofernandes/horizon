@@ -889,6 +889,26 @@ A **list screen's filters and columns under a name** (Phase 66). It is private, 
 with the workspace by its owner. It holds no data: the list still comes from its module,
 under the reader's roles.
 
+### invitation
+A **single-use link, valid for 72 hours, to join a workspace with roles** (ADR 0061). The
+person sets their own password, or confirms the one of the account they already have.
+Only the link's digest is kept.
+
+### second factor
+**What Identity asks for after the password** once an account has one (ADR 0061). It is a
+TOTP code from an authenticator app, a passkey, or one of ten recovery codes, each used
+once. Wrong answers lock it for 15 minutes.
+
+### step-up
+**Proving again who one is before a sensitive action** (ADR 0061). It takes the password,
+and the second factor when there is one. It renews the token's `auth_time`, and sensitive
+routes accept it for 10 minutes.
+
+### session
+**One sign-in on one device:** a refresh-token family (ADR 0020) that shows its device,
+network and last use. Ending it also denylists every access token it issued that is still
+alive.
+
 ### job centre
 The **one screen listing a person's background jobs** across modules (Phase 66): imports,
 exports, billing runs and supplier NF-e imports, with progress.

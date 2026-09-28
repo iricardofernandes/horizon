@@ -128,6 +128,14 @@ export class RefreshTokenFamily extends AggregateRoot<RefreshTokenFamilyProps> {
     return this.props.userId
   }
 
+  createdAt(): Date {
+    return this.props.createdAt
+  }
+
+  lastUsedAt(): Date {
+    return this.props.lastUsedAt
+  }
+
   /**
    * Two independent lifetimes, and both must hold: an absolute maximum from family
    * creation regardless of use, and an idle timeout since last use. The first bounds how

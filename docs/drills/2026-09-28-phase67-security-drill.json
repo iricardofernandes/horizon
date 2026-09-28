@@ -1,0 +1,57 @@
+{
+  "drill": "phase67-security",
+  "adr": "0061",
+  "startedAt": "2026-09-28T16:10:18.916Z",
+  "finishedAt": "2026-09-28T16:10:19.429Z",
+  "baseUrl": "http://localhost:8000",
+  "passed": true,
+  "checks": [
+    {
+      "name": "a replayed recovery code is refused",
+      "passed": true,
+      "evidence": {
+        "firstUse": 200,
+        "replay": 401
+      }
+    },
+    {
+      "name": "brute force on TOTP locks out, even the right code",
+      "passed": true,
+      "evidence": {
+        "wrongAttempts": [
+          401,
+          401,
+          401,
+          429,
+          429,
+          429
+        ],
+        "rightCodeWhileLocked": 429,
+        "lockedAtAttempt": 4
+      }
+    },
+    {
+      "name": "a revoked session's access token is refused within its lifetime",
+      "passed": true,
+      "evidence": {
+        "beforeIdentity": 200,
+        "beforeCatalog": 403,
+        "afterIdentity": 401,
+        "afterCatalog": 401,
+        "refresh": 401,
+        "tokenSecondsLeft": 900
+      }
+    },
+    {
+      "name": "an expired or used invitation is refused",
+      "passed": true,
+      "evidence": {
+        "firstAccept": 200,
+        "secondAccept": 410,
+        "expiredAccept": 410,
+        "expiredLookup": 410,
+        "deliveredBy": "mailpit"
+      }
+    }
+  ]
+}

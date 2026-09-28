@@ -14,6 +14,7 @@ import {
   authenticatedFetch,
   clearSession,
   clearWorkspaceSelection,
+  storeMfaChallenge,
   storeWorkspaceSelection,
 } from '@/lib/session'
 
@@ -27,6 +28,12 @@ const selectionSchema = z.object({
   workspaces: z.array(
     z.object({ tenantId: z.uuid(), slug: z.string().min(1), name: z.string().min(1) }),
   ),
+})
+const challengeSchema = z.object({
+  mfaRequired: z.literal(true),
+  challengeToken: z.string().min(1),
+  challengeExpiresAt: z.iso.datetime(),
+  methods: z.array(z.enum(['totp', 'recovery', 'passkey'])),
 })
 const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
 
@@ -52,9 +59,19 @@ export async function POST(request: Request) {
       { message: 'Email or password is incorrect.' },
       { status: response.status },
     )
-  const selection = selectionSchema.parse(await response.json())
+  const body: unknown = await response.json()
   await clearSession()
   await clearWorkspaceSelection()
+  const challenge = challengeSchema.safeParse(body)
+  if (challenge.success) {
+    // The password was right and the account has a second factor: it is asked next.
+    await storeMfaChallenge(
+      challenge.data.challengeToken,
+      new Date(challenge.data.challengeExpiresAt),
+    )
+    return NextResponse.json({ mfaRequired: true, methods: challenge.data.methods })
+  }
+  const selection = selectionSchema.parse(body)
   await storeWorkspaceSelection(selection.selectionToken, new Date(selection.selectionExpiresAt))
   return NextResponse.json({ workspaces: selection.workspaces })
 }

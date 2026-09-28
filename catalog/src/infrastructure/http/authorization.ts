@@ -94,14 +94,16 @@ export class CatalogAuthGuard implements CanActivate {
     if (!roleAssignmentSchema.array().safeParse(claims.roles).success)
       throw new InvalidAccessTokenError()
 
+    // A revoked token is refused as invalid before any role is weighed, so revoking a
+    // session reads the same everywhere, whatever the token's roles (Phase 67).
+    await this.assertNotRevoked(claims, request, targets)
+
     const permission = this.reflector.getAllAndOverride<{ action: string; subject: string }>(
       ROUTE_PERMISSION,
       targets,
     )
     if (permission && !abilityFor(claims).can(permission.action, permission.subject))
       throw new ForbiddenException('The assigned Catalog role does not permit this operation')
-
-    await this.assertNotRevoked(claims, request, targets)
     request.principal = claims
     return true
   }

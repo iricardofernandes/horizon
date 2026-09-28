@@ -68,7 +68,42 @@
     "searchPlaceholder": "Search name or email…",
     "status": "Status",
     "title": "People & access",
-    "you": " · You"
+    "you": " · You",
+    "invite": "Invite someone",
+    "inviteTitle": "Invite to the workspace",
+    "inviteDescription": "They get a link by email, valid for 72 hours, and choose their own password.",
+    "inviteFailed": "The invitation could not be sent.",
+    "invited": "Invitation sent.",
+    "invitations": {
+      "title": "Invitations",
+      "copy": "Links sent by email. Each is valid for 72 hours and works once.",
+      "empty": "No invitations yet.",
+      "person": "Person",
+      "status": "Status",
+      "expires": "Valid until",
+      "actions": "Actions",
+      "resend": "Resend",
+      "revoke": "Revoke",
+      "resent": "Invitation resent with a new link.",
+      "revoked": "Invitation revoked.",
+      "failed": "It could not be completed."
+    },
+    "invitationStatus": {
+      "pending": "pending",
+      "accepted": "accepted",
+      "revoked": "revoked",
+      "expired": "expired"
+    },
+    "sessions": {
+      "open": "Sessions",
+      "title": "Sessions of {name}",
+      "copy": "Where this person is signed in. Ending them also invalidates the tokens in use.",
+      "empty": "No open sessions.",
+      "meta": "Network {network} · last used {last}",
+      "endAll": "End them all",
+      "ended": "Sessions of {name} ended.",
+      "failed": "They could not be ended."
+    }
   },
   "apiKeys": {
     "copied": "Copied",
@@ -459,7 +494,27 @@
     "submitting": "Signing in…",
     "subtitle": "Your workspaces will appear after you sign in.",
     "title": "Sign in to Horizon",
-    "welcome": "Welcome back"
+    "welcome": "Welcome back",
+    "secondFactor": {
+      "eyebrow": "Second factor",
+      "title": "Confirm it is you",
+      "copy": "Your account uses a second factor. Enter your authenticator app's code, use a recovery code, or your passkey.",
+      "method": "How to confirm",
+      "methods": {
+        "totp": "Authenticator app",
+        "recovery": "Recovery code"
+      },
+      "labels": {
+        "totp": "6-digit code",
+        "recovery": "Recovery code"
+      },
+      "verify": "Confirm",
+      "usePasskey": "Use a passkey",
+      "back": "Back",
+      "wrong": "Wrong code. Try the app's next code.",
+      "locked": "Too many wrong attempts. Try again in 15 minutes.",
+      "passkeyFailed": "The passkey was not confirmed."
+    }
   },
   "modules": {
     "catalog": "Catalog",
@@ -534,7 +589,8 @@
       "forecast": "Forecast and metrics",
       "crmSettings": "CRM settings",
       "imports": "Imports",
-      "jobs": "Job centre"
+      "jobs": "Job centre",
+      "security": "Security"
     }
   },
   "orders": {
@@ -1461,7 +1517,22 @@
     "timezone": "Timezone",
     "timezoneHelp": "IANA zone, for example America/Sao_Paulo. Business dates follow it.",
     "title": "Workspace",
-    "tradeName": "Trade name"
+    "tradeName": "Trade name",
+    "mfa": {
+      "title": "Second factor",
+      "copy": "Who needs a second factor in this workspace.",
+      "enrollBy": "Anyone without a second factor must add one by {date}.",
+      "policy": "Require from",
+      "options": {
+        "off": "Nobody",
+        "admins": "Administrators",
+        "everyone": "Everyone"
+      },
+      "graceDays": "Days to enroll",
+      "save": "Save",
+      "saved": "Second factor policy saved.",
+      "failed": "It could not be saved."
+    }
   },
   "workspaces": {
     "eyebrow": "Choose where to work",
@@ -2681,5 +2752,94 @@
     "save": "Save",
     "cancel": "Cancel",
     "failed": "The view could not be saved."
+  },
+  "security": {
+    "eyebrow": "Your account",
+    "title": "Security",
+    "copy": "Second factor, recovery codes and the sessions open on your account.",
+    "factorsTitle": "Second factor",
+    "factorsCopy": "After the password, Horizon asks for one of these.",
+    "noFactors": "No second factor yet. Add an authenticator app or a passkey.",
+    "kindTotp": "Authenticator app",
+    "lastUsed": "Last used {when}",
+    "neverUsed": "Not used yet",
+    "remove": "Remove",
+    "addTotp": "Add an authenticator app",
+    "addPasskey": "Add a passkey",
+    "passkeyLabel": "Passkey",
+    "passkeyAdded": "Passkey added.",
+    "passkeyFailed": "The passkey was not registered.",
+    "totpAdded": "Authenticator app added.",
+    "factorRemoved": "Second factor removed.",
+    "codesLeft": "{count, plural, one {# recovery code left.} other {# recovery codes left.}}",
+    "regenerate": "Make new codes",
+    "sessionsTitle": "Sessions",
+    "sessionsCopy": "Where your account is signed in to this workspace. Ending a session also invalidates its tokens.",
+    "noSessions": "No open sessions.",
+    "sessionMeta": "Network {network} · since {since} · last used {last}",
+    "unknownNetwork": "unknown",
+    "withSecondFactor": "with second factor",
+    "thisSession": "this session",
+    "end": "End",
+    "endOthers": "End all the others",
+    "othersEnded": "{count, plural, =0 {No other session was open.} one {# session ended.} other {# sessions ended.}}",
+    "sessionEnded": "Session ended.",
+    "failed": "It could not be completed.",
+    "stepUp": {
+      "title": "Confirm your identity",
+      "copy": "This action is sensitive. Enter your password and, if you have one, your second factor's code.",
+      "password": "Password",
+      "method": "Second factor",
+      "totp": "Authenticator app",
+      "recovery": "Recovery code",
+      "code": "Code",
+      "confirm": "Confirm",
+      "codeNeeded": "Your account has a second factor: enter the code too.",
+      "locked": "Too many wrong attempts. Try again in 15 minutes.",
+      "failed": "Wrong password or code."
+    },
+    "totp": {
+      "start": "Start",
+      "stepScan": "Scan the QR code with your authenticator app (Google Authenticator, 1Password, Authy…).",
+      "stepCode": "Enter the 6-digit code the app shows.",
+      "qrAlt": "QR code for the authenticator app",
+      "secretLabel": "No camera? Type the key:",
+      "code": "App code",
+      "confirm": "Confirm",
+      "wrongCode": "Wrong code. Check your phone's clock and try the next one.",
+      "failed": "It could not start."
+    },
+    "recovery": {
+      "title": "Keep your recovery codes",
+      "copy": "Each code signs you in once if you lose your phone. They will not be shown again.",
+      "copyAll": "Copy all",
+      "saved": "I have kept them"
+    }
+  },
+  "enroll": {
+    "eyebrow": "Second factor required",
+    "title": "Add an authenticator app",
+    "copy": "This workspace requires a second factor and the time to add one has ended. Add it now and sign in again.",
+    "signInAgain": "Sign in again"
+  },
+  "invitation": {
+    "eyebrow": "Invitation",
+    "loading": "Opening the invitation…",
+    "unusableTitle": "This invitation no longer works",
+    "unusableCopy": "The link expired, was already used or was revoked. Ask whoever administers the workspace for a new one.",
+    "acceptedTitle": "All set",
+    "acceptedCopy": "You now belong to {workspace}. Sign in with your email and password.",
+    "signIn": "Sign in",
+    "title": "Join {workspace}",
+    "existingCopy": "{email} already has a Horizon account. Confirm with that account's password.",
+    "newCopy": "Choose the password you will use with {email}.",
+    "name": "Your name",
+    "currentPassword": "Your Horizon account password",
+    "newPassword": "New password (12 characters or more)",
+    "confirmPassword": "Repeat the password",
+    "accept": "Accept invitation",
+    "mismatch": "The passwords do not match.",
+    "wrongPassword": "That is not your account's password.",
+    "failed": "The invitation could not be accepted."
   }
 }

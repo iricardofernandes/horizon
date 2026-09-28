@@ -91,6 +91,40 @@ export async function clearWorkspaceSelection(): Promise<void> {
   ;(await cookies()).delete(workspaceSelectionCookie)
 }
 
+const mfaChallengeCookie = 'horizon_mfa_challenge'
+const enrollmentCookie = 'horizon_mfa_enrollment'
+
+/** The second step of signing in (Phase 67): the challenge the password step answered. */
+export async function storeMfaChallenge(token: string, expiresAt: Date): Promise<void> {
+  ;(await cookies()).set(mfaChallengeCookie, token, { ...cookieOptions, expires: expiresAt })
+}
+
+export async function mfaChallengeToken(): Promise<string | null> {
+  return (await cookies()).get(mfaChallengeCookie)?.value ?? null
+}
+
+export async function clearMfaChallenge(): Promise<void> {
+  ;(await cookies()).delete(mfaChallengeCookie)
+}
+
+/** When the workspace requires a factor and its grace ended: the token that allows enrolling. */
+export async function storeEnrollment(token: string, expiresAt: Date): Promise<void> {
+  ;(await cookies()).set(enrollmentCookie, token, { ...cookieOptions, expires: expiresAt })
+}
+
+export async function enrollmentToken(): Promise<string | null> {
+  return (await cookies()).get(enrollmentCookie)?.value ?? null
+}
+
+export async function clearEnrollment(): Promise<void> {
+  ;(await cookies()).delete(enrollmentCookie)
+}
+
+/** A step-up answers a new access token for the same session. */
+export async function replaceAccessToken(token: string, expiresAt: Date): Promise<void> {
+  ;(await cookies()).set('horizon_access', token, { ...cookieOptions, expires: expiresAt })
+}
+
 export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const jar = await cookies()
   const token = jar.get('horizon_access')?.value

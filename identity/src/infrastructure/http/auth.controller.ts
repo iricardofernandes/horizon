@@ -91,8 +91,13 @@ export class AuthController {
   @Header('Cache-Control', 'no-store')
   async workspace(@Body() body: unknown, @Req() request: IdentityHttpRequest) {
     const input = selectWorkspace.parse(body)
+    const userAgent = request.headers['user-agent']
     return unwrap(
-      await this.runtime.selectWorkspace.execute({ ...input, ...requestMetadata(request) }),
+      await this.runtime.selectWorkspace.execute({
+        ...input,
+        ...requestMetadata(request),
+        userAgent: typeof userAgent === 'string' ? userAgent : null,
+      }),
     )
   }
 
@@ -133,15 +138,16 @@ export class AuthController {
   async logout(@Body() body: unknown, @Req() request: IdentityHttpRequest) {
     const { familyId } = logout.parse(body)
     const claims = principal(request)
+    // The token asking dies whatever happens; the session's other live tokens die with it.
+    await this.runtime.denylist.revoke(claims.jti, claims.expiresAt)
     unwrap(
-      await this.runtime.revokeSession.execute({
-        tenantId: claims.tenantId,
-        userId: claims.subject,
-        jti: claims.jti,
-        accessTokenExpiresAt: claims.expiresAt,
+      await this.runtime.sessions.end(
+        claims.tenantId,
+        claims.subject,
         familyId,
-        requestId: request.id ?? null,
-      }),
+        { type: 'user', id: claims.subject },
+        request.id ?? null,
+      ),
     )
   }
 

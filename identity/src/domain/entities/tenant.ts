@@ -96,6 +96,11 @@ export class Tenant extends AggregateRoot<TenantProps> {
     return tenant
   }
 
+  /** The workspace name a person sees, for example in an invitation (Phase 67). */
+  displayName(): string {
+    return this.props.name.value
+  }
+
   isActive(): boolean {
     return this.props.status === 'active'
   }

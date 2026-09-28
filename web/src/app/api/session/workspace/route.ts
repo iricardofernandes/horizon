@@ -12,6 +12,7 @@ import {
   clearWorkspaceSelection,
   openSession,
   storeActiveWorkspace,
+  storeEnrollment,
   storeWorkspaceSelection,
   workspaceSelectionToken,
 } from '@/lib/session'
@@ -25,6 +26,10 @@ const selectSchema = z.strictObject({
 const workspacesSchema = z.array(
   z.object({ tenantId: z.uuid(), slug: z.string().min(1), name: z.string().min(1) }),
 )
+const enrollmentSchema = z.object({
+  enrollmentToken: z.string().min(1),
+  enrollmentExpiresAt: z.iso.datetime(),
+})
 const switchSelectionSchema = z.object({
   selectionToken: z.string().min(1),
   selectionExpiresAt: z.iso.datetime(),
@@ -81,12 +86,20 @@ export async function POST(request: Request) {
   }
   const token = await workspaceSelectionToken()
   if (!token) return NextResponse.json({ message: 'Sign in again.' }, { status: 401 })
+  // The session shows the person's device and network, not the web server's (Phase 67).
+  const forwarded = request.headers.get('x-forwarded-for')
   const response = await fetch(`${apiUrl}/auth/workspace`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'user-agent': request.headers.get('user-agent') ?? 'unknown',
+      ...(forwarded ? { 'x-forwarded-for': forwarded } : {}),
+    },
     body: JSON.stringify({ selectionToken: token, tenantId: parsed.data.tenantId }),
     cache: 'no-store',
   })
+  const enrollment = await enrollmentRequired(response)
+  if (enrollment) return enrollment
   if (!response.ok)
     return new NextResponse(await response.arrayBuffer(), {
       status: response.status,
@@ -100,4 +113,18 @@ export async function POST(request: Request) {
     status: me.status,
     headers: { 'content-type': me.headers.get('content-type') ?? 'application/json' },
   })
+}
+
+/** The workspace requires a second factor and its grace period ended: enroll first. */
+async function enrollmentRequired(response: Response): Promise<NextResponse | null> {
+  if (response.status !== 403) return null
+  const body: unknown = await response
+    .clone()
+    .json()
+    .catch(() => null)
+  const problem = enrollmentSchema.safeParse(body)
+  if (!problem.success) return null
+  await storeEnrollment(problem.data.enrollmentToken, new Date(problem.data.enrollmentExpiresAt))
+  await clearWorkspaceSelection()
+  return NextResponse.json({ enrollmentRequired: true }, { status: 403 })
 }

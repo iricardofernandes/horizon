@@ -25,6 +25,11 @@ const DOMAIN_STATUS: Readonly<Record<string, number>> = {
   SessionReusedError: 401,
   SubjectErasedError: 410,
   WorkspaceSelectionExpiredError: 401,
+  MfaLockedError: 429,
+  StepUpRequiredError: 403,
+  MfaEnrollmentRequiredError: 403,
+  InvitationUnusableError: 410,
+  MailUnavailableError: 502,
 }
 
 interface ProblemResponse {
@@ -110,6 +115,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         detail: exception.message,
         ...(exception instanceof InvalidInputError
           ? { violations: [{ pointer: exception.field, detail: exception.message }] }
+          : {}),
+        ...('extensions' in exception && typeof exception.extensions === 'object'
+          ? (exception.extensions as Record<string, unknown>)
           : {}),
       }
     }

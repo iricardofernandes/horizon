@@ -56,6 +56,7 @@ describe('EdDsaAccessTokenSigner', () => {
       ...claims,
       jti: minted.jti,
       expiresAt: new Date((issuedAt + 900) * 1000),
+      amr: [],
     })
     expect(decodeProtectedHeader(minted.token)).toEqual({
       alg: 'EdDSA',
@@ -66,6 +67,17 @@ describe('EdDsaAccessTokenSigner', () => {
     expect(minted.issuedAt).toEqual(new Date(issuedAt * 1000))
     expect(minted.expiresAt.getTime() - minted.issuedAt.getTime()).toBe(900_000)
     expect((await signer.mint(claims, now)).jti).not.toBe(minted.jti)
+  })
+
+  it('carries the session, how it signed in and when, and reads them back', async () => {
+    const authTime = new Date((issuedAt - 60) * 1000)
+    const minted = await signer.mint(claims, now, {
+      sid: 'family-1',
+      amr: ['pwd', 'otp'],
+      authTime,
+    })
+    const verified = await signer.verify(minted.token)
+    expect(verified.value).toMatchObject({ sid: 'family-1', amr: ['pwd', 'otp'], authTime })
   })
 
   it('keeps both generations verifiable while only the active key signs', async () => {

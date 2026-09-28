@@ -143,7 +143,7 @@ export class RefreshSessionUseCase {
     // Validate again after the user lookup: a concurrent rotation or revocation may
     // have invalidated this grace snapshot. CAS preserves the absolute deadline.
     if (!(await this.families.saveIfCurrent(family, family.currentDigest()))) return null
-    const minted = await this.sessions.mintAccessOnly(user, now)
+    const minted = await this.sessions.mintAccessOnly(user, now, request.familyId)
     return right({ ...minted, refreshToken: replacement, familyId: request.familyId })
   }
 

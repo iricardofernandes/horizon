@@ -116,6 +116,44 @@ re-execution of an uncertain write.
 
 ---
 
+## Access hardening (Phase 67, ADR 0061)
+
+- **Invitations** (`POST /invitations`, owner, with step-up).
+  - A single-use link, valid for 72 hours, mailed through the SMTP port (Mailpit
+    locally).
+  - Only the link's digest is kept, and the email only while the invitation is pending.
+  - `GET /invitations/lookup` and `POST /invitations/accept` are public. An existing
+    account accepts with its own password.
+- **Second factors** (`/me/mfa`), on the global account:
+  - TOTP (RFC 6238, SHA-1, 6 digits, 30 s, one step of drift), its secret sealed with
+    `MFA_SEAL_SECRET`, a used step never accepted again;
+  - passkeys (WebAuthn, `@simplewebauthn/server`);
+  - ten recovery codes, kept as digests, each used once.
+- **Signing in.** When the account has a factor, the password answers a challenge. A code
+  or a passkey (`/auth/mfa…`) then answers the workspace choice. Five wrong answers in 15
+  minutes lock the second factor for 15 minutes (`429`).
+- **Tokens** carry `sid` (the session), `amr` and `auth_time`.
+- **Step-up** (`POST /auth/step-up`) renews `auth_time`. Routes marked
+  `@RequireRecentAuth()` need it within 10 minutes, with a second factor when the account
+  has one:
+  - API keys;
+  - roles and new users;
+  - invitations;
+  - removing a factor;
+  - new recovery codes;
+  - the MFA policy;
+  - ending another user's sessions.
+- **The workspace MFA policy** (`/workspace/mfa-policy`) is `off`, `admins` or `everyone`,
+  with a grace period. After it, a covered person without a factor gets an enrollment token
+  instead of a session.
+- **Sessions** (`/auth/sessions`, `/users/{id}/sessions`).
+  - Each refresh family keeps its device, IP prefix, `amr`, `auth_time`, and the `jti`s it
+    issued.
+  - Ending a session denylists every live one.
+  - Identity and Catalog weigh revocation before any role, so a revoked token is a `401`
+    everywhere.
+- **The drill:** `node scripts/phase67-drill.mjs` stores its results in `docs/drills/`.
+
 ## Running it locally
 
 The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) is available

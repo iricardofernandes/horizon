@@ -68,7 +68,42 @@
     "searchPlaceholder": "Buscar nome ou e-mail…",
     "status": "Status",
     "title": "Pessoas e acessos",
-    "you": " · Você"
+    "you": " · Você",
+    "invite": "Convidar pessoa",
+    "inviteTitle": "Convidar para o workspace",
+    "inviteDescription": "A pessoa recebe um link por e-mail, válido por 72 horas, e define a própria senha.",
+    "inviteFailed": "Não foi possível enviar o convite.",
+    "invited": "Convite enviado.",
+    "invitations": {
+      "title": "Convites",
+      "copy": "Links enviados por e-mail. Cada um vale 72 horas e entra uma vez.",
+      "empty": "Nenhum convite ainda.",
+      "person": "Pessoa",
+      "status": "Situação",
+      "expires": "Vale até",
+      "actions": "Ações",
+      "resend": "Reenviar",
+      "revoke": "Revogar",
+      "resent": "Convite reenviado com um link novo.",
+      "revoked": "Convite revogado.",
+      "failed": "Não foi possível concluir."
+    },
+    "invitationStatus": {
+      "pending": "pendente",
+      "accepted": "aceito",
+      "revoked": "revogado",
+      "expired": "expirado"
+    },
+    "sessions": {
+      "open": "Sessões",
+      "title": "Sessões de {name}",
+      "copy": "Onde esta pessoa está conectada. Encerrar invalida também os tokens em uso.",
+      "empty": "Nenhuma sessão aberta.",
+      "meta": "Rede {network} · último uso {last}",
+      "endAll": "Encerrar todas",
+      "ended": "Sessões de {name} encerradas.",
+      "failed": "Não foi possível encerrar."
+    }
   },
   "apiKeys": {
     "copied": "Copiado",
@@ -459,7 +494,27 @@
     "submitting": "Entrando…",
     "subtitle": "Suas áreas de trabalho aparecem depois que você entrar.",
     "title": "Entrar no Horizon",
-    "welcome": "Bem-vindo de volta"
+    "welcome": "Bem-vindo de volta",
+    "secondFactor": {
+      "eyebrow": "Segundo fator",
+      "title": "Confirme que é você",
+      "copy": "Sua conta usa um segundo fator. Digite o código do aplicativo autenticador, use um código de recuperação ou sua passkey.",
+      "method": "Como confirmar",
+      "methods": {
+        "totp": "Aplicativo autenticador",
+        "recovery": "Código de recuperação"
+      },
+      "labels": {
+        "totp": "Código de 6 dígitos",
+        "recovery": "Código de recuperação"
+      },
+      "verify": "Confirmar",
+      "usePasskey": "Usar passkey",
+      "back": "Voltar",
+      "wrong": "Código incorreto. Tente o próximo código do aplicativo.",
+      "locked": "Muitas tentativas erradas. Tente de novo em 15 minutos.",
+      "passkeyFailed": "A passkey não foi confirmada."
+    }
   },
   "modules": {
     "catalog": "Catálogo",
@@ -534,7 +589,8 @@
       "forecast": "Previsão e métricas",
       "crmSettings": "Configurações do CRM",
       "imports": "Importações",
-      "jobs": "Central de jobs"
+      "jobs": "Central de jobs",
+      "security": "Segurança"
     }
   },
   "orders": {
@@ -1461,7 +1517,22 @@
     "timezone": "Fuso horário",
     "timezoneHelp": "Zona IANA, por exemplo America/Sao_Paulo. As datas de negócio seguem esse fuso.",
     "title": "Área de trabalho",
-    "tradeName": "Nome fantasia"
+    "tradeName": "Nome fantasia",
+    "mfa": {
+      "title": "Segundo fator",
+      "copy": "Quem precisa de segundo fator neste workspace.",
+      "enrollBy": "Quem ainda não tem segundo fator precisa cadastrar até {date}.",
+      "policy": "Exigir de",
+      "options": {
+        "off": "Ninguém",
+        "admins": "Administradores",
+        "everyone": "Todos"
+      },
+      "graceDays": "Dias para cadastrar",
+      "save": "Salvar",
+      "saved": "Política de segundo fator salva.",
+      "failed": "Não foi possível salvar."
+    }
   },
   "workspaces": {
     "eyebrow": "Escolha onde trabalhar",
@@ -2681,5 +2752,94 @@
     "save": "Salvar",
     "cancel": "Cancelar",
     "failed": "Não foi possível salvar a visão."
+  },
+  "security": {
+    "eyebrow": "Sua conta",
+    "title": "Segurança",
+    "copy": "Segundo fator, códigos de recuperação e as sessões abertas na sua conta.",
+    "factorsTitle": "Segundo fator",
+    "factorsCopy": "Depois da senha, o Horizon pede um destes.",
+    "noFactors": "Nenhum segundo fator ainda. Adicione um aplicativo autenticador ou uma passkey.",
+    "kindTotp": "Aplicativo autenticador",
+    "lastUsed": "Usado por último em {when}",
+    "neverUsed": "Ainda não usado",
+    "remove": "Remover",
+    "addTotp": "Adicionar aplicativo autenticador",
+    "addPasskey": "Adicionar passkey",
+    "passkeyLabel": "Passkey",
+    "passkeyAdded": "Passkey adicionada.",
+    "passkeyFailed": "A passkey não foi registrada.",
+    "totpAdded": "Aplicativo autenticador adicionado.",
+    "factorRemoved": "Segundo fator removido.",
+    "codesLeft": "{count, plural, one {# código de recuperação restante.} other {# códigos de recuperação restantes.}}",
+    "regenerate": "Gerar novos códigos",
+    "sessionsTitle": "Sessões",
+    "sessionsCopy": "Onde sua conta está conectada neste workspace. Encerrar uma sessão também invalida os tokens dela.",
+    "noSessions": "Nenhuma sessão aberta.",
+    "sessionMeta": "Rede {network} · desde {since} · último uso {last}",
+    "unknownNetwork": "desconhecida",
+    "withSecondFactor": "com segundo fator",
+    "thisSession": "esta sessão",
+    "end": "Encerrar",
+    "endOthers": "Encerrar todas as outras",
+    "othersEnded": "{count, plural, =0 {Nenhuma outra sessão aberta.} one {# sessão encerrada.} other {# sessões encerradas.}}",
+    "sessionEnded": "Sessão encerrada.",
+    "failed": "Não foi possível concluir.",
+    "stepUp": {
+      "title": "Confirme sua identidade",
+      "copy": "Esta ação é sensível. Digite sua senha e, se tiver, o código do segundo fator.",
+      "password": "Senha",
+      "method": "Segundo fator",
+      "totp": "Aplicativo autenticador",
+      "recovery": "Código de recuperação",
+      "code": "Código",
+      "confirm": "Confirmar",
+      "codeNeeded": "Sua conta tem segundo fator: informe também o código.",
+      "locked": "Muitas tentativas erradas. Tente de novo em 15 minutos.",
+      "failed": "Senha ou código incorreto."
+    },
+    "totp": {
+      "start": "Começar",
+      "stepScan": "Escaneie o QR code com o aplicativo autenticador (Google Authenticator, 1Password, Authy…).",
+      "stepCode": "Digite o código de 6 dígitos que o aplicativo mostra.",
+      "qrAlt": "QR code para o aplicativo autenticador",
+      "secretLabel": "Sem câmera? Digite a chave:",
+      "code": "Código do aplicativo",
+      "confirm": "Confirmar",
+      "wrongCode": "Código incorreto. Confira a hora do celular e tente o próximo.",
+      "failed": "Não foi possível começar."
+    },
+    "recovery": {
+      "title": "Guarde seus códigos de recuperação",
+      "copy": "Cada código entra uma vez se você perder o celular. Eles não serão mostrados de novo.",
+      "copyAll": "Copiar todos",
+      "saved": "Já guardei"
+    }
+  },
+  "enroll": {
+    "eyebrow": "Segundo fator obrigatório",
+    "title": "Adicione um aplicativo autenticador",
+    "copy": "Este workspace exige um segundo fator e o prazo para cadastrá-lo acabou. Cadastre agora e entre de novo.",
+    "signInAgain": "Entrar de novo"
+  },
+  "invitation": {
+    "eyebrow": "Convite",
+    "loading": "Abrindo o convite…",
+    "unusableTitle": "Este convite não vale mais",
+    "unusableCopy": "O link expirou, já foi usado ou foi revogado. Peça um novo convite a quem administra o workspace.",
+    "acceptedTitle": "Tudo certo",
+    "acceptedCopy": "Você agora faz parte de {workspace}. Entre com seu e-mail e senha.",
+    "signIn": "Entrar",
+    "title": "Entrar em {workspace}",
+    "existingCopy": "{email} já tem uma conta no Horizon. Confirme com a senha dessa conta.",
+    "newCopy": "Defina a senha que você vai usar com {email}.",
+    "name": "Seu nome",
+    "currentPassword": "Senha da sua conta Horizon",
+    "newPassword": "Nova senha (12 caracteres ou mais)",
+    "confirmPassword": "Repita a senha",
+    "accept": "Aceitar convite",
+    "mismatch": "As senhas não conferem.",
+    "wrongPassword": "Essa não é a senha da sua conta.",
+    "failed": "Não foi possível aceitar o convite."
   }
 }
