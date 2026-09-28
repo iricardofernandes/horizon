@@ -471,7 +471,11 @@
     "procurement": "Compras",
     "sales": "Vendas",
     "treasury": "Tesouraria",
-    "webhooks": "Webhooks"
+    "webhooks": "Webhooks",
+    "crm": "CRM",
+    "reporting": "Relatórios",
+    "fiscal": "Fiscal",
+    "files": "Arquivos"
   },
   "navigation": {
     "groups": {
@@ -529,7 +533,8 @@
       "agenda": "Minha agenda",
       "forecast": "Previsão e métricas",
       "crmSettings": "Configurações do CRM",
-      "imports": "Importações"
+      "imports": "Importações",
+      "jobs": "Central de jobs"
     }
   },
   "orders": {
@@ -799,7 +804,8 @@
       "overdue": "Vencidos",
       "settled": "Liquidados"
     },
-    "views": "Visões de contas a pagar"
+    "views": "Visões de contas a pagar",
+    "columns": "Colunas"
   },
   "paymentMethodKinds": {
     "bank-transfer": "Transferência bancária",
@@ -1020,7 +1026,8 @@
       "overdue": "Vencidos",
       "settled": "Liquidados"
     },
-    "views": "Visões de contas a receber"
+    "views": "Visões de contas a receber",
+    "columns": "Colunas"
   },
   "reconciliation": {
     "accept": "Aceitar",
@@ -2579,5 +2586,100 @@
       "quarantined": "em quarentena",
       "deleted": "removido"
     }
+  },
+  "palette": {
+    "open": "Buscar",
+    "shortcut": "Ctrl K",
+    "title": "Paleta de comandos",
+    "input": "Buscar telas, ações e registros",
+    "placeholder": "Digite para buscar telas, ações ou registros…",
+    "empty": "Nada encontrado.",
+    "silent": "Não responderam a tempo: {modules}. O resto da busca continua valendo.",
+    "hint": "↑ ↓ para escolher, Enter para abrir, Esc para fechar.",
+    "groups": {
+      "screens": "Tela",
+      "actions": "Ação",
+      "results": "Registro"
+    },
+    "actions": {
+      "registerParty": "Cadastrar parceiro",
+      "newReceivable": "Lançar conta a receber",
+      "newPayable": "Lançar conta a pagar",
+      "newRequisition": "Nova requisição de compra",
+      "newOpportunity": "Nova oportunidade",
+      "importFile": "Importar um arquivo",
+      "billContracts": "Faturar contratos do mês"
+    }
+  },
+  "notifications": {
+    "bell": "Notificações",
+    "bellUnread": "Notificações, {count, plural, one {# não lida} other {# não lidas}}",
+    "title": "Notificações",
+    "readAll": "Marcar todas como lidas",
+    "failed": "Não foi possível carregar as notificações.",
+    "empty": "Nada novo por aqui.",
+    "unread": "não lida",
+    "kinds": {
+      "task-due": "Um lembrete de tarefa do CRM venceu.",
+      "approval-requisition": "Uma requisição de compra aguarda aprovação.",
+      "approval-order": "Um pedido de compra aguarda aprovação.",
+      "approval-payable": "Uma conta a pagar de {currency} {amount} aguarda aprovação.",
+      "import-finished": "Sua importação de {kind} terminou: {written} de {total} linhas gravadas, {failed} com falha.",
+      "billing-run-finished": "O faturamento de {competence} terminou: {billed} faturados, {skipped} pulados, {refused} recusados.",
+      "file-quarantined": "Um arquivo que você anexou foi bloqueado pelo antivírus.",
+      "export-finished": "Sua exportação do relatório {report} terminou ({status}).",
+      "reconciliation-different": "A conciliação do relatório {report} encontrou diferenças."
+    }
+  },
+  "jobs": {
+    "eyebrow": "Administração",
+    "title": "Central de jobs",
+    "copy": "Suas importações, exportações, faturamentos e importações de NF-e de fornecedor, de todos os módulos.",
+    "listTitle": "Seus jobs",
+    "listCopy": "Atualizado a cada 5 segundos.",
+    "refresh": "Atualizar",
+    "failed": "Não foi possível carregar os jobs.",
+    "silent": "Não responderam a tempo: {modules}.",
+    "empty": "Nenhum job seu por enquanto.",
+    "module": "Módulo",
+    "kind": "Tipo",
+    "status": "Situação",
+    "progress": "Progresso",
+    "progressOf": "{done} de {total}",
+    "rows": "{rows} linhas",
+    "started": "Início",
+    "kinds": {
+      "import": "Importação ({detail})",
+      "export": "Exportação ({detail})",
+      "billing-run": "Faturamento ({detail})",
+      "supplier-invoice-import": "NF-e de fornecedor",
+      "unknown": "Job"
+    },
+    "states": {
+      "uploaded": "enviado",
+      "validated": "validado",
+      "previewed": "pré-visualizado",
+      "running": "em andamento",
+      "completed": "concluído",
+      "completed-with-failures": "concluído com falhas",
+      "cancelled": "cancelado",
+      "requested": "solicitado",
+      "ready": "pronto",
+      "failed": "falhou",
+      "expired": "expirado"
+    }
+  },
+  "views": {
+    "label": "Visão salva",
+    "none": "Nenhuma",
+    "sharedName": "{name} (compartilhada)",
+    "remove": "Excluir visão",
+    "saveCurrent": "Salvar visão atual",
+    "name": "Nome da visão",
+    "namePlaceholder": "Ex.: vencendo esta semana",
+    "share": "Compartilhar com o workspace",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "failed": "Não foi possível salvar a visão."
   }
 }

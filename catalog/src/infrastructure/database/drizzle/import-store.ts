@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from 'node:crypto'
 import { type SQL, sql } from 'drizzle-orm'
 import {
   ImportRowTakenError,
@@ -92,6 +93,8 @@ export class SqlImportStore extends ImportStore {
   constructor(
     private readonly database: TenantSql,
     private readonly codec: RowCodec,
+    /** The owning module, which names the event a finished job publishes (Phase 66). */
+    private readonly module: string,
   ) {
     super()
   }
@@ -240,9 +243,11 @@ export class SqlImportStore extends ImportStore {
   }
 
   cancel(tenantId: string, jobId: string, now: Date, failuresUntil: Date): Promise<boolean> {
-    return this.database.inTenantSql(tenantId, (run) =>
-      cancelJob(run, jobId, now, failuresUntil, CANCELLABLE),
-    )
+    return this.database.inTenantSql(tenantId, async (run) => {
+      if (!(await cancelJob(run, jobId, now, failuresUntil, CANCELLABLE))) return false
+      await announceFinished(run, this.module, tenantId, jobId, now)
+      return true
+    })
   }
 
   claim(tenantId: string, now: Date, leaseUntil: Date): Promise<ImportJob | null> {
@@ -310,6 +315,7 @@ export class SqlImportStore extends ImportStore {
         where id = ${jobId} and status = 'running' returning id`)
       if (updated.length === 0) return
       await clearCells(run, jobId, until === null)
+      await announceFinished(run, this.module, tenantId, jobId, now)
     })
   }
 
@@ -332,10 +338,53 @@ export class SqlImportStore extends ImportStore {
         for update skip locked`)
       let abandoned = 0
       for (const job of stale)
-        if (await cancelJob(run, String(job.id), now, failuresUntil, OPEN)) abandoned += 1
+        if (await cancelJob(run, String(job.id), now, failuresUntil, OPEN)) {
+          await announceFinished(run, this.module, tenantId, String(job.id), now)
+          abandoned += 1
+        }
       return abandoned
     })
   }
+}
+
+/**
+ * Tells whoever asked that their job ended (Phase 66): `<module>.import.finished`, in the
+ * transaction that ended it, with the counts and never a row.
+ */
+async function announceFinished(
+  run: SqlRun,
+  module: string,
+  tenantId: string,
+  jobId: string,
+  now: Date,
+): Promise<void> {
+  const [job] = await run(sql`
+    select j.kind, j.status, j.requested_by,
+      count(r.line)::int as total,
+      count(r.line) filter (where r.state = 'written')::int as written,
+      count(r.line) filter (where r.state in ('invalid', 'rejected'))::int as failed,
+      count(r.line) filter (where r.state = 'cancelled')::int as cancelled
+    from import_jobs j left join import_rows r on r.job_id = j.id
+    where j.id = ${jobId}
+    group by j.kind, j.status, j.requested_by`)
+  if (!job) return
+  const payload = {
+    jobId,
+    kind: String(job.kind),
+    status: String(job.status),
+    requestedBy: String(job.requested_by),
+    total: Number(job.total),
+    written: Number(job.written),
+    failed: Number(job.failed),
+    cancelled: Number(job.cancelled),
+  }
+  const id = randomUUID()
+  await run(sql`
+    insert into outbox (id, tenant_id, event_id, event_type, event_version, occurred_at,
+      trace_id, payload)
+    values (${id}, ${tenantId}, ${id}, ${`${module}.import.finished`}, 1,
+      ${now.toISOString()}::timestamptz, ${randomBytes(16).toString('hex')},
+      ${JSON.stringify(payload)}::jsonb)`)
 }
 
 async function clearCells(run: SqlRun, jobId: string, everyRow: boolean): Promise<void> {

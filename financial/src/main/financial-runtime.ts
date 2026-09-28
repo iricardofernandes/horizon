@@ -100,7 +100,7 @@ export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
     const database = this.database
     const rows = (key: RowKey) => new RowWritingUnitOfWork(database, key)
     this.imports = new ImportJobs(
-      new SqlImportStore(database, PLAIN_ROWS),
+      new SqlImportStore(database, PLAIN_ROWS, 'financial'),
       new TabularImportFiles(),
       [
         new TitleImporter('receivable', database, clock, rows),

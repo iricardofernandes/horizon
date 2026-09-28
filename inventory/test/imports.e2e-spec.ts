@@ -43,7 +43,7 @@ function jobsWith(clock: { now: () => Date }, crashAfter = Number.POSITIVE_INFIN
     return new RowWritingUnitOfWork(database, key)
   })
   return new ImportJobs(
-    new SqlImportStore(database, PLAIN_ROWS),
+    new SqlImportStore(database, PLAIN_ROWS, 'inventory'),
     new TabularImportFiles(),
     [importer],
     clock,

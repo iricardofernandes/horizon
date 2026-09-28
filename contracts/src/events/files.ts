@@ -38,7 +38,11 @@ export const filesAttachmentQuarantined = defineEvent({
   version: 1,
   description:
     'The scanner found something in a file attached to a record. Its bytes were removed and it is never served.',
-  payload: z.strictObject(reference),
+  payload: z.strictObject({
+    ...reference,
+    /** Who uploaded it, so they can be told (Phase 66); added in 0.49.0. */
+    uploadedBy: z.string().min(1).max(255).optional(),
+  }),
 })
 
 export const filesAttachmentDeleted = defineEvent({

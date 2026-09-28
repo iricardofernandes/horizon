@@ -53,7 +53,7 @@ function jobsWith(
     return new RowWritingUnitOfWork(database, key)
   })
   return new ImportJobs(
-    new SqlImportStore(database, new SealedImportRows(secretBox)),
+    new SqlImportStore(database, new SealedImportRows(secretBox), 'parties'),
     new TabularImportFiles(),
     [importer],
     clock,
@@ -174,8 +174,13 @@ describe('importing parties', () => {
       updatedAt: undefined,
     })
     expect(comparable(imported)).toEqual(comparable(api))
-    const events = await administrator`select event_type from outbox where tenant_id = ${tenantId}`
-    expect(events.map((event) => event.event_type)).toEqual(['parties.party.registered'])
+    const events = await administrator`select event_type, payload from outbox
+      where tenant_id = ${tenantId} order by created_at`
+    expect(events.map((event) => event.event_type)).toEqual([
+      'parties.party.registered',
+      'parties.import.finished',
+    ])
+    expect(events[1]?.payload).toMatchObject({ status: 'completed', total: 1, written: 1 })
   })
 
   it('keeps the rows sealed, and destroys their key when the failures expire', async () => {
@@ -277,6 +282,11 @@ describe('writing each row once', () => {
     })
     await jobs.runTenant(tenantId)
     expect(await partiesOf(tenantId)).toBe(0)
+    const finished = await administrator`select payload from outbox
+      where tenant_id = ${tenantId} and event_type = 'parties.import.finished'`
+    expect(finished.map((event) => event.payload)).toMatchObject([
+      { status: 'cancelled', total: 4, cancelled: 4, written: 0 },
+    ])
   })
 })
 

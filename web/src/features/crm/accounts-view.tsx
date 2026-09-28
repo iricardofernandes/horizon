@@ -12,6 +12,8 @@ import { SelectField } from '@/components/ui/select-field'
 import { Empty } from '@/components/ui/state'
 import { TextField } from '@/components/ui/text-field'
 import { PartyRegistrationForm } from '@/features/parties/party-registration-form'
+import { SavedViewsMenu } from '@/features/views/saved-views-menu'
+import { filtersOf, queryOf } from '@/lib/saved-views'
 import { useUrlParam } from '@/lib/url-param'
 import { useLoader } from '@/lib/use-loader'
 import { AccountDialog } from './account-dialog'
@@ -87,6 +89,18 @@ function AccountsView({
             value,
           }))}
           value={role}
+        />
+        <SavedViewsMenu
+          columns={null}
+          onApply={(saved) => {
+            const filters = filtersOf(saved.query)
+            setSearch(filters.search ?? '')
+            setRole(
+              filters.role && ROLE_FILTERS.includes(filters.role as never) ? filters.role : 'all',
+            )
+          }}
+          query={queryOf({ search: search.trim() || null, role: role === 'all' ? null : role })}
+          screen="crm.accounts"
         />
       </div>
       {rows.length === 0 ? (

@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common'
 import { z } from 'zod'
 import type { Either } from '@/core/either'
 import type { UseCaseError } from '@/core/errors/use-case-error'
@@ -18,6 +23,7 @@ export function unwrap<T>(result: Either<UseCaseError, T>): T {
   if (result.isRight()) return result.value
   if (result.value.title === 'Conflict') throw new ConflictException(result.value.message)
   if (result.value.title === 'Resource not found') throw new NotFoundException(result.value.message)
+  if (result.value.title === 'Forbidden') throw new ForbiddenException(result.value.message)
   throw new BadRequestException(result.value.message)
 }
 

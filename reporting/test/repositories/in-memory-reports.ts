@@ -13,6 +13,7 @@ import type { ReportData } from '@/application/report-data'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { Source } from '@/domain/journal'
+import type { NotificationDraft } from '@/domain/notifications'
 import type { ReportFilter, ReportName } from '@/domain/reports'
 
 export const EMPTY: ReportData = {
@@ -32,6 +33,7 @@ export class InMemoryReports extends ReportReads {
   readonly runs: StoredRun[] = []
   readonly filters: SavedFilter[] = []
   readonly audit: string[] = []
+  readonly notifications: NotificationDraft[] = []
   readonly jobs: ExportJob[] = []
   readonly schedules: ExportSchedule[] = []
   readonly requested: { name: ReportName; filter: ReportFilter }[] = []
@@ -108,6 +110,12 @@ export class InMemoryCommands extends ReportingCommands {
       audit: {
         append: async (record) => {
           reports.audit.push(record.action)
+        },
+      },
+      notifications: {
+        insert: async (drafts) => {
+          reports.notifications.push(...drafts)
+          return drafts.length
         },
       },
       jobs: {

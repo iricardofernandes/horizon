@@ -83,7 +83,7 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
     this.receiveStock = new ReceiveStockUseCase(this.database, clock)
     const database = this.database
     this.imports = new ImportJobs(
-      new SqlImportStore(database, PLAIN_ROWS),
+      new SqlImportStore(database, PLAIN_ROWS, 'inventory'),
       new TabularImportFiles(),
       [
         new OpeningStockImporter(

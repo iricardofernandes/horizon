@@ -82,7 +82,33 @@ const fiscalProfileInput = z.strictObject({
 const listQuery = z.strictObject({
   role: z.enum(PARTY_ROLES).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100),
+  /** A term in the legal or trade name, the email or the document (Phase 66). */
+  search: z.string().trim().min(2).max(100).optional(),
 })
+
+/**
+ * Names are encrypted, so there is no index to search: the most recent parties are opened
+ * and filtered in memory. Nothing about the term is stored or logged.
+ */
+const SEARCH_SCAN = 500
+
+const folded = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+export function matchesSearch(party: PartySnapshot, term: string): boolean {
+  if (party.status === 'erased') return false
+  const wanted = folded(term)
+  const digits = term.replace(/\D/g, '')
+  return (
+    [party.legalName, party.tradeName, party.email].some(
+      (value) => value !== null && folded(value).includes(wanted),
+    ) ||
+    (digits.length >= 4 && (party.document.number ?? '').includes(digits))
+  )
+}
 const fiscalListQuery = z.strictObject({
   limit: z.coerce.number().int().min(1).max(200).default(100),
   cursor: z.uuid().optional(),
@@ -146,11 +172,13 @@ export class PartiesController {
   async list(@Query() query: unknown, @Req() request: PartiesRequest) {
     const parsed = listQuery.safeParse(query)
     if (!parsed.success) throw new BadRequestException('Invalid party filter')
+    const { search, limit, role } = parsed.data
     const rows = await this.runtime.database.listSnapshots(tenantOf(request), {
-      limit: parsed.data.limit,
-      ...(parsed.data.role === undefined ? {} : { role: parsed.data.role }),
+      limit: search === undefined ? limit : SEARCH_SCAN,
+      ...(role === undefined ? {} : { role }),
     })
-    return { data: rows.map(present) }
+    const found = search === undefined ? rows : rows.filter((row) => matchesSearch(row, search))
+    return { data: found.slice(0, limit).map(present) }
   }
 
   @Get('parties/fiscal-profiles')

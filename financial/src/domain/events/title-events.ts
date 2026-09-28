@@ -113,3 +113,24 @@ export class SettlementReversedEvent extends FinancialEvent {
     }
   }
 }
+
+/** A payable draft waits for a second person (Phase 66): who asked, and for how much. */
+export class PayableApprovalRequestedEvent extends FinancialEvent {
+  readonly eventType = 'financial.payable.approval-requested'
+  constructor(
+    titleId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly requestedBy: string,
+    private readonly amount: Money,
+  ) {
+    super(titleId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return {
+      titleId: this.aggregateId.toString(),
+      requestedBy: this.requestedBy,
+      amount: moneyPayload(this.amount),
+    }
+  }
+}

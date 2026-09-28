@@ -874,6 +874,25 @@ A **file on a record of another module**, kept by `files/` (ADR 0060). It names 
 as module, record type and id. It goes uploading → scanning → available or quarantined →
 deleted, and it is served only when available, through a link signed for five minutes.
 
+### federated search
+The **search box that asks each module instead of an index** (Phase 66). The web server
+asks every module the person can read, with their own token and a time budget each. It
+shows what answered, and names what did not. Nothing is indexed centrally.
+
+### notification
+A **fact that needs a person, told once** (Phase 66). It is kept by Reporting and is
+unique on its source event and recipient. It is addressed to a user, or to the roles that
+must act, never to the person who asked. It is read per person.
+
+### saved view
+A **list screen's filters and columns under a name** (Phase 66). It is private, or shared
+with the workspace by its owner. It holds no data: the list still comes from its module,
+under the reader's roles.
+
+### job centre
+The **one screen listing a person's background jobs** across modules (Phase 66): imports,
+exports, billing runs and supplier NF-e imports, with progress.
+
 ### owner key
 The **key of the party or user a file is about** (ADR 0060). Each file's own key is
 wrapped by it. Erasing the owner destroys it, and every file under it becomes unreadable:

@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.48.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.49.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -82,6 +82,22 @@ A product family and the ordered attributes its variants differ along were defin
 | `familyId` | string | yes | Product family identifier. pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
 | `name` | string | yes | min length 1. max length 160 |
 | `attributes` | array | yes | — |
+### `catalog.import.finished` — v1
+
+A bulk import job of Catalog ended (ADR 0059): every row was written, some failed, or the job was cancelled.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `jobId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `kind` | string | yes | pattern `^[a-z][a-z-]*$` |
+| `status` | `completed` \| `completed-with-failures` \| `cancelled` | yes | — |
+| `requestedBy` | string | yes | min length 1. max length 255 |
+| `total` | integer | yes | — |
+| `written` | integer | yes | — |
+| `failed` | integer | yes | — |
+| `cancelled` | integer | yes | — |
 ### `catalog.item.classification-changed` — v1
 
 An item tax classification changed from an effective date; posted snapshots retain the old classification.
@@ -319,9 +335,37 @@ The scanner found something in a file attached to a record. Its bytes were remov
 | `module` | `parties` \| `procurement` \| `financial` \| `sales` \| `crm` | yes | — |
 | `recordType` | string | yes | pattern `^[a-z][a-z-]*$` |
 | `recordId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `uploadedBy` | string | no | min length 1. max length 255 |
 
 ## `financial`
 
+### `financial.import.finished` — v1
+
+A bulk import job of Financial ended (ADR 0059): every row was written, some failed, or the job was cancelled.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `jobId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `kind` | string | yes | pattern `^[a-z][a-z-]*$` |
+| `status` | `completed` \| `completed-with-failures` \| `cancelled` | yes | — |
+| `requestedBy` | string | yes | min length 1. max length 255 |
+| `total` | integer | yes | — |
+| `written` | integer | yes | — |
+| `failed` | integer | yes | — |
+| `cancelled` | integer | yes | — |
+### `financial.payable.approval-requested` — v1
+
+A payable draft at or above the approval threshold waits for a second person, who must hold the approving role and not be the requester.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `titleId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `requestedBy` | string | yes | min length 1. max length 255 |
+| `amount` | object | yes | — |
 ### `financial.payable.posted` — v1
 
 A payable left draft and became an obligation to a supplier, after the approval the workspace policy required. Installment amounts always add up to the total; corrections are reversals, never edits (ADR 0042).
@@ -654,6 +698,22 @@ A user was created within a tenant. Consumers may create per-user defaults; none
 
 ## `inventory`
 
+### `inventory.import.finished` — v1
+
+A bulk import job of Inventory ended (ADR 0059): every row was written, some failed, or the job was cancelled.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `jobId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `kind` | string | yes | pattern `^[a-z][a-z-]*$` |
+| `status` | `completed` \| `completed-with-failures` \| `cancelled` | yes | — |
+| `requestedBy` | string | yes | min length 1. max length 255 |
+| `total` | integer | yes | — |
+| `written` | integer | yes | — |
+| `failed` | integer | yes | — |
+| `cancelled` | integer | yes | — |
 ### `inventory.stock.moved` — v1
 
 An append-only movement changed on-hand stock and records the resulting balance and cost.
@@ -782,6 +842,22 @@ A posted transaction was undone by a mirror transaction with every side swapped.
 
 ## `parties`
 
+### `parties.import.finished` — v1
+
+A bulk import job of Parties ended (ADR 0059): every row was written, some failed, or the job was cancelled.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `jobId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `kind` | string | yes | pattern `^[a-z][a-z-]*$` |
+| `status` | `completed` \| `completed-with-failures` \| `cancelled` | yes | — |
+| `requestedBy` | string | yes | min length 1. max length 255 |
+| `total` | integer | yes | — |
+| `written` | integer | yes | — |
+| `failed` | integer | yes | — |
+| `cancelled` | integer | yes | — |
 ### `parties.party.erased` — v1
 
 The party’s personal data was crypto-shredded. Every projection must destroy its own copy; the payload carries no personal data by construction.
@@ -1057,6 +1133,20 @@ Somebody asked for something to be bought and sent the request for a decision. A
 
 ## `sales`
 
+### `sales.billing-run.finished` — v1
+
+A billing run of a competence month decided every contract of it: billed, skipped or refused.
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `runId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `competence` | string | yes | pattern `^\d{4}-(0[1-9]|1[0-2])$` |
+| `startedBy` | string | yes | min length 1. max length 255 |
+| `billed` | integer | yes | — |
+| `skipped` | integer | yes | — |
+| `refused` | integer | yes | — |
 ### `sales.contract-period.billed` — v1
 
 One period of a service contract was billed, with the revision, lines and amounts in force for it, now frozen. A contract bills each competence month once: Financial raises one receivable keyed by `billedPeriodId`, and Fiscal issues one NFS-e per line keyed by `entryId` and the competence month. Nothing moves stock.

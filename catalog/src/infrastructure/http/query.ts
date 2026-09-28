@@ -26,6 +26,19 @@ export const listQuerySchema = z.strictObject({
   cursor: cursor.optional(),
 })
 
+/** The items list also narrows by a term in the SKU or name (Phase 66). */
+export const itemListQuerySchema = listQuerySchema.extend({
+  search: z.string().trim().min(1).max(100).optional(),
+})
+
+export function itemListRequest(query: unknown, tenantId: string) {
+  const { search, ...page } = itemListQuerySchema.parse(query)
+  return {
+    ...listRequest(page, tenantId),
+    ...(search === undefined ? {} : { search }),
+  }
+}
+
 export function listRequest(query: unknown, tenantId: string) {
   const input = listQuerySchema.parse(query)
   return {

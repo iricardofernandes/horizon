@@ -22,6 +22,13 @@
       "when": 1790535600000,
       "tag": "0002_exports",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790611200000,
+      "tag": "0003_user_state",
+      "breakpoints": true
     }
   ]
 }

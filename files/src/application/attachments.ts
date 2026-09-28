@@ -72,7 +72,11 @@ export function eventOf(attachment: Attachment, now: Date): OutgoingEvent {
         payload: { ...reference, contentType: attachment.contentType, size: attachment.size },
       }
     case 'quarantined':
-      return { eventType: 'files.attachment.quarantined', occurredAt: now, payload: reference }
+      return {
+        eventType: 'files.attachment.quarantined',
+        occurredAt: now,
+        payload: { ...reference, uploadedBy: attachment.uploadedBy },
+      }
     case 'deleted':
       return {
         eventType: 'files.attachment.deleted',

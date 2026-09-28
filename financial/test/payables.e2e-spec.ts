@@ -149,8 +149,13 @@ describe('payables', () => {
       'payable.approved',
       'payable.posted',
     ])
-    const [event] = await administrator<{ event_type: string; payload: unknown }[]>`
-      select event_type, payload from outbox where tenant_id = ${tenantId}`
+    const [requested, event] = await administrator<{ event_type: string; payload: unknown }[]>`
+      select event_type, payload from outbox where tenant_id = ${tenantId} order by created_at`
+    expect(requested?.event_type).toBe('financial.payable.approval-requested')
+    expect(
+      findEvent('financial.payable.approval-requested', 1)?.payload.safeParse(requested?.payload)
+        .success,
+    ).toBe(true)
     expect(event?.event_type).toBe('financial.payable.posted')
     expect(
       findEvent('financial.payable.posted', 1)?.payload.safeParse(event?.payload).success,

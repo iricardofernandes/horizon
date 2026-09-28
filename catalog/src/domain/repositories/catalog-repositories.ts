@@ -17,7 +17,8 @@ export abstract class CatalogItemsRepository {
   abstract findBySku(sku: string): Promise<CatalogItem | null>
   abstract create(item: CatalogItem): Promise<void>
   abstract save(item: CatalogItem): Promise<void>
-  abstract list(params: PaginationParams): Promise<Page<CatalogItem>>
+  /** `search` narrows to items whose SKU or name contains it, ignoring case (Phase 66). */
+  abstract list(params: PaginationParams & { readonly search?: string }): Promise<Page<CatalogItem>>
 }
 export abstract class PriceListsRepository {
   abstract findById(id: string): Promise<PriceList | null>

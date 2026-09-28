@@ -7,12 +7,13 @@ An independently deployable NestJS service with its own database, its own contai
 its own lifecycle. It is reached through Kong at `/reporting`, never directly, and it
 shares no source with any other module (ADR 0001).
 
-**Status: Phase 63.**
+**Status: Phase 66.**
 - The event journal, the producers' seals and the per-source watermarks.
 - Four reports read from the journal at a cutoff, reconciled against the owners' own
   reports.
 - Saved filters.
 - Exports to CSV and XLSX, signed download links, and scheduled exports.
+- Notifications from events, once per event, and saved views of list screens (Phase 66).
 
 See the [production readiness plan](../docs/production-readiness-implementation-plan.md),
 the [API reference](../docs/reporting-api.md) and
@@ -55,6 +56,7 @@ reconciliation, through the gateway, with the token of the person who asked.
 | Queue | Fed by | Prefetch |
 |---|---|---|
 | `reporting.events` | `horizon.events`, bound to every event type of the journaled modules | `AMQP_PREFETCH` |
+| `reporting.notifications` | `horizon.events`, bound to the events that notify someone (Phase 66) | `AMQP_PREFETCH` |
 | `reporting.replay` | a producer's `republish:journal`, through the default exchange | 1, so a seal is read after the events sent before it |
 
 A message that cannot be parsed, or whose payload does not match its contract, goes to
@@ -70,6 +72,8 @@ the queue's `.dlq` at once. A failing write is retried once, then dead-lettered.
 | `POST`, `GET` | `/exports`, `/exports/{id}`, `/exports/{id}/link` | every role | Export jobs; `/exports/{id}/file` is public and checks the link's signature |
 | `POST`, `GET`, `PATCH`, `DELETE` | `/export-schedules` | `admin`, `analyst` | Scheduled exports |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/saved-filters` | `admin`, `analyst` (sharing: `admin`) | Saved filters |
+| `GET`, `POST` | `/notifications`, `/notifications/unread-count`, `/notifications/{id}/read`, `/notifications/read-all` | any signed-in user | Their notifications (Phase 66) |
+| `GET`, `POST`, `PATCH`, `DELETE` | `/views` | any signed-in user | Saved views; only the owner changes one |
 | `GET` | `/health/live`, `/health/ready` | public | Liveness, and readiness with a database ping |
 
 ## Filling the journal from a producer's history

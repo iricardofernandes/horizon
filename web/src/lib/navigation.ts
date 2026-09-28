@@ -20,6 +20,7 @@ import {
   Kanban,
   Key,
   Lifebuoy,
+  ListChecks,
   Package,
   PaperPlaneTilt,
   Receipt,
@@ -382,6 +383,15 @@ export const navigation: readonly NavigationGroup[] = [
         icon: UploadSimple,
         // Parties, Catalog, Inventory and Financial each import; the screen offers only the
         // ones the user administers (Phase 64).
+        module: null,
+        demo: false,
+      },
+      {
+        href: '/app/jobs',
+        labelKey: 'jobs',
+        icon: ListChecks,
+        // Imports, exports and runs across modules: each source is asked only when the
+        // user holds its role (Phase 66).
         module: null,
         demo: false,
       },

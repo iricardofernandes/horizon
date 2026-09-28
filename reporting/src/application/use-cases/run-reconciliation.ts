@@ -80,6 +80,20 @@ export class RunReconciliationUseCase {
           occurredAt: run.startedAt,
           details: { report: run.report, cutoff: run.cutoff, outcome: run.outcome },
         })
+        if (run.outcome === 'different')
+          await scope.notifications.insert(
+            [
+              {
+                kind: 'reconciliation-different',
+                sourceId: run.runId,
+                recipient: { type: 'user', userId: run.startedBy },
+                params: { runId: run.runId, report: run.report, cutoff: run.cutoff.toISOString() },
+                link: null,
+                occurredAt: run.startedAt,
+              },
+            ],
+            run.startedAt,
+          )
         return right(run)
       },
     )

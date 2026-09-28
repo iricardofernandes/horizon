@@ -10,6 +10,7 @@ interface ListRequest {
   readonly tenantId: string
   readonly limit?: number
   readonly cursor?: string
+  readonly search?: string
 }
 
 function params(request: ListRequest) {
@@ -26,7 +27,12 @@ export class ListCatalogItemsUseCase {
   }
   async execute(request: ListRequest): Promise<Either<never, Page<CatalogItem>>> {
     return this.unitOfWork.inTenant(request.tenantId, async (scope) =>
-      right(await scope.items.list(params(request))),
+      right(
+        await scope.items.list({
+          ...params(request),
+          ...(request.search ? { search: request.search } : {}),
+        }),
+      ),
     )
   }
 }

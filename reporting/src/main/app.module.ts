@@ -2,17 +2,20 @@ import { REPORTING_REPLAY_QUEUE } from '@horizon/contracts'
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { JOURNALED_EVENT_TYPES } from '@/application/journal-intake'
+import { NOTIFYING_EVENT_TYPES } from '@/application/notifications'
 import { ExportWorker, RelayExportWorkScan } from '@/infrastructure/exports/export-worker'
 import { ReportingAuthGuard } from '@/infrastructure/http/authorization'
 import { ExportsController } from '@/infrastructure/http/exports.controller'
 import { ReportingController } from '@/infrastructure/http/reporting.controller'
 import { ReportsController } from '@/infrastructure/http/reports.controller'
+import { UserStateController } from '@/infrastructure/http/user-state.controller'
 import { QueueConsumer } from '@/infrastructure/messaging/queue-consumer'
 import type { ReportingEnvironment } from './environment'
 import { ReportingRuntime } from './reporting-runtime'
 
 const LIVE_CONSUMER = 'LIVE_CONSUMER'
 const REPLAY_CONSUMER = 'REPLAY_CONSUMER'
+const NOTIFICATION_CONSUMER = 'NOTIFICATION_CONSUMER'
 
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: Nest dynamic modules expose a registration factory.
@@ -55,6 +58,20 @@ export class AppModule {
             prefetch: 1,
           }),
       },
+      {
+        // What needs a person's attention, once per event and recipient (Phase 66). Live only:
+        // a replay of history goes to the journal and never notifies.
+        provide: NOTIFICATION_CONSUMER,
+        inject: [ReportingRuntime],
+        useFactory: (runtime: ReportingRuntime) =>
+          new QueueConsumer({
+            url: config.RABBITMQ_URL,
+            queue: 'reporting.notifications',
+            bindings: NOTIFYING_EVENT_TYPES,
+            handle: (body) => runtime.notificationIntake.handle(body),
+            prefetch: config.AMQP_PREFETCH,
+          }),
+      },
     ]
     const relayUrl = config.DATABASE_RELAY_URL
     if (relayUrl)
@@ -73,7 +90,7 @@ export class AppModule {
       })
     return {
       module: AppModule,
-      controllers: [ReportingController, ReportsController, ExportsController],
+      controllers: [ReportingController, ReportsController, ExportsController, UserStateController],
       providers,
       exports: [ReportingRuntime],
     }

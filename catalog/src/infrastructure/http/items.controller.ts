@@ -18,7 +18,7 @@ import { RequestSchema } from './api-schema'
 import { ReadDuringDenylistOutage, RequirePermission } from './authorization'
 import { auditOf, type CatalogHttpRequest, tenantOf } from './http-context'
 import { presentItem, presentPage, unwrap } from './presenters'
-import { listRequest } from './query'
+import { itemListRequest } from './query'
 
 const createItem = z.strictObject({
   kind: z.enum(['product', 'service']),
@@ -54,7 +54,9 @@ export class ItemsController {
   @RequirePermission('read', 'Items')
   @ReadDuringDenylistOutage()
   async list(@Query() query: unknown, @Req() request: CatalogHttpRequest) {
-    const page = unwrap(await this.runtime.listItems.execute(listRequest(query, tenantOf(request))))
+    const page = unwrap(
+      await this.runtime.listItems.execute(itemListRequest(query, tenantOf(request))),
+    )
     return presentPage(page, presentItem)
   }
 

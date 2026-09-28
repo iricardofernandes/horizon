@@ -271,6 +271,7 @@ describe('a payable awaiting approval', () => {
       approvalDecidedBy: 'controller',
     })
     expect(payable.pullDomainEvents().map((event) => event.eventType)).toEqual([
+      'financial.payable.approval-requested',
       'financial.payable.posted',
     ])
   })

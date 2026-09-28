@@ -1,6 +1,7 @@
 import type { Either } from '@/core/either'
 import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { Source } from '@/domain/journal'
+import type { NotificationDraft } from '@/domain/notifications'
 import type { CheckResult, ReportFilter, ReportName, RunOutcome } from '@/domain/reports'
 import type { ReportData } from '../report-data'
 import type { ExportScope } from './export-store'
@@ -79,6 +80,10 @@ export interface CommandScope extends ExportScope {
   }
   readonly runs: { insert(run: StoredRun): Promise<void> }
   readonly audit: { append(record: AuditRecord): Promise<void> }
+  /** Reporting's own news: an export that ended, a reconciliation that differed (Phase 66). */
+  readonly notifications: {
+    insert(drafts: readonly NotificationDraft[], now: Date): Promise<number>
+  }
 }
 
 export interface CommandReceipt {

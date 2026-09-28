@@ -705,3 +705,25 @@ export class SalesContractPeriodCreditedEvent extends SalesEvent {
     }
   }
 }
+
+/** A billing run decided every contract of its month (Phase 66): who started it, and counts. */
+export class BillingRunFinishedEvent extends SalesEvent {
+  readonly eventType = 'sales.billing-run.finished'
+  constructor(
+    runId: UniqueEntityID,
+    tenantId: string,
+    occurredAt: Date,
+    private readonly facts: {
+      readonly competence: string
+      readonly startedBy: string
+      readonly billed: number
+      readonly skipped: number
+      readonly refused: number
+    },
+  ) {
+    super(runId, tenantId, occurredAt)
+  }
+  payloadOf(): Readonly<Record<string, unknown>> {
+    return { runId: this.aggregateId.toString(), ...this.facts }
+  }
+}

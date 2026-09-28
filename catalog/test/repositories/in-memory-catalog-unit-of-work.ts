@@ -186,8 +186,15 @@ class InMemoryItemsRepository
     this.replace(item)
     return Promise.resolve()
   }
-  list(params: PaginationParams): Promise<Page<CatalogItem>> {
-    return Promise.resolve(page(this.visible(), params))
+  list(params: PaginationParams & { readonly search?: string }): Promise<Page<CatalogItem>> {
+    const term = params.search?.toLowerCase()
+    const found = term
+      ? this.visible().filter((item) => {
+          const { sku, name } = item.toSnapshot()
+          return sku.toLowerCase().includes(term) || name.toLowerCase().includes(term)
+        })
+      : this.visible()
+    return Promise.resolve(page(found, params))
   }
 }
 

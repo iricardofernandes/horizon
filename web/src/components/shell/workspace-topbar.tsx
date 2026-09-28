@@ -3,7 +3,9 @@
 import { SidebarSimple, SignOut } from '@phosphor-icons/react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { CommandPalette } from '@/components/shell/command-palette'
 import { LanguageSwitcher } from '@/components/shell/language-switcher'
+import { NotificationBell } from '@/components/shell/notification-bell'
 import type { SessionUser } from '@/components/shell/workspace-context'
 import { Button } from '@/components/ui/button'
 import { tracedFetch } from '@/lib/telemetry'
@@ -51,6 +53,8 @@ export function WorkspaceTopbar({
         </div>
       </div>
       <div className="user-menu">
+        <CommandPalette />
+        <NotificationBell />
         <LanguageSwitcher />
         <span className="avatar">{session?.name?.slice(0, 1) ?? 'H'}</span>
         <span className="user-identity">

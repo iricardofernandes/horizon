@@ -143,6 +143,17 @@ describe('catalog use cases', () => {
     )
   })
 
+  it('narrows items by a term in the SKU or name, ignoring case', async () => {
+    const tenantId = randomUUID()
+    const { unitOfWork } = await seed(tenantId)
+    const listing = new ListCatalogItemsUseCase(unitOfWork)
+    // The seeded item is COFFEE-1, "Coffee".
+    const found = await listing.execute({ tenantId, search: 'offee-' })
+    const none = await listing.execute({ tenantId, search: 'no-such-item' })
+    expect(found.value.items).toHaveLength(1)
+    expect(none.value.items).toHaveLength(0)
+  })
+
   it('creates price lists and changes a price only for an active same-tenant item', async () => {
     const tenantId = randomUUID()
     const { unitOfWork, itemId } = await seed(tenantId)

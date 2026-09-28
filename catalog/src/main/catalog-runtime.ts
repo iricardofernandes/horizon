@@ -95,7 +95,7 @@ export class CatalogRuntime implements OnModuleInit, OnModuleDestroy {
     })
     const rows = (key: RowKey) => new RowWritingUnitOfWork(db, key)
     this.imports = new ImportJobs(
-      new SqlImportStore(db, PLAIN_ROWS),
+      new SqlImportStore(db, PLAIN_ROWS, 'catalog'),
       new TabularImportFiles(),
       [
         new UnitImporter(clock, rows),

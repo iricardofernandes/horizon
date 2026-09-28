@@ -60,7 +60,7 @@ export class PartiesRuntime implements OnModuleInit, OnModuleDestroy {
     this.findLookalikes = new FindLookalikePartiesUseCase(this.database)
     const database = this.database
     this.imports = new ImportJobs(
-      new SqlImportStore(database, new SealedImportRows(secretBox)),
+      new SqlImportStore(database, new SealedImportRows(secretBox), 'parties'),
       new TabularImportFiles(),
       [new PartyImporter(clock, (key) => new RowWritingUnitOfWork(database, key))],
       clock,

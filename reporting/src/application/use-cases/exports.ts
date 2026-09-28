@@ -251,6 +251,19 @@ export class ExportWorkUseCase {
         requestId: null,
         details: { rows: finished.rows, bytes: finished.bytes, settled: finished.settled },
       })
+      await scope.notifications.insert(
+        [
+          {
+            kind: 'export-finished',
+            sourceId: finished.jobId,
+            recipient: { type: 'user', userId: finished.requestedBy },
+            params: { exportId: finished.jobId, report: finished.report, status: finished.status },
+            link: null,
+            occurredAt: finished.finishedAt ?? now,
+          },
+        ],
+        now,
+      )
     })
     return finished.status === 'ready' ? 'ready' : 'failed'
   }

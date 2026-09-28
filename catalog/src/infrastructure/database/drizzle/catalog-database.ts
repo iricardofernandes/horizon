@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { and, asc, desc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, ilike, inArray, lte, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
@@ -318,6 +318,12 @@ function decodeCursor(value: string | undefined): Cursor | null {
   }
 }
 
+/** SKU or name containing the term, ignoring case; `%`, `_` and `\\` match themselves. */
+function containing(term: string) {
+  const pattern = `%${term.replace(/[\\%_]/g, (character) => `\\${character}`)}%`
+  return or(ilike(schema.catalogItems.sku, pattern), ilike(schema.catalogItems.name, pattern))
+}
+
 function page<T>(items: readonly T[], limit: number, cursorOf: (item: T) => string): Page<T> {
   const hasMore = items.length > limit
   const visible = items.slice(0, limit)
@@ -586,7 +592,14 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
         .select()
         .from(schema.catalogItems)
         .where(
-          after(schema.catalogItems.createdAt, schema.catalogItems.id, decodeCursor(params.cursor)),
+          and(
+            after(
+              schema.catalogItems.createdAt,
+              schema.catalogItems.id,
+              decodeCursor(params.cursor),
+            ),
+            params.search ? containing(params.search) : undefined,
+          ),
         )
         .orderBy(asc(schema.catalogItems.createdAt), asc(schema.catalogItems.id))
         .limit(params.limit + 1)

@@ -4,6 +4,7 @@ import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import type { ServiceContract } from '@/domain/entities/service-contract'
+import { BillingRunFinishedEvent } from '@/domain/events/sales-events'
 import {
   type BillingRun,
   CREDIT_REASONS,
@@ -360,7 +361,9 @@ export class ProcessBillingRunUseCase {
         occurredAt: now,
         details: { competence: run.competence },
       })
-      return scope.billingRuns.findById(run.id)
+      const finished = await scope.billingRuns.findById(run.id)
+      if (finished) await scope.events.append(finishedEvent(context.tenantId, finished, now))
+      return finished
     })
     if (!closed) return
     for (const item of closed.items)
@@ -465,5 +468,17 @@ async function recordBilled(
     subjectId: contract.id.toString(),
     occurredAt: now,
     details: { billedPeriodId, competence },
+  })
+}
+
+/** Tells whoever started the run how it ended (Phase 66). */
+function finishedEvent(tenantId: string, run: BillingRun, now: Date): BillingRunFinishedEvent {
+  const count = (outcome: string) => run.items.filter((item) => item.outcome === outcome).length
+  return new BillingRunFinishedEvent(new UniqueEntityID(run.id), tenantId, now, {
+    competence: run.competence,
+    startedBy: run.requestedBy,
+    billed: count('billed'),
+    skipped: count('skipped'),
+    refused: count('refused'),
   })
 }

@@ -2599,9 +2599,19 @@ implemented by Parties, Catalog, Inventory and Financial.
 
 ## Phase 66 — Search, command palette, saved views, notifications and the job centre
 
-**Planned.** Federated search that shows only what the user may read, a command palette, saved views,
-in-app notifications from events, and one centre for every background job.
-[Detailed work](production-readiness-implementation-plan.md#66--search-command-palette-saved-views-notifications-and-the-job-centre).
+**Delivered on 2026-09-28.** Contracts 0.49.0.
+- **Federated search:** the web server asks each module the user can read, within 1.5 s
+  each, and names any module that did not answer.
+- **The command palette:** Ctrl/⌘ K, over screens, role-gated actions and search results.
+- **Saved views:** shared or private, on the titles and CRM account lists. The titles list
+  also lets a person choose its columns.
+- **The bell:** notifications from events, once per event: CRM reminders, approvals,
+  finished imports, exports and billing runs, quarantined files, and reconciliations with
+  differences.
+- **The job centre:** one screen for the user's jobs across modules.
+
+[Plan](readiness-phase66-implementation-plan.md),
+[evidence](readiness-phase66-evidence.md).
 
 ## Phase 67 — Invitations, MFA, passkeys and sessions
 

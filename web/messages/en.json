@@ -471,7 +471,11 @@
     "procurement": "Purchasing",
     "sales": "Sales",
     "treasury": "Treasury",
-    "webhooks": "Webhooks"
+    "webhooks": "Webhooks",
+    "crm": "CRM",
+    "reporting": "Reporting",
+    "fiscal": "Fiscal",
+    "files": "Files"
   },
   "navigation": {
     "groups": {
@@ -529,7 +533,8 @@
       "agenda": "My agenda",
       "forecast": "Forecast and metrics",
       "crmSettings": "CRM settings",
-      "imports": "Imports"
+      "imports": "Imports",
+      "jobs": "Job centre"
     }
   },
   "orders": {
@@ -799,7 +804,8 @@
       "overdue": "Overdue",
       "settled": "Settled"
     },
-    "views": "Payable views"
+    "views": "Payable views",
+    "columns": "Columns"
   },
   "paymentMethodKinds": {
     "bank-transfer": "Bank transfer",
@@ -1020,7 +1026,8 @@
       "overdue": "Overdue",
       "settled": "Settled"
     },
-    "views": "Receivable views"
+    "views": "Receivable views",
+    "columns": "Columns"
   },
   "reconciliation": {
     "accept": "Accept",
@@ -2579,5 +2586,100 @@
       "quarantined": "quarantined",
       "deleted": "removed"
     }
+  },
+  "palette": {
+    "open": "Search",
+    "shortcut": "Ctrl K",
+    "title": "Command palette",
+    "input": "Search screens, actions and records",
+    "placeholder": "Type to search screens, actions or records…",
+    "empty": "Nothing found.",
+    "silent": "Did not answer in time: {modules}. The rest of the search still stands.",
+    "hint": "↑ ↓ to choose, Enter to open, Esc to close.",
+    "groups": {
+      "screens": "Screen",
+      "actions": "Action",
+      "results": "Record"
+    },
+    "actions": {
+      "registerParty": "Register a party",
+      "newReceivable": "Record a receivable",
+      "newPayable": "Record a payable",
+      "newRequisition": "New purchase requisition",
+      "newOpportunity": "New opportunity",
+      "importFile": "Import a file",
+      "billContracts": "Bill this month's contracts"
+    }
+  },
+  "notifications": {
+    "bell": "Notifications",
+    "bellUnread": "Notifications, {count, plural, one {# unread} other {# unread}}",
+    "title": "Notifications",
+    "readAll": "Mark all as read",
+    "failed": "The notifications could not be loaded.",
+    "empty": "Nothing new here.",
+    "unread": "unread",
+    "kinds": {
+      "task-due": "A CRM task reminder came due.",
+      "approval-requisition": "A purchase requisition waits for approval.",
+      "approval-order": "A purchase order waits for approval.",
+      "approval-payable": "A payable of {currency} {amount} waits for approval.",
+      "import-finished": "Your {kind} import finished: {written} of {total} rows written, {failed} failed.",
+      "billing-run-finished": "Billing for {competence} finished: {billed} billed, {skipped} skipped, {refused} refused.",
+      "file-quarantined": "A file you attached was blocked by the malware scanner.",
+      "export-finished": "Your export of the {report} report finished ({status}).",
+      "reconciliation-different": "The reconciliation of the {report} report found differences."
+    }
+  },
+  "jobs": {
+    "eyebrow": "Administration",
+    "title": "Job centre",
+    "copy": "Your imports, exports, billing runs and supplier NF-e imports, across modules.",
+    "listTitle": "Your jobs",
+    "listCopy": "Refreshed every 5 seconds.",
+    "refresh": "Refresh",
+    "failed": "The jobs could not be loaded.",
+    "silent": "Did not answer in time: {modules}.",
+    "empty": "No jobs of yours yet.",
+    "module": "Module",
+    "kind": "Kind",
+    "status": "Status",
+    "progress": "Progress",
+    "progressOf": "{done} of {total}",
+    "rows": "{rows} rows",
+    "started": "Started",
+    "kinds": {
+      "import": "Import ({detail})",
+      "export": "Export ({detail})",
+      "billing-run": "Billing run ({detail})",
+      "supplier-invoice-import": "Supplier NF-e",
+      "unknown": "Job"
+    },
+    "states": {
+      "uploaded": "uploaded",
+      "validated": "validated",
+      "previewed": "previewed",
+      "running": "running",
+      "completed": "completed",
+      "completed-with-failures": "completed with failures",
+      "cancelled": "cancelled",
+      "requested": "requested",
+      "ready": "ready",
+      "failed": "failed",
+      "expired": "expired"
+    }
+  },
+  "views": {
+    "label": "Saved view",
+    "none": "None",
+    "sharedName": "{name} (shared)",
+    "remove": "Delete view",
+    "saveCurrent": "Save current view",
+    "name": "View name",
+    "namePlaceholder": "E.g. due this week",
+    "share": "Share with the workspace",
+    "save": "Save",
+    "cancel": "Cancel",
+    "failed": "The view could not be saved."
   }
 }

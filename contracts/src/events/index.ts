@@ -59,6 +59,14 @@ import {
   inventoryStockReserved,
 } from './inventory'
 import {
+  catalogImportFinished,
+  financialImportFinished,
+  financialPayableApprovalRequested,
+  inventoryImportFinished,
+  partiesImportFinished,
+  salesBillingRunFinished,
+} from './jobs'
+import {
   ledgerAccountOpened,
   ledgerPeriodClosed,
   ledgerPeriodReopened,
@@ -126,6 +134,7 @@ export * from './financial'
 export * from './fiscal'
 export * from './identity'
 export * from './inventory'
+export * from './jobs'
 export * from './ledger'
 export * from './parties'
 export * from './procurement'
@@ -234,6 +243,12 @@ export const EVENTS: readonly EventDefinition[] = [
   filesAttachmentAvailable,
   filesAttachmentQuarantined,
   filesAttachmentDeleted,
+  partiesImportFinished,
+  catalogImportFinished,
+  inventoryImportFinished,
+  financialImportFinished,
+  financialPayableApprovalRequested,
+  salesBillingRunFinished,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

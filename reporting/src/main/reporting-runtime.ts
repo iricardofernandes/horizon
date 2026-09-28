@@ -1,5 +1,6 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { JournalIntake } from '@/application/journal-intake'
+import { NotificationIntake, NotificationsUseCase } from '@/application/notifications'
 import type { ObjectStore } from '@/application/ports/export-store'
 import type { Clock } from '@/application/ports/journal-store'
 import {
@@ -11,6 +12,7 @@ import {
 import { ManageSavedFiltersUseCase } from '@/application/use-cases/manage-saved-filters'
 import { DashboardUseCase, ReadReportUseCase } from '@/application/use-cases/read-report'
 import { RunReconciliationUseCase } from '@/application/use-cases/run-reconciliation'
+import { ManageViewsUseCase } from '@/application/views'
 import { reportFilterOf } from '@/domain/reports'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { ReportingDatabase } from '@/infrastructure/database/drizzle/reporting-database'
@@ -37,6 +39,9 @@ export class ReportingRuntime implements OnModuleInit, OnModuleDestroy {
   readonly readExports: ReadExportsUseCase
   readonly exportSchedules: ManageExportSchedulesUseCase
   readonly exportWork: ExportWorkUseCase
+  readonly notificationIntake: NotificationIntake
+  readonly notifications: NotificationsUseCase
+  readonly views: ManageViewsUseCase
 
   constructor(config: ReportingEnvironment) {
     this.clock = { now: () => new Date() }
@@ -50,6 +55,9 @@ export class ReportingRuntime implements OnModuleInit, OnModuleDestroy {
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
     )
     this.intake = new JournalIntake(this.database, this.clock)
+    this.notificationIntake = new NotificationIntake(this.database.notifications, this.clock)
+    this.notifications = new NotificationsUseCase(this.database.notifications, this.clock)
+    this.views = new ManageViewsUseCase(this.database.views, this.clock)
     this.readReport = new ReadReportUseCase(this.database.reports, this.clock)
     this.dashboard = new DashboardUseCase(this.database.reports, this.clock)
     this.runReconciliation = new RunReconciliationUseCase(

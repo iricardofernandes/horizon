@@ -175,3 +175,52 @@ A bare array is exported as one page.
 |---|---|---|---|
 | `GET` | `/sales/orders/summary` | sales, read | Orders by status and currency: count and total |
 | `GET` | `/procurement/orders/summary` | procurement, read | Purchase orders by status and currency: count and total |
+
+## Notifications (Phase 66)
+
+These routes need only a token: no Reporting role. A notification holds ids, counts and
+statuses, never a name, and the web renders its text in the reader's language.
+
+| Route | Does |
+|---|---|
+| `GET /notifications?limit=` | the latest notifications for the reader (up to 100), each with `read` |
+| `GET /notifications/unread-count` | `{ unread }` |
+| `POST /notifications/{id}/read` | marks one read for the reader; `{ marked }` |
+| `POST /notifications/read-all` | marks everything the reader can see read |
+
+- **Who sees one.**
+  - A notification addressed to a user is theirs.
+  - One addressed to a role is shown to whoever holds that role in the module when they
+    read it, except the person whose own request it is.
+  - Read state is per person.
+- **Once per event.** A notification is unique on `(tenant, source event, kind, recipient)`.
+  A redelivered or republished event inserts nothing. Replays of history go to the
+  journal's replay queue, which never notifies.
+
+| Kind | From | For |
+|---|---|---|
+| `task-due` | `crm.task.due` | the assignee |
+| `approval-requisition` | `procurement.requisition.submitted` | procurement `admin` and `approver`, except the submitter |
+| `approval-order` | `procurement.order.placed` with `approvalRequired` | procurement `admin` and `approver`, except the buyer |
+| `approval-payable` | `financial.payable.approval-requested` | financial `admin`, except the requester |
+| `import-finished` | `parties\|catalog\|inventory\|financial.import.finished` | whoever uploaded the file |
+| `billing-run-finished` | `sales.billing-run.finished` | whoever started the run |
+| `file-quarantined` | `files.attachment.quarantined` | the uploader |
+| `export-finished` | an export of Reporting ending, ready or failed | whoever asked for it |
+| `reconciliation-different` | a reconciliation run with differences | whoever started it |
+
+## Saved views (Phase 66)
+
+These routes need only a token. A view holds a list screen's query string (its filters)
+and, where the screen allows, its visible columns.
+
+| Route | Does |
+|---|---|
+| `GET /views?screen=` | the reader's own views and the shared ones |
+| `POST /views` | `{ screen, name, query, columns?, shared? }`; `409` for a name the owner already uses there |
+| `PATCH /views/{id}` | renames, changes or shares; the owner only (`403` otherwise) |
+| `DELETE /views/{id}` | the owner only |
+
+- **The fields.** `screen` is `<module>.<list>`, such as `financial.payables` or
+  `crm.accounts`. `query` has no leading `?`, and is at most 1,000 characters.
+- **Visibility.** Another person's private view answers `404`.

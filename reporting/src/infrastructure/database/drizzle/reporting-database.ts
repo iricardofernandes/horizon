@@ -28,6 +28,7 @@ import { exportScope } from './export-store'
 import { movedAfter, readReport } from './report-reads'
 import * as schema from './schema'
 import type { Database, Transaction } from './transaction'
+import { insertNotifications, SqlNotificationStore, SqlViewStore } from './user-state-store'
 
 export interface ReportingDatabaseOptions {
   readonly url: string
@@ -204,6 +205,9 @@ function commandScope(tx: Transaction, tenantId: string): CommandScope {
         })
       },
     },
+    notifications: {
+      insert: (drafts, now) => insertNotifications(tx, tenantId, drafts, now),
+    },
     audit: {
       async append(record: AuditRecord) {
         // A per-tenant transaction lock serializes chain appends, including the first link.
@@ -249,6 +253,8 @@ export class ReportingDatabase extends JournalStore {
   readonly #db: Database
   readonly reports: ReportReads
   readonly commands: ReportingCommands
+  readonly notifications: SqlNotificationStore
+  readonly views: SqlViewStore
 
   constructor(options: ReportingDatabaseOptions) {
     super()
@@ -260,6 +266,8 @@ export class ReportingDatabase extends JournalStore {
     this.#db = drizzle(this.#client, { schema })
     const within = <T>(tenantId: string, work: (tx: Transaction) => Promise<T>) =>
       this.#within(tenantId, work)
+    this.notifications = new SqlNotificationStore(within)
+    this.views = new SqlViewStore(within)
     this.reports = new (class extends ReportReads {
       report<N extends ReportName>(tenantId: string, name: N, cutoff: Date, filter: ReportFilter) {
         return within(tenantId, (tx) => readReport(tx, name, cutoff, filter)) as Promise<

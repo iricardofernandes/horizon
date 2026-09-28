@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import { useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ColumnPicker, SavedViewsMenu } from '@/features/views/saved-views-menu'
+import { filtersOf, queryOf, shownColumns } from '@/lib/saved-views'
 import { useStatusLabel } from '@/lib/status'
 import { useUrlParam } from '@/lib/url-param'
 import { useDate, useMoney } from '@/lib/use-format'
@@ -32,6 +34,11 @@ export type TitleAbilities = {
   /** The signed-in subject, so a requester is not offered their own approval. */
   userId: string | null
 }
+/** The columns a person may hide; the document, status and actions always show. */
+const OPTIONAL_COLUMNS = ['counterparty', 'issuedOn', 'nextDue', 'total', 'outstanding'] as const
+type OptionalColumn = (typeof OPTIONAL_COLUMNS)[number]
+const NUMERIC: readonly string[] = ['total', 'outstanding']
+
 export type MutationProps = { onChanged: () => Promise<void>; setNotice: (value: string) => void }
 
 /**
@@ -50,6 +57,8 @@ export function TitlesView({
   const [view, setView] = useState<TitleView>('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [columns, setColumns] = useState<string[] | null>(null)
+  const shown = shownColumns(OPTIONAL_COLUMNS, columns)
   // A link from another screen names the title to open, or what to search for (Phase 53).
   const openParam = useUrlParam('open')
   const searchParam = useUrlParam('search')
@@ -116,9 +125,30 @@ export function TitlesView({
             value={query}
           />
         </div>
+        <div className="catalog-toolbar saved-views-toolbar">
+          <SavedViewsMenu
+            columns={columns}
+            onApply={(saved) => {
+              const filters = filtersOf(saved.query)
+              const candidate = filters.view as TitleView | undefined
+              setView(candidate && viewsOf(direction).includes(candidate) ? candidate : 'all')
+              setQuery(filters.search ?? '')
+              setColumns(saved.columns)
+            }}
+            query={queryOf({ view: view === 'all' ? null : view, search: query.trim() || null })}
+            screen={`financial.${direction}s`}
+          />
+          <ColumnPicker
+            all={OPTIONAL_COLUMNS}
+            label={t('columns')}
+            labelOf={(column) => t(column)}
+            onChange={setColumns}
+            shown={shown}
+          />
+        </div>
         <div className="panel table-panel">
           <div className="table-scroll">
-            <TitlesTable direction={direction} onOpen={setSelected} rows={rows} />
+            <TitlesTable columns={shown} direction={direction} onOpen={setSelected} rows={rows} />
           </div>
           {!rows.length ? (
             <div className="catalog-empty">
@@ -210,27 +240,37 @@ function SummaryCards({ data }: { data: TitlesData }) {
 function TitlesTable({
   direction,
   rows,
+  columns,
   onOpen,
 }: {
   direction: Direction
   rows: TitleRow[]
+  columns: readonly string[]
   onOpen: (id: string) => void
 }) {
+  const shown = OPTIONAL_COLUMNS.filter((column) => columns.includes(column))
   const t = useTranslations(namespaceOf(direction))
   const common = useTranslations('common')
   const statusLabel = useStatusLabel()
   const money = useMoney()
   const date = useDate()
+  const cell: Readonly<Record<OptionalColumn, (row: TitleRow) => string>> = {
+    counterparty: (row) => row.partyName ?? t('erasedParty'),
+    issuedOn: (row) => date(`${row.issuedOn}T12:00:00`),
+    nextDue: (row) => (row.nextDueOn ? date(`${row.nextDueOn}T12:00:00`) : '—'),
+    total: (row) => money(row.total, row.currency),
+    outstanding: (row) => money(row.outstanding, row.currency),
+  }
   return (
     <table>
       <thead>
         <tr>
           <th>{t('document')}</th>
-          <th>{t('counterparty')}</th>
-          <th>{t('issuedOn')}</th>
-          <th>{t('nextDue')}</th>
-          <th className="numeric">{t('total')}</th>
-          <th className="numeric">{t('outstanding')}</th>
+          {shown.map((column) => (
+            <th className={NUMERIC.includes(column) ? 'numeric' : undefined} key={column}>
+              {t(column)}
+            </th>
+          ))}
           <th>{t('status')}</th>
           <th aria-label={common('actions')} />
         </tr>
@@ -246,11 +286,11 @@ function TitlesTable({
                   <small className="receivable-origin">{t(`from.${row.origin.type}`)}</small>
                 )}
               </td>
-              <td>{row.partyName ?? t('erasedParty')}</td>
-              <td>{date(`${row.issuedOn}T12:00:00`)}</td>
-              <td>{row.nextDueOn ? date(`${row.nextDueOn}T12:00:00`) : '—'}</td>
-              <td className="numeric">{money(row.total, row.currency)}</td>
-              <td className="numeric">{money(row.outstanding, row.currency)}</td>
+              {shown.map((column) => (
+                <td className={NUMERIC.includes(column) ? 'numeric' : undefined} key={column}>
+                  {cell[column](row)}
+                </td>
+              ))}
               <td>
                 <Badge label={statusLabel(status)} status={status} />
               </td>

@@ -7,6 +7,7 @@ import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-e
 import {
   moneyPayload,
   originPayload,
+  PayableApprovalRequestedEvent,
   SettlementRecordedEvent,
   SettlementReversedEvent,
   TitlePostedEvent,
@@ -399,6 +400,9 @@ export class Title extends AggregateRoot<TitleProps> {
       return left(new ConflictError(`this payable is already ${this.props.approval.state}`))
     this.props.approval = { ...NO_APPROVAL, state: 'pending', requestedBy: actor, requestedAt: now }
     this.props.updatedAt = now
+    this.addDomainEvent(
+      new PayableApprovalRequestedEvent(this.id, this.props.tenantId, now, actor, this.total()),
+    )
     return right(undefined)
   }
 
