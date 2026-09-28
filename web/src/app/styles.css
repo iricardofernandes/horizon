@@ -3286,6 +3286,32 @@ tbody tr.reconciliation-selected td {
   font-size: 11px;
   color: var(--color-text-muted);
 }
+/* On a phone the top bar keeps only icons: the palette, the bell, the language and sign-out. */
+@media (max-width: 760px) {
+  .palette-trigger span,
+  .palette-trigger kbd,
+  .user-identity {
+    display: none;
+  }
+  .user-menu {
+    flex-shrink: 0;
+    gap: 6px;
+  }
+  .topbar {
+    gap: 8px;
+  }
+  .topbar-leading,
+  .topbar-leading > div {
+    min-width: 0;
+  }
+  .topbar-leading strong,
+  .topbar-kicker {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
 .palette-popup {
   width: min(640px, 92vw);
   display: grid;

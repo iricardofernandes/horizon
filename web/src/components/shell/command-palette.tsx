@@ -134,7 +134,7 @@ export function CommandPalette() {
 
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
-      <Dialog.Trigger className="ui-button ui-button-ghost palette-trigger">
+      <Dialog.Trigger aria-label={t('open')} className="ui-button ui-button-ghost palette-trigger">
         <MagnifyingGlass aria-hidden="true" size={16} />
         <span>{t('open')}</span>
         <kbd>{t('shortcut')}</kbd>
