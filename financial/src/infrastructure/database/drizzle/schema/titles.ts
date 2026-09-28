@@ -65,8 +65,10 @@ export const titles = pgTable('titles', {
   approvalRequestedBy: text('approval_requested_by'),
   approvalRequestedAt: instant('approval_requested_at'),
   approvalDecidedBy: text('approval_decided_by'),
+  approvalDecidedFor: text('approval_decided_for'),
   approvalDecidedAt: instant('approval_decided_at'),
   approvalReason: text('approval_reason'),
+  createdBy: text('created_by'),
   createdAt: instant('created_at').notNull(),
   updatedAt: instant('updated_at').notNull(),
 })

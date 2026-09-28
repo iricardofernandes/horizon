@@ -1,6 +1,7 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { InventoryAuthGuard } from '@/infrastructure/http/authorization'
+import { AuditController, DelegationsController } from '@/infrastructure/http/controls.controller'
 import { ImportsController } from '@/infrastructure/http/imports.controller'
 import { InventoryController } from '@/infrastructure/http/inventory.controller'
 import { ImportWorker, RelayImportScan } from '@/infrastructure/imports/import-worker'
@@ -70,7 +71,7 @@ export class AppModule {
     }
     return {
       module: AppModule,
-      controllers: [InventoryController, ImportsController],
+      controllers: [InventoryController, ImportsController, DelegationsController, AuditController],
       providers,
       exports: [InventoryRuntime],
     }

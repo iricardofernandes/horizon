@@ -2631,9 +2631,20 @@ implemented by Parties, Catalog, Inventory and Financial.
 
 ## Phase 68 — Segregation of duties, delegation and the audit screen
 
-**Planned.** A declared duties matrix enforced by each module, approval delegation that records both
-names, and a federated audit screen with chain verification.
-[Detailed work](production-readiness-implementation-plan.md#68--segregation-of-duties-delegation-and-the-audit-screen).
+**Delivered on 2026-09-28.**
+- **A duties matrix** in contracts 0.50.0: eight pairs in Financial, Procurement,
+  Inventory, Ledger and Treasury. Each module refuses its own pairs with the same `403`.
+- **Two new approvals:** a manual ledger entry and a treasury transfer wait for a second
+  person above a per-currency threshold.
+- **Delegation:** an approver lends an approval for up to 90 days. The decision records
+  both names, and never falls to whoever did the work or lent it.
+- **An audit read endpoint in twelve modules,** with the hash chain judged on every page.
+- **The audit screen** searches every administered module at once and exports CSV. A
+  tampered row shows as a broken chain.
+- **A controls drill** stores its results.
+
+[Plan](readiness-phase68-implementation-plan.md), [evidence](readiness-phase68-evidence.md),
+[drill](drills/2026-09-28-phase68-controls-drill.json).
 
 ## Phase 69 — Backups, restore drills, retention and consistency checks
 

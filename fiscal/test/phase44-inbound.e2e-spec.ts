@@ -4,12 +4,17 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { fiscalInboundImportSchema, fiscalInboundMatched } from '@horizon/contracts'
+import {
+  auditQuerySchema,
+  fiscalInboundImportSchema,
+  fiscalInboundMatched,
+} from '@horizon/contracts'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import postgres from 'postgres'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { EncryptedFiscalArtifactStore, LocalObjectStore } from '../src/artifact-store'
 import { type AuditRow, verifyAuditRows } from '../src/audit'
+import { FiscalAuditLog } from '../src/audit-log'
 import { FiscalInboundImports } from '../src/inbound-imports'
 import {
   FiscalInboundReconciliations,
@@ -241,6 +246,27 @@ it('reconciles an XML imported after its receipt once, whatever is replayed or r
     'fiscal.inbound.imported',
     'fiscal.inbound.reconciled',
   ])
+  // Phase 68: the audit read endpoint judges each page, and a tampered row shows as broken.
+  const log = new FiscalAuditLog(url)
+  try {
+    const read = (query: Record<string, string>) =>
+      log.page(tenant.tenantId, auditQuerySchema.parse(query))
+    const intact = await read({})
+    expect(intact.chain).toEqual({ status: 'intact', checked: 2, broken: [] })
+    expect(intact.data.map((entry) => entry.action)).toEqual([
+      'fiscal.inbound.reconciled',
+      'fiscal.inbound.imported',
+    ])
+    expect((await read({ action: 'fiscal.inbound.imported' })).chain.status).toBe('intact')
+    await admin.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`update fiscal_audit_entries set actor_id = 'someone-else'
+        where tenant_id = ${tenant.tenantId} and sequence = 1`
+    })
+    expect((await read({})).chain).toMatchObject({ status: 'broken', broken: [1] })
+  } finally {
+    await log.close()
+  }
 })
 
 it('matches a partially received order to several invoices and never allocates twice', async () => {

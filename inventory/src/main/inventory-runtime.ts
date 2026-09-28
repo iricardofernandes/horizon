@@ -19,6 +19,11 @@ import {
   DefineStockLevelUseCase,
 } from '@/application/use-cases/define-policies'
 import {
+  GrantDelegationUseCase,
+  ListDelegationsUseCase,
+  RevokeDelegationUseCase,
+} from '@/application/use-cases/delegations'
+import {
   CreateWarehouseUseCase,
   DeactivateWarehouseUseCase,
   ReceiveStockUseCase,
@@ -49,6 +54,9 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
   readonly procurementEvents: InventoryProcurementEventHandlers
   readonly catalogEvents: InventoryCatalogEventHandlers
   readonly accessTokens: AccessTokenVerifier
+  readonly grantDelegation: GrantDelegationUseCase
+  readonly revokeDelegation: RevokeDelegationUseCase
+  readonly listDelegations: ListDelegationsUseCase
   readonly createWarehouse: CreateWarehouseUseCase
   readonly deactivateWarehouse: DeactivateWarehouseUseCase
   readonly receiveStock: ReceiveStockUseCase
@@ -122,6 +130,9 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
       config.JWKS_URL,
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
     )
+    this.grantDelegation = new GrantDelegationUseCase(this.database, clock)
+    this.revokeDelegation = new RevokeDelegationUseCase(this.database, clock)
+    this.listDelegations = new ListDelegationsUseCase(this.database)
     this.salesEvents = new InventorySalesEventHandlers(
       this.database,
       clock,

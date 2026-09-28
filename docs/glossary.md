@@ -909,6 +909,25 @@ routes accept it for 10 minutes.
 network and last use. Ending it also denylists every access token it issued that is still
 alive.
 
+### segregation of duties
+**Two duties the same person may never both hold on one record** (ADR 0062), such as
+drafting a payable and approving it. The pairs are declared once, in contracts, and each
+module refuses its own with `403` and the code `segregation-of-duties`.
+
+### approval delegation
+**An approval lent by someone who holds it through a role, to a colleague, for up to 90
+days** (ADR 0062). A decision taken through it records both names. It never lets anyone
+decide work they did, or work of the person who lent it, and it cannot be passed on.
+
+### manual entry proposal
+**A manual ledger entry at or above the workspace's threshold, waiting for a second
+person** (Phase 68). It is not in the journal until approved, and approving posts it.
+
+### audit screen
+**The one screen that reads every module's audit log the person administers** (Phase
+68). Each module judges the hash chain of the page it returns; the screen shows the verdict
+and names any module that did not answer. There is no central copy.
+
 ### job centre
 The **one screen listing a person's background jobs** across modules (Phase 66): imports,
 exports, billing runs and supplier NF-e imports, with progress.

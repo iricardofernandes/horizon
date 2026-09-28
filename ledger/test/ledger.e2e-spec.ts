@@ -3,6 +3,14 @@ import { findEvent } from '@horizon/contracts'
 import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  DecideManualEntryUseCase,
+  DefineEntryApprovalPolicyUseCase,
+} from '@/application/use-cases/approve-entries'
+import {
+  GrantDelegationUseCase,
+  RevokeDelegationUseCase,
+} from '@/application/use-cases/delegations'
+import {
   ChangeAccountStatusUseCase,
   OpenAccountUseCase,
 } from '@/application/use-cases/manage-chart'
@@ -487,5 +495,120 @@ describe('the database itself', () => {
         offset: 0,
       }),
     ).toBeNull()
+  })
+})
+
+describe('manual entries over the threshold (Phase 68)', () => {
+  const APPROVE = 'ledger:entry:approve'
+  const as = (tenantId: string, actor: string, approver = false) => ({
+    tenantId,
+    actor,
+    requestId: null,
+    approvals: approver ? [APPROVE] : [],
+  })
+  const pairOf = (result: { isLeft(): boolean; value: unknown }) =>
+    result.isLeft() ? ((result.value as { pair?: string }).pair ?? 'refused') : 'allowed'
+
+  async function guarded() {
+    const world = await workspace()
+    value(
+      await new DefineEntryApprovalPolicyUseCase(database, clock).execute({
+        context: as(world.tenantId, 'controller', true),
+        currency: 'BRL',
+        threshold: '100000',
+      }),
+    )
+    return world
+  }
+
+  it('posts below the threshold, and holds one at or above it out of the journal', async () => {
+    const { tenantId, post, debit, credit, cash, revenue } = await guarded()
+    const small = value<{ status: string }>(
+      await post('NF-10', '2026-03-10', [debit(cash, '99999'), credit(revenue, '99999')]),
+    )
+    expect(small.status).toBe('posted')
+    const large = value<{ status: string; manualEntryId: string }>(
+      await post('NF-11', '2026-03-10', [debit(cash, '100000'), credit(revenue, '100000')]),
+    )
+    expect(large.status).toBe('pending-approval')
+    const trial = await database.chartOfAccounts(tenantId, '2026-03-31')
+    expect(trial.find((row) => row.code === '1.01.001')?.balance).toBe('99999')
+    expect(await database.listManualEntries(tenantId, 'pending')).toMatchObject([
+      { id: large.manualEntryId, requestedBy: 'ana', total: '100000' },
+    ])
+  })
+
+  it('refuses ledger.entry to its writer, and allows it through a delegation', async () => {
+    const { tenantId, post, debit, credit, cash, revenue } = await guarded()
+    const { manualEntryId } = value<{ manualEntryId: string }>(
+      await post('NF-12', '2026-03-12', [debit(cash, '250000'), credit(revenue, '250000')]),
+    )
+    const decide = new DecideManualEntryUseCase(database, clock)
+    expect(pairOf(await decide.approve(as(tenantId, 'ana', true), manualEntryId))).toBe(
+      'ledger.entry',
+    )
+    expect(pairOf(await decide.approve(as(tenantId, 'stand-in'), manualEntryId))).toBe('refused')
+    const lend = (from: string) =>
+      new GrantDelegationUseCase(database, clock).execute({
+        context: as(tenantId, from, true),
+        grant: {
+          permission: APPROVE,
+          delegateId: 'stand-in',
+          startsAt: new Date().toISOString(),
+          endsAt: new Date(Date.now() + 86_400_000).toISOString(),
+        },
+      })
+    const byWriter = value<{ id: { toString(): string } }>(await lend('ana'))
+    expect(pairOf(await decide.approve(as(tenantId, 'stand-in'), manualEntryId))).toBe(
+      'ledger.entry',
+    )
+    value(
+      await new RevokeDelegationUseCase(database, clock).execute({
+        context: as(tenantId, 'ana', true),
+        delegationId: byWriter.id.toString(),
+      }),
+    )
+    value(await lend('controller'))
+    const approved = value<{ status: string; transactionId: string }>(
+      await decide.approve(as(tenantId, 'stand-in'), manualEntryId),
+    )
+    expect(approved.status).toBe('approved')
+    const [row] = await administrator`select decided_by, decided_for, transaction_id
+      from manual_entries where id = ${manualEntryId}`
+    expect(row).toEqual({
+      decided_by: 'stand-in',
+      decided_for: 'controller',
+      transaction_id: approved.transactionId,
+    })
+    const trial = await database.chartOfAccounts(tenantId, '2026-03-31')
+    expect(trial.find((entry) => entry.code === '1.01.001')?.balance).toBe('250000')
+    const audit = await database.auditPage(tenantId, { subjectType: 'manual-entry', limit: 10 })
+    expect(audit.data.map((entry) => entry.action)).toEqual([
+      'manual-entry.approved',
+      'manual-entry.requested',
+    ])
+    expect(audit.data[0]?.details).toMatchObject({ onBehalfOf: 'controller' })
+    expect(audit.chain.status).toBe('intact')
+  })
+
+  it('rejects with a reason, and shows a tampered audit row as broken', async () => {
+    const { tenantId, post, debit, credit, cash, revenue } = await guarded()
+    const { manualEntryId } = value<{ manualEntryId: string }>(
+      await post('NF-13', '2026-03-12', [debit(cash, '150000'), credit(revenue, '150000')]),
+    )
+    value(
+      await new DecideManualEntryUseCase(database, clock).reject(
+        as(tenantId, 'controller', true),
+        manualEntryId,
+        'Wrong account',
+      ),
+    )
+    await administrator.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`delete from audit_log where tenant_id = ${tenantId}
+        and action = 'manual-entry.requested'`
+    })
+    const page = await database.auditPage(tenantId, { limit: 50 })
+    expect(page.chain.status).toBe('broken')
   })
 })

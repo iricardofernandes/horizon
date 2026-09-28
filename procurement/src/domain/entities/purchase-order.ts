@@ -3,6 +3,8 @@ import { AggregateRoot } from '@/core/entities/aggregate-root'
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import type { SegregationOfDutiesError } from '@/core/errors/errors/segregation-of-duties-error'
+import { type ApprovalAuthority, checkDuties } from '../controls/approval-delegation'
 import { moneyPayload, ProcurementEvent, quantityPayload } from '../events/procurement-events'
 import {
   type Charges,
@@ -52,6 +54,8 @@ export interface OrderApproval {
   readonly requestedBy: string | null
   readonly requestedAt: Date | null
   readonly decidedBy: string | null
+  /** The approver who lent the decision, when it was taken through a delegation. */
+  readonly decidedFor: string | null
   readonly decidedAt: Date | null
   readonly reason: Reason | null
 }
@@ -61,6 +65,7 @@ export const NO_APPROVAL: OrderApproval = Object.freeze({
   requestedBy: null,
   requestedAt: null,
   decidedBy: null,
+  decidedFor: null,
   decidedAt: null,
   reason: null,
 })
@@ -273,14 +278,24 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
     return right(undefined)
   }
 
-  /** Four eyes: whoever placed the order cannot be the one who approves it. */
-  approve(actor: string, now: Date): Either<ConflictError, void> {
-    const decidable = this.decidable(actor)
+  /**
+   * Four eyes (ADR 0062): whoever placed the order cannot decide it, nor whoever requested
+   * or submitted the requisition it came from — in person or through a delegation they lent.
+   * `requisition` holds those people, when the order came from a requisition.
+   */
+  approve(
+    authority: ApprovalAuthority,
+    now: Date,
+    requisition: readonly (string | null)[] = [],
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
+    const decidable = this.decidable(authority, requisition)
     if (decidable.isLeft()) return decidable
+    const actor = authority.actor
     this.props.approval = {
       ...this.props.approval,
       state: 'approved',
       decidedBy: actor,
+      decidedFor: authority.onBehalfOf,
       decidedAt: now,
     }
     this.props.status = 'approved'
@@ -289,13 +304,20 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
     return right(undefined)
   }
 
-  reject(actor: string, reason: Reason, now: Date): Either<ConflictError, void> {
-    const decidable = this.decidable(actor)
+  reject(
+    authority: ApprovalAuthority,
+    reason: Reason,
+    now: Date,
+    requisition: readonly (string | null)[] = [],
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
+    const decidable = this.decidable(authority, requisition)
     if (decidable.isLeft()) return decidable
+    const actor = authority.actor
     this.props.approval = {
       ...this.props.approval,
       state: 'rejected',
       decidedBy: actor,
+      decidedFor: authority.onBehalfOf,
       decidedAt: now,
       reason,
     }
@@ -547,6 +569,7 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
     approvalRequestedBy: string | null
     approvalRequestedAt: Date | null
     approvalDecidedBy: string | null
+    approvalDecidedFor: string | null
     approvalDecidedAt: Date | null
     approvalReason: string | null
     closureReason: string | null
@@ -587,6 +610,7 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
       approvalRequestedBy: this.props.approval.requestedBy,
       approvalRequestedAt: this.props.approval.requestedAt,
       approvalDecidedBy: this.props.approval.decidedBy,
+      approvalDecidedFor: this.props.approval.decidedFor,
       approvalDecidedAt: this.props.approval.decidedAt,
       approvalReason: this.props.approval.reason?.value ?? null,
       closureReason: this.props.closure?.value ?? null,
@@ -641,12 +665,25 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
     return right(undefined)
   }
 
-  private decidable(actor: string): Either<ConflictError, void> {
+  private decidable(
+    authority: ApprovalAuthority,
+    requisition: readonly (string | null)[],
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
     if (this.props.status !== 'pending' || this.props.approval.state !== 'pending')
       return left(new ConflictError('there is no pending approval to decide'))
-    if (this.props.approval.requestedBy === actor)
-      return left(new ConflictError('the person who placed the order cannot approve it'))
-    return right(undefined)
+    const placed = checkDuties(
+      'procurement.order',
+      [this.props.approval.requestedBy],
+      authority,
+      'the person who placed the order cannot approve it',
+    )
+    if (placed.isLeft()) return placed
+    return checkDuties(
+      'procurement.requisition-order',
+      requisition,
+      authority,
+      'the person who requested or submitted the requisition cannot approve its order',
+    )
   }
 
   /**

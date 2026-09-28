@@ -112,6 +112,16 @@ describe('an attachment at rest', () => {
       'attachment.link-issued',
     ])
     expect(chain[1]?.previous_hash).toBe(chain[0]?.hash)
+    // Phase 68: the audit read endpoint judges each page, and a tampered row shows.
+    expect((await database.auditPage(tenantId, { limit: 50 })).chain.status).toBe('intact')
+    await administrator.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`update audit_log set actor = 'someone else' where tenant_id = ${tenantId} and sequence = 2`
+    })
+    expect((await database.auditPage(tenantId, { limit: 50 })).chain).toMatchObject({
+      status: 'broken',
+      broken: [2],
+    })
   })
 })
 

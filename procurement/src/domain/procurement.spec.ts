@@ -1,6 +1,7 @@
 import { snapshotOf } from 'test/support/snapshot-of'
 import { describe, expect, it } from 'vitest'
 import type { Either } from '@/core/either'
+import { ownAuthority } from './controls/approval-delegation'
 import { PurchaseOrder } from './entities/purchase-order'
 import { PurchaseRequisition } from './entities/purchase-requisition'
 import { SupplierQuotation } from './entities/supplier-quotation'
@@ -69,7 +70,7 @@ function submitted() {
 
 function approved() {
   const open = submitted()
-  valid(open.approve(MANAGER, now))
+  valid(open.approve(ownAuthority(MANAGER), now))
   return open
 }
 
@@ -133,16 +134,16 @@ describe('purchase requisition', () => {
 
   it('is decided by somebody other than whoever submitted it', () => {
     const open = submitted()
-    expect(open.approve(BUYER, now).isLeft()).toBe(true)
-    expect(open.reject(BUYER, reason, now).isLeft()).toBe(true)
-    valid(open.approve(MANAGER, now))
+    expect(open.approve(ownAuthority(BUYER), now).isLeft()).toBe(true)
+    expect(open.reject(ownAuthority(BUYER), reason, now).isLeft()).toBe(true)
+    valid(open.approve(ownAuthority(MANAGER), now))
     expect(open.status).toBe('approved')
   })
 
   it('announces what it asks for, and what was decided', () => {
     const open = requisition()
     valid(open.submit(BUYER, now))
-    valid(open.approve(MANAGER, now))
+    valid(open.approve(ownAuthority(MANAGER), now))
     const types = open.pullDomainEvents().map((event) => event.eventType)
     expect(types).toEqual(['procurement.requisition.submitted', 'procurement.requisition.approved'])
   })
@@ -308,8 +309,8 @@ describe('purchase order', () => {
     const placed = order()
     valid(placed.place(BUYER, now, { approvalRequired: true }))
     expect(placed.status).toBe('pending')
-    expect(placed.approve(BUYER, now).isLeft()).toBe(true)
-    valid(placed.approve(MANAGER, now))
+    expect(placed.approve(ownAuthority(BUYER), now).isLeft()).toBe(true)
+    valid(placed.approve(ownAuthority(MANAGER), now))
     expect(placed.status).toBe('approved')
   })
 

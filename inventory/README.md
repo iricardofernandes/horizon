@@ -79,6 +79,16 @@ assuming RabbitMQ preserves aggregate ordering across retries and consumers.
 
 ---
 
+## Segregation of duties, delegation and audit (Phase 68)
+
+- **Pairs** (ADR 0062): the `inventory.adjustment` and `inventory.count` pairs: whoever asked for an adjustment, or closed a count, never decides it. A refusal is `403` with the code `segregation-of-duties`.
+- **Delegation:** an approver (admin) lends `inventory:adjustment:approve` and `inventory:count:approve` to a member of the module for up to 90
+  days, through `POST /delegations`; `GET /delegations` lists them and
+  `POST /delegations/{id}/revoke` ends one. A decision through a delegation records both
+  names, and is refused when either did the work.
+- **Audit:** `GET /audit` reads the log a page at a time, filtered by actor, action, record
+  and period, with the hash chain judged on the page. Admins only.
+
 ## Endpoints
 
 Order reservation and shipment remain event-driven. Operator commands use the HTTP

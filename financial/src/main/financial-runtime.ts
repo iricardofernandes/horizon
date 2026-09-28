@@ -9,6 +9,11 @@ import {
   DefineApprovalPolicyUseCase,
 } from '@/application/use-cases/approve-payables'
 import {
+  GrantDelegationUseCase,
+  ListDelegationsUseCase,
+  RevokeDelegationUseCase,
+} from '@/application/use-cases/delegations'
+import {
   ChangeRegistryStatusUseCase,
   DefineCategoryUseCase,
   DefineDimensionUseCase,
@@ -69,6 +74,9 @@ export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
   readonly titles: Readonly<Record<TitleDirection, TitleCommands>>
   readonly payableApprovals: DecidePayableApprovalUseCase
   readonly defineApprovalPolicy: DefineApprovalPolicyUseCase
+  readonly grantDelegation: GrantDelegationUseCase
+  readonly revokeDelegation: RevokeDelegationUseCase
+  readonly listDelegations: ListDelegationsUseCase
   readonly eventHandlers: FinancialModuleEventHandlers
   readonly imports: ImportJobs
 
@@ -96,6 +104,9 @@ export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
     }
     this.payableApprovals = new DecidePayableApprovalUseCase(this.database, clock)
     this.defineApprovalPolicy = new DefineApprovalPolicyUseCase(this.database, clock)
+    this.grantDelegation = new GrantDelegationUseCase(this.database, clock)
+    this.revokeDelegation = new RevokeDelegationUseCase(this.database, clock)
+    this.listDelegations = new ListDelegationsUseCase(this.database)
     this.eventHandlers = new FinancialModuleEventHandlers(this.database, clock)
     const database = this.database
     const rows = (key: RowKey) => new RowWritingUnitOfWork(database, key)

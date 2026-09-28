@@ -185,13 +185,14 @@ export class ProcurementController {
   }
 
   @Post('requisitions/:id/approve')
-  @RequireProcurementAction('decide')
+  // Any Procurement role reaches the decision: it may be delegated (ADR 0062).
+  @RequireProcurementAction('read')
   async approveRequisition(@Param('id') requisitionId: string, @Req() request: ProcurementRequest) {
     return unwrap(await this.runtime.decideRequisition.approve(context(request), id(requisitionId)))
   }
 
   @Post('requisitions/:id/reject')
-  @RequireProcurementAction('decide')
+  @RequireProcurementAction('read')
   async rejectRequisition(
     @Param('id') requisitionId: string,
     @Body() body: unknown,
@@ -334,13 +335,13 @@ export class ProcurementController {
   }
 
   @Post('orders/:id/approve')
-  @RequireProcurementAction('decide')
+  @RequireProcurementAction('read')
   async approveOrder(@Param('id') orderId: string, @Req() request: ProcurementRequest) {
     return unwrap(await this.runtime.decideOrder.approve(context(request), id(orderId)))
   }
 
   @Post('orders/:id/reject')
-  @RequireProcurementAction('decide')
+  @RequireProcurementAction('read')
   async rejectOrder(
     @Param('id') orderId: string,
     @Body() body: unknown,

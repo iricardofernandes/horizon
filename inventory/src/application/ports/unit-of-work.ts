@@ -1,5 +1,6 @@
 import type { Either } from '@/core/either'
 import type { ConflictError } from '@/core/errors/errors/conflict-error'
+import type { DelegationsRepository } from '@/domain/controls/delegations-repository'
 import type {
   AdjustmentPoliciesRepository,
   InventoryEventsRepository,
@@ -22,6 +23,7 @@ export interface AuditRecord {
   readonly actor: string
   readonly action: string
   readonly subjectType:
+    | 'delegation'
     | 'warehouse'
     | 'transfer'
     | 'adjustment'
@@ -62,6 +64,7 @@ export interface InventoryScope {
   readonly policies: AdjustmentPoliciesRepository
   readonly levels: StockLevelsRepository
   readonly events: InventoryEventsRepository
+  readonly delegations: DelegationsRepository
   readonly audit: AuditTrail
 }
 

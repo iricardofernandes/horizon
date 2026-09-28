@@ -395,6 +395,15 @@ export const navigation: readonly NavigationGroup[] = [
         demo: false,
       },
       {
+        href: '/app/administration/audit',
+        labelKey: 'audit',
+        icon: ClipboardText,
+        // Every module log the user administers, searched at once; each module still
+        // refuses a reader without its admin role (Phase 68).
+        module: null,
+        demo: false,
+      },
+      {
         href: '/app/jobs',
         labelKey: 'jobs',
         icon: ListChecks,

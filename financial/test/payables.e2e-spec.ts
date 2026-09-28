@@ -73,7 +73,12 @@ async function workspace() {
       nature: 'expense',
     }),
   ).id
-  const as = (actor: string) => ({ tenantId, actor, requestId: null })
+  const as = (actor: string) => ({
+    tenantId,
+    actor,
+    requestId: null,
+    approvals: ['financial:payable:approve'],
+  })
   const keyed = (actor: string) => ({ ...as(actor), idempotencyKey: randomUUID() })
   const terms = (amount: string): TermsInput => ({
     partyId: supplierId,
@@ -236,6 +241,6 @@ describe('payables', () => {
           sql`update titles set approval_state = 'approved', approval_requested_by = 'clerk',
             approval_decided_by = 'clerk' where id = ${id}`,
       ),
-    ).rejects.toThrow(/titles_four_eyes_check/)
+    ).rejects.toThrow(/titles_(drafter_)?four_eyes_check/)
   })
 })

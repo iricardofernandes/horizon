@@ -11,10 +11,12 @@ import {
   Put,
   Query,
   Req,
+  Res,
 } from '@nestjs/common'
 import { z } from 'zod'
 import { POSTING_ROLES } from '@/domain/entities/account-mapping'
 import { ACCOUNT_TYPES, ENTRY_SIDES } from '@/domain/entities/ledger-account'
+import { MANUAL_ENTRY_STATUSES } from '@/domain/entities/manual-entry'
 import { CASH_FLOW_GRAINS } from '@/infrastructure/database/drizzle/ledger-reports'
 import { LedgerRuntime } from '@/main/ledger-runtime'
 import { type LedgerRequest, PublicRoute, RequireLedgerAction, tenantOf } from './authorization'
@@ -177,15 +179,72 @@ export class LedgerController {
     }
   }
 
+  /** `201` when it posts; `202` when it waits for a second person (Phase 68). */
   @Post('transactions')
   @RequireLedgerAction('post')
-  async postTransaction(@Body() body: unknown, @Req() request: LedgerRequest) {
-    return unwrap(
+  async postTransaction(
+    @Body() body: unknown,
+    @Req() request: LedgerRequest,
+    @Res({ passthrough: true }) response: { status(code: number): unknown },
+  ) {
+    const outcome = unwrap(
       await this.runtime.postTransaction.execute({
         context: idempotent(request),
         transaction: parse(transactionInput, body),
       }),
     )
+    if (outcome.status === 'pending-approval') response.status(202)
+    return outcome
+  }
+
+  @Get('manual-entries')
+  @RequireLedgerAction('read')
+  async manualEntries(@Query() query: unknown, @Req() request: LedgerRequest) {
+    const { status } = parse(z.object({ status: z.enum(MANUAL_ENTRY_STATUSES).optional() }), query)
+    return {
+      data: await this.runtime.database.listManualEntries(tenantOf(request), status ?? null),
+    }
+  }
+
+  // Any Ledger role reaches the decision: an approval may be delegated (ADR 0062).
+  @Post('manual-entries/:id/approve')
+  @RequireLedgerAction('read')
+  @HttpCode(200)
+  async approveManualEntry(@Param('id') entryId: string, @Req() request: LedgerRequest) {
+    return unwrap(await this.runtime.decideManualEntry.approve(context(request), id(entryId)))
+  }
+
+  @Post('manual-entries/:id/reject')
+  @RequireLedgerAction('read')
+  @HttpCode(200)
+  async rejectManualEntry(
+    @Param('id') entryId: string,
+    @Body() body: unknown,
+    @Req() request: LedgerRequest,
+  ) {
+    return unwrap(
+      await this.runtime.decideManualEntry.reject(
+        context(request),
+        id(entryId),
+        parse(reasonInput, body).reason,
+      ),
+    )
+  }
+
+  @Get('approval-policies')
+  @RequireLedgerAction('read')
+  async approvalPolicies(@Req() request: LedgerRequest) {
+    return { data: await this.runtime.database.listEntryPolicies(tenantOf(request)) }
+  }
+
+  @Put('approval-policies')
+  @RequireLedgerAction('configure')
+  async defineApprovalPolicy(@Body() body: unknown, @Req() request: LedgerRequest) {
+    const input = parse(z.strictObject({ currency, threshold: minorUnits }), body)
+    const policy = unwrap(
+      await this.runtime.defineEntryApprovalPolicy.execute({ context: context(request), ...input }),
+    )
+    return { ...policy, threshold: policy.threshold.toString() }
   }
 
   @Get('transactions/:id')

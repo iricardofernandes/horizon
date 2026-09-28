@@ -6,12 +6,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import type { Reflector } from '@nestjs/core'
+import { DELEGABLE_PERMISSIONS } from '@/domain/controls/duties'
 import type { AccessClaims } from '@/infrastructure/cryptography/access-token-verifier'
 import type { ProcurementRuntime } from '@/main/procurement-runtime'
 
 const PUBLIC = 'procurement:public'
 const ACTION = 'procurement:action'
-export type ProcurementAction = 'read' | 'write' | 'commit' | 'decide' | 'configure'
+export type ProcurementAction = 'read' | 'write' | 'commit' | 'decide' | 'configure' | 'audit'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
 export const RequireProcurementAction = (action: ProcurementAction) => SetMetadata(ACTION, action)
 
@@ -36,13 +37,31 @@ export function tenantOf(request: ProcurementRequest): string {
  * The split that matters is `commit` against `decide`: a buyer writes requisitions,
  * records what suppliers answered, chooses between them and places the order; an approver
  * decides whether the company will stand behind it. Giving one person both is a workspace
- * decision — grant them the admin role — but it is never the accident of a role map.
+ * decision — grant them the admin role — but it is never the accident of a role map. Even
+ * then the aggregate refuses whoever did the work (ADR 0062). A decision can be lent to any
+ * member of the module for a period, so the decide routes admit every role and the use case
+ * judges; reading the audit log is an admin's (Phase 68).
  */
 const PERMITS: Readonly<Record<string, readonly ProcurementAction[]>> = {
-  admin: ['read', 'write', 'commit', 'decide', 'configure'],
+  admin: ['read', 'write', 'commit', 'decide', 'configure', 'audit'],
   buyer: ['read', 'write', 'commit'],
   approver: ['read', 'decide'],
   viewer: ['read'],
+}
+
+function permits(principal: AccessClaims | undefined, action: ProcurementAction): boolean {
+  return (
+    principal?.roles.some(
+      (assignment) =>
+        assignment.module === 'procurement' &&
+        (PERMITS[assignment.role]?.includes(action) ?? false),
+    ) ?? false
+  )
+}
+
+/** The approvals the person holds through a Procurement role (ADR 0062). */
+export function approvalsOf(request: ProcurementRequest): readonly string[] {
+  return permits(request.principal, 'decide') ? DELEGABLE_PERMISSIONS : []
 }
 
 export class ProcurementAuthGuard implements CanActivate {
@@ -67,12 +86,7 @@ export class ProcurementAuthGuard implements CanActivate {
     request.principal = principal
     const action = this.reflector.getAllAndOverride<ProcurementAction>(ACTION, targets)
     if (!action) return true
-    const allowed = principal.roles.some(
-      (assignment) =>
-        assignment.module === 'procurement' &&
-        (PERMITS[assignment.role]?.includes(action) ?? false),
-    )
-    if (!allowed)
+    if (!permits(principal, action))
       throw new ForbiddenException('The Procurement role does not permit this operation')
     return true
   }

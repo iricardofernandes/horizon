@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common'
 import { z } from 'zod'
 import type { CommandContext, IdempotentContext } from '@/application/use-cases/commands'
-import { actorOf, type TreasuryRequest, tenantOf } from './authorization'
+import { actorOf, approvalsOf, type TreasuryRequest, tenantOf } from './authorization'
 import { parse } from './request-parsing'
 
 const MAX_RANGE_DAYS = 366
@@ -39,6 +39,7 @@ export function context(request: TreasuryRequest): CommandContext {
     tenantId: tenantOf(request),
     actor: actorOf(request),
     requestId: typeof requestId === 'string' ? requestId.slice(0, 128) : null,
+    approvals: approvalsOf(request),
   }
 }
 

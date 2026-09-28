@@ -11,6 +11,9 @@ import {
 } from '@/application/ports/unit-of-work'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import type { ManualEntryStatus } from '@/domain/entities/manual-entry'
+import { listEntryPolicies, listManualEntries } from './approval-store'
+import { type AuditFilter, type AuditPageView, readAuditPage } from './audit-reader'
 import {
   accountLedger,
   chartOfAccounts,
@@ -164,6 +167,19 @@ export class LedgerDatabase extends LedgerUnitOfWork {
 
   listPendingFacts(tenantId: string, limit: number) {
     return this.read(tenantId, (tx) => listPendingFacts(tx, limit))
+  }
+
+  listManualEntries(tenantId: string, status: ManualEntryStatus | null) {
+    return this.read(tenantId, (tx) => listManualEntries(tx, status))
+  }
+
+  listEntryPolicies(tenantId: string) {
+    return this.read(tenantId, (tx) => listEntryPolicies(tx))
+  }
+
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  auditPage(tenantId: string, filter: AuditFilter): Promise<AuditPageView> {
+    return this.read(tenantId, (tx) => readAuditPage(tx, filter))
   }
 
   async ping(): Promise<void> {

@@ -1,6 +1,7 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { ProcurementAuthGuard } from '@/infrastructure/http/authorization'
+import { AuditController, DelegationsController } from '@/infrastructure/http/controls.controller'
 import { ProcurementController } from '@/infrastructure/http/procurement.controller'
 import { JournalSealWorker } from '@/infrastructure/messaging/journal-replay'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
@@ -57,7 +58,7 @@ export class AppModule {
     }
     return {
       module: AppModule,
-      controllers: [ProcurementController],
+      controllers: [ProcurementController, DelegationsController, AuditController],
       providers,
       exports: [ProcurementRuntime],
     }

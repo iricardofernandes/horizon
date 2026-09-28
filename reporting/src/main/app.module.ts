@@ -4,6 +4,7 @@ import { APP_GUARD, Reflector } from '@nestjs/core'
 import { JOURNALED_EVENT_TYPES } from '@/application/journal-intake'
 import { NOTIFYING_EVENT_TYPES } from '@/application/notifications'
 import { ExportWorker, RelayExportWorkScan } from '@/infrastructure/exports/export-worker'
+import { AuditController } from '@/infrastructure/http/audit.controller'
 import { ReportingAuthGuard } from '@/infrastructure/http/authorization'
 import { ExportsController } from '@/infrastructure/http/exports.controller'
 import { ReportingController } from '@/infrastructure/http/reporting.controller'
@@ -90,7 +91,13 @@ export class AppModule {
       })
     return {
       module: AppModule,
-      controllers: [ReportingController, ReportsController, ExportsController, UserStateController],
+      controllers: [
+        ReportingController,
+        ReportsController,
+        ExportsController,
+        UserStateController,
+        AuditController,
+      ],
       providers,
       exports: [ReportingRuntime],
     }

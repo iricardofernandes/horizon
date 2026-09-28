@@ -6,12 +6,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import type { Reflector } from '@nestjs/core'
+import { DELEGABLE_PERMISSIONS } from '@/domain/controls/duties'
 import type { AccessClaims } from '@/infrastructure/cryptography/access-token-verifier'
 import type { FinancialRuntime } from '@/main/financial-runtime'
 
 const PUBLIC = 'financial:public'
 const ACTION = 'financial:action'
-export type FinancialAction = 'read' | 'configure' | 'record' | 'reverse' | 'approve' | 'import'
+export type FinancialAction =
+  | 'read'
+  | 'configure'
+  | 'record'
+  | 'reverse'
+  | 'approve'
+  | 'import'
+  | 'audit'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
 export const RequireFinancialAction = (action: FinancialAction) => SetMetadata(ACTION, action)
 
@@ -36,12 +44,28 @@ export function tenantOf(request: FinancialRequest): string {
  * Operators draft, post and settle titles. Reversing something already posted or settled
  * undoes a fact other contexts acted on, so it stays with admins (ADR 0042), as does
  * approving a payable — and the aggregate refuses an approval by whoever requested it.
- * Loading the open titles of a go-live in bulk is an administrator's work too (Phase 64).
+ * Loading the open titles of a go-live in bulk is an administrator's work too (Phase 64), and
+ * so is reading the audit log (Phase 68). An approval can also be lent to any member of the
+ * module for a period: the approve routes admit every role, and the use case decides.
  */
 const PERMITS: Readonly<Record<string, readonly FinancialAction[]>> = {
-  admin: ['read', 'configure', 'record', 'reverse', 'approve', 'import'],
+  admin: ['read', 'configure', 'record', 'reverse', 'approve', 'import', 'audit'],
   operator: ['read', 'record'],
   viewer: ['read'],
+}
+
+function permits(principal: AccessClaims | undefined, action: FinancialAction): boolean {
+  return (
+    principal?.roles.some(
+      (assignment) =>
+        assignment.module === 'financial' && (PERMITS[assignment.role]?.includes(action) ?? false),
+    ) ?? false
+  )
+}
+
+/** The approvals the person holds through a Financial role (ADR 0062). */
+export function approvalsOf(request: FinancialRequest): readonly string[] {
+  return permits(request.principal, 'approve') ? DELEGABLE_PERMISSIONS : []
 }
 
 export class FinancialAuthGuard implements CanActivate {
@@ -66,11 +90,8 @@ export class FinancialAuthGuard implements CanActivate {
     request.principal = principal
     const action = this.reflector.getAllAndOverride<FinancialAction>(ACTION, targets)
     if (!action) return true
-    const allowed = principal.roles.some(
-      (assignment) =>
-        assignment.module === 'financial' && (PERMITS[assignment.role]?.includes(action) ?? false),
-    )
-    if (!allowed) throw new ForbiddenException('The Financial role does not permit this operation')
+    if (!permits(principal, action))
+      throw new ForbiddenException('The Financial role does not permit this operation')
     return true
   }
 }

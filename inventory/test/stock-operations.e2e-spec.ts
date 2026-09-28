@@ -9,6 +9,7 @@ import {
   RecordStockCountUseCase,
 } from '@/application/use-cases/count-stock'
 import { DefineAdjustmentPolicyUseCase } from '@/application/use-cases/define-policies'
+import { GrantDelegationUseCase } from '@/application/use-cases/delegations'
 import { TransferStockUseCase } from '@/application/use-cases/transfer-stock'
 import { InventoryDatabase } from '@/infrastructure/database/drizzle/inventory-database'
 
@@ -30,7 +31,15 @@ afterAll(async () => {
   await Promise.allSettled([database?.close(), application?.end(), administrator?.end()])
 })
 
-const context = (tenantId: string, actor = KEEPER) => ({ tenantId, actor, requestId: null })
+const APPROVALS = ['inventory:adjustment:approve', 'inventory:count:approve']
+const context = (tenantId: string, actor = KEEPER) => ({
+  tenantId,
+  actor,
+  requestId: null,
+  approvals: APPROVALS,
+})
+/** A member of the module who holds no approval through a role. */
+const member = (tenantId: string, actor: string) => ({ ...context(tenantId, actor), approvals: [] })
 const idempotent = (tenantId: string, actor = KEEPER) => ({
   ...context(tenantId, actor),
   idempotencyKey: randomUUID(),
@@ -341,4 +350,105 @@ it('keeps one tenant out of what another tenant moved, wrote off and counted', a
       where id = ${asked.value.adjustmentId}`
     expect(changed.count).toBe(0)
   })
+})
+
+const STAND_IN = 'user-stand-in'
+const lend = (tenantId: string, from: string, permission: string) =>
+  new GrantDelegationUseCase(database, clock).execute({
+    context: context(tenantId, from),
+    grant: {
+      permission,
+      delegateId: STAND_IN,
+      startsAt: new Date().toISOString(),
+      endsAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    },
+  })
+const pairOf = (result: { isLeft(): boolean; value: unknown }) =>
+  result.isLeft() ? ((result.value as { pair?: string }).pair ?? 'refused') : 'allowed'
+
+it('refuses inventory.adjustment to the asker, and allows it through a delegation', async () => {
+  const fixture = await warehoused({ allowance: '10000' })
+  const asked = await new AdjustStockUseCase(database, clock).execute({
+    context: idempotent(fixture.tenantId),
+    warehouseId: fixture.main,
+    itemId: fixture.itemId,
+    direction: 'out',
+    quantity: '50',
+    reason: 'loss',
+  })
+  if (asked.isLeft()) throw asked.value
+  const decide = (actor: ReturnType<typeof context>) =>
+    new DecideAdjustmentUseCase(database, clock).execute({
+      context: actor,
+      adjustmentId: asked.value.adjustmentId,
+      decision: { kind: 'approve' },
+    })
+  expect(pairOf(await decide(context(fixture.tenantId, KEEPER)))).toBe('inventory.adjustment')
+  expect(pairOf(await decide(member(fixture.tenantId, STAND_IN)))).toBe('refused')
+  // Lent by the asker, the approval is still the asker's.
+  const lentByAsker = await lend(fixture.tenantId, KEEPER, 'inventory:adjustment:approve')
+  if (lentByAsker.isLeft()) throw lentByAsker.value
+  expect(pairOf(await decide(member(fixture.tenantId, STAND_IN)))).toBe('inventory.adjustment')
+  const lent = await lend(fixture.tenantId, MANAGER, 'inventory:adjustment:approve')
+  if (lent.isLeft()) throw lent.value
+  expect(pairOf(await decide(member(fixture.tenantId, STAND_IN)))).toBe('allowed')
+  const [row] = await administrator`select decided_by, decided_for from stock_adjustments
+    where id = ${asked.value.adjustmentId}`
+  expect(row).toEqual({ decided_by: STAND_IN, decided_for: MANAGER })
+})
+
+it('refuses inventory.count to whoever closed it, and allows it through a delegation', async () => {
+  const fixture = await warehoused({ allowance: '10000' })
+  const opened = await new OpenStockCountUseCase(database, clock).execute({
+    context: idempotent(fixture.tenantId),
+    warehouseId: fixture.main,
+  })
+  if (opened.isLeft()) throw opened.value
+  await new RecordStockCountUseCase(database, clock).execute({
+    context: context(fixture.tenantId),
+    countId: opened.value.countId,
+    counts: [{ itemId: fixture.itemId, counted: '40' }],
+  })
+  const closed = await new CloseStockCountUseCase(database, clock).execute({
+    context: context(fixture.tenantId),
+    countId: opened.value.countId,
+  })
+  if (closed.isLeft()) throw closed.value
+  const decide = (actor: ReturnType<typeof context>) =>
+    new DecideStockCountUseCase(database, clock).execute({
+      context: actor,
+      countId: opened.value.countId,
+      decision: { kind: 'approve' },
+    })
+  expect(pairOf(await decide(context(fixture.tenantId, KEEPER)))).toBe('inventory.count')
+  const lent = await lend(fixture.tenantId, MANAGER, 'inventory:count:approve')
+  if (lent.isLeft()) throw lent.value
+  expect(pairOf(await decide(member(fixture.tenantId, STAND_IN)))).toBe('allowed')
+  const [row] = await administrator`select decided_by, decided_for from stock_counts
+    where id = ${opened.value.countId}`
+  expect(row).toEqual({ decided_by: STAND_IN, decided_for: MANAGER })
+  const page = await database.auditPage(fixture.tenantId, { action: 'count.approved', limit: 5 })
+  expect(page.data[0]).toMatchObject({ actor: STAND_IN, details: { onBehalfOf: MANAGER } })
+})
+
+it('reads the audit log a page at a time, and shows a tampered row as broken', async () => {
+  const fixture = await warehoused({ allowance: '10000' })
+  await new AdjustStockUseCase(database, clock).execute({
+    context: idempotent(fixture.tenantId),
+    warehouseId: fixture.main,
+    itemId: fixture.itemId,
+    direction: 'out',
+    quantity: '50',
+    reason: 'expiry',
+  })
+  const intact = await database.auditPage(fixture.tenantId, { limit: 1 })
+  expect(intact.chain.status).toBe('intact')
+  expect(intact.page.hasMore).toBe(true)
+  await administrator.begin(async (tx) => {
+    await tx`set local session_replication_role = replica`
+    await tx`update audit_log set occurred_at = occurred_at - interval '1 day'
+      where tenant_id = ${fixture.tenantId} and action = 'adjustment.requested'`
+  })
+  const page = await database.auditPage(fixture.tenantId, { limit: 10 })
+  expect(page.chain).toMatchObject({ status: 'broken', broken: [2] })
 })

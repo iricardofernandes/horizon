@@ -1,5 +1,6 @@
-import { moduleNameSchema } from '@horizon/contracts'
+import { auditQuerySchema, moduleNameSchema } from '@horizon/contracts'
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,6 +10,7 @@ import {
   Inject,
   Param,
   Post,
+  Query,
   Req,
 } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
@@ -115,6 +117,27 @@ export class AdministrationController {
         ...requestMetadata(request),
       }),
     )
+  }
+
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  @Get('audit')
+  @RequirePermission('read', 'Audit')
+  @Header('Cache-Control', 'no-store')
+  async auditPage(@Query() query: unknown, @Req() request: IdentityHttpRequest) {
+    const parsed = auditQuerySchema.safeParse(query)
+    if (!parsed.success)
+      throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid audit query')
+    const filter = parsed.data
+    return this.runtime.database.auditPage(principal(request).tenantId, {
+      actor: filter.actor,
+      action: filter.action,
+      subjectType: filter.subjectType,
+      subjectId: filter.subjectId,
+      from: filter.from ? new Date(filter.from) : undefined,
+      to: filter.to ? new Date(filter.to) : undefined,
+      before: filter.cursor ? Number(filter.cursor) : undefined,
+      limit: filter.limit,
+    })
   }
 
   @Get('audit/verify')

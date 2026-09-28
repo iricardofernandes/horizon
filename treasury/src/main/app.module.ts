@@ -1,6 +1,7 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { TreasuryAuthGuard } from '@/infrastructure/http/authorization'
+import { AuditController, DelegationsController } from '@/infrastructure/http/controls.controller'
 import { ReconciliationController } from '@/infrastructure/http/reconciliation.controller'
 import { TreasuryController } from '@/infrastructure/http/treasury.controller'
 import { JournalSealWorker } from '@/infrastructure/messaging/journal-replay'
@@ -58,7 +59,12 @@ export class AppModule {
     }
     return {
       module: AppModule,
-      controllers: [TreasuryController, ReconciliationController],
+      controllers: [
+        TreasuryController,
+        ReconciliationController,
+        DelegationsController,
+        AuditController,
+      ],
       providers,
       exports: [TreasuryRuntime],
     }

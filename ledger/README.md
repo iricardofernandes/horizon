@@ -96,6 +96,16 @@ Resolution of an account is exact, then the role's default, then suspense. Suspe
 the books complete when a category has no account yet: the transaction still balances, and
 the accountant reclassifies it.
 
+## Segregation of duties, delegation and audit (Phase 68)
+
+- **Pairs** (ADR 0062): the `ledger.entry` pair: a manual entry at or above the threshold set with `PUT /approval-policies` waits (`202`, `GET /manual-entries`) and whoever wrote it never decides it (`POST /manual-entries/{id}/approve` or `/reject`). A refusal is `403` with the code `segregation-of-duties`.
+- **Delegation:** an approver (admin) lends `ledger:entry:approve` to a member of the module for up to 90
+  days, through `POST /delegations`; `GET /delegations` lists them and
+  `POST /delegations/{id}/revoke` ends one. A decision through a delegation records both
+  names, and is refused when either did the work.
+- **Audit:** `GET /audit` reads the log a page at a time, filtered by actor, action, record
+  and period, with the hash chain judged on the page. Admins only.
+
 ## Authorization
 
 | Role | Reads | Posts, reverses and replays | Opens accounts, maps them, closes and reopens months |

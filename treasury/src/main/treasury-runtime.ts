@@ -1,5 +1,10 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { TreasuryModuleEventHandlers } from '@/application/consume-module-events'
+import {
+  GrantDelegationUseCase,
+  ListDelegationsUseCase,
+  RevokeDelegationUseCase,
+} from '@/application/use-cases/delegations'
 import { ImportStatementUseCase } from '@/application/use-cases/import-statements'
 import {
   ChangeAccountStatusUseCase,
@@ -8,6 +13,8 @@ import {
 import { RecordEntryUseCase, ReverseEntryUseCase } from '@/application/use-cases/manage-journal'
 import {
   CancelTransferUseCase,
+  DecideTransferUseCase,
+  DefineTransferApprovalPolicyUseCase,
   PostTransferUseCase,
 } from '@/application/use-cases/manage-transfers'
 import {
@@ -28,12 +35,17 @@ import type { TreasuryEnvironment } from './environment'
 export class TreasuryRuntime implements OnModuleInit, OnModuleDestroy {
   readonly database: TreasuryDatabase
   readonly accessTokens: AccessTokenVerifier
+  readonly grantDelegation: GrantDelegationUseCase
+  readonly revokeDelegation: RevokeDelegationUseCase
+  readonly listDelegations: ListDelegationsUseCase
   readonly openAccount: OpenAccountUseCase
   readonly changeAccountStatus: ChangeAccountStatusUseCase
   readonly recordEntry: RecordEntryUseCase
   readonly reverseEntry: ReverseEntryUseCase
   readonly postTransfer: PostTransferUseCase
   readonly cancelTransfer: CancelTransferUseCase
+  readonly decideTransfer: DecideTransferUseCase
+  readonly defineTransferApprovalPolicy: DefineTransferApprovalPolicyUseCase
   readonly importStatement: ImportStatementUseCase
   readonly confirmMatch: ConfirmMatchUseCase
   readonly ignoreLines: IgnoreStatementLinesUseCase
@@ -54,12 +66,20 @@ export class TreasuryRuntime implements OnModuleInit, OnModuleDestroy {
       config.JWKS_URL,
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
     )
+    this.grantDelegation = new GrantDelegationUseCase(this.database, clock)
+    this.revokeDelegation = new RevokeDelegationUseCase(this.database, clock)
+    this.listDelegations = new ListDelegationsUseCase(this.database)
     this.openAccount = new OpenAccountUseCase(this.database, clock)
     this.changeAccountStatus = new ChangeAccountStatusUseCase(this.database, clock)
     this.recordEntry = new RecordEntryUseCase(this.database, clock)
     this.reverseEntry = new ReverseEntryUseCase(this.database, clock)
     this.postTransfer = new PostTransferUseCase(this.database, clock)
     this.cancelTransfer = new CancelTransferUseCase(this.database, clock)
+    this.decideTransfer = new DecideTransferUseCase(this.database, clock)
+    this.defineTransferApprovalPolicy = new DefineTransferApprovalPolicyUseCase(
+      this.database,
+      clock,
+    )
     this.importStatement = new ImportStatementUseCase(this.database, clock, {
       ofx: new OfxStatementAdapter(),
       csv: new CsvStatementAdapter(),

@@ -266,6 +266,10 @@ it('serializes concurrent appends and names the first link a forgery breaks', as
   const after = await verifier.execute({ tenantId })
   if (after.isLeft()) throw after.value
   expect(after.value).toMatchObject({ intact: false, verifiedThrough: 2, brokenAt: 3 })
+  // Phase 68: the read endpoint judges each page, and shows the same row as broken.
+  const page = await database.auditPage(tenantId, { limit: 50 })
+  expect(page.chain).toMatchObject({ status: 'broken', broken: [3] })
+  expect((await database.auditPage(tenantId, { limit: 2 })).chain.status).toBe('intact')
 
   const cli = await runAuditCli(tenantId)
   expect(cli.stderr).toBe('')

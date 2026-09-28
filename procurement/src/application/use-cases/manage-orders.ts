@@ -2,6 +2,8 @@ import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
+import { type ApprovalAuthority, ownAuthority } from '@/domain/controls/approval-delegation'
+import { APPROVE_ORDER } from '@/domain/controls/duties'
 import { type OrderRevision, PurchaseOrder } from '@/domain/entities/purchase-order'
 import type { PurchaseRequisition } from '@/domain/entities/purchase-requisition'
 import type { Supplier } from '@/domain/entities/supplier'
@@ -24,6 +26,7 @@ import {
   type Outcome,
   once,
 } from './commands'
+import { decideWith, onBehalfOf, resolveAuthorities } from './delegations'
 import {
   type ChargesInput,
   chargesOf,
@@ -239,7 +242,16 @@ export class DecideOrderUseCase {
       const order = await scope.orders.findForUpdate(orderId)
       if (!order) return left(new ResourceNotFoundError('purchase order was not found'))
       const now = this.clock.now()
-      const applied = await apply(scope, order, decision, context.actor, now)
+      const deciding = decision.kind === 'approve' || decision.kind === 'reject'
+      const authorities = deciding
+        ? await resolveAuthorities(scope, context, APPROVE_ORDER, now)
+        : right<never, readonly ApprovalAuthority[]>([ownAuthority(context.actor)])
+      if (authorities.isLeft()) return left(authorities.value)
+      const placement = decision.kind === 'place' ? await approvalRequired(scope, order) : false
+      const requisition = deciding ? await requisitionPerformers(scope, order) : []
+      const applied = decideWith(authorities.value, (authority) =>
+        apply(order, decision, authority, now, { placement, requisition }),
+      )
       if (applied.isLeft()) return left(applied.value)
       if (order.status === 'approved') {
         const answered = await answerRequisition(scope, order, now)
@@ -255,6 +267,7 @@ export class DecideOrderUseCase {
           total: order.total().amount.toString(),
           currency: order.currency.value,
           ...('reason' in decision ? { reason: decision.reason } : {}),
+          ...onBehalfOf(applied.value),
         },
       })
       return right({ status: order.status, approvalState: order.approvalState })
@@ -271,21 +284,33 @@ export async function approvalRequired(
   return policy === null || order.total().amount >= policy.threshold
 }
 
-async function apply(
+/** Who requested and submitted the requisition an order came from (ADR 0062). */
+async function requisitionPerformers(
   scope: ProcurementScope,
   order: PurchaseOrder,
+): Promise<readonly (string | null)[]> {
+  if (!order.requisitionId) return []
+  const requisition = await scope.requisitions.findById(order.requisitionId)
+  return requisition?.performers() ?? []
+}
+
+function apply(
+  order: PurchaseOrder,
   decision: Decision,
-  actor: string,
+  authority: ApprovalAuthority,
   now: Date,
-): Promise<Either<Failure, void>> {
+  facts: { readonly placement: boolean; readonly requisition: readonly (string | null)[] },
+): Either<Failure, void> {
   switch (decision.kind) {
     case 'place':
-      return order.place(actor, now, { approvalRequired: await approvalRequired(scope, order) })
+      return order.place(authority.actor, now, { approvalRequired: facts.placement })
     case 'approve':
-      return order.approve(actor, now)
+      return order.approve(authority, now, facts.requisition)
     case 'reject': {
       const reason = reasonOf(decision.reason)
-      return reason.isLeft() ? left(reason.value) : order.reject(actor, reason.value, now)
+      return reason.isLeft()
+        ? left(reason.value)
+        : order.reject(authority, reason.value, now, facts.requisition)
     }
     default: {
       const reason = reasonOf(decision.reason)

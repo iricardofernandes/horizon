@@ -17,7 +17,13 @@ import type { CommandContext, IdempotentContext } from '@/application/use-cases/
 import { MAX_TITLE_INSTALLMENTS, TITLE_STAGES, type TitleDirection } from '@/domain/entities/title'
 import { TITLE_VIEWS } from '@/infrastructure/database/drizzle/title-reads'
 import { FinancialRuntime } from '@/main/financial-runtime'
-import { actorOf, type FinancialRequest, RequireFinancialAction, tenantOf } from './authorization'
+import {
+  actorOf,
+  approvalsOf,
+  type FinancialRequest,
+  RequireFinancialAction,
+  tenantOf,
+} from './authorization'
 import { id, parse, unwrap } from './request-parsing'
 
 const minorUnits = z.string().regex(/^\d{1,18}$/)
@@ -80,6 +86,7 @@ function context(request: FinancialRequest): CommandContext {
     tenantId: tenantOf(request),
     actor: actorOf(request),
     requestId: typeof requestId === 'string' ? requestId.slice(0, 128) : null,
+    approvals: approvalsOf(request),
   }
 }
 
@@ -324,15 +331,16 @@ export class PayablesController extends TitlesController {
     return unwrap(await this.runtime.payableApprovals.request(context(request), id(titleId)))
   }
 
+  // Any Financial role reaches the decision: an approval may be delegated (ADR 0062).
   @Post(':id/approve')
-  @RequireFinancialAction('approve')
+  @RequireFinancialAction('read')
   @HttpCode(200)
   async approve(@Param('id') titleId: string, @Req() request: FinancialRequest) {
     return unwrap(await this.runtime.payableApprovals.approve(context(request), id(titleId)))
   }
 
   @Post(':id/reject')
-  @RequireFinancialAction('approve')
+  @RequireFinancialAction('read')
   @HttpCode(200)
   async reject(
     @Param('id') titleId: string,

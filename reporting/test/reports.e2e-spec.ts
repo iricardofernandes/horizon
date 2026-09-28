@@ -443,6 +443,16 @@ describe('settled cutoffs and reconciliation runs', () => {
     )
     await expect(administrator`delete from reconciliation_runs`).rejects.toThrow(/append-only/)
     await expect(administrator`update audit_log set actor = 'x'`).rejects.toThrow(/append-only/)
+    // Phase 68: the audit read endpoint judges each page, and a tampered row shows.
+    expect((await database.auditPage(tenantId, { limit: 50 })).chain.status).toBe('intact')
+    await administrator.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`update audit_log set actor = 'someone else' where tenant_id = ${tenantId} and action = 'reconciliation.run'`
+    })
+    expect((await database.auditPage(tenantId, { limit: 50 })).chain).toMatchObject({
+      status: 'broken',
+      broken: [Number(link?.sequence)],
+    })
   })
 })
 

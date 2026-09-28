@@ -56,6 +56,16 @@ that names a treasury account becomes, or stops being, that account's journal en
 settlement the account cannot take is recorded as refused with its reason. Every command that moves money requires an `Idempotency-Key`
 header (ADR 0028), and every command is written to a per-tenant hash-chained audit log.
 
+## Segregation of duties, delegation and audit (Phase 68)
+
+- **Pairs** (ADR 0062): the `treasury.transfer` pair: a transfer at or above the threshold set with `PUT /approval-policies` waits with no legs, and whoever asked for it never decides it (`POST /transfers/{id}/approve` or `/reject`). A refusal is `403` with the code `segregation-of-duties`.
+- **Delegation:** an approver (admin) lends `treasury:transfer:approve` to a member of the module for up to 90
+  days, through `POST /delegations`; `GET /delegations` lists them and
+  `POST /delegations/{id}/revoke` ends one. A decision through a delegation records both
+  names, and is refused when either did the work.
+- **Audit:** `GET /audit` reads the log a page at a time, filtered by actor, action, record
+  and period, with the hash chain judged on the page. Admins only.
+
 ## Authorization
 
 | Role | Reads | Records entries, transfers, imports and reconciliations | Reverses, cancels and undoes | Opens accounts, closes and reopens periods |

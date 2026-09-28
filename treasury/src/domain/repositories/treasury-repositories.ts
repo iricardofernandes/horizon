@@ -22,6 +22,18 @@ export abstract class JournalRepository {
   abstract append(entries: readonly JournalEntry[]): Promise<void>
 }
 
+/** At or above the threshold, a transfer in this currency waits for a second person. */
+export interface TransferApprovalPolicy {
+  readonly currency: string
+  readonly threshold: bigint
+  readonly updatedAt: Date
+}
+
+export abstract class TransferApprovalPoliciesRepository {
+  abstract find(currency: string): Promise<TransferApprovalPolicy | null>
+  abstract save(policy: TransferApprovalPolicy): Promise<void>
+}
+
 export abstract class TransfersRepository {
   abstract findForUpdate(id: string): Promise<Transfer | null>
   abstract create(transfer: Transfer): Promise<void>

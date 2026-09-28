@@ -3,7 +3,9 @@ import { canonicalJson } from '@/core/audit/canonical-json'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import type { NotAllowedError } from '@/core/errors/errors/not-allowed-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
+import type { SegregationOfDutiesError } from '@/core/errors/errors/segregation-of-duties-error'
 import type { SettlementInput, TitleDirection, TitleTerms } from '@/domain/entities/title'
 import type { AllocationEntry } from '@/domain/value-objects/allocation'
 import { BusinessDate, Currency, Money, Share } from '@/domain/value-objects/financial-values'
@@ -15,6 +17,11 @@ export interface CommandContext {
   readonly tenantId: string
   readonly actor: string
   readonly requestId: string | null
+  /**
+   * The approvals the person holds through their own role (ADR 0062). Anything else they
+   * decide takes an active delegation.
+   */
+  readonly approvals?: readonly string[]
 }
 
 export interface IdempotentContext extends CommandContext {
@@ -46,7 +53,12 @@ export interface SettlementRequest {
   readonly treasuryAccountId?: string | null | undefined
 }
 
-export type Failure = InvalidInputError | ConflictError | ResourceNotFoundError
+export type Failure =
+  | InvalidInputError
+  | ConflictError
+  | ResourceNotFoundError
+  | NotAllowedError
+  | SegregationOfDutiesError
 
 export function fingerprintOf(command: string, request: unknown): string {
   return createHash('sha256').update(canonicalJson({ command, request })).digest('hex')

@@ -90,6 +90,16 @@ Every command that creates a document requires an `Idempotency-Key` header (ADR 
 decision on a document that already exists does not, because repeating one is refused by
 the document's own state. Every command is written to a per-tenant hash-chained audit log.
 
+## Segregation of duties, delegation and audit (Phase 68)
+
+- **Pairs** (ADR 0062): three pairs: `procurement.requisition`, `procurement.order` and `procurement.requisition-order` — whoever requested, submitted or placed never decides, nor approves the order made from their requisition. A refusal is `403` with the code `segregation-of-duties`.
+- **Delegation:** an approver (admin and approver) lends `procurement:requisition:approve` and `procurement:order:approve` to a member of the module for up to 90
+  days, through `POST /delegations`; `GET /delegations` lists them and
+  `POST /delegations/{id}/revoke` ends one. A decision through a delegation records both
+  names, and is refused when either did the work.
+- **Audit:** `GET /audit` reads the log a page at a time, filtered by actor, action, record
+  and period, with the hash chain judged on the page. Admins only.
+
 ## Authorization
 
 | Role | Reads | Writes and places | Decides | Sets thresholds |

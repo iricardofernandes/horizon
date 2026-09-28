@@ -1,5 +1,6 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
+import { AuditController } from '@/infrastructure/http/audit.controller'
 import { SalesAuthGuard } from '@/infrastructure/http/authorization'
 import { BillingController } from '@/infrastructure/http/billing.controller'
 import { ContractsController } from '@/infrastructure/http/contracts.controller'
@@ -70,7 +71,7 @@ export class AppModule {
     }
     return {
       module: AppModule,
-      controllers: [SalesController, ContractsController, BillingController],
+      controllers: [SalesController, ContractsController, BillingController, AuditController],
       providers,
       exports: [SalesRuntime],
     }

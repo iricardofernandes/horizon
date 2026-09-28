@@ -1,5 +1,6 @@
 import type { Either } from '@/core/either'
 import type { ConflictError } from '@/core/errors/errors/conflict-error'
+import type { DelegationsRepository } from '@/domain/controls/delegations-repository'
 import type {
   AccountsRepository,
   ClosuresRepository,
@@ -7,6 +8,7 @@ import type {
   ReconciliationsRepository,
   SettlementPostingsRepository,
   StatementsRepository,
+  TransferApprovalPoliciesRepository,
   TransfersRepository,
 } from '@/domain/repositories/treasury-repositories'
 
@@ -15,6 +17,8 @@ export interface AuditRecord {
   readonly actor: string
   readonly action: string
   readonly subjectType:
+    | 'delegation'
+    | 'policy'
     | 'account'
     | 'entry'
     | 'transfer'
@@ -36,10 +40,12 @@ export interface TreasuryScope {
   readonly accounts: AccountsRepository
   readonly journal: JournalRepository
   readonly transfers: TransfersRepository
+  readonly transferPolicies: TransferApprovalPoliciesRepository
   readonly statements: StatementsRepository
   readonly reconciliations: ReconciliationsRepository
   readonly closures: ClosuresRepository
   readonly settlements: SettlementPostingsRepository
+  readonly delegations: DelegationsRepository
   readonly audit: AuditTrail
   /** Serializes reconciliation work on one account for the rest of the transaction. */
   lockAccount(accountId: string): Promise<void>

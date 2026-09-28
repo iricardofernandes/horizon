@@ -2,6 +2,7 @@ import type { AccountMapping, PostingChart, PostingRole } from '../entities/acco
 import type { AccountingPeriod } from '../entities/accounting-period'
 import type { JournalTransaction } from '../entities/journal-transaction'
 import type { LedgerAccount } from '../entities/ledger-account'
+import type { ManualEntry } from '../entities/manual-entry'
 import type { Fact } from '../services/posting-rules'
 
 export abstract class LedgerAccountsRepository {
@@ -72,4 +73,22 @@ export abstract class PostingFactsRepository {
     },
   ): Promise<void>
   abstract pending(limit: number): Promise<readonly PostingFactRecord[]>
+}
+
+/** At or above the threshold, a manual entry in this currency waits for a second person. */
+export interface EntryApprovalPolicy {
+  readonly currency: string
+  readonly threshold: bigint
+  readonly updatedAt: Date
+}
+
+export abstract class EntryApprovalPoliciesRepository {
+  abstract find(currency: string): Promise<EntryApprovalPolicy | null>
+  abstract save(policy: EntryApprovalPolicy): Promise<void>
+}
+
+export abstract class ManualEntriesRepository {
+  abstract findForUpdate(id: string): Promise<ManualEntry | null>
+  abstract create(entry: ManualEntry): Promise<void>
+  abstract save(entry: ManualEntry): Promise<void>
 }

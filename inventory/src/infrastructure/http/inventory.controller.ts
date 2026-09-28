@@ -292,7 +292,7 @@ export class InventoryController {
   }
 
   @Patch('stock-adjustments/:id/approve')
-  @RequireInventoryAction('approve')
+  @RequireInventoryAction('read')
   async approveAdjustment(@Param('id') adjustmentId: string, @Req() request: InventoryRequest) {
     return unwrap(
       await this.runtime.decideAdjustment.execute({
@@ -304,7 +304,7 @@ export class InventoryController {
   }
 
   @Patch('stock-adjustments/:id/reject')
-  @RequireInventoryAction('approve')
+  @RequireInventoryAction('read')
   async rejectAdjustment(
     @Param('id') adjustmentId: string,
     @Body() body: unknown,
@@ -380,7 +380,7 @@ export class InventoryController {
   }
 
   @Patch('stock-counts/:id/approve')
-  @RequireInventoryAction('approve')
+  @RequireInventoryAction('read')
   async approveCount(@Param('id') countId: string, @Req() request: InventoryRequest) {
     return unwrap(
       await this.runtime.decideCount.execute({
@@ -392,7 +392,7 @@ export class InventoryController {
   }
 
   @Patch('stock-counts/:id/reject')
-  @RequireInventoryAction('approve')
+  @RequireInventoryAction('read')
   async rejectCount(
     @Param('id') countId: string,
     @Body() body: unknown,

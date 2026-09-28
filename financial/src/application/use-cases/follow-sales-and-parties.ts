@@ -98,6 +98,7 @@ async function raise(
       allocations: [],
     },
     stage,
+    createdBy: SALES_ACTOR,
     now,
   })
   if (title.isLeft()) return left(title.value)

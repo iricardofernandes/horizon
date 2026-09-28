@@ -2,6 +2,11 @@ import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { ProcurementModuleEventHandlers } from '@/application/consume-module-events'
 import { DefineApprovalPolicyUseCase } from '@/application/use-cases/define-policies'
 import {
+  GrantDelegationUseCase,
+  ListDelegationsUseCase,
+  RevokeDelegationUseCase,
+} from '@/application/use-cases/delegations'
+import {
   DecideOrderUseCase,
   DraftOrderFromQuotationUseCase,
   DraftOrderUseCase,
@@ -30,6 +35,9 @@ import type { ProcurementEnvironment } from './environment'
 export class ProcurementRuntime implements OnModuleInit, OnModuleDestroy {
   readonly database: ProcurementDatabase
   readonly accessTokens: AccessTokenVerifier
+  readonly grantDelegation: GrantDelegationUseCase
+  readonly revokeDelegation: RevokeDelegationUseCase
+  readonly listDelegations: ListDelegationsUseCase
   readonly openRequisition: OpenRequisitionUseCase
   readonly reviseRequisition: ReviseRequisitionUseCase
   readonly decideRequisition: DecideRequisitionUseCase
@@ -57,6 +65,9 @@ export class ProcurementRuntime implements OnModuleInit, OnModuleDestroy {
       config.JWKS_URL,
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
     )
+    this.grantDelegation = new GrantDelegationUseCase(this.database, clock)
+    this.revokeDelegation = new RevokeDelegationUseCase(this.database, clock)
+    this.listDelegations = new ListDelegationsUseCase(this.database)
     this.openRequisition = new OpenRequisitionUseCase(this.database, clock)
     this.reviseRequisition = new ReviseRequisitionUseCase(this.database, clock)
     this.decideRequisition = new DecideRequisitionUseCase(this.database, clock)

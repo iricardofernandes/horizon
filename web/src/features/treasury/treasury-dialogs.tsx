@@ -153,6 +153,7 @@ export function TransferDialog({
       onDone={onDone}
       submitLabel={t('transfer')}
       success={t('transferred')}
+      pending={t('transferPending')}
       title={t('newTransfer')}
       trigger={
         <>

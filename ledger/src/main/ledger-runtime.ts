@@ -1,6 +1,15 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { LedgerModuleEventHandlers } from '@/application/consume-module-events'
 import {
+  DecideManualEntryUseCase,
+  DefineEntryApprovalPolicyUseCase,
+} from '@/application/use-cases/approve-entries'
+import {
+  GrantDelegationUseCase,
+  ListDelegationsUseCase,
+  RevokeDelegationUseCase,
+} from '@/application/use-cases/delegations'
+import {
   ChangeAccountStatusUseCase,
   OpenAccountUseCase,
 } from '@/application/use-cases/manage-chart'
@@ -19,10 +28,15 @@ import type { LedgerEnvironment } from './environment'
 export class LedgerRuntime implements OnModuleInit, OnModuleDestroy {
   readonly database: LedgerDatabase
   readonly accessTokens: AccessTokenVerifier
+  readonly grantDelegation: GrantDelegationUseCase
+  readonly revokeDelegation: RevokeDelegationUseCase
+  readonly listDelegations: ListDelegationsUseCase
   readonly openAccount: OpenAccountUseCase
   readonly changeAccountStatus: ChangeAccountStatusUseCase
   readonly postTransaction: PostTransactionUseCase
   readonly reverseTransaction: ReverseTransactionUseCase
+  readonly decideManualEntry: DecideManualEntryUseCase
+  readonly defineEntryApprovalPolicy: DefineEntryApprovalPolicyUseCase
   readonly closePeriod: ClosePeriodUseCase
   readonly reopenPeriod: ReopenPeriodUseCase
   readonly defineMapping: DefineAccountMappingUseCase
@@ -40,10 +54,15 @@ export class LedgerRuntime implements OnModuleInit, OnModuleDestroy {
       config.JWKS_URL,
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
     )
+    this.grantDelegation = new GrantDelegationUseCase(this.database, clock)
+    this.revokeDelegation = new RevokeDelegationUseCase(this.database, clock)
+    this.listDelegations = new ListDelegationsUseCase(this.database)
     this.openAccount = new OpenAccountUseCase(this.database, clock)
     this.changeAccountStatus = new ChangeAccountStatusUseCase(this.database, clock)
     this.postTransaction = new PostTransactionUseCase(this.database, clock)
     this.reverseTransaction = new ReverseTransactionUseCase(this.database, clock)
+    this.decideManualEntry = new DecideManualEntryUseCase(this.database, clock)
+    this.defineEntryApprovalPolicy = new DefineEntryApprovalPolicyUseCase(this.database, clock)
     this.closePeriod = new ClosePeriodUseCase(this.database, clock)
     this.reopenPeriod = new ReopenPeriodUseCase(this.database, clock)
     this.defineMapping = new DefineAccountMappingUseCase(this.database, clock)

@@ -1,6 +1,7 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { LedgerAuthGuard } from '@/infrastructure/http/authorization'
+import { AuditController, DelegationsController } from '@/infrastructure/http/controls.controller'
 import { LedgerController } from '@/infrastructure/http/ledger.controller'
 import { JournalSealWorker } from '@/infrastructure/messaging/journal-replay'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
@@ -57,7 +58,7 @@ export class AppModule {
     }
     return {
       module: AppModule,
-      controllers: [LedgerController],
+      controllers: [LedgerController, DelegationsController, AuditController],
       providers,
       exports: [LedgerRuntime],
     }

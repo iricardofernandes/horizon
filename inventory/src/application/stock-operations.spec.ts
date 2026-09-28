@@ -19,7 +19,12 @@ const clock = { now: () => now }
 const KEEPER = 'user-keeper'
 const MANAGER = 'user-manager'
 
-const context = (tenantId: string, actor = KEEPER) => ({ tenantId, actor, requestId: null })
+const context = (tenantId: string, actor = KEEPER) => ({
+  tenantId,
+  actor,
+  requestId: null,
+  approvals: ['inventory:adjustment:approve', 'inventory:count:approve'],
+})
 const idempotent = (tenantId: string, key: string, actor = KEEPER) => ({
   ...context(tenantId, actor),
   idempotencyKey: key,

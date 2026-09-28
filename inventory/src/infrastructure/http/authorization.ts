@@ -6,13 +6,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import type { Reflector } from '@nestjs/core'
+import { DELEGABLE_PERMISSIONS } from '@/domain/controls/duties'
 import type { AccessClaims } from '@/infrastructure/cryptography/access-token-verifier'
 import type { InventoryRuntime } from '@/main/inventory-runtime'
 
 const PUBLIC = 'inventory:public'
 const ACTION = 'inventory:action'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
-export type InventoryAction = 'read' | 'manage' | 'approve' | 'import'
+export type InventoryAction = 'read' | 'manage' | 'approve' | 'import' | 'audit'
 export const RequireInventoryAction = (action: InventoryAction) => SetMetadata(ACTION, action)
 
 export interface InventoryRequest {
@@ -28,6 +29,29 @@ export function tenantOf(request: InventoryRequest): string {
 export function actorOf(request: InventoryRequest): string {
   if (!request.principal) throw new UnauthorizedException()
   return request.principal.subject
+}
+
+/**
+ * An operator moves stock; allowing a write-off, loading opening balances in bulk (Phase 64)
+ * and reading the audit log (Phase 68) take an admin. An admin can do both, which is
+ * deliberate — the four-eyes rule is about who a person is, not what they may do, and it is
+ * the aggregate and the table that refuse one's own approval (ADR 0062).
+ */
+function permits(principal: AccessClaims | undefined, action: InventoryAction): boolean {
+  return (
+    principal?.roles.some(
+      (assignment) =>
+        assignment.module === 'inventory' &&
+        (assignment.role === 'admin' ||
+          (action === 'read' && ['operator', 'viewer'].includes(assignment.role)) ||
+          (action === 'manage' && assignment.role === 'operator')),
+    ) ?? false
+  )
+}
+
+/** The approvals the person holds through an Inventory role (ADR 0062). */
+export function approvalsOf(request: InventoryRequest): readonly string[] {
+  return permits(request.principal, 'approve') ? DELEGABLE_PERMISSIONS : []
 }
 
 export class InventoryAuthGuard implements CanActivate {
@@ -50,18 +74,8 @@ export class InventoryAuthGuard implements CanActivate {
     }
     const action = this.reflector.getAllAndOverride<InventoryAction>(ACTION, targets)
     if (!action) return true
-    // An operator moves stock; allowing a write-off, or loading opening balances in bulk
-    // (Phase 64), takes an admin. An admin can do both,
-    // which is deliberate — the four-eyes rule is about who a person is, not what they
-    // may do, and it is the aggregate and the table that refuse one's own approval.
-    const allowed = request.principal.roles.some(
-      (assignment) =>
-        assignment.module === 'inventory' &&
-        (assignment.role === 'admin' ||
-          (action === 'read' && ['operator', 'viewer'].includes(assignment.role)) ||
-          (action === 'manage' && assignment.role === 'operator')),
-    )
-    if (!allowed) throw new ForbiddenException('The Inventory role does not permit this operation')
+    if (!permits(request.principal, action))
+      throw new ForbiddenException('The Inventory role does not permit this operation')
     return true
   }
 }

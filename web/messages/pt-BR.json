@@ -590,7 +590,8 @@
       "crmSettings": "Configurações do CRM",
       "imports": "Importações",
       "jobs": "Central de jobs",
-      "security": "Segurança"
+      "security": "Segurança",
+      "audit": "Auditoria"
     }
   },
   "orders": {
@@ -1452,7 +1453,8 @@
     "transferred": "Transferência lançada.",
     "transfers": "Transferências",
     "transfersCopy": "Dinheiro movido entre contas. Uma transferência cancelada mantém suas pernas e ganha lançamentos inversos.",
-    "valueOn": "Data-valor"
+    "valueOn": "Data-valor",
+    "transferPending": "Transferência registrada. Ela aguarda a aprovação de outra pessoa."
   },
   "webhooks": {
     "activeCount": "{count} ativos",
@@ -2841,5 +2843,41 @@
     "mismatch": "As senhas não conferem.",
     "wrongPassword": "Essa não é a senha da sua conta.",
     "failed": "Não foi possível aceitar o convite."
+  },
+  "audit": {
+    "eyebrow": "Administração",
+    "title": "Auditoria",
+    "copy": "Quem fez o quê, e quando, em todos os módulos que você administra. Cada módulo confere a própria cadeia de hashes; uma linha adulterada aparece como quebrada.",
+    "failed": "Não foi possível carregar os registros de auditoria.",
+    "noneReadable": "Você não administra nenhum módulo com registro de auditoria.",
+    "silent": "Não responderam a tempo: {modules}.",
+    "filtersTitle": "Busca",
+    "filtersCopy": "Filtre por módulo, pessoa, ação, registro e período.",
+    "module": "Módulo",
+    "allModules": "Todos os módulos",
+    "actor": "Pessoa",
+    "action": "Ação",
+    "subjectType": "Tipo de registro",
+    "subjectId": "Id do registro",
+    "from": "De",
+    "to": "Até",
+    "search": "Buscar",
+    "export": "Exportar CSV",
+    "exportHint": "Todas as linhas encontradas, até 50.000, com o veredito da cadeia de cada módulo.",
+    "chainTitle": "Cadeias de hashes",
+    "chainCopy": "Cada módulo recalcula cada linha que devolveu e confere os elos com as linhas vizinhas.",
+    "intact": "íntegra ({rows} conferidas)",
+    "broken": "quebrada em {rows}",
+    "listTitle": "Registros",
+    "listCopy": "Mais recentes primeiro, juntando os módulos.",
+    "empty": "Nada encontrado.",
+    "more": "Carregar mais",
+    "when": "Quando",
+    "record": "Registro",
+    "details": "Detalhes",
+    "chain": "Cadeia",
+    "sealed": "Dados pessoais lacrados",
+    "onBehalfOf": "em nome de",
+    "rowBroken": "#{sequence} quebrada"
   }
 }

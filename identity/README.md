@@ -281,3 +281,10 @@ The e2e suite uses isolated containers, including a non-superuser migration owne
 application role. It verifies RLS, concurrent mutations, inbox duplicate delivery,
 ciphertext-preserving erasure, the audit CLI, concurrent relays, unroutable publication,
 durable trace propagation, refresh CAS, idempotency and the HTTP authentication flow.
+
+## Audit log (Phase 68)
+
+`GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered
+by actor, action, record and period. Every page carries the chain's verdict: each row is
+recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
+owners and admins; the web's audit screen asks it alongside every other module.

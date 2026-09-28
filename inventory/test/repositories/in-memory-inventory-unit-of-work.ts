@@ -9,6 +9,7 @@ import { AuditTrail, InventoryUnitOfWork } from '@/application/ports/unit-of-wor
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DomainEvent } from '@/core/events/domain-event'
+import type { ApprovalDelegation } from '@/domain/controls/approval-delegation'
 import { outstandingByItem } from '@/domain/entities/lot-book'
 import type { ProductionOrder } from '@/domain/entities/production-order'
 import type { StockAdjustment } from '@/domain/entities/stock-adjustment'
@@ -40,6 +41,7 @@ import {
   WarehousesRepository,
 } from '@/domain/repositories/inventory-repositories'
 import type { SerialNumber } from '@/domain/value-objects/tracking'
+import { InMemoryDelegations } from './in-memory-delegations'
 
 class InMemoryBalances extends StockBalancesRepository {
   constructor(
@@ -461,6 +463,7 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
   readonly compositionsHeard: { tenantId: string; composition: ItemComposition }[] = []
   readonly productionOrders: ProductionOrder[] = []
   readonly auditRecords: AuditRecord[] = []
+  readonly delegationRecords: ApprovalDelegation[] = []
   readonly receipts = new Map<string, { receipt: CommandReceipt; response: unknown }>()
   readonly events: DomainEvent[] = []
   readonly provisionedTenants = new Set<string>()
@@ -488,6 +491,7 @@ export class InMemoryInventoryUnitOfWork extends InventoryUnitOfWork {
       policies: new InMemoryPolicies(tenantId, this.policies),
       levels: new InMemoryLevels(tenantId, this.levels),
       events: new InMemoryEvents(tenantId, this.events),
+      delegations: new InMemoryDelegations(this.delegationRecords),
       audit: new InMemoryAudit(this.auditRecords),
     })
   }

@@ -590,7 +590,8 @@
       "crmSettings": "CRM settings",
       "imports": "Imports",
       "jobs": "Job centre",
-      "security": "Security"
+      "security": "Security",
+      "audit": "Audit"
     }
   },
   "orders": {
@@ -1452,7 +1453,8 @@
     "transferred": "Transfer posted.",
     "transfers": "Transfers",
     "transfersCopy": "Money moved between accounts. A cancelled transfer keeps its legs and adds inverse entries.",
-    "valueOn": "Value date"
+    "valueOn": "Value date",
+    "transferPending": "Transfer recorded. It waits for a second person to approve it."
   },
   "webhooks": {
     "activeCount": "{count} active",
@@ -2841,5 +2843,41 @@
     "mismatch": "The passwords do not match.",
     "wrongPassword": "That is not your account's password.",
     "failed": "The invitation could not be accepted."
+  },
+  "audit": {
+    "eyebrow": "Administration",
+    "title": "Audit",
+    "copy": "Who did what, and when, across every module you administer. Each module checks its own hash chain; a tampered row shows as broken.",
+    "failed": "The audit logs could not be loaded.",
+    "noneReadable": "You administer no module with an audit log.",
+    "silent": "Did not answer in time: {modules}.",
+    "filtersTitle": "Search",
+    "filtersCopy": "Narrow by module, person, action, record and period.",
+    "module": "Module",
+    "allModules": "All modules",
+    "actor": "Person",
+    "action": "Action",
+    "subjectType": "Record type",
+    "subjectId": "Record id",
+    "from": "From",
+    "to": "To",
+    "search": "Search",
+    "export": "Export CSV",
+    "exportHint": "Every matching row, up to 50,000, with each module's chain verdict.",
+    "chainTitle": "Hash chains",
+    "chainCopy": "Each module recomputes every row it returned and checks its links to the rows around it.",
+    "intact": "intact ({rows} checked)",
+    "broken": "broken at {rows}",
+    "listTitle": "Entries",
+    "listCopy": "Newest first, merged across modules.",
+    "empty": "Nothing matches.",
+    "more": "Load more",
+    "when": "When",
+    "record": "Record",
+    "details": "Details",
+    "chain": "Chain",
+    "sealed": "Sealed personal data",
+    "onBehalfOf": "on behalf of",
+    "rowBroken": "#{sequence} broken"
   }
 }

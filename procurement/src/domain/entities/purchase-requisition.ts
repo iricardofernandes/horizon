@@ -3,6 +3,8 @@ import { AggregateRoot } from '@/core/entities/aggregate-root'
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import type { SegregationOfDutiesError } from '@/core/errors/errors/segregation-of-duties-error'
+import { type ApprovalAuthority, checkDuties } from '../controls/approval-delegation'
 import { ProcurementEvent, quantityPayload } from '../events/procurement-events'
 import type {
   BusinessDate,
@@ -32,6 +34,8 @@ export interface RequisitionLine {
 
 export interface RequisitionDecision {
   readonly by: string
+  /** The approver who lent the decision, when it was taken through a delegation. */
+  readonly for: string | null
   readonly at: Date
   readonly reason: Reason | null
 }
@@ -181,12 +185,19 @@ export class PurchaseRequisition extends AggregateRoot<RequisitionProps> {
     return right(undefined)
   }
 
-  /** Four eyes: whoever submitted the requisition cannot be the one who approves it. */
-  approve(actor: string, now: Date): Either<ConflictError, void> {
-    const decidable = this.decidable(actor)
+  /**
+   * Four eyes (ADR 0062): whoever requested or submitted the requisition cannot decide it,
+   * in person or through a delegation lent by either of them.
+   */
+  approve(
+    authority: ApprovalAuthority,
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
+    const decidable = this.decidable(authority)
     if (decidable.isLeft()) return decidable
+    const actor = authority.actor
     this.props.status = 'approved'
-    this.props.decision = { by: actor, at: now, reason: null }
+    this.props.decision = { by: actor, for: authority.onBehalfOf, at: now, reason: null }
     this.advance(now)
     this.addDomainEvent(
       this.event('procurement.requisition.approved', now, {
@@ -197,11 +208,16 @@ export class PurchaseRequisition extends AggregateRoot<RequisitionProps> {
     return right(undefined)
   }
 
-  reject(actor: string, reason: Reason, now: Date): Either<ConflictError, void> {
-    const decidable = this.decidable(actor)
+  reject(
+    authority: ApprovalAuthority,
+    reason: Reason,
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
+    const decidable = this.decidable(authority)
     if (decidable.isLeft()) return decidable
+    const actor = authority.actor
     this.props.status = 'rejected'
-    this.props.decision = { by: actor, at: now, reason }
+    this.props.decision = { by: actor, for: authority.onBehalfOf, at: now, reason }
     this.advance(now)
     this.addDomainEvent(
       this.event('procurement.requisition.rejected', now, {
@@ -246,6 +262,7 @@ export class PurchaseRequisition extends AggregateRoot<RequisitionProps> {
     submittedBy: string | null
     submittedAt: Date | null
     decidedBy: string | null
+    decidedFor: string | null
     decidedAt: Date | null
     decisionReason: string | null
     orderId: string | null
@@ -271,6 +288,7 @@ export class PurchaseRequisition extends AggregateRoot<RequisitionProps> {
       submittedBy: this.props.submittedBy,
       submittedAt: this.props.submittedAt,
       decidedBy: this.props.decision?.by ?? null,
+      decidedFor: this.props.decision?.for ?? null,
       decidedAt: this.props.decision?.at ?? null,
       decisionReason: this.props.decision?.reason?.value ?? null,
       orderId: this.props.orderId,
@@ -287,12 +305,22 @@ export class PurchaseRequisition extends AggregateRoot<RequisitionProps> {
     })
   }
 
-  private decidable(actor: string): Either<ConflictError, void> {
+  /** Who did the work being decided: one side of the requisition pairs (ADR 0062). */
+  performers(): readonly (string | null)[] {
+    return [this.props.requestedBy, this.props.submittedBy]
+  }
+
+  private decidable(
+    authority: ApprovalAuthority,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
     if (this.props.status !== 'submitted')
       return left(new ConflictError('there is no submitted requisition to decide'))
-    if (this.props.submittedBy === actor)
-      return left(new ConflictError('the person who submitted the requisition cannot decide it'))
-    return right(undefined)
+    return checkDuties(
+      'procurement.requisition',
+      this.performers(),
+      authority,
+      'the person who requested or submitted the requisition cannot decide it',
+    )
   }
 
   private event(

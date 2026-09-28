@@ -1,6 +1,8 @@
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
+import { type ApprovalAuthority, ownAuthority } from '@/domain/controls/approval-delegation'
+import { APPROVE_COUNT } from '@/domain/controls/duties'
 import { unitsOf } from '@/domain/entities/serial-book'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import { StockCount, type Variance } from '@/domain/entities/stock-count'
@@ -19,6 +21,7 @@ import {
   type Outcome,
   once,
 } from './commands'
+import { decideWith, onBehalfOf, resolveAuthorities } from './delegations'
 import { noteOf, quantityOf, worthOf } from './inputs'
 import { openBalance } from './manage-inventory'
 
@@ -216,7 +219,14 @@ export class DecideStockCountUseCase {
       const count = await scope.counts.findById(request.countId)
       if (!count) return left(new ResourceNotFoundError('count was not found'))
       const now = this.clock.now()
-      const decided = decide(count, decision, reason, context.actor, now)
+      const authorities =
+        decision.kind === 'cancel'
+          ? right<never, readonly ApprovalAuthority[]>([ownAuthority(context.actor)])
+          : await resolveAuthorities(scope, context, APPROVE_COUNT, now)
+      if (authorities.isLeft()) return left(authorities.value)
+      const decided = decideWith(authorities.value, (authority) =>
+        decide(count, decision, reason, authority, now),
+      )
       if (decided.isLeft()) return left(decided.value)
 
       const posted = await post(scope, count, now)
@@ -232,6 +242,7 @@ export class DecideStockCountUseCase {
           closedBy: count.closedBy(),
           status: count.status(),
           ...(reason ? { reason: reason.value } : {}),
+          ...onBehalfOf(decided.value),
         },
       })
       return right({ status: count.status(), approvalState: count.approvalState() })
@@ -243,12 +254,14 @@ function decide(
   count: StockCount,
   decision: CountDecision,
   reason: Note | null,
-  actor: string,
+  authority: ApprovalAuthority,
   now: Date,
 ): Either<Failure, void> {
-  if (decision.kind === 'approve') return count.approve(actor, now)
+  if (decision.kind === 'approve') return count.approve(authority, now)
   if (!reason) return left(new ConflictError('this decision needs a reason'))
-  return decision.kind === 'reject' ? count.reject(actor, reason, now) : count.cancel(reason, now)
+  return decision.kind === 'reject'
+    ? count.reject(authority, reason, now)
+    : count.cancel(reason, now)
 }
 
 /** What the differences are worth, at the cost the goods carry right now. */

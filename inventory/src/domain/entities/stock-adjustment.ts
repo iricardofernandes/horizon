@@ -2,6 +2,8 @@ import { type Either, left, right } from '@/core/either'
 import { AggregateRoot } from '@/core/entities/aggregate-root'
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import type { SegregationOfDutiesError } from '@/core/errors/errors/segregation-of-duties-error'
+import { type ApprovalAuthority, checkDuties } from '../controls/approval-delegation'
 import type { Money, Note, Quantity } from '../value-objects/inventory-values'
 import { type AdjustmentReason, reasonAdmits } from '../value-objects/movement-origin'
 import type { LotCode, SerialNumber } from '../value-objects/tracking'
@@ -47,6 +49,8 @@ interface StockAdjustmentProps {
   requestedBy: string
   requestedAt: Date
   decidedBy: string | null
+  /** The approver who lent the decision, when it was taken through a delegation. */
+  decidedFor: string | null
   decidedAt: Date | null
   decisionReason: Note | null
   postedAt: Date | null
@@ -117,6 +121,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
           requestedBy: props.requestedBy,
           requestedAt: props.now,
           decidedBy: null,
+          decidedFor: null,
           decidedAt: null,
           decisionReason: null,
           postedAt: props.approvalRequired ? null : props.now,
@@ -127,29 +132,51 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
     )
   }
 
-  /** Allowing somebody else's write-off. Allowing your own is not an approval. */
-  approve(actor: string, now: Date): Either<ConflictError, void> {
+  /**
+   * Allowing somebody else's write-off. Allowing your own is not an approval, in person or
+   * through a delegation you lent (ADR 0062).
+   */
+  approve(
+    authority: ApprovalAuthority,
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
     if (this.props.approvalState !== 'pending')
       return left(new ConflictError('this adjustment is not waiting for a decision'))
-    if (actor === this.props.requestedBy)
-      return left(new ConflictError('the person who asked for an adjustment cannot allow it'))
+    const allowed = checkDuties(
+      'inventory.adjustment',
+      [this.props.requestedBy],
+      authority,
+      'the person who asked for an adjustment cannot allow it',
+    )
+    if (allowed.isLeft()) return allowed
     this.props.approvalState = 'approved'
     this.props.status = 'posted'
-    this.props.decidedBy = actor
+    this.props.decidedBy = authority.actor
+    this.props.decidedFor = authority.onBehalfOf
     this.props.decidedAt = now
     this.props.postedAt = now
     this.props.updatedAt = now
     return right(undefined)
   }
 
-  reject(actor: string, reason: Note, now: Date): Either<ConflictError, void> {
+  reject(
+    authority: ApprovalAuthority,
+    reason: Note,
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
     if (this.props.approvalState !== 'pending')
       return left(new ConflictError('this adjustment is not waiting for a decision'))
-    if (actor === this.props.requestedBy)
-      return left(new ConflictError('the person who asked for an adjustment cannot refuse it'))
+    const allowed = checkDuties(
+      'inventory.adjustment',
+      [this.props.requestedBy],
+      authority,
+      'the person who asked for an adjustment cannot refuse it',
+    )
+    if (allowed.isLeft()) return allowed
     this.props.approvalState = 'rejected'
     this.props.status = 'rejected'
-    this.props.decidedBy = actor
+    this.props.decidedBy = authority.actor
+    this.props.decidedFor = authority.onBehalfOf
     this.props.decidedAt = now
     this.props.decisionReason = reason
     this.props.updatedAt = now
@@ -231,6 +258,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
     requestedBy: string
     requestedAt: Date
     decidedBy: string | null
+    decidedFor: string | null
     decidedAt: Date | null
     decisionReason: string | null
     postedAt: Date | null
@@ -256,6 +284,7 @@ export class StockAdjustment extends AggregateRoot<StockAdjustmentProps> {
       requestedBy: this.props.requestedBy,
       requestedAt: this.props.requestedAt,
       decidedBy: this.props.decidedBy,
+      decidedFor: this.props.decidedFor,
       decidedAt: this.props.decidedAt,
       decisionReason: this.props.decisionReason?.value ?? null,
       postedAt: this.props.postedAt,

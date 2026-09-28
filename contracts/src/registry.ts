@@ -7,6 +7,11 @@ import {
   attachmentLinkSchema,
   attachmentRequestSchema,
   attachmentSchema,
+  auditChainSchema,
+  auditEntrySchema,
+  auditPageSchema,
+  auditQuerySchema,
+  delegationSchema,
   fiscalArtifactKindSchema,
   fiscalArtifactKindV2Schema,
   fiscalArtifactListV2Schema,
@@ -83,6 +88,7 @@ import {
   fiscalServiceSourceKeySchema,
   fiscalServiceSubstitutionRequestSchema,
   fiscalSupportOverviewSchema,
+  grantDelegationSchema,
   importFieldSchema,
   importJobSchema,
   importKindSchema,
@@ -94,6 +100,7 @@ import {
   journalSealSchema,
   paginationQuerySchema,
   problemDetailsSchema,
+  segregationOfDutiesProblemSchema,
   validationProblemSchema,
 } from './http'
 import { pageInfoSchema } from './http/pagination'
@@ -713,6 +720,49 @@ const staticEntries: readonly RegistryEntry[] = [
     kind: 'http',
     description: 'A signed, short-lived link to upload an attachment or download it.',
     schema: attachmentLinkSchema,
+  },
+  {
+    id: 'http:segregation-of-duties-problem',
+    kind: 'http',
+    description:
+      'The 403 every module answers when one person would hold both duties of a declared pair (ADR 0062).',
+    schema: segregationOfDutiesProblemSchema,
+  },
+  {
+    id: 'http:delegation-grant',
+    kind: 'http',
+    description: 'Lending an approval held through a role to a colleague for a period (ADR 0062).',
+    schema: grantDelegationSchema,
+  },
+  {
+    id: 'http:delegation',
+    kind: 'http',
+    description: 'An approval delegation in its owning module, with its state.',
+    schema: delegationSchema,
+  },
+  {
+    id: 'http:audit-query',
+    kind: 'http',
+    description: "The filters and cursor of a module's audit read endpoint.",
+    schema: auditQuerySchema,
+  },
+  {
+    id: 'http:audit-entry',
+    kind: 'http',
+    description: 'One row of a module audit log, as its read endpoint shows it.',
+    schema: auditEntrySchema,
+  },
+  {
+    id: 'http:audit-chain',
+    kind: 'http',
+    description: "The hash chain's verdict on one page of an audit log (ADR 0025).",
+    schema: auditChainSchema,
+  },
+  {
+    id: 'http:audit-page',
+    kind: 'http',
+    description: 'A page of a module audit log, newest first, with the chain verdict.',
+    schema: auditPageSchema,
   },
   {
     id: 'authorization:role-assignment',

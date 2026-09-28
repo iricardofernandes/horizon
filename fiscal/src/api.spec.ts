@@ -18,6 +18,7 @@ let statusQueryInput: unknown
 let cancellationInput: unknown
 let cancellationQueryInput: unknown
 let certificateUploadInput: unknown
+let auditInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
 let activeCapability = false
 let activeHomologationCapability = false
@@ -323,6 +324,16 @@ const server = createFiscalServer({
       }
     },
   },
+  audit: {
+    async page(tenant, query) {
+      auditInput = { tenant, query }
+      return {
+        data: [],
+        page: { hasMore: false },
+        chain: { status: 'intact', checked: 0, broken: [] },
+      }
+    },
+  },
   credentials: {
     async list(requestedTenant) {
       if (requestedTenant !== tenantId) throw new Error('Wrong tenant')
@@ -385,6 +396,22 @@ it('restricts certificate upload to Fiscal admins and takes tenant identity from
   })
   expect(await accepted.text()).not.toContain('test-password')
   expect((await fetch(`${base}/establishment-credentials`, { headers })).status).toBe(200)
+  role = 'viewer'
+})
+
+it('reads the audit log only as a Fiscal admin, for the token tenant (Phase 68)', async () => {
+  const headers = { authorization: 'Bearer test' }
+  role = 'issuer'
+  expect((await fetch(`${base}/audit`, { headers })).status).toBe(403)
+  role = 'admin'
+  expect((await fetch(`${base}/audit?limit=900`, { headers })).status).toBe(400)
+  const page = await fetch(`${base}/audit?action=fiscal.inbound.imported&limit=20`, { headers })
+  expect(page.status).toBe(200)
+  expect(await page.json()).toMatchObject({ chain: { status: 'intact' } })
+  expect(auditInput).toEqual({
+    tenant: tenantId,
+    query: { action: 'fiscal.inbound.imported', limit: 20 },
+  })
   role = 'viewer'
 })
 

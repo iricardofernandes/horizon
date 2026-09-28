@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { INestApplication } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { Test } from '@nestjs/testing'
+import postgres from 'postgres'
 import request from 'supertest'
 import { z } from 'zod'
 
@@ -362,6 +363,37 @@ it('exports without credentials and erases a subject while preserving audit veri
     .set('Authorization', `Bearer ${owner.accessToken}`)
     .expect(200)
   expect(chain.body.intact).toBe(true)
+  // Phase 68: the log reads a page at a time; the erased subject's diffs stay sealed, and
+  // the page still verifies.
+  const page = await request(app.getHttpServer())
+    .get('/audit')
+    .query({ subjectId: user.userId, limit: 50 })
+    .set('Authorization', `Bearer ${owner.accessToken}`)
+    .expect(200)
+  expect(page.body.chain).toMatchObject({ status: 'intact', broken: [] })
+  expect(page.body.data.length).toBeGreaterThan(0)
+  expect(page.body.data.some((entry: { sealed?: boolean }) => entry.sealed === true)).toBe(true)
+  expect(JSON.stringify(page.body)).not.toContain(user.email)
+  await request(app.getHttpServer())
+    .get('/audit')
+    .set('Authorization', `Bearer ${user.accessToken}`)
+    .expect(401)
+  const database = postgres(process.env.ADMIN_DATABASE_URL ?? '', { max: 1 })
+  try {
+    await database.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`update audit_log set action = 'user.forged'
+        where tenant_id = ${owner.tenantId} and sequence = 1`
+    })
+  } finally {
+    await database.end()
+  }
+  const tampered = await request(app.getHttpServer())
+    .get('/audit')
+    .set('Authorization', `Bearer ${owner.accessToken}`)
+    .expect(200)
+  expect(tampered.body.chain).toMatchObject({ status: 'broken' })
+  expect(tampered.body.chain.broken).toContain(1)
 })
 
 it('allows only the explicitly read-only route during a Redis outage', async () => {

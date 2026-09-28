@@ -4,6 +4,8 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
+import type { SegregationOfDutiesError } from '@/core/errors/errors/segregation-of-duties-error'
+import { type ApprovalAuthority, checkDuties } from '../controls/approval-delegation'
 import {
   moneyPayload,
   originPayload,
@@ -137,6 +139,8 @@ interface TitleProps {
   postedAt: Date | null
   closure: { readonly at: Date; readonly reason: Reason } | null
   approval: TitleApproval
+  /** Who drafted it: one side of the payable pair (ADR 0062). Unknown for older titles. */
+  createdBy: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -192,8 +196,10 @@ export interface TitleSnapshot {
   readonly approvalRequestedBy: string | null
   readonly approvalRequestedAt: Date | null
   readonly approvalDecidedBy: string | null
+  readonly approvalDecidedFor: string | null
   readonly approvalDecidedAt: Date | null
   readonly approvalReason: string | null
+  readonly createdBy: string | null
   readonly createdAt: Date
   readonly updatedAt: Date
 }
@@ -219,6 +225,7 @@ export class Title extends AggregateRoot<TitleProps> {
       origin: TitleOrigin
       terms: TitleTerms
       stage?: TitleStage
+      createdBy?: string | null
       now: Date
     },
     id?: UniqueEntityID,
@@ -240,6 +247,7 @@ export class Title extends AggregateRoot<TitleProps> {
           postedAt: null,
           closure: null,
           approval: NO_APPROVAL,
+          createdBy: props.createdBy ?? null,
           createdAt: props.now,
           updatedAt: props.now,
         },
@@ -406,27 +414,39 @@ export class Title extends AggregateRoot<TitleProps> {
     return right(undefined)
   }
 
-  /** Four eyes: whoever asked for approval cannot give it or refuse it. */
-  approve(actor: string, now: Date): Either<ConflictError, void> {
-    const decidable = this.decidable(actor)
+  /**
+   * Four eyes (ADR 0062): whoever drafted the payable or asked for its approval cannot
+   * decide it, in person or through a delegation lent by either of them.
+   */
+  approve(
+    authority: ApprovalAuthority,
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
+    const decidable = this.decidable(authority)
     if (decidable.isLeft()) return decidable
     this.props.approval = {
       ...this.props.approval,
       state: 'approved',
-      decidedBy: actor,
+      decidedBy: authority.actor,
+      decidedFor: authority.onBehalfOf,
       decidedAt: now,
     }
     this.props.updatedAt = now
     return right(undefined)
   }
 
-  reject(actor: string, reason: Reason, now: Date): Either<ConflictError, void> {
-    const decidable = this.decidable(actor)
+  reject(
+    authority: ApprovalAuthority,
+    reason: Reason,
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
+    const decidable = this.decidable(authority)
     if (decidable.isLeft()) return decidable
     this.props.approval = {
       ...this.props.approval,
       state: 'rejected',
-      decidedBy: actor,
+      decidedBy: authority.actor,
+      decidedFor: authority.onBehalfOf,
       decidedAt: now,
       reason,
     }
@@ -434,12 +454,17 @@ export class Title extends AggregateRoot<TitleProps> {
     return right(undefined)
   }
 
-  private decidable(actor: string): Either<ConflictError, void> {
+  private decidable(
+    authority: ApprovalAuthority,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
     if (this.props.status !== 'draft' || this.props.approval.state !== 'pending')
       return left(new ConflictError('there is no pending approval to decide'))
-    if (this.props.approval.requestedBy === actor)
-      return left(new ConflictError('the person who requested approval cannot decide it'))
-    return right(undefined)
+    return checkDuties(
+      'financial.payable',
+      [this.props.createdBy, this.props.approval.requestedBy],
+      authority,
+      'the person who drafted this payable or asked for its approval cannot decide it',
+    )
   }
 
   /** A draft that will never be posted. Nothing was published, so nothing is announced. */
@@ -683,8 +708,10 @@ export class Title extends AggregateRoot<TitleProps> {
       approvalRequestedBy: this.props.approval.requestedBy,
       approvalRequestedAt: this.props.approval.requestedAt,
       approvalDecidedBy: this.props.approval.decidedBy,
+      approvalDecidedFor: this.props.approval.decidedFor,
       approvalDecidedAt: this.props.approval.decidedAt,
       approvalReason: this.props.approval.reason?.value ?? null,
+      createdBy: this.props.createdBy,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,
     })

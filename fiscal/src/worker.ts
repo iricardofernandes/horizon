@@ -1,3 +1,4 @@
+import { FiscalAuditLog } from './audit-log'
 import './telemetry'
 import { readFileSync } from 'node:fs'
 import { S3Client } from '@aws-sdk/client-s3'
@@ -258,6 +259,7 @@ const serviceRuntime = createServiceRuntime({
 })
 const documentList = new FiscalDocumentList(config.DATABASE_URL)
 const support = new FiscalSupport(config.DATABASE_URL)
+const auditLog = new FiscalAuditLog(config.DATABASE_URL)
 // Gauges sum the tenants this worker serves; no metric names a tenant (ADR 0055).
 const stopSupportGauges = startSupportGauges(support, Object.keys(keys))
 const server = createFiscalServer({
@@ -284,6 +286,7 @@ const server = createFiscalServer({
   service: serviceRuntime.dependencies,
   documentList,
   support,
+  audit: auditLog,
 })
 const fixedSimulatorScenario = config.FISCAL_SIMULATOR_SCENARIO
 const simulator = new DeterministicNfe55Simulator(
@@ -365,6 +368,7 @@ async function stop(): Promise<void> {
     serviceRuntime.close(),
     documentList.close(),
     support.close(),
+    auditLog.close(),
     denylist.close(),
     phase43Runtime?.close(),
   ])
@@ -409,6 +413,7 @@ void consumer
       serviceRuntime.close(),
       documentList.close(),
       support.close(),
+      auditLog.close(),
       denylist.close(),
       phase43Runtime?.close(),
     ])

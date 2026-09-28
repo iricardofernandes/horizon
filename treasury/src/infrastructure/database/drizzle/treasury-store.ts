@@ -25,6 +25,7 @@ import {
   Money,
   Reason,
 } from '@/domain/value-objects/treasury-values'
+import { delegationsRepository } from './delegation-store'
 import {
   closuresRepository,
   reconciliationsRepository,
@@ -107,7 +108,18 @@ function mapTransfer(row: typeof schema.transfers.$inferSelect): Transfer {
       valueOn: restored(BusinessDate.create(row.valueOn)),
       memo: restored(Memo.create(row.memo ?? undefined, '/memo')),
       status: oneOf<TransferStatus>(TRANSFER_STATUSES, row.status, 'transfer status'),
+      requestedBy: row.requestedBy,
+      requestedAt: row.requestedAt,
       postedAt: row.postedAt,
+      decision:
+        row.decidedBy && row.decidedAt
+          ? {
+              by: row.decidedBy,
+              for: row.decidedFor,
+              at: row.decidedAt,
+              reason: row.decisionReason ? restored(Reason.create(row.decisionReason)) : null,
+            }
+          : null,
       cancellation:
         row.cancelledAt && row.cancellationReason
           ? { at: row.cancelledAt, reason: restored(Reason.create(row.cancellationReason)) }
@@ -193,6 +205,26 @@ export function makeScope(tx: Transaction, tenantId: string): TreasuryScope {
   }
   return {
     tenantId,
+    delegations: delegationsRepository(tx, tenantId),
+    transferPolicies: {
+      find: async (currency) => {
+        const table = schema.transferApprovalPolicies
+        const [row] = await tx.select().from(table).where(eq(table.currency, currency)).limit(1)
+        return row
+          ? { currency: row.currency, threshold: row.threshold, updatedAt: row.updatedAt }
+          : null
+      },
+      save: async (policy) => {
+        const table = schema.transferApprovalPolicies
+        await tx
+          .insert(table)
+          .values({ tenantId, ...policy })
+          .onConflictDoUpdate({
+            target: [table.tenantId, table.currency],
+            set: { threshold: policy.threshold, updatedAt: policy.updatedAt },
+          })
+      },
+    },
     accounts: {
       findForUpdate: async (ids) => {
         const unique = [...new Set(ids)].sort()
@@ -295,6 +327,11 @@ export function makeScope(tx: Transaction, tenantId: string): TreasuryScope {
           .update(schema.transfers)
           .set({
             status: row.status,
+            postedAt: row.postedAt,
+            decidedBy: row.decidedBy,
+            decidedFor: row.decidedFor,
+            decidedAt: row.decidedAt,
+            decisionReason: row.decisionReason,
             cancelledAt: row.cancelledAt,
             cancellationReason: row.cancellationReason,
           })

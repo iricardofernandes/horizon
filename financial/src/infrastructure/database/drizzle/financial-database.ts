@@ -33,6 +33,8 @@ import {
 import { PaymentTerm, type PaymentTermSnapshot } from '@/domain/entities/payment-term'
 import type { TitleDirection } from '@/domain/entities/title'
 import { Code, Name, Share } from '@/domain/value-objects/financial-values'
+import { type AuditFilter, type AuditPageView, readAuditPage } from './audit-reader'
+import { delegationsRepository } from './delegation-store'
 import type { SqlRun, TenantSql } from './import-store'
 import { cashFlowOutlook, type OutlookGrain } from './outlook-reads'
 import * as schema from './schema'
@@ -222,6 +224,11 @@ export class FinancialDatabase extends FinancialUnitOfWork implements TenantSql 
     )
   }
 
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  auditPage(tenantId: string, filter: AuditFilter): Promise<AuditPageView> {
+    return this.read(tenantId, (tx) => readAuditPage(tx, filter))
+  }
+
   async ping(): Promise<void> {
     await this.#db.execute(sql`select 1`)
   }
@@ -347,6 +354,7 @@ function makeScope(tx: Transaction, tenantId: string): FinancialScope {
     tenantId,
     titles: titlesRepository(tx, tenantId),
     parties: partyProjection(tx, tenantId),
+    delegations: delegationsRepository(tx, tenantId),
     audit: auditTrail(tx, tenantId),
     approvalPolicies: approvalPolicies(tx, tenantId),
     categories: {

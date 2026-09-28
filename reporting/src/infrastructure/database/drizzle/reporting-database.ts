@@ -24,6 +24,7 @@ import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { JOURNALED_SOURCES, type JournalEntry, type Source } from '@/domain/journal'
 import type { CheckResult, ReportFilter, ReportName, RunOutcome } from '@/domain/reports'
+import { type AuditFilter, type AuditPageView, readAuditPage } from './audit-reader'
 import { exportScope } from './export-store'
 import { movedAfter, readReport } from './report-reads'
 import * as schema from './schema'
@@ -412,6 +413,11 @@ export class ReportingDatabase extends JournalStore {
         }
       })
     })
+  }
+
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  auditPage(tenantId: string, filter: AuditFilter): Promise<AuditPageView> {
+    return this.#within(tenantId, (tx) => readAuditPage(tx, filter))
   }
 
   async ping(): Promise<void> {

@@ -3500,3 +3500,33 @@ tbody tr.reconciliation-selected td {
   list-style: none;
   font-size: 15px;
 }
+
+/* Phase 68 — the audit screen: each module's chain verdict, and the rows that fail it. */
+.audit-actions {
+  flex-wrap: wrap;
+}
+.chain-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chain-summary li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+tbody tr.audit-broken td {
+  background: var(--color-danger-bg);
+}
+.audit-details {
+  max-width: 360px;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+.audit-screen {
+  display: grid;
+  gap: 16px;
+}

@@ -102,3 +102,10 @@ npm run dev
 npm test             # unit tests, coverage gate on domain/ and application/
 npm run test:e2e     # PostgreSQL and RabbitMQ in Testcontainers
 ```
+
+## Audit log (Phase 68)
+
+`GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered
+by actor, action, record and period. Every page carries the chain's verdict: each row is
+recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
+admins; the web's audit screen asks it alongside every other module.

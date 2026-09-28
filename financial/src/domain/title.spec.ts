@@ -1,6 +1,7 @@
 import { snapshotOf } from 'test/support/snapshot-of'
 import { describe, expect, it } from 'vitest'
 import type { Either } from '@/core/either'
+import { ownAuthority } from './controls/approval-delegation'
 import { Title, type TitleTerms } from './entities/title'
 import { BusinessDate, Currency, Money, Share } from './value-objects/financial-values'
 import { DocumentNumber, Reason } from './value-objects/title-values'
@@ -242,13 +243,14 @@ describe('a forecast', () => {
 })
 
 describe('a payable awaiting approval', () => {
-  function payableDraft() {
+  function payableDraft(createdBy: string | null = null) {
     return valid(
       Title.draft({
         tenantId: 't',
         direction: 'payable',
         origin: { type: 'manual' },
         terms: terms(),
+        createdBy,
         now,
       }),
     )
@@ -260,9 +262,9 @@ describe('a payable awaiting approval', () => {
     expect(payable.post(now, required).isLeft()).toBe(true)
     valid(payable.requestApproval('clerk', now))
     expect(payable.requestApproval('clerk', now).isLeft()).toBe(true)
-    expect(payable.approve('clerk', now).isLeft()).toBe(true)
+    expect(payable.approve(ownAuthority('clerk'), now).isLeft()).toBe(true)
     expect(payable.post(now, required).isLeft()).toBe(true)
-    valid(payable.approve('controller', now))
+    valid(payable.approve(ownAuthority('controller'), now))
     valid(payable.post(now, required))
     expect(snapshotOf(payable)).toMatchObject({
       status: 'posted',
@@ -276,16 +278,35 @@ describe('a payable awaiting approval', () => {
     ])
   })
 
+  it('is never decided by whoever drafted it, even through a delegation they lent', () => {
+    const payable = payableDraft('drafter')
+    valid(payable.requestApproval('clerk', now))
+    const byDrafter = payable.approve(ownAuthority('drafter'), now)
+    expect(byDrafter.isLeft() && byDrafter.value.name).toBe('SegregationOfDutiesError')
+    const lentByRequester = payable.reject(
+      { actor: 'stand-in', onBehalfOf: 'clerk', delegationId: 'd' },
+      reason,
+      now,
+    )
+    expect(lentByRequester.isLeft()).toBe(true)
+    valid(payable.approve({ actor: 'stand-in', onBehalfOf: 'controller', delegationId: 'd' }, now))
+    expect(snapshotOf(payable)).toMatchObject({
+      createdBy: 'drafter',
+      approvalDecidedBy: 'stand-in',
+      approvalDecidedFor: 'controller',
+    })
+  })
+
   it('returns a rejected draft to its author, and a revision withdraws any approval', () => {
     const payable = payableDraft()
     valid(payable.requestApproval('clerk', now))
-    valid(payable.reject('controller', reason, now))
+    valid(payable.reject(ownAuthority('controller'), reason, now))
     expect(snapshotOf(payable)).toMatchObject({
       approvalState: 'rejected',
       approvalReason: 'Entered by mistake',
     })
     valid(payable.requestApproval('clerk', now))
-    valid(payable.approve('controller', now))
+    valid(payable.approve(ownAuthority('controller'), now))
     valid(payable.revise(terms(), now))
     expect(snapshotOf(payable).approvalState).toBe('none')
     expect(payable.post(now, required).isLeft()).toBe(true)

@@ -12,6 +12,8 @@ export interface TitleApproval {
   readonly requestedBy: string | null
   readonly requestedAt: Date | null
   readonly decidedBy: string | null
+  /** The approver who lent the decision, when it was taken through a delegation. */
+  readonly decidedFor: string | null
   readonly decidedAt: Date | null
   readonly reason: Reason | null
 }
@@ -21,6 +23,7 @@ export const NO_APPROVAL: TitleApproval = Object.freeze({
   requestedBy: null,
   requestedAt: null,
   decidedBy: null,
+  decidedFor: null,
   decidedAt: null,
   reason: null,
 })

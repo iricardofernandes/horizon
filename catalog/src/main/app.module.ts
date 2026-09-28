@@ -3,6 +3,7 @@ import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core'
 import { LoggerModule } from 'nestjs-pino'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
+import { AuditController } from '@/infrastructure/http/audit.controller'
 import { CatalogAuthGuard } from '@/infrastructure/http/authorization'
 import { CompositionsController } from '@/infrastructure/http/compositions.controller'
 import { FamiliesController } from '@/infrastructure/http/families.controller'
@@ -128,6 +129,7 @@ export class AppModule {
         PriceListsController,
         ImportsController,
         SystemController,
+        AuditController,
       ],
       providers,
       exports: [CatalogRuntime],

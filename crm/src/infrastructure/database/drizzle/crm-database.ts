@@ -12,6 +12,7 @@ import {
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { SecretBox } from '@/domain/services/secret-box'
+import { type AuditFilter, type AuditPageView, readAuditPage } from './audit-reader'
 import {
   type AccountFilter,
   accountDetail,
@@ -232,6 +233,11 @@ export class CrmDatabase extends CrmUnitOfWork {
 
   listOwners(tenantId: string) {
     return this.read(tenantId, (tx) => listOwners(tx))
+  }
+
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  auditPage(tenantId: string, filter: AuditFilter): Promise<AuditPageView> {
+    return this.read(tenantId, (tx) => readAuditPage(tx, filter))
   }
 
   async ping(): Promise<void> {

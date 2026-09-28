@@ -4,6 +4,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ProcurementModuleEventHandlers } from '@/application/consume-module-events'
 import { DefineApprovalPolicyUseCase } from '@/application/use-cases/define-policies'
+import { GrantDelegationUseCase } from '@/application/use-cases/delegations'
 import {
   DecideOrderUseCase,
   DraftOrderFromQuotationUseCase,
@@ -63,7 +64,12 @@ async function workspace() {
   const paper = randomUUID()
   const toner = randomUUID()
 
-  const context = (actor = BUYER) => ({ tenantId, actor, requestId: null })
+  const context = (actor = BUYER) => ({
+    tenantId,
+    actor,
+    requestId: null,
+    approvals: ['procurement:requisition:approve', 'procurement:order:approve'],
+  })
   const idempotent = (actor = BUYER, key = randomUUID()) => ({
     ...context(actor),
     idempotencyKey: key,
@@ -745,5 +751,143 @@ describe('suppliers from party events in both versions', () => {
       active: true,
     })
     expect(await read(fromV2)).toMatchObject({ email: 'sales@acme.example', status: 'inactive' })
+  })
+})
+
+describe('segregation of duties and delegation (Phase 68)', () => {
+  const REQUESTER = 'user:requester'
+  const STAND_IN = 'user:stand-in'
+  const member = (tenantId: string, actor: string) => ({
+    tenantId,
+    actor,
+    requestId: null,
+    approvals: [] as string[],
+  })
+  const lend = (tenantId: string, from: string, permission: string) =>
+    new GrantDelegationUseCase(database, clock).execute({
+      context: {
+        tenantId,
+        actor: from,
+        requestId: null,
+        approvals: ['procurement:requisition:approve', 'procurement:order:approve'],
+      },
+      grant: {
+        permission,
+        delegateId: STAND_IN,
+        startsAt: new Date().toISOString(),
+        endsAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+      },
+    })
+  const refusedPair = (result: { isLeft(): boolean; value: unknown }) =>
+    result.isLeft() ? (result.value as { pair?: string }).pair : 'allowed'
+  const decidedFor = async (table: 'requisitions' | 'orders', id: string) => {
+    const column = table === 'orders' ? 'approval_decided_for' : 'decided_for'
+    const [row] = await administrator`select ${administrator(column)} as decided_for
+      from ${administrator(table)} where id = ${id}`
+    return row?.decided_for
+  }
+
+  it('refuses procurement.requisition, and allows it through a delegation', async () => {
+    const shop = await workspace()
+    const id = await shop.openRequisition()
+    value(await shop.deciding.submit(shop.context(), id))
+    expect(refusedPair(await shop.deciding.approve(shop.context(BUYER), id))).toBe(
+      'procurement.requisition',
+    )
+    expect(refusedPair(await shop.deciding.approve(member(shop.tenantId, STAND_IN), id))).toBe(
+      undefined,
+    )
+    value(await lend(shop.tenantId, MANAGER, 'procurement:requisition:approve'))
+    value(await shop.deciding.approve(member(shop.tenantId, STAND_IN), id))
+    expect(await decidedFor('requisitions', id)).toBe(MANAGER)
+  })
+
+  it('refuses procurement.order, and allows it through a delegation', async () => {
+    const shop = await workspace()
+    const order = value<{ id: string }>(
+      await shop.drafting.execute({
+        context: shop.idempotent(),
+        order: {
+          supplierId: shop.supplierId,
+          warehouseId: shop.warehouseId,
+          currency: 'BRL',
+          issuedOn: '2026-09-16',
+          expectedOn: '2026-09-30',
+          paymentTermDays: [30],
+          lines: [
+            {
+              lineId: randomUUID(),
+              itemId: shop.paper,
+              quantity: '5',
+              unitPrice: '2000',
+            },
+          ],
+        },
+      }),
+    )
+    value(await shop.decidingOrder.place(shop.context(), order.id))
+    expect(refusedPair(await shop.decidingOrder.approve(shop.context(BUYER), order.id))).toBe(
+      'procurement.order',
+    )
+    value(await lend(shop.tenantId, MANAGER, 'procurement:order:approve'))
+    value(await shop.decidingOrder.approve(member(shop.tenantId, STAND_IN), order.id))
+    expect(await decidedFor('orders', order.id)).toBe(MANAGER)
+  })
+
+  it('refuses procurement.requisition-order, even through the requester’s delegation', async () => {
+    const shop = await workspace()
+    const requisition = value<{ id: string }>(
+      await new OpenRequisitionUseCase(database, clock).execute({
+        context: { ...member(shop.tenantId, REQUESTER), idempotencyKey: randomUUID() },
+        requisition: {
+          warehouseId: shop.warehouseId,
+          neededBy: '2026-12-31',
+          lines: [{ lineId: randomUUID(), itemId: shop.paper, quantity: '10' }],
+        },
+      }),
+    ).id
+    value(await shop.deciding.submit(member(shop.tenantId, REQUESTER), requisition))
+    value(await shop.deciding.approve(shop.context(MANAGER), requisition))
+    const quotation = await shop.quote(requisition, '2000')
+    value(await shop.selecting.execute({ context: shop.context(), quotationId: quotation.id }))
+    const order = value<{ id: string }>(
+      await shop.ordering.execute({
+        context: shop.idempotent(),
+        quotationId: quotation.id,
+        issuedOn: '2026-09-16',
+      }),
+    )
+    value(await shop.decidingOrder.place(shop.context(), order.id))
+    const asRequester = {
+      ...member(shop.tenantId, REQUESTER),
+      approvals: ['procurement:order:approve'],
+    }
+    expect(refusedPair(await shop.decidingOrder.approve(asRequester, order.id))).toBe(
+      'procurement.requisition-order',
+    )
+    value(await lend(shop.tenantId, REQUESTER, 'procurement:order:approve'))
+    expect(
+      refusedPair(await shop.decidingOrder.approve(member(shop.tenantId, STAND_IN), order.id)),
+    ).toBe('procurement.requisition-order')
+    value(await lend(shop.tenantId, MANAGER, 'procurement:order:approve'))
+    value(await shop.decidingOrder.approve(member(shop.tenantId, STAND_IN), order.id))
+    expect(await decidedFor('orders', order.id)).toBe(MANAGER)
+    const page = await database.auditPage(shop.tenantId, { action: 'order.approved', limit: 5 })
+    expect(page.data[0]?.details).toMatchObject({ onBehalfOf: MANAGER })
+    expect(page.chain.status).toBe('intact')
+  })
+
+  it('shows a tampered audit row as a broken chain', async () => {
+    const shop = await workspace()
+    const id = await shop.openRequisition()
+    value(await shop.deciding.submit(shop.context(), id))
+    expect((await database.auditPage(shop.tenantId, { limit: 50 })).chain.status).toBe('intact')
+    await administrator.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`update audit_log set actor = 'user:someone-else'
+        where tenant_id = ${shop.tenantId} and action = 'requisition.opened'`
+    })
+    const page = await database.auditPage(shop.tenantId, { limit: 50 })
+    expect(page.chain).toMatchObject({ status: 'broken', broken: [1] })
   })
 })

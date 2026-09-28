@@ -1,0 +1,59 @@
+{
+  "drill": "phase68-controls",
+  "adr": "0062",
+  "startedAt": "2026-09-28T18:20:44.686Z",
+  "finishedAt": "2026-09-28T18:20:44.938Z",
+  "baseUrl": "http://localhost:8000",
+  "tenantId": "e3434e27-b268-4714-bbbf-0cfaf64002ee",
+  "passed": true,
+  "checks": [
+    {
+      "name": "the treasury.transfer pair is refused with the shared code",
+      "passed": true,
+      "evidence": {
+        "transferStatus": "pending",
+        "status": 403,
+        "code": "segregation-of-duties",
+        "pair": "treasury.transfer"
+      }
+    },
+    {
+      "name": "a member is refused without the approval, and allowed through a valid delegation",
+      "passed": true,
+      "evidence": {
+        "withoutDelegation": 403,
+        "withDelegation": 200,
+        "decidedBy": "stand-in",
+        "decidedFor": "treasurer"
+      }
+    },
+    {
+      "name": "a revoked delegation no longer works",
+      "passed": true,
+      "evidence": {
+        "status": 403,
+        "delegation": "revoked"
+      }
+    },
+    {
+      "name": "a tampered audit row is reported as a broken chain",
+      "passed": true,
+      "evidence": {
+        "before": {
+          "status": "intact",
+          "checked": 8,
+          "broken": []
+        },
+        "after": {
+          "status": "broken",
+          "checked": 8,
+          "broken": [
+            6
+          ]
+        },
+        "tamperedSequence": 6,
+        "readByOperator": 403
+      }
+    }
+  ]
+}

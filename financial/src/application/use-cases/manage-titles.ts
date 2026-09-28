@@ -108,6 +108,7 @@ export class DraftTitleUseCase extends TitleCommand {
         origin: { type: 'manual' },
         terms: terms.value,
         stage,
+        createdBy: context.actor,
         now,
       })
       if (title.isLeft()) return left(title.value)

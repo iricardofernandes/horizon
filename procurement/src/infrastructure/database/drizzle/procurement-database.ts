@@ -11,6 +11,7 @@ import {
 } from '@/application/ports/unit-of-work'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import { type AuditFilter, type AuditPageView, readAuditPage } from './audit-reader'
 import {
   listOrders,
   listPolicies,
@@ -159,6 +160,11 @@ export class ProcurementDatabase extends ProcurementUnitOfWork {
 
   listPolicies(tenantId: string) {
     return this.read(tenantId, (tx) => listPolicies(tx))
+  }
+
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  auditPage(tenantId: string, filter: AuditFilter): Promise<AuditPageView> {
+    return this.read(tenantId, (tx) => readAuditPage(tx, filter))
   }
 
   async ping(): Promise<void> {

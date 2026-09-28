@@ -32,6 +32,7 @@ import { Locale } from '@/domain/value-objects/locale'
 import { PasswordHash } from '@/domain/value-objects/password-hash'
 import { PersonName } from '@/domain/value-objects/person-name'
 import { RoleAssignments } from '@/domain/value-objects/role-assignments'
+import { type AuditFilter, type AuditPageView, readAuditPage } from './audit-reader'
 import { mapApiKey, mapDataSubjectKey, mapTenant, restored, tenantRow } from './mappers'
 import * as schema from './schema'
 
@@ -112,6 +113,14 @@ export class IdentityDatabase extends UnitOfWork {
         this.findAccountIdByMembership(tenantId, userId),
       save: (account) => this.saveAccount(account),
     }
+  }
+
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  auditPage(tenantId: string, filter: AuditFilter): Promise<AuditPageView> {
+    return this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
+      return readAuditPage(tx, filter)
+    })
   }
 
   async inTenant<T>(tenantId: string, work: (scope: TenantScope) => Promise<T>): Promise<T> {

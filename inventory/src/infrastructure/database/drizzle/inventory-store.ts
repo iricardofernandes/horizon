@@ -51,6 +51,7 @@ import {
   trackingOf,
   UNTRACKED,
 } from '@/domain/value-objects/tracking'
+import { delegationsRepository } from './delegation-store'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
@@ -207,6 +208,7 @@ function mapAdjustment(row: typeof schema.stockAdjustments.$inferSelect): StockA
       requestedBy: row.requestedBy,
       requestedAt: row.requestedAt,
       decidedBy: row.decidedBy,
+      decidedFor: row.decidedFor,
       decidedAt: row.decidedAt,
       decisionReason: note(row.decisionReason),
       postedAt: row.postedAt,
@@ -239,6 +241,7 @@ function mapCount(
       closedBy: row.closedBy,
       closedAt: row.closedAt,
       decidedBy: row.decidedBy,
+      decidedFor: row.decidedFor,
       decidedAt: row.decidedAt,
       closureReason: note(row.closureReason),
       updatedAt: row.updatedAt,
@@ -604,6 +607,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
   }
   return {
     tenantId,
+    delegations: delegationsRepository(tx, tenantId),
     warehouses: {
       findById: async (id) => {
         const [row] = await tx
@@ -1134,6 +1138,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           requestedBy: row.requestedBy,
           requestedAt: row.requestedAt,
           decidedBy: row.decidedBy,
+          decidedFor: row.decidedFor,
           decidedAt: row.decidedAt,
           decisionReason: row.decisionReason,
           postedAt: row.postedAt,
@@ -1149,6 +1154,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
             status: row.status,
             approvalState: row.approvalState,
             decidedBy: row.decidedBy,
+            decidedFor: row.decidedFor,
             decidedAt: row.decidedAt,
             decisionReason: row.decisionReason,
             postedAt: row.postedAt,
@@ -1188,6 +1194,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           closedBy: row.closedBy,
           closedAt: row.closedAt,
           decidedBy: row.decidedBy,
+          decidedFor: row.decidedFor,
           decidedAt: row.decidedAt,
           closureReason: row.closureReason,
           updatedAt: row.updatedAt,
@@ -1216,6 +1223,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
             closedBy: row.closedBy,
             closedAt: row.closedAt,
             decidedBy: row.decidedBy,
+            decidedFor: row.decidedFor,
             decidedAt: row.decidedAt,
             closureReason: row.closureReason,
             updatedAt: row.updatedAt,

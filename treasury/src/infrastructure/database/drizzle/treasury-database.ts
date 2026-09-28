@@ -11,6 +11,7 @@ import {
 } from '@/application/ports/unit-of-work'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import { type AuditFilter, type AuditPageView, readAuditPage } from './audit-reader'
 import { reconciliationMetrics, reconciliationWorkspace } from './reconciliation-reads'
 import * as schema from './schema'
 import {
@@ -150,6 +151,11 @@ export class TreasuryDatabase extends TreasuryUnitOfWork {
 
   listTransfers(tenantId: string, limit: number) {
     return this.read(tenantId, (tx) => listTransfers(tx, limit))
+  }
+
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  auditPage(tenantId: string, filter: AuditFilter): Promise<AuditPageView> {
+    return this.read(tenantId, (tx) => readAuditPage(tx, filter))
   }
 
   async ping(): Promise<void> {

@@ -22,6 +22,7 @@ export type FiscalPermission =
   | 'cancellation:request'
   | 'import:review'
   | 'credentials:manage'
+  | 'audit:read'
 
 export type FiscalPrincipal = {
   tenantId: string
@@ -39,6 +40,7 @@ const permissions: Record<FiscalPrincipal['role'], readonly FiscalPermission[]> 
     'cancellation:request',
     'import:review',
     'credentials:manage',
+    'audit:read',
   ],
   issuer: ['read', 'evidence:read', 'draft:create', 'transmission:submit', 'cancellation:request'],
   reviewer: ['read', 'evidence:read', 'import:review'],

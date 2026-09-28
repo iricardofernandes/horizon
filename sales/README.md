@@ -292,3 +292,10 @@ immediately rather than surfacing as a failure on first use.
   filter maps error classes to RFC 9457 `application/problem+json` (ADR 0032).
 - **Tests** — every test creates its own tenant, and every aggregate has a test that
   writes under tenant A and asserts tenant B cannot read it (ADR 0014).
+
+## Audit log (Phase 68)
+
+`GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered
+by actor, action, record and period. Every page carries the chain's verdict: each row is
+recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
+admins; the web's audit screen asks it alongside every other module.

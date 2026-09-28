@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { findEvent } from '@horizon/contracts'
 import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { GrantDelegationUseCase } from '@/application/use-cases/delegations'
 import {
   ChangeAccountStatusUseCase,
   OpenAccountUseCase,
@@ -9,6 +10,8 @@ import {
 import { RecordEntryUseCase, ReverseEntryUseCase } from '@/application/use-cases/manage-journal'
 import {
   CancelTransferUseCase,
+  DecideTransferUseCase,
+  DefineTransferApprovalPolicyUseCase,
   PostTransferUseCase,
 } from '@/application/use-cases/manage-transfers'
 import { TreasuryDatabase } from '@/infrastructure/database/drizzle/treasury-database'
@@ -327,5 +330,101 @@ describe('the database guards the journal', () => {
     await expect(
       asTenant((sql) => sql`delete from journal_entries where id = ${entry}`),
     ).rejects.toThrow(/permission denied|append-only/)
+  })
+})
+
+describe('transfers over the threshold (Phase 68)', () => {
+  const APPROVE = 'treasury:transfer:approve'
+  const pairOf = (result: { isLeft(): boolean; value: unknown }) =>
+    result.isLeft() ? ((result.value as { pair?: string }).pair ?? 'refused') : 'allowed'
+
+  it('waits above the threshold, refuses treasury.transfer, and allows it by delegation', async () => {
+    const { tenantId, context, open, balances } = await workspace()
+    const as = (actor: string, approver = false) => ({
+      tenantId,
+      actor,
+      requestId: null,
+      approvals: approver ? [APPROVE] : [],
+    })
+    const main = await open('Banco principal', '500000')
+    const reserve = await open('Reserva', '0')
+    value(
+      await new DefineTransferApprovalPolicyUseCase(database, clock).execute({
+        context: as('treasurer', true),
+        currency: 'BRL',
+        threshold: '100000',
+      }),
+    )
+    const posting = new PostTransferUseCase(database, clock)
+    const transfer = (amount: string) =>
+      posting.execute({
+        context: context(),
+        transfer: {
+          fromAccountId: main,
+          toAccountId: reserve,
+          amount,
+          currency: 'BRL',
+          valueOn: '2026-09-10',
+        },
+      })
+    expect(value<{ status: string }>(await transfer('90000')).status).toBe('posted')
+    const waiting = value<{ id: string; status: string }>(await transfer('200000'))
+    expect(waiting.status).toBe('pending')
+    expect(await balances()).toMatchObject({ 'Banco principal': '410000', Reserva: '90000' })
+    const [announced] = await administrator`select count(*)::int as total from outbox
+      where tenant_id = ${tenantId} and event_type = 'treasury.transfer.posted'`
+    expect(announced?.total).toBe(1)
+
+    const decide = new DecideTransferUseCase(database, clock)
+    expect(pairOf(await decide.approve(as('user-1', true), waiting.id))).toBe('treasury.transfer')
+    expect(pairOf(await decide.approve(as('stand-in'), waiting.id))).toBe('refused')
+    expect(
+      (
+        await new CancelTransferUseCase(database, clock).execute({
+          context: context(),
+          transferId: waiting.id,
+          reason: 'not needed',
+        })
+      ).isLeft(),
+    ).toBe(true)
+    value(
+      await new GrantDelegationUseCase(database, clock).execute({
+        context: as('treasurer', true),
+        grant: {
+          permission: APPROVE,
+          delegateId: 'stand-in',
+          startsAt: new Date().toISOString(),
+          endsAt: new Date(Date.now() + 86_400_000).toISOString(),
+        },
+      }),
+    )
+    expect(pairOf(await decide.approve(as('stand-in'), waiting.id))).toBe('allowed')
+    expect(await balances()).toMatchObject({ 'Banco principal': '210000', Reserva: '290000' })
+    const [row] = await administrator`select status, decided_by, decided_for from transfers
+      where id = ${waiting.id}`
+    expect(row).toEqual({ status: 'posted', decided_by: 'stand-in', decided_for: 'treasurer' })
+    const listed = await database.listTransfers(tenantId, 10)
+    expect(listed.find((entry) => entry.id === waiting.id)).toMatchObject({
+      requestedBy: 'user-1',
+      decidedFor: 'treasurer',
+    })
+
+    const refused = value<{ id: string }>(await transfer('300000'))
+    value(await decide.reject(as('treasurer', true), refused.id, 'Not this month'))
+    const audit = await database.auditPage(tenantId, { subjectType: 'transfer', limit: 10 })
+    expect(audit.data.map((entry) => entry.action)).toEqual([
+      'transfer.rejected',
+      'transfer.requested',
+      'transfer.approved',
+      'transfer.requested',
+      'transfer.posted',
+    ])
+    expect(audit.chain.status).toBe('intact')
+    await administrator.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`update audit_log set details = '{}'::jsonb
+        where tenant_id = ${tenantId} and action = 'transfer.approved'`
+    })
+    expect((await database.auditPage(tenantId, { limit: 50 })).chain.status).toBe('broken')
   })
 })

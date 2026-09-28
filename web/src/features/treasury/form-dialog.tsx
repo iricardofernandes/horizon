@@ -22,6 +22,7 @@ export function FormDialog({
   description,
   submitLabel,
   success,
+  pending,
   build,
   onDone,
   children,
@@ -32,6 +33,8 @@ export function FormDialog({
   description: string
   submitLabel: string
   success: string
+  /** Said instead of `success` when the command waits for a second person (Phase 68). */
+  pending?: string
   build: (form: FormData) => Submission | string
   onDone: (notice: string) => Promise<void>
   children: ReactNode
@@ -62,8 +65,9 @@ export function FormDialog({
       setError(await apiError(response, t('actionFailed')))
       return
     }
+    const answer = (await response.json().catch(() => null)) as { status?: unknown } | null
     setOpen(false)
-    await onDone(success)
+    await onDone(pending && answer?.status === 'pending' ? pending : success)
   }
 
   return (

@@ -15,6 +15,13 @@
       "when": 1790800000000,
       "tag": "0001_postings",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791216000000,
+      "tag": "0002_duties",
+      "breakpoints": true
     }
   ]
 }

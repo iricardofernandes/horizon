@@ -4,6 +4,7 @@ import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import { type DraftLine, JournalTransaction } from '@/domain/entities/journal-transaction'
 import type { EntrySide, LedgerAccount } from '@/domain/entities/ledger-account'
+import { ManualEntry, type ManualEntryTerms } from '@/domain/entities/manual-entry'
 import {
   BusinessDate,
   Currency,
@@ -41,7 +42,7 @@ interface ParsedTransaction {
   memos: readonly (Memo | null)[]
 }
 
-function parse(input: TransactionInput): Either<InvalidInputError, ParsedTransaction> {
+export function parse(input: TransactionInput): Either<InvalidInputError, ParsedTransaction> {
   const reference = Reference.create(input.reference)
   if (reference.isLeft()) return left(reference.value)
   const postedOn = BusinessDate.create(input.postedOn, '/postedOn')
@@ -71,7 +72,7 @@ function parse(input: TransactionInput): Either<InvalidInputError, ParsedTransac
 }
 
 /** Every named account, loaded once and checked against the amount it is about to take. */
-async function resolveLines(
+export async function resolveLines(
   scope: LedgerScope,
   input: TransactionInput,
   parsed: ParsedTransaction,
@@ -101,7 +102,7 @@ async function resolveLines(
 }
 
 /** A closed month takes nothing, and refuses it before any work is done. */
-async function requireOpen(
+export async function requireOpen(
   scope: LedgerScope,
   period: string,
 ): Promise<Either<ConflictError, void>> {
@@ -111,7 +112,25 @@ async function requireOpen(
   return right(undefined)
 }
 
-/** Post a balanced transaction into an open month. */
+export type PostedOrPending =
+  | {
+      readonly status: 'posted'
+      readonly id: string
+      readonly period: string
+      readonly total: string
+    }
+  | {
+      readonly status: 'pending-approval'
+      readonly manualEntryId: string
+      readonly period: string
+      readonly total: string
+    }
+
+/**
+ * Post a balanced transaction into an open month — or, at or above the workspace's
+ * threshold for its currency, keep it as a manual entry waiting for a second person
+ * (ADR 0062). Either way it has been checked in full, so what waits is what would post.
+ */
 export class PostTransactionUseCase {
   constructor(
     private readonly unitOfWork: LedgerUnitOfWork,
@@ -121,7 +140,7 @@ export class PostTransactionUseCase {
   async execute(request: {
     context: IdempotentContext
     transaction: TransactionInput
-  }): Outcome<{ id: string; period: string; total: string }> {
+  }): Outcome<PostedOrPending> {
     const parsed = parse(request.transaction)
     if (parsed.isLeft()) return left(parsed.value)
     const values = parsed.value
@@ -149,6 +168,36 @@ export class PostTransactionUseCase {
           now,
         })
         if (posted.isLeft()) return left(posted.value)
+        const total = posted.value.total.amount
+        const policy = await scope.entryPolicies.find(values.currency.value)
+        if (policy && total >= policy.threshold) {
+          const entry = ManualEntry.request({
+            tenantId: context.tenantId,
+            terms: termsOf(request.transaction),
+            total,
+            requestedBy: context.actor,
+            now,
+          })
+          await scope.manualEntries.create(entry)
+          await audit(scope, context, {
+            action: 'manual-entry.requested',
+            subjectType: 'manual-entry',
+            subjectId: entry.id.toString(),
+            occurredAt: now,
+            details: {
+              reference: values.reference.value,
+              postedOn: values.postedOn.value,
+              total,
+              threshold: policy.threshold,
+            },
+          })
+          return right({
+            status: 'pending-approval' as const,
+            manualEntryId: entry.id.toString(),
+            period,
+            total: total.toString(),
+          })
+        }
         await scope.journal.post(posted.value)
         await audit(scope, context, {
           action: 'transaction.posted',
@@ -164,12 +213,29 @@ export class PostTransactionUseCase {
           },
         })
         return right({
+          status: 'posted' as const,
           id: posted.value.id.toString(),
           period,
-          total: posted.value.total.amount.toString(),
+          total: total.toString(),
         })
       },
     )
+  }
+}
+
+/** The entry exactly as written, kept until someone decides it. */
+export function termsOf(input: TransactionInput): ManualEntryTerms {
+  return {
+    reference: input.reference,
+    postedOn: input.postedOn,
+    currency: input.currency,
+    memo: input.memo ?? null,
+    lines: input.lines.map((line) => ({
+      accountId: line.accountId,
+      side: line.side,
+      amount: line.amount,
+      memo: line.memo ?? null,
+    })),
   }
 }
 

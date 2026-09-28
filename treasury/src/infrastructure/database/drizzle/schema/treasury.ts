@@ -52,10 +52,30 @@ export const transfers = pgTable('transfers', {
   valueOn: businessDate('value_on').notNull(),
   memo: text('memo'),
   status: text('status').notNull(),
-  postedAt: instant('posted_at').notNull(),
+  requestedBy: text('requested_by'),
+  requestedAt: instant('requested_at').notNull(),
+  postedAt: instant('posted_at'),
+  decidedBy: text('decided_by'),
+  decidedFor: text('decided_for'),
+  decidedAt: instant('decided_at'),
+  decisionReason: text('decision_reason'),
   cancelledAt: instant('cancelled_at'),
   cancellationReason: text('cancellation_reason'),
 })
+
+/** At or above the threshold, a transfer in this currency waits for a second person. */
+export const transferApprovalPolicies = pgTable(
+  'transfer_approval_policies',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    currency: text('currency').notNull(),
+    threshold: minorUnits('threshold').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.currency] })],
+)
 
 export const journalEntries = pgTable('journal_entries', {
   id: uuid('id').primaryKey(),

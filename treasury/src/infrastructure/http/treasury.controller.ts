@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
 } from '@nestjs/common'
@@ -218,6 +219,44 @@ export class TreasuryController {
         transfer: parse(transferInput, body),
       }),
     )
+  }
+
+  // Any Treasury role reaches the decision: an approval may be delegated (ADR 0062).
+  @Post('transfers/:id/approve')
+  @RequireTreasuryAction('read')
+  @HttpCode(200)
+  async approveTransfer(@Param('id') transferId: string, @Req() request: TreasuryRequest) {
+    return unwrap(await this.runtime.decideTransfer.approve(context(request), id(transferId)))
+  }
+
+  @Post('transfers/:id/reject')
+  @RequireTreasuryAction('read')
+  @HttpCode(200)
+  async rejectTransfer(
+    @Param('id') transferId: string,
+    @Body() body: unknown,
+    @Req() request: TreasuryRequest,
+  ) {
+    return unwrap(
+      await this.runtime.decideTransfer.reject(
+        context(request),
+        id(transferId),
+        parse(reasonInput, body).reason,
+      ),
+    )
+  }
+
+  @Put('approval-policies')
+  @RequireTreasuryAction('configure')
+  async defineApprovalPolicy(@Body() body: unknown, @Req() request: TreasuryRequest) {
+    const input = parse(z.strictObject({ currency, threshold: minorUnits }), body)
+    const policy = unwrap(
+      await this.runtime.defineTransferApprovalPolicy.execute({
+        context: context(request),
+        ...input,
+      }),
+    )
+    return { ...policy, threshold: policy.threshold.toString() }
   }
 
   @Post('transfers/:id/cancel')

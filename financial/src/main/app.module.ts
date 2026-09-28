@@ -1,6 +1,7 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { FinancialAuthGuard } from '@/infrastructure/http/authorization'
+import { AuditController, DelegationsController } from '@/infrastructure/http/controls.controller'
 import { DimensionsController } from '@/infrastructure/http/dimensions.controller'
 import { ImportsController } from '@/infrastructure/http/imports.controller'
 import { PayablesController, ReceivablesController } from '@/infrastructure/http/titles.controller'
@@ -76,6 +77,8 @@ export class AppModule {
         ReceivablesController,
         PayablesController,
         ImportsController,
+        DelegationsController,
+        AuditController,
       ],
       providers,
       exports: [FinancialRuntime],

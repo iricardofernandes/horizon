@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
+import { ownAuthority } from './controls/approval-delegation'
 import { StockAdjustment } from './entities/stock-adjustment'
 import { StockBalance } from './entities/stock-balance'
 import { StockCount } from './entities/stock-count'
@@ -171,17 +172,17 @@ describe('an adjustment', () => {
 
   it('is neither allowed nor refused by the person who asked', () => {
     const adjustment = unwrap(request())
-    expect(adjustment.approve('keeper', later).isLeft()).toBe(true)
-    expect(adjustment.reject('keeper', note('no'), later).isLeft()).toBe(true)
+    expect(adjustment.approve(ownAuthority('keeper'), later).isLeft()).toBe(true)
+    expect(adjustment.reject(ownAuthority('keeper'), note('no'), later).isLeft()).toBe(true)
     expect(adjustment.posts()).toBe(false)
   })
 
   it('is decided once', () => {
     const adjustment = unwrap(request())
-    unwrap(adjustment.reject('manager', note('count it again first'), later))
+    unwrap(adjustment.reject(ownAuthority('manager'), note('count it again first'), later))
     expect(adjustment.status()).toBe('rejected')
     expect(adjustment.posts()).toBe(false)
-    expect(adjustment.approve('manager', later).isLeft()).toBe(true)
+    expect(adjustment.approve(ownAuthority('manager'), later).isLeft()).toBe(true)
     expect(adjustment.approvalState()).toBe('rejected')
   })
 })
@@ -269,12 +270,12 @@ describe('a count sheet', () => {
     unwrap(count.record([{ itemId: 'item-a', counted: quantity('40') }], later))
     unwrap(count.close('keeper', later, { approvalRequired: true }))
     expect(count.posts()).toBe(false)
-    expect(count.approve('keeper', later).isLeft()).toBe(true)
-    expect(count.reject('keeper', note('no'), later).isLeft()).toBe(true)
+    expect(count.approve(ownAuthority('keeper'), later).isLeft()).toBe(true)
+    expect(count.reject(ownAuthority('keeper'), note('no'), later).isLeft()).toBe(true)
 
-    unwrap(count.approve('manager', later))
+    unwrap(count.approve(ownAuthority('manager'), later))
     expect(count.posts()).toBe(true)
-    expect(count.approve('manager', later).isLeft()).toBe(true)
+    expect(count.approve(ownAuthority('manager'), later).isLeft()).toBe(true)
   })
 
   it('can be abandoned while it is open or waiting, and never after', () => {

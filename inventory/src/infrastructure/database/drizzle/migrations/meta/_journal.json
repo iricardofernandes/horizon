@@ -57,6 +57,13 @@
       "when": 1794186400000,
       "tag": "0007_imports",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794186500000,
+      "tag": "0008_duties",
+      "breakpoints": true
     }
   ]
 }

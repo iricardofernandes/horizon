@@ -3,12 +3,14 @@ import { AggregateRoot } from '@/core/entities/aggregate-root'
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import type { SegregationOfDutiesError } from '@/core/errors/errors/segregation-of-duties-error'
+import { type ApprovalAuthority, checkDuties } from '../controls/approval-delegation'
 import { moneyPayload, TreasuryEvent } from '../events/treasury-events'
 import type { BusinessDate, Memo, Money, Reason } from '../value-objects/treasury-values'
 import type { Account } from './account'
 import { JournalEntry } from './journal-entry'
 
-export const TRANSFER_STATUSES = ['posted', 'cancelled'] as const
+export const TRANSFER_STATUSES = ['pending', 'posted', 'rejected', 'cancelled'] as const
 export type TransferStatus = (typeof TRANSFER_STATUSES)[number]
 
 interface TransferProps {
@@ -20,8 +22,21 @@ interface TransferProps {
   valueOn: BusinessDate
   memo: Memo | null
   status: TransferStatus
-  postedAt: Date
+  /** Who asked for it: one side of the transfer pair (ADR 0062). Unknown for older ones. */
+  requestedBy: string | null
+  requestedAt: Date
+  /** When its legs were written: at once, or when a second person approved it. */
+  postedAt: Date | null
+  decision: TransferDecision | null
   cancellation: { readonly at: Date; readonly reason: Reason } | null
+}
+
+export interface TransferDecision {
+  readonly by: string
+  /** The approver who lent the decision, when it was taken through a delegation. */
+  readonly for: string | null
+  readonly at: Date
+  readonly reason: Reason | null
 }
 
 export interface TransferSnapshot {
@@ -35,7 +50,13 @@ export interface TransferSnapshot {
   readonly valueOn: string
   readonly memo: string | null
   readonly status: TransferStatus
-  readonly postedAt: Date
+  readonly requestedBy: string | null
+  readonly requestedAt: Date
+  readonly postedAt: Date | null
+  readonly decidedBy: string | null
+  readonly decidedFor: string | null
+  readonly decidedAt: Date | null
+  readonly decisionReason: string | null
   readonly cancelledAt: Date | null
   readonly cancellationReason: string | null
 }
@@ -44,6 +65,9 @@ export interface TransferSnapshot {
  * Money moving between two accounts of the same workspace. The transfer and its legs — an
  * outflow, an inflow and, when there is one, a fee outflow — are produced together and
  * persisted in one transaction, so a transfer can never exist with only one leg.
+ *
+ * At or above the workspace's threshold a transfer waits for a second person, with no legs
+ * and nothing announced, and whoever asked for it can never decide it (ADR 0062).
  */
 export class Transfer extends AggregateRoot<TransferProps> {
   static post(
@@ -56,6 +80,8 @@ export class Transfer extends AggregateRoot<TransferProps> {
       valueOn: BusinessDate
       memo: Memo | null
       now: Date
+      requestedBy?: string | null
+      approvalRequired?: boolean
     },
     id?: UniqueEntityID,
   ): Either<InvalidInputError | ConflictError, { transfer: Transfer; legs: JournalEntry[] }> {
@@ -79,26 +105,93 @@ export class Transfer extends AggregateRoot<TransferProps> {
         fee,
         valueOn: props.valueOn,
         memo: props.memo,
-        status: 'posted',
-        postedAt: props.now,
+        status: props.approvalRequired ? 'pending' : 'posted',
+        requestedBy: props.requestedBy ?? null,
+        requestedAt: props.now,
+        postedAt: props.approvalRequired ? null : props.now,
+        decision: null,
         cancellation: null,
       },
       id,
     )
-    const legs = transfer.legs(props.now)
+    if (props.approvalRequired) return right({ transfer, legs: [] })
+    const legs = transfer.written(props.now)
     if (legs.isLeft()) return left(legs.value)
-    transfer.addDomainEvent(
-      new TreasuryEvent('treasury.transfer.posted', transfer.id, props.tenantId, props.now, {
-        transferId: transfer.id.toString(),
-        fromAccountId: transfer.props.fromAccountId,
-        toAccountId: transfer.props.toAccountId,
-        amount: moneyPayload(props.amount),
-        fee: fee ? moneyPayload(fee) : null,
-        valueOn: props.valueOn.value,
-        postedAt: props.now.toISOString(),
+    return right({ transfer, legs: legs.value })
+  }
+
+  /**
+   * A second person lets it go. The accounts are checked again — either may have closed
+   * while it waited — and the legs are written and announced now.
+   */
+  approve(
+    authority: ApprovalAuthority,
+    accounts: { readonly from: Account; readonly to: Account },
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError | InvalidInputError, JournalEntry[]> {
+    const decidable = this.decidable(authority)
+    if (decidable.isLeft()) return left(decidable.value)
+    for (const account of [accounts.from, accounts.to]) {
+      const accepted = account.accepts(this.props.amount.currency, this.props.valueOn)
+      if (accepted.isLeft()) return left(accepted.value)
+    }
+    const legs = this.written(now)
+    if (legs.isLeft()) return left(legs.value)
+    this.props.status = 'posted'
+    this.props.postedAt = now
+    this.props.decision = { by: authority.actor, for: authority.onBehalfOf, at: now, reason: null }
+    return right(legs.value)
+  }
+
+  reject(
+    authority: ApprovalAuthority,
+    reason: Reason,
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
+    const decidable = this.decidable(authority)
+    if (decidable.isLeft()) return decidable
+    this.props.status = 'rejected'
+    this.props.decision = { by: authority.actor, for: authority.onBehalfOf, at: now, reason }
+    return right(undefined)
+  }
+
+  get status(): TransferStatus {
+    return this.props.status
+  }
+
+  get amount(): Money {
+    return this.props.amount
+  }
+
+  private decidable(
+    authority: ApprovalAuthority,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
+    if (this.props.status !== 'pending')
+      return left(new ConflictError('this transfer is not waiting for a decision'))
+    return checkDuties(
+      'treasury.transfer',
+      [this.props.requestedBy],
+      authority,
+      'the person who asked for a transfer cannot decide it',
+    )
+  }
+
+  /** Its legs, and the announcement that it moved money. */
+  private written(now: Date): Either<InvalidInputError, JournalEntry[]> {
+    const legs = this.legs(now)
+    if (legs.isLeft()) return left(legs.value)
+    this.addDomainEvent(
+      new TreasuryEvent('treasury.transfer.posted', this.id, this.props.tenantId, now, {
+        transferId: this.id.toString(),
+        fromAccountId: this.props.fromAccountId,
+        toAccountId: this.props.toAccountId,
+        amount: moneyPayload(this.props.amount),
+        fee: this.props.fee ? moneyPayload(this.props.fee) : null,
+        valueOn: this.props.valueOn.value,
+        postedAt: now.toISOString(),
       }),
     )
-    return right({ transfer, legs: legs.value })
+    return right(legs.value)
   }
 
   static rehydrate(props: TransferProps, id: UniqueEntityID): Transfer {
@@ -122,8 +215,10 @@ export class Transfer extends AggregateRoot<TransferProps> {
     reason: Reason,
     now: Date,
   ): Either<ConflictError | InvalidInputError, JournalEntry[]> {
+    if (this.props.status === 'pending')
+      return left(new ConflictError('a transfer waiting for approval is rejected, not cancelled'))
     if (this.props.status !== 'posted')
-      return left(new ConflictError('the transfer is already cancelled'))
+      return left(new ConflictError(`the transfer is already ${this.props.status}`))
     const inverses: JournalEntry[] = []
     for (const leg of legs) {
       const inverse = leg.reverse(reason, now, { fromTransfer: true })
@@ -199,7 +294,13 @@ export class Transfer extends AggregateRoot<TransferProps> {
       valueOn: this.props.valueOn.value,
       memo: this.props.memo?.value ?? null,
       status: this.props.status,
+      requestedBy: this.props.requestedBy,
+      requestedAt: this.props.requestedAt,
       postedAt: this.props.postedAt,
+      decidedBy: this.props.decision?.by ?? null,
+      decidedFor: this.props.decision?.for ?? null,
+      decidedAt: this.props.decision?.at ?? null,
+      decisionReason: this.props.decision?.reason?.value ?? null,
       cancelledAt: this.props.cancellation?.at ?? null,
       cancellationReason: this.props.cancellation?.reason.value ?? null,
     })

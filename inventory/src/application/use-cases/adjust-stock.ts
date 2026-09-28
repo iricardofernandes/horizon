@@ -1,6 +1,7 @@
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
+import { APPROVE_ADJUSTMENT } from '@/domain/controls/duties'
 import { type AdjustmentDirection, StockAdjustment } from '@/domain/entities/stock-adjustment'
 import type { StockBalance } from '@/domain/entities/stock-balance'
 import { naming } from '@/domain/entities/tracked-units'
@@ -21,6 +22,7 @@ import {
   type Outcome,
   once,
 } from './commands'
+import { decideWith, onBehalfOf, resolveAuthorities } from './delegations'
 import { moneyOf, noteOf, quantityOf, serialsOf, worthOf } from './inputs'
 import { openBalance } from './manage-inventory'
 
@@ -182,9 +184,13 @@ export class DecideAdjustmentUseCase {
       const adjustment = await scope.adjustments.findById(request.adjustmentId)
       if (!adjustment) return left(new ResourceNotFoundError('adjustment was not found'))
       const now = this.clock.now()
-      const decided = rejection
-        ? adjustment.reject(context.actor, rejection, now)
-        : adjustment.approve(context.actor, now)
+      const authorities = await resolveAuthorities(scope, context, APPROVE_ADJUSTMENT, now)
+      if (authorities.isLeft()) return left(authorities.value)
+      const decided = decideWith(authorities.value, (authority) =>
+        rejection
+          ? adjustment.reject(authority, rejection, now)
+          : adjustment.approve(authority, now),
+      )
       if (decided.isLeft()) return left(decided.value)
 
       if (adjustment.posts()) {
@@ -205,6 +211,7 @@ export class DecideAdjustmentUseCase {
           direction: adjustment.direction(),
           value: described(adjustment.value()),
           ...(decision.kind === 'reject' ? { reason: decision.reason } : {}),
+          ...onBehalfOf(decided.value),
         },
       })
       return right({ status: adjustment.status(), approvalState: adjustment.approvalState() })

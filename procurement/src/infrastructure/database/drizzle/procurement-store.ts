@@ -40,6 +40,7 @@ import {
   Quantity,
   Reason,
 } from '@/domain/value-objects/procurement-values'
+import { delegationsRepository } from './delegation-store'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
@@ -132,6 +133,7 @@ function mapRequisition(
         row.decidedBy && row.decidedAt
           ? {
               by: row.decidedBy,
+              for: row.decidedFor,
               at: row.decidedAt,
               reason: row.decisionReason ? restored(Reason.create(row.decisionReason)) : null,
             }
@@ -203,6 +205,7 @@ function mapOrder(
         requestedBy: row.approvalRequestedBy,
         requestedAt: row.approvalRequestedAt,
         decidedBy: row.approvalDecidedBy,
+        decidedFor: row.approvalDecidedFor,
         decidedAt: row.approvalDecidedAt,
         reason: row.approvalReason ? restored(Reason.create(row.approvalReason)) : null,
       },
@@ -377,6 +380,7 @@ export function makeScope(tx: Transaction, tenantId: string): ProcurementScope {
   }
   return {
     tenantId,
+    delegations: delegationsRepository(tx, tenantId),
     suppliers: {
       findById: async (id) => {
         const [row] = await tx
@@ -498,6 +502,7 @@ export function makeScope(tx: Transaction, tenantId: string): ProcurementScope {
             submittedBy: row.submittedBy,
             submittedAt: row.submittedAt,
             decidedBy: row.decidedBy,
+            decidedFor: row.decidedFor,
             decidedAt: row.decidedAt,
             decisionReason: row.decisionReason,
             orderId: row.orderId,
@@ -634,6 +639,7 @@ export function makeScope(tx: Transaction, tenantId: string): ProcurementScope {
           approvalRequestedBy: row.approvalRequestedBy,
           approvalRequestedAt: row.approvalRequestedAt,
           approvalDecidedBy: row.approvalDecidedBy,
+          approvalDecidedFor: row.approvalDecidedFor,
           approvalDecidedAt: row.approvalDecidedAt,
           approvalReason: row.approvalReason,
           closureReason: row.closureReason,
@@ -668,6 +674,7 @@ export function makeScope(tx: Transaction, tenantId: string): ProcurementScope {
             approvalRequestedBy: row.approvalRequestedBy,
             approvalRequestedAt: row.approvalRequestedAt,
             approvalDecidedBy: row.approvalDecidedBy,
+            approvalDecidedFor: row.approvalDecidedFor,
             approvalDecidedAt: row.approvalDecidedAt,
             approvalReason: row.approvalReason,
             closureReason: row.closureReason,
@@ -812,6 +819,7 @@ function headOf(row: RequisitionRow) {
     submittedBy: row.submittedBy,
     submittedAt: row.submittedAt,
     decidedBy: row.decidedBy,
+    decidedFor: row.decidedFor,
     decidedAt: row.decidedAt,
     decisionReason: row.decisionReason,
     orderId: row.orderId,

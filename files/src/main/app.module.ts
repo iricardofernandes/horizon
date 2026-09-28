@@ -1,6 +1,7 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { RelayDueScan } from '@/infrastructure/database/drizzle/files-database'
+import { AuditController } from '@/infrastructure/http/audit.controller'
 import { FilesAuthGuard } from '@/infrastructure/http/authorization'
 import { FilesController } from '@/infrastructure/http/files.controller'
 import { erasureHandlers } from '@/infrastructure/messaging/erasure-handlers'
@@ -56,7 +57,7 @@ export class AppModule {
       )
     return {
       module: AppModule,
-      controllers: [FilesController],
+      controllers: [FilesController, AuditController],
       providers,
       exports: [FilesRuntime],
     }

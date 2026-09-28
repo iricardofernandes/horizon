@@ -1,6 +1,7 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { FireDueRemindersUseCase } from '@/application/use-cases/fire-due-reminders'
+import { AuditController } from '@/infrastructure/http/audit.controller'
 import { CrmAuthGuard } from '@/infrastructure/http/authorization'
 import { CrmController } from '@/infrastructure/http/crm.controller'
 import { MetricsController } from '@/infrastructure/http/metrics.controller'
@@ -85,7 +86,13 @@ export class AppModule {
     }
     return {
       module: AppModule,
-      controllers: [CrmController, OpportunitiesController, RecordsController, MetricsController],
+      controllers: [
+        CrmController,
+        OpportunitiesController,
+        RecordsController,
+        MetricsController,
+        AuditController,
+      ],
       providers,
       exports: [CrmRuntime],
     }

@@ -208,7 +208,12 @@ export interface TransferRow {
   readonly valueOn: string
   readonly memo: string | null
   readonly status: string
-  readonly postedAt: Date
+  readonly requestedBy: string | null
+  readonly requestedAt: Date
+  /** Null while it waits for a second person, or once refused. */
+  readonly postedAt: Date | null
+  readonly decidedBy: string | null
+  readonly decidedFor: string | null
   readonly cancellationReason: string | null
 }
 
@@ -216,11 +221,12 @@ export async function listTransfers(tx: Transaction, limit: number): Promise<Tra
   const rows = (await tx.execute(sql`
     select t.id, t.from_account_id, f.name as from_name, t.to_account_id, d.name as to_name,
       t.amount::text as amount, t.fee::text as fee, t.currency, t.value_on::text as value_on,
-      t.memo, t.status, t.posted_at, t.cancellation_reason
+      t.memo, t.status, t.requested_by, t.requested_at, t.posted_at, t.decided_by, t.decided_for,
+      t.cancellation_reason
     from transfers t
     join accounts f on f.tenant_id = t.tenant_id and f.id = t.from_account_id
     join accounts d on d.tenant_id = t.tenant_id and d.id = t.to_account_id
-    order by t.value_on desc, t.posted_at desc
+    order by t.value_on desc, t.requested_at desc
     limit ${limit}`)) as unknown as Record<string, unknown>[]
   return rows.map((row) => ({
     id: String(row.id),
@@ -234,7 +240,11 @@ export async function listTransfers(tx: Transaction, limit: number): Promise<Tra
     valueOn: String(row.value_on),
     memo: (row.memo as string | null) ?? null,
     status: String(row.status),
-    postedAt: new Date(String(row.posted_at)),
+    requestedBy: (row.requested_by as string | null) ?? null,
+    requestedAt: new Date(String(row.requested_at)),
+    postedAt: row.posted_at ? new Date(String(row.posted_at)) : null,
+    decidedBy: (row.decided_by as string | null) ?? null,
+    decidedFor: (row.decided_for as string | null) ?? null,
     cancellationReason: (row.cancellation_reason as string | null) ?? null,
   }))
 }

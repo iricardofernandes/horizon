@@ -46,6 +46,8 @@ import {
   Reason,
   Reference,
 } from '@/domain/value-objects/ledger-values'
+import { entryPoliciesRepository, manualEntriesRepository } from './approval-store'
+import { delegationsRepository } from './delegation-store'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
@@ -276,6 +278,9 @@ export function makeScope(tx: Transaction, tenantId: string): LedgerScope {
   }
   return {
     tenantId,
+    delegations: delegationsRepository(tx, tenantId),
+    manualEntries: manualEntriesRepository(tx, tenantId),
+    entryPolicies: entryPoliciesRepository(tx, tenantId),
     accounts: {
       findMany: async (ids) => {
         const unique = [...new Set(ids)].sort()

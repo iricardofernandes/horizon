@@ -11,6 +11,7 @@ import type {
 import { InventoryUnitOfWork } from '@/application/ports/unit-of-work'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import { type AuditFilter, type AuditPageView, readAuditPage } from './audit-reader'
 import type { SqlRun, TenantSql } from './import-store'
 import {
   countDetail,
@@ -240,6 +241,11 @@ export class InventoryDatabase extends InventoryUnitOfWork implements TenantSql 
 
   listTracking(tenantId: string) {
     return this.inTenant(tenantId, (scope) => scope.tracking.list())
+  }
+
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  auditPage(tenantId: string, filter: AuditFilter): Promise<AuditPageView> {
+    return this.read(tenantId, (tx) => readAuditPage(tx, filter))
   }
 
   async ping(): Promise<void> {

@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import {
+  auditQuerySchema,
   fiscalArtifactListV2Schema,
   fiscalCapabilityListV2Schema,
   fiscalCorrectionRequestSchema,
@@ -9,6 +10,7 @@ import {
 } from '@horizon/contracts'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
+import type { FiscalAuditLog } from './audit-log'
 import { type FiscalPermission, type FiscalPrincipal, type FiscalTokenVerifier, may } from './auth'
 import type { FiscalCalculations } from './calculations'
 import { CancellationWindowElapsed, type FiscalCancellation } from './cancellation'
@@ -57,6 +59,7 @@ export type FiscalServerDependencies = {
   service?: ServiceDependencies
   documentList?: Pick<FiscalDocumentList, 'list'>
   support?: Pick<FiscalSupport, 'overview'>
+  audit?: Pick<FiscalAuditLog, 'page'>
 }
 
 export function createFiscalServer(dependencies: FiscalServerDependencies): Server {
@@ -311,6 +314,18 @@ async function handle(
         problem(response, 400, 'Bad Request', 'Invalid Fiscal document list query')
       else throw error
     }
+    return
+  }
+
+  if (request.method === 'GET' && url.pathname === '/audit' && dependencies.audit) {
+    if (!requirePermission(principal, 'audit:read', response)) return
+    response.setHeader('cache-control', 'private, no-store')
+    const query = auditQuerySchema.safeParse(Object.fromEntries(url.searchParams))
+    if (!query.success) {
+      problem(response, 400, 'Bad Request', 'Invalid Fiscal audit query')
+      return
+    }
+    json(response, 200, await dependencies.audit.page(principal.tenantId, query.data))
     return
   }
 

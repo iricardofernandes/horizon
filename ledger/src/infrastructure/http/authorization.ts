@@ -6,12 +6,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import type { Reflector } from '@nestjs/core'
+import { DELEGABLE_PERMISSIONS } from '@/domain/controls/duties'
 import type { AccessClaims } from '@/infrastructure/cryptography/access-token-verifier'
 import type { LedgerRuntime } from '@/main/ledger-runtime'
 
 const PUBLIC = 'ledger:public'
 const ACTION = 'ledger:action'
-export type LedgerAction = 'read' | 'configure' | 'post' | 'reverse' | 'close'
+export type LedgerAction = 'read' | 'configure' | 'post' | 'reverse' | 'close' | 'approve' | 'audit'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
 export const RequireLedgerAction = (action: LedgerAction) => SetMetadata(ACTION, action)
 
@@ -35,12 +36,28 @@ export function tenantOf(request: LedgerRequest): string {
  * report can ever say, so changing it is admin-only. An accountant posts and reverses —
  * a reversal is ordinary accounting work, not an escalation, because it never destroys the
  * original (ADR 0042). Closing a month freezes what everyone else may post, so it stays
- * with admins.
+ * with admins, and so do approving a manual entry that waits and reading the audit log
+ * (Phase 68). An approval can be lent to any member of the module for a period, so the
+ * decide routes admit every role and the use case judges (ADR 0062).
  */
 const PERMITS: Readonly<Record<string, readonly LedgerAction[]>> = {
-  admin: ['read', 'configure', 'post', 'reverse', 'close'],
+  admin: ['read', 'configure', 'post', 'reverse', 'close', 'approve', 'audit'],
   accountant: ['read', 'post', 'reverse'],
   viewer: ['read'],
+}
+
+function permits(principal: AccessClaims | undefined, action: LedgerAction): boolean {
+  return (
+    principal?.roles.some(
+      (assignment) =>
+        assignment.module === 'ledger' && (PERMITS[assignment.role]?.includes(action) ?? false),
+    ) ?? false
+  )
+}
+
+/** The approvals the person holds through a Ledger role (ADR 0062). */
+export function approvalsOf(request: LedgerRequest): readonly string[] {
+  return permits(request.principal, 'approve') ? DELEGABLE_PERMISSIONS : []
 }
 
 export class LedgerAuthGuard implements CanActivate {
@@ -65,11 +82,8 @@ export class LedgerAuthGuard implements CanActivate {
     request.principal = principal
     const action = this.reflector.getAllAndOverride<LedgerAction>(ACTION, targets)
     if (!action) return true
-    const allowed = principal.roles.some(
-      (assignment) =>
-        assignment.module === 'ledger' && (PERMITS[assignment.role]?.includes(action) ?? false),
-    )
-    if (!allowed) throw new ForbiddenException('The Ledger role does not permit this operation')
+    if (!permits(principal, action))
+      throw new ForbiddenException('The Ledger role does not permit this operation')
     return true
   }
 }

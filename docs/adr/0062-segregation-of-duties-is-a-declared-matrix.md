@@ -1,6 +1,6 @@
 # 62. Segregation of duties is a declared matrix, enforced by each module, with delegation
 
-- Status: accepted; Phase 68 implements it.
+- Status: accepted; implemented in Phase 68 ([plan](../readiness-phase68-implementation-plan.md)), with the revision below.
 - Date: 2026-09-27
 
 ## Context
@@ -30,7 +30,9 @@ approvals stop when the approver is away.
    documentation and a test oracle, never a runtime service.
 3. **Delegation.**
    - An approver may delegate a subject to someone for a date range. The delegate must
-     already hold the approver role in the module.
+     hold a role in the module, which their own token proves each time they use it
+     (revised in Phase 68: a delegate who already held the approver role would not need a
+     delegation).
    - An approval by a delegate records both names.
    - A delegate can never approve their own work, and a delegation cannot be delegated.
    - Delegations are audited, end on their date and can be revoked.
@@ -39,6 +41,17 @@ approvals stop when the approver is away.
      record and period, with the chain-verification status of each page.
    - The screen searches them all at once.
    - There is no central copy of the audit log.
+
+## Revision (Phase 68)
+
+- The delegate holds any role in the module; the delegation lends the approval alone.
+- A delegator's role cannot be checked when the delegation is used: modules see only the
+  caller's token. A delegation therefore lasts at most 90 days and can be revoked by any
+  approver of the module.
+- A decision through a delegation is refused when either the delegate or the delegator
+  did the work. A delegate lent the same approval by several people decides for the first
+  of them the record accepts.
+- Files keeps no roles (ADR 0060), so its audit log is read by Identity owners and admins.
 
 ## Consequences
 

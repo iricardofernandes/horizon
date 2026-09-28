@@ -1,5 +1,6 @@
 import type { Either } from '@/core/either'
 import type { ConflictError } from '@/core/errors/errors/conflict-error'
+import type { DelegationsRepository } from '@/domain/controls/delegations-repository'
 import type {
   CategoriesRepository,
   DimensionsRepository,
@@ -16,7 +17,7 @@ import type {
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'title' | 'approval-policy'
+  readonly subjectType: 'title' | 'approval-policy' | 'delegation'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null
@@ -36,6 +37,7 @@ export interface FinancialScope {
   readonly titles: TitlesRepository
   readonly parties: PartyProjectionRepository
   readonly approvalPolicies: ApprovalPoliciesRepository
+  readonly delegations: DelegationsRepository
   readonly audit: AuditTrail
 }
 

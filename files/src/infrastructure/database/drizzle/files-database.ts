@@ -13,6 +13,7 @@ import type { AuditRecord, FilesScope, FilesStore, OwnerKey } from '@/applicatio
 import { canonicalJson } from '@/core/audit/canonical-json'
 import type { Attachment, Owner, OwnerType } from '@/domain/attachment'
 import type { AttachingModule } from '@/domain/records'
+import { type AuditFilter, type AuditPageView, readAuditPage } from './audit-reader'
 import * as schema from './schema'
 import type { Database, Transaction } from './transaction'
 
@@ -319,6 +320,14 @@ export class FilesDatabase implements FilesStore {
       await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
       await tx.insert(schema.tenants).values({ id: tenantId }).onConflictDoNothing()
       return work(scopeOf(tx, tenantId))
+    })
+  }
+
+  /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */
+  auditPage(tenantId: string, filter: AuditFilter): Promise<AuditPageView> {
+    return this.#db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
+      return readAuditPage(tx, filter)
     })
   }
 

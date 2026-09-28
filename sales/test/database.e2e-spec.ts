@@ -489,6 +489,16 @@ it('negotiates an offer in versions and makes the accepted one binding', async (
   ])
   expect(trail[0]?.previous_hash).toBe('0'.repeat(64))
   expect(trail.every((row) => row.actor === 'ana')).toBe(true)
+  // Phase 68: the audit read endpoint judges each page, and a tampered row shows.
+  expect((await database.auditPage(tenantId, { limit: 50 })).chain.status).toBe('intact')
+  await administrator.begin(async (tx) => {
+    await tx`set local session_replication_role = replica`
+    await tx`update audit_log set actor = 'someone else' where tenant_id = ${tenantId} and sequence = 3`
+  })
+  expect((await database.auditPage(tenantId, { limit: 50 })).chain).toMatchObject({
+    status: 'broken',
+    broken: [3],
+  })
 })
 
 it('delivers an order in parts, and takes one delivery back', async () => {

@@ -1,5 +1,7 @@
 import { type Either, left, right } from '@/core/either'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
+import { type ApprovalAuthority, ownAuthority } from '@/domain/controls/approval-delegation'
+import { APPROVE_REQUISITION } from '@/domain/controls/duties'
 import { PurchaseRequisition } from '@/domain/entities/purchase-requisition'
 import type { Clock } from '../ports/clock'
 import type { ProcurementUnitOfWork } from '../ports/unit-of-work'
@@ -11,6 +13,7 @@ import {
   type Outcome,
   once,
 } from './commands'
+import { decideWith, onBehalfOf, resolveAuthorities } from './delegations'
 import { dateOf, type LineInput, memoOf, reasonOf, requisitionLinesOf } from './inputs'
 
 export interface RequisitionInput {
@@ -153,7 +156,14 @@ export class DecideRequisitionUseCase {
       const requisition = await scope.requisitions.findForUpdate(requisitionId)
       if (!requisition) return left(new ResourceNotFoundError('requisition was not found'))
       const now = this.clock.now()
-      const applied = apply(requisition, decision, context.actor, now)
+      const deciding = decision.kind === 'approve' || decision.kind === 'reject'
+      const authorities = deciding
+        ? await resolveAuthorities(scope, context, APPROVE_REQUISITION, now)
+        : right<never, readonly ApprovalAuthority[]>([ownAuthority(context.actor)])
+      if (authorities.isLeft()) return left(authorities.value)
+      const applied = decideWith(authorities.value, (authority) =>
+        apply(requisition, decision, authority, now),
+      )
       if (applied.isLeft()) return left(applied.value)
       await scope.requisitions.save(requisition)
       await audit(scope, context, {
@@ -161,7 +171,10 @@ export class DecideRequisitionUseCase {
         subjectType: 'requisition',
         subjectId: requisitionId,
         occurredAt: now,
-        details: 'reason' in decision ? { reason: decision.reason } : {},
+        details: {
+          ...('reason' in decision ? { reason: decision.reason } : {}),
+          ...onBehalfOf(applied.value),
+        },
       })
       return right({ status: requisition.status })
     })
@@ -171,17 +184,17 @@ export class DecideRequisitionUseCase {
 function apply(
   requisition: PurchaseRequisition,
   decision: Decision,
-  actor: string,
+  authority: ApprovalAuthority,
   now: Date,
 ): Either<Failure, void> {
   switch (decision.kind) {
     case 'submit':
-      return requisition.submit(actor, now)
+      return requisition.submit(authority.actor, now)
     case 'approve':
-      return requisition.approve(actor, now)
+      return requisition.approve(authority, now)
     case 'reject': {
       const reason = reasonOf(decision.reason)
-      return reason.isLeft() ? left(reason.value) : requisition.reject(actor, reason.value, now)
+      return reason.isLeft() ? left(reason.value) : requisition.reject(authority, reason.value, now)
     }
     default: {
       const reason = reasonOf(decision.reason)

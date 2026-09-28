@@ -66,6 +66,7 @@ export async function raise(
     origin: input.origin,
     terms,
     stage: input.stage,
+    createdBy: input.actor,
     now: input.now,
   })
   if (title.isLeft()) return left(title.value)

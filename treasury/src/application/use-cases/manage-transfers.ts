@@ -1,10 +1,21 @@
-import { left, right } from '@/core/either'
+import { type Either, left, right } from '@/core/either'
+import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
+import { APPROVE_TRANSFER } from '@/domain/controls/duties'
 import { Transfer } from '@/domain/entities/transfer'
+import type { TransferApprovalPolicy } from '@/domain/repositories/treasury-repositories'
 import { BusinessDate, Currency, Memo, Money, Reason } from '@/domain/value-objects/treasury-values'
 import type { Clock } from '../ports/clock'
 import type { TreasuryUnitOfWork } from '../ports/unit-of-work'
-import { audit, type IdempotentContext, type Outcome, once } from './commands'
+import {
+  audit,
+  type CommandContext,
+  type Failure,
+  type IdempotentContext,
+  type Outcome,
+  once,
+} from './commands'
+import { decideWith, onBehalfOf, resolveAuthorities } from './delegations'
 
 export interface TransferInput {
   readonly fromAccountId: string
@@ -16,7 +27,11 @@ export interface TransferInput {
   readonly memo?: string | undefined
 }
 
-/** Both legs and the fee are appended in the transaction that records the transfer. */
+/**
+ * Both legs and the fee are appended in the transaction that records the transfer — or, at
+ * or above the workspace's threshold for its currency, none until a second person approves
+ * it (ADR 0062).
+ */
 export class PostTransferUseCase {
   constructor(
     private readonly unitOfWork: TreasuryUnitOfWork,
@@ -26,7 +41,7 @@ export class PostTransferUseCase {
   async execute(request: {
     context: IdempotentContext
     transfer: TransferInput
-  }): Outcome<{ id: string }> {
+  }): Outcome<{ id: string; status: string }> {
     const input = request.transfer
     const currency = Currency.create(input.currency)
     if (currency.isLeft()) return left(currency.value)
@@ -45,6 +60,8 @@ export class PostTransferUseCase {
       const to = accounts.find((account) => account.id.toString() === input.toAccountId)
       if (!from || !to) return left(new ResourceNotFoundError('account was not found'))
       const now = this.clock.now()
+      const policy = await scope.transferPolicies.find(currency.value.value)
+      const approvalRequired = policy !== null && amount.value.amount >= policy.threshold
       const posted = Transfer.post({
         tenantId: context.tenantId,
         from,
@@ -54,12 +71,14 @@ export class PostTransferUseCase {
         valueOn: valueOn.value,
         memo: memo.value,
         now,
+        requestedBy: context.actor,
+        approvalRequired,
       })
       if (posted.isLeft()) return left(posted.value)
       await scope.transfers.create(posted.value.transfer)
       await scope.journal.append(posted.value.legs)
       await audit(scope, context, {
-        action: 'transfer.posted',
+        action: approvalRequired ? 'transfer.requested' : 'transfer.posted',
         subjectType: 'transfer',
         subjectId: posted.value.transfer.id.toString(),
         occurredAt: now,
@@ -70,7 +89,10 @@ export class PostTransferUseCase {
           fee: fee.value.amount,
         },
       })
-      return right({ id: posted.value.transfer.id.toString() })
+      return right({
+        id: posted.value.transfer.id.toString(),
+        status: posted.value.transfer.status,
+      })
     })
   }
 }
@@ -108,6 +130,117 @@ export class CancelTransferUseCase {
         details: { reason: reason.value.value },
       })
       return right({ id: request.transferId })
+    })
+  }
+}
+
+/** At or above the threshold, a transfer in this currency waits for a second person. */
+export class DefineTransferApprovalPolicyUseCase {
+  constructor(
+    private readonly unitOfWork: TreasuryUnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  async execute(request: {
+    context: CommandContext
+    currency: string
+    threshold: string
+  }): Promise<Either<InvalidInputError, TransferApprovalPolicy>> {
+    const currency = Currency.create(request.currency)
+    if (currency.isLeft()) return left(currency.value)
+    if (!/^\d{1,18}$/.test(request.threshold))
+      return left(new InvalidInputError('/threshold', 'must be an integer count of minor units'))
+    const { context } = request
+    return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
+      const policy: TransferApprovalPolicy = {
+        currency: currency.value.value,
+        threshold: BigInt(request.threshold),
+        updatedAt: this.clock.now(),
+      }
+      await scope.transferPolicies.save(policy)
+      await audit(scope, context, {
+        action: 'policy.defined',
+        subjectType: 'policy',
+        subjectId: context.tenantId,
+        occurredAt: policy.updatedAt,
+        details: { subject: 'transfer', currency: policy.currency, threshold: policy.threshold },
+      })
+      return right(policy)
+    })
+  }
+}
+
+/**
+ * Deciding a transfer that waits (ADR 0062). Approving writes its legs and announces it;
+ * whoever asked for it never decides it, in person or through a delegation they lent.
+ */
+export class DecideTransferUseCase {
+  constructor(
+    private readonly unitOfWork: TreasuryUnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  approve(context: CommandContext, transferId: string): Outcome<{ id: string; status: string }> {
+    return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
+      const transfer = await scope.transfers.findForUpdate(transferId)
+      if (!transfer) return left(new ResourceNotFoundError('transfer was not found'))
+      const accounts = await scope.accounts.findForUpdate([
+        transfer.fromAccountId,
+        transfer.toAccountId,
+      ])
+      const from = accounts.find((account) => account.id.toString() === transfer.fromAccountId)
+      const to = accounts.find((account) => account.id.toString() === transfer.toAccountId)
+      if (!from || !to) return left(new ResourceNotFoundError('account was not found'))
+      const now = this.clock.now()
+      const authorities = await resolveAuthorities(scope, context, APPROVE_TRANSFER, now)
+      if (authorities.isLeft()) return left(authorities.value)
+      let legs: Awaited<ReturnType<typeof scope.journal.findLegsOf>> = []
+      const decided = decideWith<Failure>(authorities.value, (authority) => {
+        const written = transfer.approve(authority, { from, to }, now)
+        if (written.isLeft()) return left(written.value)
+        legs = written.value
+        return right(undefined)
+      })
+      if (decided.isLeft()) return left(decided.value)
+      await scope.transfers.save(transfer)
+      await scope.journal.append(legs)
+      await audit(scope, context, {
+        action: 'transfer.approved',
+        subjectType: 'transfer',
+        subjectId: transferId,
+        occurredAt: now,
+        details: { amount: transfer.amount.amount, ...onBehalfOf(decided.value) },
+      })
+      return right({ id: transferId, status: transfer.status })
+    })
+  }
+
+  reject(
+    context: CommandContext,
+    transferId: string,
+    reason: string,
+  ): Outcome<{ id: string; status: string }> {
+    const parsed = Reason.create(reason)
+    if (parsed.isLeft()) return Promise.resolve(left(parsed.value))
+    return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
+      const transfer = await scope.transfers.findForUpdate(transferId)
+      if (!transfer) return left(new ResourceNotFoundError('transfer was not found'))
+      const now = this.clock.now()
+      const authorities = await resolveAuthorities(scope, context, APPROVE_TRANSFER, now)
+      if (authorities.isLeft()) return left(authorities.value)
+      const decided = decideWith(authorities.value, (authority) =>
+        transfer.reject(authority, parsed.value, now),
+      )
+      if (decided.isLeft()) return left(decided.value)
+      await scope.transfers.save(transfer)
+      await audit(scope, context, {
+        action: 'transfer.rejected',
+        subjectType: 'transfer',
+        subjectId: transferId,
+        occurredAt: now,
+        details: { reason: parsed.value.value, ...onBehalfOf(decided.value) },
+      })
+      return right({ id: transferId, status: transfer.status })
     })
   }
 }

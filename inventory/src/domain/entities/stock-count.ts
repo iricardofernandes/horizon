@@ -2,6 +2,8 @@ import { type Either, left, right } from '@/core/either'
 import { AggregateRoot } from '@/core/entities/aggregate-root'
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import type { SegregationOfDutiesError } from '@/core/errors/errors/segregation-of-duties-error'
+import { type ApprovalAuthority, checkDuties } from '../controls/approval-delegation'
 import type { Note, Quantity } from '../value-objects/inventory-values'
 import type { LotCode, SerialNumber } from '../value-objects/tracking'
 import type { ApprovalState } from './stock-adjustment'
@@ -56,6 +58,8 @@ interface StockCountProps {
   closedBy: string | null
   closedAt: Date | null
   decidedBy: string | null
+  /** The approver who lent the decision, when it was taken through a delegation. */
+  decidedFor: string | null
   decidedAt: Date | null
   closureReason: Note | null
   updatedAt: Date
@@ -114,6 +118,7 @@ export class StockCount extends AggregateRoot<StockCountProps> {
           closedBy: null,
           closedAt: null,
           decidedBy: null,
+          decidedFor: null,
           decidedAt: null,
           closureReason: null,
           updatedAt: props.now,
@@ -171,27 +176,47 @@ export class StockCount extends AggregateRoot<StockCountProps> {
     return right(undefined)
   }
 
-  approve(actor: string, now: Date): Either<ConflictError, void> {
+  /** Four eyes (ADR 0062): whoever closed the count never decides it, even by delegation. */
+  approve(
+    authority: ApprovalAuthority,
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
     if (this.props.approvalState !== 'pending')
       return left(new ConflictError('this count is not waiting for a decision'))
-    if (actor === this.props.closedBy)
-      return left(new ConflictError('the person who closed a count cannot allow its differences'))
+    const allowed = checkDuties(
+      'inventory.count',
+      [this.props.closedBy],
+      authority,
+      'the person who closed a count cannot allow its differences',
+    )
+    if (allowed.isLeft()) return allowed
     this.props.approvalState = 'approved'
     this.props.status = 'closed'
-    this.props.decidedBy = actor
+    this.props.decidedBy = authority.actor
+    this.props.decidedFor = authority.onBehalfOf
     this.props.decidedAt = now
     this.props.updatedAt = now
     return right(undefined)
   }
 
-  reject(actor: string, reason: Note, now: Date): Either<ConflictError, void> {
+  reject(
+    authority: ApprovalAuthority,
+    reason: Note,
+    now: Date,
+  ): Either<ConflictError | SegregationOfDutiesError, void> {
     if (this.props.approvalState !== 'pending')
       return left(new ConflictError('this count is not waiting for a decision'))
-    if (actor === this.props.closedBy)
-      return left(new ConflictError('the person who closed a count cannot refuse its differences'))
+    const allowed = checkDuties(
+      'inventory.count',
+      [this.props.closedBy],
+      authority,
+      'the person who closed a count cannot refuse its differences',
+    )
+    if (allowed.isLeft()) return allowed
     this.props.approvalState = 'rejected'
     this.props.status = 'cancelled'
-    this.props.decidedBy = actor
+    this.props.decidedBy = authority.actor
+    this.props.decidedFor = authority.onBehalfOf
     this.props.decidedAt = now
     this.props.closureReason = reason
     this.props.updatedAt = now
@@ -280,6 +305,7 @@ export class StockCount extends AggregateRoot<StockCountProps> {
     closedBy: string | null
     closedAt: Date | null
     decidedBy: string | null
+    decidedFor: string | null
     decidedAt: Date | null
     closureReason: string | null
     updatedAt: Date
@@ -303,6 +329,7 @@ export class StockCount extends AggregateRoot<StockCountProps> {
       closedBy: this.props.closedBy,
       closedAt: this.props.closedAt,
       decidedBy: this.props.decidedBy,
+      decidedFor: this.props.decidedFor,
       decidedAt: this.props.decidedAt,
       closureReason: this.props.closureReason?.value ?? null,
       updatedAt: this.props.updatedAt,

@@ -66,6 +66,16 @@ Posting, settling and every reversal require an `Idempotency-Key` header (ADR 00
 - Journal entries, periods and the DRE — `ledger/`.
 - Who the counterparties are — `parties/`.
 
+## Segregation of duties, delegation and audit (Phase 68)
+
+- **Pairs** (ADR 0062): the `financial.payable` pair: whoever drafted a payable or asked for its approval never decides it. A refusal is `403` with the code `segregation-of-duties`.
+- **Delegation:** an approver (admin) lends `financial:payable:approve` to a member of the module for up to 90
+  days, through `POST /delegations`; `GET /delegations` lists them and
+  `POST /delegations/{id}/revoke` ends one. A decision through a delegation records both
+  names, and is refused when either did the work.
+- **Audit:** `GET /audit` reads the log a page at a time, filtered by actor, action, record
+  and period, with the hash chain judged on the page. Admins only.
+
 ## Authorization
 
 | Role | Reads | Drafts, posts, settles, requests approval | Reverses, approves | Configures registries and approval policy |

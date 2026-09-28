@@ -141,3 +141,10 @@ Two one-off commands bring an existing workspace into CRM:
   party, so the ones that already hold a CRM role become accounts;
 - `npm run backfill:owners -- --tenant <uuid>` here loads the workspace's users as
   owners (`IDENTITY_URL`, `IDENTITY_TOKEN`).
+
+## Audit log (Phase 68)
+
+`GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered
+by actor, action, record and period. Every page carries the chain's verdict: each row is
+recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
+admins; the web's audit screen asks it alongside every other module.

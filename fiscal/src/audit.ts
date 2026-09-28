@@ -78,7 +78,7 @@ export function verifyAuditRows(
   return !head || (Number(head.sequence) === sequence && head.hash === previous)
 }
 
-function hashRow(row: AuditRow): string {
+export function hashRow(row: AuditRow): string {
   const instant = new Date(row.occurred_at).toISOString()
   return digest(
     JSON.stringify([
