@@ -1202,7 +1202,13 @@ function purchaseGoods(modules, context) {
 async function runPurchase(modules, context) {
   const { database, relay, tenantId, supplierId, warehouseId, itemId, clock } = context
   const buyer = { tenantId, actor: 'demo:buyer', requestId: null }
-  const manager = { tenantId, actor: 'demo:manager', requestId: null }
+  // The manager decides through their own role, which the context declares (ADR 0062).
+  const manager = {
+    tenantId,
+    actor: 'demo:manager',
+    requestId: null,
+    approvals: ['procurement:requisition:approve', 'procurement:order:approve'],
+  }
   const keyed = (actor) => ({ ...actor, idempotencyKey: randomUUID() })
   const value = (result) => {
     if (result.isLeft()) throw result.value
