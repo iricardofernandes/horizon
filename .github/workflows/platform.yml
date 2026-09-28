@@ -12,12 +12,16 @@ on:
       - 'infra/**'
       - 'gateway/**'
       - 'contracts/**'
+      # `make up` is how the smoke starts the platform.
+      - 'Makefile'
       - '.github/workflows/platform.yml'
   pull_request:
     paths:
       - 'infra/**'
       - 'gateway/**'
       - 'contracts/**'
+      # `make up` is how the smoke starts the platform.
+      - 'Makefile'
       - '.github/workflows/platform.yml'
   workflow_dispatch:
 
