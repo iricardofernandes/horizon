@@ -20,12 +20,16 @@ export type AuditSource = {
 const adminOf = (module: string): AuditSource => ({
   module,
   path: `/${module}/audit`,
-  readers: [`${module}:admin`],
+  readers: [`${module}:admin`, `${module}:auditor`],
 })
 
 /** Every module that keeps an audit log. Parties and Webhooks keep none. */
 export const AUDIT_SOURCES: readonly AuditSource[] = [
-  { module: 'identity', path: '/identity/audit', readers: ['identity:owner', 'identity:admin'] },
+  {
+    module: 'identity',
+    path: '/identity/audit',
+    readers: ['identity:owner', 'identity:admin', 'identity:auditor'],
+  },
   adminOf('catalog'),
   adminOf('sales'),
   adminOf('financial'),
@@ -37,7 +41,11 @@ export const AUDIT_SOURCES: readonly AuditSource[] = [
   adminOf('crm'),
   adminOf('reporting'),
   // Files holds no roles (ADR 0060): its log is the workspace administrators'.
-  { module: 'files', path: '/files/audit', readers: ['identity:owner', 'identity:admin'] },
+  {
+    module: 'files',
+    path: '/files/audit',
+    readers: ['identity:owner', 'identity:admin', 'identity:auditor'],
+  },
 ]
 
 export function auditSourcesFor(roles: readonly RoleAssignment[]): AuditSource[] {

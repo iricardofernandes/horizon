@@ -403,6 +403,9 @@ it('reads the audit log only as a Fiscal admin, for the token tenant (Phase 68)'
   const headers = { authorization: 'Bearer test' }
   role = 'issuer'
   expect((await fetch(`${base}/audit`, { headers })).status).toBe(403)
+  role = 'auditor'
+  expect((await fetch(`${base}/audit`, { headers })).status).toBe(200)
+  expect((await fetch(`${base}/documents`, { headers })).status).toBe(403)
   role = 'admin'
   expect((await fetch(`${base}/audit?limit=900`, { headers })).status).toBe(400)
   const page = await fetch(`${base}/audit?action=fiscal.inbound.imported&limit=20`, { headers })

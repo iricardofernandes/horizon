@@ -102,6 +102,9 @@ services:
       BLIND_INDEX_KEY_PATH: /keys/blind-index.key
       # Phase 67: TOTP secrets are sealed with this; invitations go out through Mailpit.
       MFA_SEAL_SECRET: ${HORIZON_MFA_SEAL_SECRET:-local-mfa-seal-secret-change-me-0123456789}
+      # Service clients for scheduled work (Phase 69): `name:sha256(secret)`. The default is
+      # the digest of reporting's local default secret; change both together.
+      SERVICE_CLIENTS: ${HORIZON_SERVICE_CLIENTS:-reporting:9b8f7788a8796f95e9bebddfe847bf1d539fe1a6e8fbe17393302202175f768c}
       SMTP_URL: smtp://mailpit:1025
       MAIL_FROM: Horizon <no-reply@horizon.local>
       WEB_URL: http://localhost:${HORIZON_WEB_PORT:-3000}
@@ -426,6 +429,9 @@ services:
       AWS_ACCESS_KEY_ID: ${HORIZON_MINIO_USER:-horizon-fiscal-local}
       AWS_SECRET_ACCESS_KEY: ${HORIZON_MINIO_PASSWORD:-horizon-fiscal-local-secret}
       EXPORT_LINK_SECRET: ${HORIZON_EXPORT_LINK_SECRET:-local-export-link-secret-change-me-0123456789}
+      # The service identity for scheduled controls (Phase 69); Identity holds its digest.
+      SERVICE_TOKEN_SECRET: ${HORIZON_SERVICE_TOKEN_SECRET:-local-reporting-service-secret-change-me-0123456789}
+      CONTROLS_INTERVAL_SECONDS: ${HORIZON_CONTROLS_INTERVAL_SECONDS:-86400}
 
   files-migrate:
     <<: *service
@@ -588,3 +594,15 @@ services:
     depends_on:
       kong:
         condition: service_healthy
+
+  # Retention (ADR 0063, Phase 69): removes delivery bookkeeping past its declared age, as
+  # each module's relay role, and logs the counts per class, table and tenant.
+  retention:
+    <<: *service
+    build:
+      context: ../tooling/retention
+    container_name: horizon-retention
+    environment:
+      RETENTION_DATABASE_URL_TEMPLATE: postgres://horizon_relay:horizon@postgres:5432/horizon_{database}
+      REDIS_URL: redis://redis:6379
+      RETENTION_INTERVAL_SECONDS: ${HORIZON_RETENTION_INTERVAL_SECONDS:-86400}

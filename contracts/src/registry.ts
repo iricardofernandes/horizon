@@ -11,6 +11,9 @@ import {
   auditEntrySchema,
   auditPageSchema,
   auditQuerySchema,
+  consistencyCheckSchema,
+  consistencyDifferenceSchema,
+  consistencyRunSchema,
   delegationSchema,
   fiscalArtifactKindSchema,
   fiscalArtifactKindV2Schema,
@@ -763,6 +766,13 @@ const staticEntries: readonly RegistryEntry[] = [
     kind: 'http',
     description: 'A page of a module audit log, newest first, with the chain verdict.',
     schema: auditPageSchema,
+  },
+  {
+    id: 'http:consistency-run',
+    kind: 'http',
+    description:
+      'A consistency run: owner figures against their ledger accounts, and every audit chain (ADR 0063).',
+    schema: consistencyRunSchema,
   },
   {
     id: 'authorization:role-assignment',

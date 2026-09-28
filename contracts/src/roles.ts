@@ -43,21 +43,24 @@ export type ModuleName = z.infer<typeof moduleNameSchema>
  * permission checks become unanalysable and no test can enumerate the reachable states.
  * The whole permission surface of the system is readable from this file plus five
  * per-module maps, in a few minutes. A role change is a deployment, not a support action.
+ *
+ * `auditor` (Phase 69) reads a module's audit log and nothing else, in every module that
+ * keeps one: an external auditor, or the reporting service's scheduled chain checks.
  */
 export const ROLES = {
-  identity: ['owner', 'admin', 'member', 'fiscal-reader'],
-  catalog: ['admin', 'editor', 'viewer'],
-  inventory: ['admin', 'operator', 'viewer'],
-  sales: ['admin', 'representative', 'viewer'],
+  identity: ['owner', 'admin', 'member', 'fiscal-reader', 'auditor'],
+  catalog: ['admin', 'editor', 'viewer', 'auditor'],
+  inventory: ['admin', 'operator', 'viewer', 'auditor'],
+  sales: ['admin', 'representative', 'viewer', 'auditor'],
   webhooks: ['admin', 'viewer'],
   parties: ['admin', 'editor', 'viewer', 'fiscal-reader'],
-  financial: ['admin', 'operator', 'viewer'],
-  treasury: ['admin', 'operator', 'viewer'],
-  ledger: ['admin', 'accountant', 'viewer'],
-  procurement: ['admin', 'buyer', 'approver', 'viewer'],
-  fiscal: ['admin', 'issuer', 'reviewer', 'viewer'],
-  crm: ['admin', 'manager', 'representative', 'viewer'],
-  reporting: ['admin', 'analyst', 'viewer'],
+  financial: ['admin', 'operator', 'viewer', 'auditor'],
+  treasury: ['admin', 'operator', 'viewer', 'auditor'],
+  ledger: ['admin', 'accountant', 'viewer', 'auditor'],
+  procurement: ['admin', 'buyer', 'approver', 'viewer', 'auditor'],
+  fiscal: ['admin', 'issuer', 'reviewer', 'viewer', 'auditor'],
+  crm: ['admin', 'manager', 'representative', 'viewer', 'auditor'],
+  reporting: ['admin', 'analyst', 'viewer', 'auditor'],
 } as const satisfies Record<ModuleName, readonly string[]>
 
 export type RolesByModule = typeof ROLES

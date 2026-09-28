@@ -20,7 +20,11 @@ export class AuditController {
   async page(@Query() query: unknown, @Req() request: FilesRequest) {
     const roles = principalOf(request).roles
     // Files holds no roles (ADR 0060): its log is the workspace administrators' to read.
-    if (!roles.some((role) => role.module === 'identity' && ['owner', 'admin'].includes(role.role)))
+    if (
+      !roles.some(
+        (role) => role.module === 'identity' && ['owner', 'admin', 'auditor'].includes(role.role),
+      )
+    )
       throw new ForbiddenException('Reading the audit log takes the Identity owner or admin role')
     const parsed = auditQuerySchema.safeParse(query)
     if (!parsed.success)

@@ -25,6 +25,8 @@ export const POSTING_ROLES = [
   'bank-fees',
   'opening-balance',
   'suspense',
+  // Stock is not posted; the account is kept by manual entries, and checked (Phase 69).
+  'inventory',
 ] as const
 export type PostingRole = (typeof POSTING_ROLES)[number]
 
@@ -45,6 +47,7 @@ const REQUIRED_TYPE: Readonly<Record<PostingRole, AccountType>> = {
   'bank-fees': 'expense',
   'opening-balance': 'equity',
   suspense: 'asset',
+  inventory: 'asset',
 }
 
 /** Roles that are chosen per source record: a cash account per treasury account, and so on. */
@@ -61,6 +64,7 @@ const KEYED_ROLES: Readonly<Record<PostingRole, boolean>> = {
   'bank-fees': false,
   'opening-balance': false,
   suspense: false,
+  inventory: false,
 }
 
 interface MappingProps {

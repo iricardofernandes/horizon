@@ -928,6 +928,34 @@ person** (Phase 68). It is not in the journal until approved, and approving post
 68). Each module judges the hash chain of the page it returns; the screen shows the verdict
 and names any module that did not answer. There is no central copy.
 
+### RPO and RTO
+**How much committed work a restore may lose, and how long it may take** (ADR 0063): 15
+minutes and 1 hour for the whole stack in one region. The restore drill measures both, and
+fails when either is missed.
+
+### base backup
+**A copy of the whole PostgreSQL cluster** taken every 6 hours (Phase 69). With the
+archived WAL after it, it restores the cluster to any instant since.
+
+### service identity
+**A read-only token Identity issues to a named service for one tenant** (Phase 69), so
+scheduled work reads other modules without a person's access. Its roles are fixed in code,
+and every issue is audited.
+
+### auditor
+**A role that reads a module's audit log and nothing else** (Phase 69), held by an external
+auditor or by the reporting service's scheduled chain checks.
+
+### consistency check
+**An owner's figures compared with the ledger accounts that should hold the same amounts**,
+and every audit chain judged (ADR 0063). Reporting runs them daily and on request, and
+keeps each run.
+
+### retention job
+**The scheduled removal of delivery bookkeeping past its declared age** (ADR 0063): inboxes
+after 90 days, command receipts after 30. Posted records, audit logs and outboxes are never
+removed.
+
 ### job centre
 The **one screen listing a person's background jobs** across modules (Phase 66): imports,
 exports, billing runs and supplier NF-e imports, with progress.

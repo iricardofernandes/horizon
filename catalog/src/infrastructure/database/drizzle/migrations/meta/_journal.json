@@ -36,6 +36,13 @@
       "when": 1794086401000,
       "tag": "0004_imports",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794086501000,
+      "tag": "0005_retention",
+      "breakpoints": true
     }
   ]
 }

@@ -3,9 +3,15 @@ import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { JOURNALED_EVENT_TYPES } from '@/application/journal-intake'
 import { NOTIFYING_EVENT_TYPES } from '@/application/notifications'
+import {
+  RelayTenantScan,
+  ScheduledControlsWorker,
+} from '@/infrastructure/controls/scheduled-controls-worker'
+import { ServiceTokens } from '@/infrastructure/controls/service-tokens'
 import { ExportWorker, RelayExportWorkScan } from '@/infrastructure/exports/export-worker'
 import { AuditController } from '@/infrastructure/http/audit.controller'
 import { ReportingAuthGuard } from '@/infrastructure/http/authorization'
+import { ConsistencyController } from '@/infrastructure/http/consistency.controller'
 import { ExportsController } from '@/infrastructure/http/exports.controller'
 import { ReportingController } from '@/infrastructure/http/reporting.controller'
 import { ReportsController } from '@/infrastructure/http/reports.controller'
@@ -89,6 +95,24 @@ export class AppModule {
             leaseMs: config.EXPORT_LEASE_MS,
           }),
       })
+    const secret = config.SERVICE_TOKEN_SECRET
+    if (relayUrl && secret)
+      providers.push({
+        // Consistency checks and reconciliations on a schedule, with the service identity
+        // (Phase 69), for every tenant found as the relay role.
+        provide: ScheduledControlsWorker,
+        inject: [ReportingRuntime],
+        useFactory: (runtime: ReportingRuntime) =>
+          new ScheduledControlsWorker({
+            scan: new RelayTenantScan(relayUrl),
+            tokens: new ServiceTokens(config.GATEWAY_URL, secret),
+            consistency: runtime.consistency,
+            reconciliation: runtime.runReconciliation,
+            reads: runtime.database.reports,
+            intervalMs: config.CONTROLS_INTERVAL_SECONDS * 1000,
+            firstDelayMs: config.CONTROLS_FIRST_DELAY_SECONDS * 1000,
+          }),
+      })
     return {
       module: AppModule,
       controllers: [
@@ -97,6 +121,7 @@ export class AppModule {
         ExportsController,
         UserStateController,
         AuditController,
+        ConsistencyController,
       ],
       providers,
       exports: [ReportingRuntime],

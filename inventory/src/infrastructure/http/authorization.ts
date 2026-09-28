@@ -44,7 +44,8 @@ function permits(principal: AccessClaims | undefined, action: InventoryAction): 
         assignment.module === 'inventory' &&
         (assignment.role === 'admin' ||
           (action === 'read' && ['operator', 'viewer'].includes(assignment.role)) ||
-          (action === 'manage' && assignment.role === 'operator')),
+          (action === 'manage' && assignment.role === 'operator') ||
+          (action === 'audit' && assignment.role === 'auditor')),
     ) ?? false
   )
 }

@@ -27,7 +27,7 @@ export type FiscalPermission =
 export type FiscalPrincipal = {
   tenantId: string
   subject: string
-  role: 'admin' | 'issuer' | 'reviewer' | 'viewer'
+  role: 'admin' | 'issuer' | 'reviewer' | 'viewer' | 'auditor'
 }
 
 const permissions: Record<FiscalPrincipal['role'], readonly FiscalPermission[]> = {
@@ -45,6 +45,7 @@ const permissions: Record<FiscalPrincipal['role'], readonly FiscalPermission[]> 
   issuer: ['read', 'evidence:read', 'draft:create', 'transmission:submit', 'cancellation:request'],
   reviewer: ['read', 'evidence:read', 'import:review'],
   viewer: ['read'],
+  auditor: ['audit:read'],
 }
 
 export function may(principal: FiscalPrincipal, permission: FiscalPermission): boolean {

@@ -40,6 +40,11 @@ const refresh = z.strictObject({
 })
 const logout = z.strictObject({ familyId: z.uuid() })
 const apiKey = z.strictObject({ tenantId: z.uuid(), presented: z.string().min(1).max(256) })
+const serviceToken = z.strictObject({
+  client: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/),
+  secret: z.string().min(32).max(256),
+  tenantId: z.uuid(),
+})
 
 @Controller('auth')
 @ApiTags('authentication')
@@ -160,6 +165,19 @@ export class AuthController {
   async authenticateApiKey(@Body() body: unknown) {
     const input = apiKey.parse(body)
     return unwrap(await this.runtime.authenticateApiKey.execute(input))
+  }
+
+  /** Scheduled work in one tenant, for a named service client (Phase 69). */
+  @Post('service-token')
+  @RequestSchema(serviceToken)
+  @PublicRoute()
+  @SkipIdempotency()
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async serviceToken(@Body() body: unknown) {
+    const input = serviceToken.parse(body)
+    const issued = unwrap(await this.runtime.issueServiceToken.execute(input))
+    return { ...issued, accessTokenExpiresAt: issued.accessTokenExpiresAt.toISOString() }
   }
 
   @Post('fiscal-token')

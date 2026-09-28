@@ -288,3 +288,16 @@ durable trace propagation, refresh CAS, idempotency and the HTTP authentication 
 by actor, action, record and period. Every page carries the chain's verdict: each row is
 recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
 owners and admins; the web's audit screen asks it alongside every other module.
+
+## Service tokens (Phase 69)
+
+`POST /auth/service-token` with `{ client, secret, tenantId }` issues a token for scheduled
+work in one tenant.
+- **The client:** it must be named in `SERVICE_CLIENTS` (`name:sha256(secret)`), and the
+  tenant must exist.
+- **The token:** its subject is `service:<client>`, and its roles are fixed in code:
+  - `reporting` gets `viewer` where it reads figures, and `auditor` in every module with
+    an audit log.
+- **Audit:** every issue is recorded in the tenant's chain (`service-token.issued`).
+
+The `auditor` role reads the audit log (`GET /audit`) and nothing else.

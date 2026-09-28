@@ -87,6 +87,19 @@ async function handle(
     problem(response, 401, 'Unauthorized', 'A valid Fiscal access token is required')
     return
   }
+  // Before the general read check: an auditor reads the audit log and nothing else (Phase 69).
+  if (request.method === 'GET' && url.pathname === '/audit' && dependencies.audit) {
+    if (!requirePermission(principal, 'audit:read', response)) return
+    response.setHeader('cache-control', 'private, no-store')
+    const query = auditQuerySchema.safeParse(Object.fromEntries(url.searchParams))
+    if (!query.success) {
+      problem(response, 400, 'Bad Request', 'Invalid Fiscal audit query')
+      return
+    }
+    json(response, 200, await dependencies.audit.page(principal.tenantId, query.data))
+    return
+  }
+
   if (!requirePermission(principal, 'read', response)) return
   if (
     dependencies.inbound &&
@@ -314,18 +327,6 @@ async function handle(
         problem(response, 400, 'Bad Request', 'Invalid Fiscal document list query')
       else throw error
     }
-    return
-  }
-
-  if (request.method === 'GET' && url.pathname === '/audit' && dependencies.audit) {
-    if (!requirePermission(principal, 'audit:read', response)) return
-    response.setHeader('cache-control', 'private, no-store')
-    const query = auditQuerySchema.safeParse(Object.fromEntries(url.searchParams))
-    if (!query.success) {
-      problem(response, 400, 'Bad Request', 'Invalid Fiscal audit query')
-      return
-    }
-    json(response, 200, await dependencies.audit.page(principal.tenantId, query.data))
     return
   }
 

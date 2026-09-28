@@ -9,7 +9,7 @@ import {
   Req,
 } from '@nestjs/common'
 import { ReportingRuntime } from '@/main/reporting-runtime'
-import { type ReportingRequest, RequireReportingAction, tenantOf } from './authorization'
+import { type ReportingRequest, tenantOf } from './authorization'
 
 /** The tenant's audit log, a page at a time, with the chain's verdict (Phase 68). */
 @Controller('audit')
@@ -17,10 +17,12 @@ export class AuditController {
   constructor(@Inject(ReportingRuntime) private readonly runtime: ReportingRuntime) {}
 
   @Get()
-  @RequireReportingAction('read')
+  // Authenticated by the guard; the role is judged here, since `auditor` reads nothing else.
   async page(@Query() query: unknown, @Req() request: ReportingRequest) {
     if (
-      !request.principal?.roles.some((role) => role.module === 'reporting' && role.role === 'admin')
+      !request.principal?.roles.some(
+        (role) => role.module === 'reporting' && ['admin', 'auditor'].includes(role.role),
+      )
     )
       throw new ForbiddenException('Reading the audit log takes the Reporting admin role')
     const parsed = auditQuerySchema.safeParse(query)

@@ -63,6 +63,8 @@ function abilityFor(claims: VerifiedAccessToken) {
       can('manage', 'Items')
       can('manage', 'Prices')
     }
+    // Reads the audit log and nothing else (Phase 69).
+    if (assignment.role === 'auditor') can('read', 'Audit')
     if (assignment.role === 'viewer') {
       can('read', 'Units')
       can('read', 'Items')

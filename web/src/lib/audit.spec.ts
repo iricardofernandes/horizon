@@ -48,6 +48,13 @@ describe('who reads which audit log', () => {
       'files',
     ])
     expect(AUDIT_SOURCES.map((source) => source.module)).not.toContain('parties')
+    // An auditor reads the logs and nothing else (Phase 69).
+    expect(
+      auditSourcesFor([
+        { module: 'ledger', role: 'auditor' },
+        { module: 'identity', role: 'auditor' },
+      ]).map((source) => source.module),
+    ).toEqual(['identity', 'ledger', 'files'])
   })
 
   it('narrows to the modules asked for', () => {

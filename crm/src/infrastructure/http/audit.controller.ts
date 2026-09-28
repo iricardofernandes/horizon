@@ -9,7 +9,7 @@ import {
   Req,
 } from '@nestjs/common'
 import { CrmRuntime } from '@/main/crm-runtime'
-import { type CrmRequest, RequireCrmAction, tenantOf } from './authorization'
+import { type CrmRequest, tenantOf } from './authorization'
 
 /** The tenant's audit log, a page at a time, with the chain's verdict (Phase 68). */
 @Controller('audit')
@@ -17,9 +17,13 @@ export class AuditController {
   constructor(@Inject(CrmRuntime) private readonly runtime: CrmRuntime) {}
 
   @Get()
-  @RequireCrmAction('read')
+  // Authenticated by the guard; the role is judged here, since `auditor` reads nothing else.
   async page(@Query() query: unknown, @Req() request: CrmRequest) {
-    if (!request.principal?.roles.some((role) => role.module === 'crm' && role.role === 'admin'))
+    if (
+      !request.principal?.roles.some(
+        (role) => role.module === 'crm' && ['admin', 'auditor'].includes(role.role),
+      )
+    )
       throw new ForbiddenException('Reading the audit log takes the CRM admin role')
     const parsed = auditQuerySchema.safeParse(query)
     if (!parsed.success)

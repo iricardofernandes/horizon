@@ -165,6 +165,18 @@ ps: ## Show platform container status
 logs: ## Follow platform logs (make logs SERVICE=kong)
 	@$(COMPOSE) logs -f $(SERVICE)
 
+.PHONY: backup-now
+backup-now: ## Take a PostgreSQL base backup now (Phase 69)
+	@docker exec horizon-postgres-backup sh /scripts/basebackup.sh once
+
+.PHONY: retention-now
+retention-now: ## Run one retention pass now and print its log (Phase 69)
+	@docker exec -e RETENTION_ONCE=true horizon-retention node dist/main.js
+
+.PHONY: restore-drill
+restore-drill: ## Restore the whole stack from backups beside the live one, verify it, store the evidence (Phase 69)
+	@scripts/restore-drill.sh
+
 .PHONY: publish-contracts
 publish-contracts: ## Build and publish @horizon/contracts to the local registry
 	@cd contracts && npm run build && npm publish \

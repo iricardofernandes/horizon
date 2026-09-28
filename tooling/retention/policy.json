@@ -1,0 +1,154 @@
+{
+  "rules": [
+    {
+      "class": "delivery-bookkeeping",
+      "database": "identity",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "catalog",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "inventory",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "sales",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "webhooks",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "financial",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "treasury",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "ledger",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "procurement",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "fiscal",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "crm",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "delivery-bookkeeping",
+      "database": "files",
+      "table": "inbox",
+      "ageColumn": "received_at",
+      "keepDays": 90
+    },
+    {
+      "class": "command-receipts",
+      "database": "sales",
+      "table": "command_receipts",
+      "ageColumn": "created_at",
+      "keepDays": 30
+    },
+    {
+      "class": "command-receipts",
+      "database": "inventory",
+      "table": "command_receipts",
+      "ageColumn": "created_at",
+      "keepDays": 30
+    },
+    {
+      "class": "command-receipts",
+      "database": "financial",
+      "table": "command_receipts",
+      "ageColumn": "created_at",
+      "keepDays": 30
+    },
+    {
+      "class": "command-receipts",
+      "database": "treasury",
+      "table": "command_receipts",
+      "ageColumn": "created_at",
+      "keepDays": 30
+    },
+    {
+      "class": "command-receipts",
+      "database": "ledger",
+      "table": "command_receipts",
+      "ageColumn": "created_at",
+      "keepDays": 30
+    },
+    {
+      "class": "command-receipts",
+      "database": "procurement",
+      "table": "command_receipts",
+      "ageColumn": "created_at",
+      "keepDays": 30
+    },
+    {
+      "class": "command-receipts",
+      "database": "crm",
+      "table": "command_receipts",
+      "ageColumn": "created_at",
+      "keepDays": 30
+    },
+    {
+      "class": "command-receipts",
+      "database": "reporting",
+      "table": "command_receipts",
+      "ageColumn": "created_at",
+      "keepDays": 30
+    }
+  ],
+  "batchSize": 5000,
+  "reports": {
+    "redisPrefixes": [
+      "identity:denylist:",
+      "identity:refresh:",
+      "identity:mfa:",
+      "identity:workspace-selection:"
+    ],
+    "overdueGraceMinutes": 60
+  }
+}

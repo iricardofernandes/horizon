@@ -63,6 +63,7 @@ try {
     '0050_phase48_support.sql',
     '0051_phase50_service_intake.sql',
     '0052_phase52_contract_periods.sql',
+    '0053_phase69_retention.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

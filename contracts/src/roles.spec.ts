@@ -53,3 +53,22 @@ describe('role assignments', () => {
     )
   })
 })
+
+describe('the auditor role (Phase 69)', () => {
+  it('exists in every module with an audit log and roles, and nowhere else', () => {
+    const withAuditor = MODULES.filter((module) => isValidRole(module, 'auditor'))
+    expect(withAuditor).toEqual([
+      'identity',
+      'catalog',
+      'inventory',
+      'sales',
+      'financial',
+      'treasury',
+      'ledger',
+      'procurement',
+      'fiscal',
+      'crm',
+      'reporting',
+    ])
+  })
+})

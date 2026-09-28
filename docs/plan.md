@@ -2648,10 +2648,22 @@ implemented by Parties, Catalog, Inventory and Financial.
 
 ## Phase 69 — Backups, restore drills, retention and consistency checks
 
-**Planned.** Point-in-time backups with RPO 15 minutes and RTO 1 hour, a full restore drill that
-stores its evidence, retention jobs per table class, and scheduled financial consistency
-checks.
-[Detailed work](production-readiness-implementation-plan.md#69--backups-restore-drills-retention-and-consistency-checks).
+**Delivered on 2026-09-28.**
+- **Backups:** WAL archived at least every 5 minutes, base backups every 6 hours, every
+  bucket versioned, and a [runbook](recovery-runbook.md) stating RPO 15 minutes and RTO 1
+  hour.
+- **The restore drill** (`make restore-drill`) rebuilds PostgreSQL to a point in time, the
+  buckets, and every service beside the live stack, and verifies them. It stores its
+  evidence.
+- **Retention jobs** remove old inboxes and command receipts as the relay role, and log
+  counts per class, table and tenant.
+- **Consistency checks:** control accounts against receivables, payables, cash and stock,
+  plus every audit chain. Reporting runs them daily with a read-only service identity,
+  and reconciles every report at its settled cutoff.
+- **A new `auditor` role** reads audit logs only.
+
+[Plan](readiness-phase69-implementation-plan.md), [evidence](readiness-phase69-evidence.md),
+[drill](drills/2026-09-28-phase69-restore-drill.json).
 
 ## Phase 70 — Service levels, synthetic monitoring, release evidence and closing Phase M
 

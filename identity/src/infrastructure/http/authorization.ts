@@ -55,6 +55,8 @@ function abilityFor(claims: VerifiedAccessToken) {
       can('read', 'Audit')
       can('read', 'DataSubjects')
     }
+    // Reads the audit log and nothing else (Phase 69).
+    if (assignment.role === 'auditor') can('read', 'Audit')
   }
   return build()
 }

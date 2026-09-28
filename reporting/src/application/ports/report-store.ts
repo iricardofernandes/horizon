@@ -64,7 +64,12 @@ export abstract class OwnerReports {
 export interface AuditRecord {
   readonly actor: string
   readonly action: string
-  readonly subjectType: 'reconciliation-run' | 'saved-filter' | 'export' | 'export-schedule'
+  readonly subjectType:
+    | 'reconciliation-run'
+    | 'saved-filter'
+    | 'export'
+    | 'export-schedule'
+    | 'consistency-run'
   readonly subjectId: string
   readonly occurredAt: Date
   readonly requestId: string | null

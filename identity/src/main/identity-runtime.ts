@@ -1,8 +1,6 @@
 import { readFileSync } from 'node:fs'
-
 import { Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
 import Redis from 'ioredis'
-
 import { IdentityPolicy } from '@/application/ports/identity-policy'
 import type { Mailer } from '@/application/ports/mfa'
 import { SessionIssuer } from '@/application/services/session-issuer'
@@ -20,6 +18,10 @@ import {
 import { DisableUserUseCase } from '@/application/use-cases/disable-user'
 import { EraseDataSubjectUseCase } from '@/application/use-cases/erase-data-subject'
 import { ExportDataSubjectUseCase } from '@/application/use-cases/export-data-subject'
+import {
+  IssueServiceTokenUseCase,
+  serviceClientsOf,
+} from '@/application/use-cases/issue-service-token'
 import { ListUsersUseCase } from '@/application/use-cases/list-users'
 import { InvitationsUseCase } from '@/application/use-cases/mfa/invitations'
 import { MfaPolicyUseCase } from '@/application/use-cases/mfa/mfa-policy'
@@ -94,6 +96,7 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
   readonly database: IdentityDatabase
   readonly redis: Redis
   readonly signer: EdDsaAccessTokenSigner
+  readonly issueServiceToken: IssueServiceTokenUseCase
   readonly denylist: RedisTokenDenylist
   readonly createTenant: CreateTenantUseCase
   readonly authenticateUser: AuthenticateUserUseCase
@@ -229,6 +232,12 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
       { policies, challenges: this.challenges },
     )
     this.authenticateApiKey = new AuthenticateApiKeyUseCase(db, hasher, clock)
+    this.issueServiceToken = new IssueServiceTokenUseCase(
+      db,
+      this.signer,
+      serviceClientsOf(config.SERVICE_CLIENTS),
+      clock,
+    )
     this.refreshSession = new RefreshSessionUseCase(
       db,
       families,

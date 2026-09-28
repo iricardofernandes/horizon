@@ -9,7 +9,7 @@ import {
   Req,
 } from '@nestjs/common'
 import { SalesRuntime } from '@/main/sales-runtime'
-import { RequireSalesAction, type SalesRequest, tenantOf } from './authorization'
+import { type SalesRequest, tenantOf } from './authorization'
 
 /** The tenant's audit log, a page at a time, with the chain's verdict (Phase 68). */
 @Controller('audit')
@@ -17,9 +17,13 @@ export class AuditController {
   constructor(@Inject(SalesRuntime) private readonly runtime: SalesRuntime) {}
 
   @Get()
-  @RequireSalesAction('read')
+  // Authenticated by the guard; the role is judged here, since `auditor` reads nothing else.
   async page(@Query() query: unknown, @Req() request: SalesRequest) {
-    if (!request.principal?.roles.some((role) => role.module === 'sales' && role.role === 'admin'))
+    if (
+      !request.principal?.roles.some(
+        (role) => role.module === 'sales' && ['admin', 'auditor'].includes(role.role),
+      )
+    )
       throw new ForbiddenException('Reading the audit log takes the Sales admin role')
     const parsed = auditQuerySchema.safeParse(query)
     if (!parsed.success)

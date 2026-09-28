@@ -78,6 +78,13 @@
       "when": 1791216000000,
       "tag": "0010_duties",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0011_retention",
+      "breakpoints": true
     }
   ]
 }

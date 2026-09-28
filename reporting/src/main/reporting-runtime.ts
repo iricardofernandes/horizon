@@ -1,4 +1,5 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import { RunConsistencyChecksUseCase } from '@/application/consistency'
 import { JournalIntake } from '@/application/journal-intake'
 import { NotificationIntake, NotificationsUseCase } from '@/application/notifications'
 import type { ObjectStore } from '@/application/ports/export-store'
@@ -31,6 +32,7 @@ export class ReportingRuntime implements OnModuleInit, OnModuleDestroy {
   readonly readReport: ReadReportUseCase
   readonly dashboard: DashboardUseCase
   readonly runReconciliation: RunReconciliationUseCase
+  readonly consistency: RunConsistencyChecksUseCase
   readonly savedFilters: ManageSavedFiltersUseCase
   readonly filterOf = reportFilterOf
   readonly objectStore: ObjectStore
@@ -64,6 +66,11 @@ export class ReportingRuntime implements OnModuleInit, OnModuleDestroy {
       this.database.reports,
       new GatewayOwnerReports(config.GATEWAY_URL),
       this.database.commands,
+      this.clock,
+    )
+    this.consistency = new RunConsistencyChecksUseCase(
+      new GatewayOwnerReports(config.GATEWAY_URL),
+      this.database.consistency,
       this.clock,
     )
     this.savedFilters = new ManageSavedFiltersUseCase(this.database.commands, this.clock)

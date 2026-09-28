@@ -1,0 +1,34 @@
+{
+  "name": "@horizon/retention",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Removes delivery bookkeeping past its declared age, and reports what else is overdue (ADR 0063).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "rm -rf dist && swc src -d dist --strip-leading-paths --quiet --ignore '**/*.spec.ts,**/*.e2e-spec.ts'",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.config.e2e.mts"
+  },
+  "dependencies": {
+    "ioredis": "^6.0.0",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
+    "@swc/cli": "^0.8.1",
+    "@swc/core": "^1.16.2",
+    "@testcontainers/postgresql": "^12.1.0",
+    "@types/node": "^26.5.1",
+    "typescript": "5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

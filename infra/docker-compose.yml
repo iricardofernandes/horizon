@@ -23,6 +23,11 @@ networks:
 
 volumes:
   postgres-data:
+  # Recovery (ADR 0063, Phase 69): archived WAL, base backups, and the cluster's socket,
+  # shared with the backup container so it needs no network access to the cluster.
+  postgres-wal:
+  postgres-base:
+  postgres-socket:
   redis-data:
   rabbitmq-data:
   verdaccio-storage:
@@ -66,8 +71,13 @@ services:
         mc version enable local/horizon-fiscal-artifacts
         mc mb --ignore-existing local/horizon-exports
         mc version enable local/horizon-exports
-        # Attachments are not versioned: a removed or expired file must really go (Phase 65).
         mc mb --ignore-existing local/horizon-attachments
+        # Every bucket is versioned, so a restore can go back to a point in time (ADR 0063).
+        # A removed attachment's old version is kept 30 days, as ciphertext whose owner key
+        # erasure has already destroyed (Phase 65); exports are regenerable, 7 days.
+        mc version enable local/horizon-attachments
+        mc ilm rule add --noncurrent-expire-days 30 local/horizon-attachments || true
+        mc ilm rule add --noncurrent-expire-days 7 local/horizon-exports || true
 
   # ClamAV for the files module's scanner port (ADR 0060), opt-in with `make up-scanner`.
   # It downloads its signatures at start, which is large and often refused from CI
@@ -128,15 +138,61 @@ services:
       # one-off scripts: the default of 100 runs out once CRM joins (Phase 55).
       - -c
       - max_connections=200
+      # Point-in-time recovery (ADR 0063): every WAL segment is copied to the archive, never
+      # overwritten, and one is closed at least every 5 minutes, so at most 5 minutes of
+      # committed work can be lost against an RPO of 15.
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=test ! -f /backups/wal/%f && cp %p /backups/wal/%f
+      - -c
+      - archive_timeout=300
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - postgres-wal:/backups/wal
+      - postgres-socket:/var/run/postgresql
+    depends_on:
+      postgres-volumes:
+        condition: service_completed_successfully
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres -d postgres']
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 10s
+
+  # The backup volumes belong to the postgres user (uid 70) before the cluster writes to them.
+  postgres-volumes:
+    image: postgres:17-alpine
+    networks: [horizon]
+    user: root
+    entrypoint: ['/bin/sh', '-ec']
+    command: ['mkdir -p /backups/wal /backups/base && chown -R 70:70 /backups /var/run/postgresql']
+    volumes:
+      - postgres-wal:/backups/wal
+      - postgres-base:/backups/base
+      - postgres-socket:/var/run/postgresql
+
+  # Scheduled base backups through the cluster's local socket (ADR 0063, Phase 69).
+  postgres-backup:
+    <<: *restart
+    image: postgres:17-alpine
+    container_name: horizon-postgres-backup
+    networks: [horizon]
+    user: '70:70'
+    entrypoint: ['/bin/sh', '/scripts/basebackup.sh']
+    environment:
+      BASEBACKUP_INTERVAL_SECONDS: ${HORIZON_BASEBACKUP_INTERVAL_SECONDS:-21600}
+      BASEBACKUP_KEEP: ${HORIZON_BASEBACKUP_KEEP:-7}
+    volumes:
+      - ./postgres/backup:/scripts:ro
+      - postgres-wal:/backups/wal
+      - postgres-base:/backups/base
+      - postgres-socket:/var/run/postgresql
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   redis:
     <<: *restart

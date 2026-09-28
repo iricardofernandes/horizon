@@ -47,6 +47,7 @@ const PERMITS: Readonly<Record<string, readonly ProcurementAction[]>> = {
   buyer: ['read', 'write', 'commit'],
   approver: ['read', 'decide'],
   viewer: ['read'],
+  auditor: ['audit'],
 }
 
 function permits(principal: AccessClaims | undefined, action: ProcurementAction): boolean {

@@ -1,0 +1,191 @@
+{
+  "drill": "phase69-restore",
+  "adr": "0063",
+  "run": "20260928T193455Z",
+  "startedAt": "2026-09-28T19:34:55.387Z",
+  "failedAt": "2026-09-28T19:35:15.434Z",
+  "verifiedAt": "2026-09-28T19:35:33.284Z",
+  "objectives": {
+    "rpoSeconds": 900,
+    "rtoSeconds": 3600
+  },
+  "baseBackup": {
+    "stamp": "20260928T184352Z",
+    "label": "horizon-20260928T184352Z",
+    "startedAt": "2026-09-28T18:43:52Z",
+    "finishedAt": "2026-09-28T18:43:55Z",
+    "startWal": "000000010000000000000014",
+    "history": "000000010000000000000014.00000028.backup",
+    "sizeBytes": 31824709,
+    "sha256": "24940094731096283c31c2b725b62f95679306b228da9779a94a45ffe6c52986"
+  },
+  "baseBackupIntervalSeconds": 21600,
+  "buckets": {
+    "horizon-fiscal-artifacts": 644,
+    "horizon-exports": 47,
+    "horizon-attachments": 2
+  },
+  "passed": true,
+  "checks": [
+    {
+      "name": "the restore lands on the target: what was written before it is there, what came after is not",
+      "passed": true,
+      "evidence": {
+        "target": "2026-09-28T19:35:05.406007Z",
+        "rows": [
+          "before"
+        ],
+        "objects": [
+          "before"
+        ],
+        "lastReplayedCommit": "2026-09-28 19:34:55.577244+00",
+        "beforeMarkerWritten": "2026-09-28 19:34:55.577203+00"
+      }
+    },
+    {
+      "name": "the point-in-time target lands inside the RPO",
+      "passed": true,
+      "evidence": {
+        "rpoSeconds": 900,
+        "worstCaseLossSeconds": 300,
+        "lastArchivedSegmentAgeAtFailureSeconds": 0,
+        "targetMinusLastReplayedCommitSeconds": 9.829,
+        "archiver": {
+          "archivedCount": 20,
+          "lastArchivedWal": "000000010000000000000021",
+          "lastArchivedAt": "2026-09-28T19:35:15.391514+00:00",
+          "failedCount": 0,
+          "archiveTimeoutSeconds": "00:05:00"
+        }
+      }
+    },
+    {
+      "name": "every audit chain of every tenant judges the same restored as live",
+      "passed": true,
+      "evidence": {
+        "tenants": 18,
+        "chainsCompared": 52,
+        "rowsChecked": 4429,
+        "differing": [],
+        "knownBroken": [
+          {
+            "tenant": "01a0e940-46cc-7c63-a51f-6e77445819bc",
+            "module": "treasury",
+            "broken": [
+              5
+            ]
+          },
+          {
+            "tenant": "01a0e93f-8b51-7155-aba8-79ea2616a44c",
+            "module": "treasury",
+            "broken": [
+              5
+            ]
+          },
+          {
+            "tenant": "e3434e27-b268-4714-bbbf-0cfaf64002ee",
+            "module": "treasury",
+            "broken": [
+              6
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the drill writes only to its own copy",
+      "passed": true,
+      "evidence": {
+        "reference": "DRILL-20260928T193455Z",
+        "inDrill": 1,
+        "inLive": 0
+      }
+    },
+    {
+      "name": "a deliberately broken balance is caught by the consistency check",
+      "passed": true,
+      "evidence": {
+        "tenant": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+        "before": {
+          "status": 201,
+          "outcome": "inconsistent",
+          "receivables": {
+            "check": "receivables-control",
+            "outcome": "matched",
+            "compared": 1,
+            "differences": [],
+            "reason": null
+          }
+        },
+        "postedToReceivables": {
+          "status": 201,
+          "amount": "12345",
+          "currency": "BRL"
+        },
+        "after": {
+          "status": 201,
+          "outcome": "inconsistent",
+          "receivables": {
+            "check": "receivables-control",
+            "outcome": "differences",
+            "compared": 1,
+            "differences": [
+              {
+                "key": "BRL",
+                "owner": "0",
+                "ledger": "12345"
+              }
+            ],
+            "reason": null
+          }
+        },
+        "checks": [
+          {
+            "check": "receivables-control",
+            "outcome": "differences"
+          },
+          {
+            "check": "payables-control",
+            "outcome": "differences"
+          },
+          {
+            "check": "cash-accounts",
+            "outcome": "differences"
+          },
+          {
+            "check": "inventory-accounts",
+            "outcome": "not-applicable"
+          },
+          {
+            "check": "audit-chains",
+            "outcome": "matched"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the demo user signs in to the restored stack and reads it",
+      "passed": true,
+      "evidence": {
+        "login": 200,
+        "workspace": 200,
+        "me": 200,
+        "catalogItems": 200
+      }
+    },
+    {
+      "name": "the stack is restored and verified within the RTO",
+      "passed": true,
+      "evidence": {
+        "rtoSeconds": 3600,
+        "measuredSeconds": 18,
+        "steps": {
+          "restorePostgresSeconds": 4,
+          "restoreObjectsSeconds": 3,
+          "startStackSeconds": 8,
+          "verifySeconds": 3
+        }
+      }
+    }
+  ]
+}

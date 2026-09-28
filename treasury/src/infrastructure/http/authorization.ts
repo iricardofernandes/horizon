@@ -43,6 +43,7 @@ const PERMITS: Readonly<Record<string, readonly TreasuryAction[]>> = {
   admin: ['read', 'configure', 'record', 'reverse', 'approve', 'audit'],
   operator: ['read', 'record'],
   viewer: ['read'],
+  auditor: ['audit'],
 }
 
 function permits(principal: AccessClaims | undefined, action: TreasuryAction): boolean {

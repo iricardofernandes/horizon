@@ -52,6 +52,7 @@ const PERMITS: Readonly<Record<string, readonly FinancialAction[]>> = {
   admin: ['read', 'configure', 'record', 'reverse', 'approve', 'import', 'audit'],
   operator: ['read', 'record'],
   viewer: ['read'],
+  auditor: ['audit'],
 }
 
 function permits(principal: AccessClaims | undefined, action: FinancialAction): boolean {

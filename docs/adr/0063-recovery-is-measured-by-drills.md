@@ -1,7 +1,7 @@
 # 63. Recovery is measured by drills, and retention is declared per table class
 
-- Status: accepted; Phase 69 implements backups, drills and retention. Phase 70 adds
-  service levels.
+- Status: accepted; implemented in Phase 69 ([plan](../readiness-phase69-implementation-plan.md),
+  [runbook](../recovery-runbook.md)), with the revision below. Phase 70 adds service levels.
 - Date: 2026-09-27
 
 ## Context
@@ -46,6 +46,20 @@ CRM in Phase 60. Nothing restores the whole system.
    - receivables and payables against their ledger control accounts;
    - treasury balances against the cash accounts;
    - stock valuation against the inventory accounts.
+
+## Revision (Phase 69)
+
+- **Attachments are versioned too.** Noncurrent versions expire after 30 days; the owner
+  key a removed file needs is destroyed by erasure (ADR 0026), so erasure completes when
+  the backups holding that key age out.
+- **Scheduled checks need a service identity.** Identity issues a read-only token per
+  tenant to a named service client (`POST /auth/service-token`). Its roles are fixed in code:
+  `viewer` where figures are read, and a new `auditor` role wherever an audit log is.
+- **Stock is not posted to the ledger.** The inventory check compares the valuation with the
+  accounts mapped to a new `inventory` role, kept by manual entries, and is `not-applicable`
+  where none is mapped.
+- **Retention runs as each module's relay role,** granted `DELETE` on delivery bookkeeping
+  only. Fiscal's idempotency tables guard documents with legal effect and are kept.
 
 ## Consequences
 

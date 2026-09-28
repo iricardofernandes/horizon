@@ -4,6 +4,7 @@ import { and, count, desc, eq, lte, max, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { uuidv7 } from 'uuidv7'
+import { type ConsistencyRun, ConsistencyStore } from '@/application/consistency'
 import {
   type JournalScope,
   JournalStore,
@@ -256,6 +257,7 @@ export class ReportingDatabase extends JournalStore {
   readonly commands: ReportingCommands
   readonly notifications: SqlNotificationStore
   readonly views: SqlViewStore
+  readonly consistency: ConsistencyStore
 
   constructor(options: ReportingDatabaseOptions) {
     super()
@@ -269,6 +271,50 @@ export class ReportingDatabase extends JournalStore {
       this.#within(tenantId, work)
     this.notifications = new SqlNotificationStore(within)
     this.views = new SqlViewStore(within)
+    this.consistency = new (class extends ConsistencyStore {
+      record(tenantId: string, run: ConsistencyRun, requestId: string | null) {
+        return within(tenantId, async (tx) => {
+          await tx.insert(schema.consistencyRuns).values({
+            id: run.runId,
+            tenantId,
+            trigger: run.trigger,
+            outcome: run.outcome,
+            checks: run.checks,
+            pendingPostings: run.pendingPostings,
+            startedBy: run.startedBy,
+            startedAt: run.startedAt,
+            finishedAt: run.finishedAt,
+          })
+          await commandScope(tx, tenantId).audit.append({
+            actor: run.startedBy,
+            action: 'consistency.run',
+            subjectType: 'consistency-run',
+            subjectId: run.runId,
+            occurredAt: run.finishedAt,
+            requestId,
+            details: { trigger: run.trigger, outcome: run.outcome },
+          })
+        })
+      }
+      list(tenantId: string, limit: number) {
+        return within(tenantId, async (tx) => {
+          const runs = schema.consistencyRuns
+          const rows = await tx.select().from(runs).orderBy(desc(runs.startedAt)).limit(limit)
+          return rows.map(
+            (row): ConsistencyRun => ({
+              runId: row.id,
+              trigger: row.trigger as ConsistencyRun['trigger'],
+              outcome: row.outcome as ConsistencyRun['outcome'],
+              checks: row.checks as ConsistencyRun['checks'],
+              pendingPostings: row.pendingPostings,
+              startedBy: row.startedBy,
+              startedAt: row.startedAt,
+              finishedAt: row.finishedAt,
+            }),
+          )
+        })
+      }
+    })()
     this.reports = new (class extends ReportReads {
       report<N extends ReportName>(tenantId: string, name: N, cutoff: Date, filter: ReportFilter) {
         return within(tenantId, (tx) => readReport(tx, name, cutoff, filter)) as Promise<

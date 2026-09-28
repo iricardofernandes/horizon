@@ -18,6 +18,7 @@
     { "path": "web",                   "kind": "frontend", "port": 3000 },
     { "path": "contracts",             "kind": "package" },
     { "path": "tooling/mcp-debugger",  "kind": "package" },
+    { "path": "tooling/retention",     "kind": "package" },
     { "path": "gateway",               "kind": "config" },
     { "path": "infra",                 "kind": "config" }
   ]

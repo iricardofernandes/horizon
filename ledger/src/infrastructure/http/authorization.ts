@@ -44,6 +44,7 @@ const PERMITS: Readonly<Record<string, readonly LedgerAction[]>> = {
   admin: ['read', 'configure', 'post', 'reverse', 'close', 'approve', 'audit'],
   accountant: ['read', 'post', 'reverse'],
   viewer: ['read'],
+  auditor: ['audit'],
 }
 
 function permits(principal: AccessClaims | undefined, action: LedgerAction): boolean {

@@ -36,6 +36,8 @@ const NOT_INDEPENDENTLY_VERSIONED = new Set([
   'fiscalCalculationProblemCodeSchema',
   'fiscalCalculationResultSchema',
   'fiscalUnsupportedCalculationSchema',
+  'consistencyCheckSchema', // only ever inside consistencyRunSchema
+  'consistencyDifferenceSchema', // likewise
 ])
 
 describe('schema registry', () => {

@@ -37,6 +37,8 @@ const environmentSchema = z
     DATA_SUBJECT_KEY_MODE: z.literal('table').default('table'),
     TRUST_GATEWAY_JWT: z.enum(['false']).default('false'),
     TENANT_ID_HASH_SALT: z.string().min(16),
+    /** Service clients for scheduled work, `name:sha256hex` pairs (Phase 69). */
+    SERVICE_CLIENTS: z.string().optional(),
     /** Seals TOTP secrets at rest (Phase 67); 32 characters or more, never shared. */
     MFA_SEAL_SECRET: z.string().min(32),
     /** Where invitation links point, and the passkey origin. */

@@ -33,6 +33,16 @@ const environmentSchema = z.object({
   EXPORT_SETTLE_GRACE_MS: positive.max(86_400_000).default(3_600_000),
   EXPORT_POLL_INTERVAL_MS: positive.min(500).max(600_000).default(5000),
   EXPORT_LEASE_MS: positive.min(60_000).default(600_000),
+  /**
+   * The reporting service client's secret (Phase 69): with it, scheduled controls ask
+   * Identity for a read-only token per tenant. Without it, nothing runs on a schedule.
+   */
+  SERVICE_TOKEN_SECRET: z.string().min(32).optional(),
+  CONTROLS_INTERVAL_SECONDS: positive
+    .min(60)
+    .max(7 * 86_400)
+    .default(86_400),
+  CONTROLS_FIRST_DELAY_SECONDS: positive.max(86_400).default(300),
 })
 
 export type ReportingEnvironment = z.infer<typeof environmentSchema>

@@ -109,3 +109,21 @@ npm run test:e2e     # PostgreSQL and RabbitMQ in Testcontainers
 by actor, action, record and period. Every page carries the chain's verdict: each row is
 recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
 admins; the web's audit screen asks it alongside every other module.
+
+## Consistency checks and scheduled controls (Phase 69)
+
+- `POST /consistency-checks` compares, now and per currency, the owners' figures with
+  their ledger control accounts:
+  - receivables and payables (Financial);
+  - cash (Treasury);
+  - stock valuation (Inventory), where an `inventory` account is mapped.
+
+  It also judges every module's audit chain, page by page. It uses the caller's own access.
+- `GET /consistency-checks` lists the runs, which are kept append-only with their audit
+  links.
+- **With `SERVICE_TOKEN_SECRET` and the relay URL set,** a worker runs these checks daily
+  (`CONTROLS_INTERVAL_SECONDS`) for every tenant. It then reconciles each report at its
+  latest settled cutoff.
+  - It uses a read-only service token from Identity (`service:reporting`), never a
+    person's.
+  - One log line per tenant says what it found.

@@ -219,3 +219,17 @@ running it is published alongside the code when that phase lands.
 
 Something *is* reachable: phase 11 deploys `web/` plus a minimal backend to a free tier,
 with a note saying exactly which parts of the architecture are running there.
+
+## Backups, retention and the restore drill (Phase 69)
+
+- **PostgreSQL archives its WAL** to the `postgres-wal` volume, a segment at least every 5
+  minutes.
+- **`postgres-backup` takes base backups:** every 6 hours, keeping 7, into `postgres-base`,
+  with a manifest each. `make backup-now` takes one.
+- **Every MinIO bucket is versioned.**
+- **`horizon-retention`** removes old delivery bookkeeping daily. `make retention-now` runs
+  one pass.
+- **`make restore-drill`** restores everything beside the live stack (gateway on 18000),
+  verifies it, and stores the evidence.
+
+See the [recovery runbook](../docs/recovery-runbook.md).
