@@ -101,7 +101,10 @@ kong-config: infra/keys/public ## Render Kong's config from the template plus th
 
 .PHONY: up
 up: infra/.env infra/keys/public kong-config ## Start the local platform and wait for health
-	@$(COMPOSE) up -d --wait
+	@# `--wait` fails on a container that exits, even with 0, when nothing depends on it, so
+	@# the bucket setup runs on its own and must succeed.
+	@$(COMPOSE) up -d --wait $$($(COMPOSE) config --services | grep -vx minio-init)
+	@$(COMPOSE) run --rm minio-init >/dev/null
 	@echo
 	@echo "  gateway     http://localhost:$${HORIZON_KONG_PROXY_PORT:-8000}"
 	@echo "  grafana     http://localhost:$${HORIZON_GRAFANA_PORT:-3300}   (admin/admin)"
