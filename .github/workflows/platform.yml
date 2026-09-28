@@ -30,6 +30,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Every alert and recording rule is checked and unit-tested with promtool (Phase 70).
+  alerts:
+    name: alert rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: promtool check and test
+        run: make test-alerts
+
   smoke:
     name: platform smoke
     runs-on: ubuntu-latest

@@ -248,3 +248,15 @@ export async function listTransfers(tx: Transaction, limit: number): Promise<Tra
     cancellationReason: (row.cancellation_reason as string | null) ?? null,
   }))
 }
+
+/** The tenant's approval thresholds, one per currency (Phase 68; read since Phase 70). */
+export async function listTransferPolicies(tx: Transaction) {
+  const rows = (await tx.execute(sql`
+    select currency, threshold::text as threshold, updated_at from transfer_approval_policies
+    order by currency`)) as unknown as Record<string, unknown>[]
+  return rows.map((row) => ({
+    currency: String(row.currency),
+    threshold: String(row.threshold),
+    updatedAt: new Date(String(row.updated_at)).toISOString(),
+  }))
+}

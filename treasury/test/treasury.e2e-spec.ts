@@ -355,6 +355,9 @@ describe('transfers over the threshold (Phase 68)', () => {
         threshold: '100000',
       }),
     )
+    expect(await database.listTransferPolicies(tenantId)).toEqual([
+      { currency: 'BRL', threshold: '100000', updatedAt: expect.any(String) },
+    ])
     const posting = new PostTransferUseCase(database, clock)
     const transfer = (amount: string) =>
       posting.execute({

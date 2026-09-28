@@ -670,6 +670,14 @@ browser workflow and the Phase 58–59 suites: see the
 ### Phase M — reporting, data operations and product hardening
 
 Split into phases 61–70: [production readiness implementation plan](production-readiness-implementation-plan.md).
+**Closed on 2026-09-28.** The three exit criteria are proven by stored records:
+- the [Phase M golden path](drills/2026-09-28-phase-m-golden-path.json): a reconciliation at
+  a settled cutoff with zero difference, and an interrupted import that ends fully
+  accounted for;
+- the [security](drills/2026-09-28-phase67-security-drill.json) and
+  [restore](drills/2026-09-28-phase69-restore-drill.json) drills.
+
+See the [Phase 70 evidence](readiness-phase70-evidence.md).
 
 **Deliverables**
 

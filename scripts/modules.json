@@ -19,6 +19,7 @@
     { "path": "contracts",             "kind": "package" },
     { "path": "tooling/mcp-debugger",  "kind": "package" },
     { "path": "tooling/retention",     "kind": "package" },
+    { "path": "tooling/probe",         "kind": "package" },
     { "path": "gateway",               "kind": "config" },
     { "path": "infra",                 "kind": "config" }
   ]

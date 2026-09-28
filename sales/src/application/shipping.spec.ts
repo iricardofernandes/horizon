@@ -116,12 +116,18 @@ describe('getting the goods to the customer', () => {
       lines: [{ quantity: '4', unitPrice: { amount: '100' } }],
     })
 
+    const leadTimes: number[] = []
     const dispatched = unwrap(
-      await new DispatchShipmentUseCase(unitOfWork, clock).execute({
+      await new DispatchShipmentUseCase(unitOfWork, clock, {
+        shipped: (seconds) => leadTimes.push(seconds),
+      }).execute({
         context: commandOf(fixture.tenantId),
         shipmentId,
       }),
     )
+    // The order-to-shipment SLI counts the shipment once it is committed (Phase 70).
+    expect(leadTimes).toHaveLength(1)
+    expect(leadTimes[0]).toBeGreaterThanOrEqual(0)
     // Four of ten units of an order charged 1200: 480 goes, 720 is still expected.
     expect(dispatched).toMatchObject({ value: '480', remaining: '720', complete: false })
     expect(snapshotOf(required(unitOfWork.shipments[0]))).toMatchObject({

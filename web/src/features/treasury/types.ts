@@ -55,8 +55,13 @@ export type TransferRow = {
   currency: string
   valueOn: string
   memo: string | null
-  status: 'posted' | 'cancelled'
-  postedAt: string
+  /** `pending` waits for a second person above the threshold; `rejected` never moved money. */
+  status: 'posted' | 'cancelled' | 'pending' | 'rejected'
+  requestedBy: string | null
+  requestedAt: string
+  postedAt: string | null
+  decidedBy: string | null
+  decidedFor: string | null
   cancellationReason: string | null
 }
 
@@ -67,6 +72,13 @@ export type TreasuryAbilities = { canConfigure: boolean; canRecord: boolean; can
 export type MutationProps = { onChanged: () => Promise<void>; setNotice: (value: string) => void }
 
 export const TREASURY_API = '/api/horizon/treasury'
+
+/** Transfers waiting for a second person, oldest first: the queue is worked in order. */
+export function awaitingApproval(transfers: readonly TransferRow[]): TransferRow[] {
+  return transfers
+    .filter((transfer) => transfer.status === 'pending')
+    .sort((left, right) => left.requestedAt.localeCompare(right.requestedAt))
+}
 
 /** Signed minor units from the API: negative when the account is overdrawn. */
 export function isNegative(amount: string): boolean {

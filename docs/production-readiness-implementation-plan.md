@@ -1,6 +1,6 @@
 # Production readiness implementation plan — Phase M
 
-Status: **in progress** — Phases 61 to 63 delivered on 2026-09-27 ([61](readiness-phase61-evidence.md), [62](readiness-phase62-evidence.md), [63](readiness-phase63-evidence.md)), Phases 64 to 69 on 2026-09-28 ([64](readiness-phase64-evidence.md), [65](readiness-phase65-evidence.md), [66](readiness-phase66-evidence.md), [67](readiness-phase67-evidence.md), [68](readiness-phase68-evidence.md), [69](readiness-phase69-evidence.md)). This is the execution plan for Phase M of the
+Status: **delivered, Phase M closed on 2026-09-28** — Phases 61 to 63 delivered on 2026-09-27 ([61](readiness-phase61-evidence.md), [62](readiness-phase62-evidence.md), [63](readiness-phase63-evidence.md)), Phases 64 to 70 on 2026-09-28 ([64](readiness-phase64-evidence.md), [65](readiness-phase65-evidence.md), [66](readiness-phase66-evidence.md), [67](readiness-phase67-evidence.md), [68](readiness-phase68-evidence.md), [69](readiness-phase69-evidence.md), [70](readiness-phase70-evidence.md)). This is the execution plan for Phase M of the
 [ERP expansion plan](erp-expansion-plan.md#phase-m--reporting-data-operations-and-product-hardening),
 split into phases 61–70 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to L.

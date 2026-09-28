@@ -1,0 +1,127 @@
+# Service levels of Phase 70. Recording rules name each SLI once; alerts read them.
+# Objectives and runbooks: docs/service-levels.md. Thresholds are local defaults.
+# Tested by `promtool test rules infra/observability/rules/slo.rules.test.yml`.
+groups:
+  - name: slo-recording
+    rules:
+      # Login: Kong's own route for POST /auth/login. A 401 is a correct answer, and no 5xx
+      # at all is a ratio of 0, not a missing series.
+      - record: sli:login_errors:ratio_rate5m
+        expr: |
+          (sum(rate(kong_http_requests_total{route="identity-login",code=~"5.."}[5m])) or vector(0))
+            / sum(rate(kong_http_requests_total{route="identity-login"}[5m]))
+      - record: sli:login_errors:ratio_rate1h
+        expr: |
+          (sum(rate(kong_http_requests_total{route="identity-login",code=~"5.."}[1h])) or vector(0))
+            / sum(rate(kong_http_requests_total{route="identity-login"}[1h]))
+      - record: sli:login_under_1s:ratio_rate5m
+        expr: |
+          sum(rate(kong_request_latency_ms_bucket{route="identity-login",le="1000.0"}[5m]))
+            / sum(rate(kong_request_latency_ms_count{route="identity-login"}[5m]))
+
+      # Order to shipment: shipments that left within 48 hours of the order's confirmation.
+      # The OpenTelemetry exporter writes bucket bounds as floats: `le="172800.0"`.
+      - record: sli:order_to_shipment_within_48h:ratio_rate1d
+        expr: |
+          sum(rate(sales_order_to_shipment_seconds_bucket{le="172800.0"}[1d]))
+            / sum(rate(sales_order_to_shipment_seconds_count[1d]))
+
+      # Invoice issuance (simulation): authorized among the documents the authority decided.
+      - record: sli:invoice_authorized:ratio_rate1h
+        expr: |
+          sum(rate(fiscal_authority_outcomes_total{outcome="authorized"}[1h]))
+            / sum(rate(fiscal_authority_outcomes_total{outcome=~"authorized|rejected"}[1h]))
+
+      # Payment settlement: settlement events Treasury and Ledger consumed, against what
+      # either of them sent to a dead-letter queue.
+      - record: sli:settlement_delivered:ratio_rate1h
+        expr: |
+          sum(rate(inbox_consumed_total{event_type=~"financial\\.settlement\\..*",service_name=~"treasury|ledger"}[1h]))
+            / (
+              sum(rate(inbox_consumed_total{event_type=~"financial\\.settlement\\..*",service_name=~"treasury|ledger"}[1h]))
+              + (sum(rate(inbox_dead_lettered_total{service_name=~"treasury|ledger"}[1h])) or vector(0))
+            )
+
+      # Report freshness: the oldest watermark of each source, across tenants.
+      - record: sli:report_freshness_seconds:max
+        expr: max by (source) (reporting_source_freshness_seconds)
+
+      # Import throughput: rows accounted for per second, and the jobs running.
+      - record: sli:import_rows:rate5m
+        expr: |
+          (sum(rate(import_rows_written_total[5m])) or vector(0))
+            + (sum(rate(import_rows_rejected_total[5m])) or vector(0))
+      - record: sli:import_jobs_active:sum
+        expr: sum(max by (service_name) (import_jobs_active))
+
+      # The synthetic probe of the critical path.
+      - record: sli:probe_success:ratio_rate1h
+        expr: |
+          sum(rate(horizon_probe_runs_total{outcome="success"}[1h]))
+            / sum(rate(horizon_probe_runs_total[1h]))
+
+  - name: slo-alerts
+    rules:
+      # 99.5% over 30 days; both windows burn at 14.4x the budget (2% of it in an hour).
+      - alert: LoginAvailabilityBurn
+        expr: sli:login_errors:ratio_rate1h > (14.4 * 0.005) and sli:login_errors:ratio_rate5m > (14.4 * 0.005)
+        labels: { severity: critical, slo: login-availability }
+        annotations:
+          summary: 'Sign-in is failing fast enough to spend its monthly error budget in about two days'
+          runbook: docs/service-levels.md#loginavailabilityburn
+
+      - alert: LoginLatencySlow
+        expr: sli:login_under_1s:ratio_rate5m < 0.95
+        for: 10m
+        labels: { severity: warning, slo: login-latency }
+        annotations:
+          summary: 'Fewer than 95% of sign-ins answer within a second'
+          runbook: docs/service-levels.md#loginlatencyslow
+
+      - alert: OrderToShipmentSlow
+        expr: sli:order_to_shipment_within_48h:ratio_rate1d < 0.95
+        for: 1h
+        labels: { severity: warning, slo: order-to-shipment }
+        annotations:
+          summary: 'Fewer than 95% of shipments left within 48 hours of their order'
+          runbook: docs/service-levels.md#ordertoshipmentslow
+
+      - alert: InvoiceIssuanceFailing
+        expr: sli:invoice_authorized:ratio_rate1h < 0.99
+        for: 30m
+        labels: { severity: warning, slo: invoice-issuance }
+        annotations:
+          summary: 'Fewer than 99% of decided fiscal documents were authorized'
+          runbook: docs/service-levels.md#invoiceissuancefailing
+
+      - alert: SettlementsDeadLettered
+        expr: sum(increase(inbox_dead_lettered_total{service_name=~"treasury|ledger"}[15m])) > 0
+        labels: { severity: critical, slo: payment-settlement }
+        annotations:
+          summary: 'Treasury or Ledger sent a message to a dead-letter queue: a settlement may not have landed'
+          runbook: docs/service-levels.md#settlementsdeadlettered
+
+      - alert: ReportsStale
+        expr: sli:report_freshness_seconds:max > 900
+        for: 5m
+        labels: { severity: warning, slo: report-freshness }
+        annotations:
+          summary: 'Reports from {{ $labels.source }} are more than 15 minutes behind'
+          runbook: docs/service-levels.md#reportsstale
+
+      - alert: ImportsStalled
+        expr: sli:import_jobs_active:sum > 0 and sli:import_rows:rate5m == 0
+        for: 15m
+        labels: { severity: warning, slo: import-throughput }
+        annotations:
+          summary: 'An import job has been running for 15 minutes without accounting for a row'
+          runbook: docs/service-levels.md#importsstalled
+
+      - alert: SyntheticProbeFailing
+        expr: |
+          sum(increase(horizon_probe_runs_total{outcome="failure"}[5m])) >= 3
+            or (time() - max(horizon_probe_last_success_timestamp_seconds)) > 300
+        labels: { severity: critical, slo: synthetic-probe }
+        annotations:
+          summary: 'The synthetic probe of sign-in, the dashboard and a draft order is failing'
+          runbook: docs/service-levels.md#syntheticprobefailing

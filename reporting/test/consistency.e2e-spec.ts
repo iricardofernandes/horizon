@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { ConsistencyRun } from '@/application/consistency'
+import { FreshnessGauge } from '@/infrastructure/controls/freshness-gauge'
 import { RelayTenantScan } from '@/infrastructure/controls/scheduled-controls-worker'
 import { ReportingDatabase } from '@/infrastructure/database/drizzle/reporting-database'
 
@@ -95,9 +96,16 @@ describe('consistency runs (Phase 69)', () => {
     } finally {
       await scan.close()
     }
+    // Phase 70: the freshness gauge reads the oldest watermark per source, and nothing else.
+    const gauge = new FreshnessGauge({ databaseUrl: url.toString() })
+    try {
+      expect((await gauge.refresh()).get('financial')).toBeGreaterThanOrEqual(0)
+    } finally {
+      await gauge.onModuleDestroy()
+    }
     const relay = postgres(url.toString(), { max: 1 })
     try {
-      await expect(relay`select through from source_watermarks`).rejects.toThrow(
+      await expect(relay`select seal_id from source_watermarks`).rejects.toThrow(
         /permission denied/,
       )
       await expect(relay`select * from consistency_runs`).rejects.toThrow(/permission denied/)

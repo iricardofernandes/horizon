@@ -4,14 +4,17 @@ import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ApprovalQueue } from '@/features/approvals/approval-queue'
 import { useStatusLabel } from '@/lib/status'
 import { useDate, useMoney } from '@/lib/use-format'
 import { AccountStatement } from './account-statement'
 import { TransfersPanel } from './transfers-panel'
 import { OpenAccountDialog, TransferDialog } from './treasury-dialogs'
 import {
+  awaitingApproval,
   isNegative,
   type MutationProps,
+  TREASURY_API,
   type TreasuryAbilities,
   type TreasuryAccount,
   type TreasuryData,
@@ -28,6 +31,7 @@ export function TreasuryView({
   setNotice,
 }: { data: TreasuryData; abilities: TreasuryAbilities } & MutationProps) {
   const t = useTranslations('treasury')
+  const money = useMoney()
   const [selected, setSelected] = useState<string | null>(data.accounts[0]?.id ?? null)
   const account = data.accounts.find((candidate) => candidate.id === selected) ?? null
   const done = async (notice: string) => {
@@ -48,6 +52,25 @@ export function TreasuryView({
           {abilities.canRecord ? <TransferDialog accounts={data.accounts} onDone={done} /> : null}
         </div>
       </header>
+
+      <ApprovalQueue
+        api={TREASURY_API}
+        copy={t('awaitingCopy')}
+        items={awaitingApproval(data.transfers).map((transfer) => ({
+          id: transfer.id,
+          requestedBy: transfer.requestedBy,
+          requestedAt: transfer.requestedAt,
+          summary: t('awaitingSummary', {
+            from: transfer.fromAccountName,
+            to: transfer.toAccountName,
+            amount: money(transfer.amount, transfer.currency),
+          }),
+        }))}
+        onDecided={done}
+        path="transfers"
+        telemetry="treasury.transfer"
+        title={t('awaitingTitle')}
+      />
 
       {data.accounts.length ? (
         <div className="treasury-accounts">

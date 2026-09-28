@@ -36,7 +36,10 @@ import {
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
-import { openTelemetryBillingMetrics } from '@/infrastructure/observability/billing-metrics'
+import {
+  openTelemetryBillingMetrics,
+  openTelemetryShippingMetrics,
+} from '@/infrastructure/observability/billing-metrics'
 import type { SalesEnvironment } from './environment'
 
 export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
@@ -100,7 +103,11 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
     this.placeOrder = new PlaceOrderUseCase(this.database, clock)
     this.pickShipment = new PickShipmentUseCase(this.database, clock)
     this.packShipment = new PackShipmentUseCase(this.database, clock)
-    this.dispatchShipment = new DispatchShipmentUseCase(this.database, clock)
+    this.dispatchShipment = new DispatchShipmentUseCase(
+      this.database,
+      clock,
+      openTelemetryShippingMetrics,
+    )
     this.returnShipment = new ReturnShipmentUseCase(this.database, clock)
     this.abandonShipment = new AbandonShipmentUseCase(this.database, clock)
     this.openServiceOrder = new OpenServiceOrderUseCase(this.database, clock)

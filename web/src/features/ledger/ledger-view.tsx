@@ -4,10 +4,11 @@ import { Tabs } from '@base-ui/react/tabs'
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 import { Notice } from '@/components/ui/state'
+import { ApprovalQueue } from '@/features/approvals/approval-queue'
 import { useMoney } from '@/lib/use-format'
 import { AccountDrillDialog } from './account-drill-dialog'
 import { CashFlowPanel, ChartPanel, IncomeStatementPanel, TrialBalancePanel } from './ledger-panels'
-import { GRAINS, type Grain, type LedgerData } from './types'
+import { GRAINS, type Grain, LEDGER_API, type LedgerData } from './types'
 
 const REPORTS = ['result', 'cash-flow', 'trial-balance', 'chart'] as const
 type Report = (typeof REPORTS)[number]
@@ -22,10 +23,12 @@ export function LedgerView({
   data,
   onRange,
   onGrain,
+  onDecided,
 }: {
   data: LedgerData
   onRange: (range: { from: string; to: string }) => void
   onGrain: (grain: Grain) => void
+  onDecided: (notice: string) => Promise<void>
 }) {
   const t = useTranslations('ledger')
   const money = useMoney()
@@ -43,6 +46,25 @@ export function LedgerView({
       {data.pending.total ? (
         <Notice copy={t('pendingWarning', { count: data.pending.total })} />
       ) : null}
+
+      <ApprovalQueue
+        api={LEDGER_API}
+        copy={t('awaitingCopy')}
+        items={data.manualEntries.map((entry) => ({
+          id: entry.id,
+          requestedBy: entry.requestedBy,
+          requestedAt: entry.requestedAt,
+          summary: t('awaitingSummary', {
+            reference: entry.reference,
+            amount: money(entry.total, entry.currency),
+            postedOn: entry.postedOn,
+          }),
+        }))}
+        onDecided={onDecided}
+        path="manual-entries"
+        telemetry="ledger.manualEntry"
+        title={t('awaitingTitle')}
+      />
 
       <div className="receivables-summary">
         <article className="customer-summary-card">

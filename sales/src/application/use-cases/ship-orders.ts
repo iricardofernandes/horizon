@@ -14,6 +14,7 @@ import {
   TrackingCode,
 } from '@/domain/value-objects/sales-values'
 import type { Clock } from '../ports/clock'
+import { NO_SHIPPING_METRICS, type ShippingMetrics } from '../ports/shipping-metrics'
 import type { SalesScope, SalesUnitOfWork } from '../ports/unit-of-work'
 import {
   audit,
@@ -136,16 +137,23 @@ export class DispatchShipmentUseCase {
   constructor(
     private readonly unitOfWork: SalesUnitOfWork,
     private readonly clock: Clock,
+    private readonly metrics: ShippingMetrics = NO_SHIPPING_METRICS,
   ) {}
 
-  execute(request: {
+  async execute(request: {
     context: IdempotentContext
     shipmentId: string
     dispatchedOn?: string | undefined
     consignment?: ConsignmentInput | undefined
   }): Outcome<{ shipmentId: string; value: string; remaining: string; complete: boolean }> {
     const { context } = request
-    return once(this.unitOfWork, context, 'shipment.dispatch', request, async (scope) => {
+    let leadSeconds: number | null = null
+    const outcome = await once<{
+      shipmentId: string
+      value: string
+      remaining: string
+      complete: boolean
+    }>(this.unitOfWork, context, 'shipment.dispatch', request, async (scope) => {
       const found = await delivery(scope, request.shipmentId)
       if (found.isLeft()) return left(found.value)
       const { shipment, order } = found.value
@@ -192,6 +200,8 @@ export class DispatchShipmentUseCase {
       await scope.shipments.save(shipment)
       await scope.orders.save(order)
       for (const event of order.pullDomainEvents()) await scope.events.append(event)
+      const confirmed = order.confirmationInstant
+      leadSeconds = confirmed ? (now.getTime() - confirmed.getTime()) / 1000 : null
       await audit(scope, context, {
         action: 'shipment.dispatched',
         subjectType: 'shipment',
@@ -211,6 +221,9 @@ export class DispatchShipmentUseCase {
         complete: plan.value.complete,
       })
     })
+    // Counted once the shipment is committed; a replayed request returns before it is set.
+    if (outcome.isRight() && leadSeconds !== null) this.metrics.shipped(leadSeconds)
+    return outcome
   }
 }
 

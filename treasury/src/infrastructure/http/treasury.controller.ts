@@ -246,6 +246,12 @@ export class TreasuryController {
     )
   }
 
+  @Get('approval-policies')
+  @RequireTreasuryAction('read')
+  async approvalPolicies(@Req() request: TreasuryRequest) {
+    return { data: await this.runtime.database.listTransferPolicies(tenantOf(request)) }
+  }
+
   @Put('approval-policies')
   @RequireTreasuryAction('configure')
   async defineApprovalPolicy(@Body() body: unknown, @Req() request: TreasuryRequest) {

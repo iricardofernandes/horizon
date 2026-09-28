@@ -19,6 +19,7 @@ import {
   accountStatement,
   balanceTimeline,
   listAccounts,
+  listTransferPolicies,
   listTransfers,
 } from './treasury-reads'
 import { makeScope, type Transaction } from './treasury-store'
@@ -151,6 +152,10 @@ export class TreasuryDatabase extends TreasuryUnitOfWork {
 
   listTransfers(tenantId: string, limit: number) {
     return this.read(tenantId, (tx) => listTransfers(tx, limit))
+  }
+
+  listTransferPolicies(tenantId: string) {
+    return this.read(tenantId, (tx) => listTransferPolicies(tx))
   }
 
   /** A page of the tenant's audit log, with the chain's verdict on it (Phase 68). */

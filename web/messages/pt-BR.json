@@ -476,7 +476,10 @@
     "title": "Os livros",
     "total": "Total",
     "type": "Tipo",
-    "unbalanced": "Débitos e créditos divergem"
+    "unbalanced": "Débitos e créditos divergem",
+    "awaitingTitle": "Lançamentos manuais aguardando aprovação",
+    "awaitingCopy": "Acima do limite, um lançamento manual só chega aos livros quando uma segunda pessoa o aprova. Quem o escreveu não pode decidir.",
+    "awaitingSummary": "{reference} · {amount} · lançado em {postedOn}"
   },
   "login": {
     "demoNote": "Senha da demonstração local:",
@@ -591,7 +594,9 @@
       "imports": "Importações",
       "jobs": "Central de jobs",
       "security": "Segurança",
-      "audit": "Auditoria"
+      "audit": "Auditoria",
+      "crossReports": "Relatórios",
+      "controls": "Controles"
     }
   },
   "orders": {
@@ -1454,7 +1459,10 @@
     "transfers": "Transferências",
     "transfersCopy": "Dinheiro movido entre contas. Uma transferência cancelada mantém suas pernas e ganha lançamentos inversos.",
     "valueOn": "Data-valor",
-    "transferPending": "Transferência registrada. Ela aguarda a aprovação de outra pessoa."
+    "transferPending": "Transferência registrada. Ela aguarda a aprovação de outra pessoa.",
+    "awaitingTitle": "Transferências aguardando aprovação",
+    "awaitingCopy": "Acima do limite, uma transferência não movimenta dinheiro até que uma segunda pessoa a aprove. Quem pediu não pode decidir.",
+    "awaitingSummary": "{from} → {to} · {amount}"
   },
   "webhooks": {
     "activeCount": "{count} ativos",
@@ -2879,5 +2887,176 @@
     "sealed": "Dados pessoais lacrados",
     "onBehalfOf": "em nome de",
     "rowBroken": "#{sequence} quebrada"
+  },
+  "approvals": {
+    "requested": "Pedido",
+    "what": "Aguardando",
+    "decision": "Decisão",
+    "approve": "Aprovar",
+    "reject": "Recusar",
+    "keep": "Manter aguardando",
+    "reason": "Motivo da recusa",
+    "approved": "Aprovado.",
+    "rejected": "Recusado.",
+    "failed": "A decisão não foi registrada.",
+    "unknownRequester": "pessoa desconhecida"
+  },
+  "reports": {
+    "eyebrow": "Visão geral",
+    "title": "Relatórios",
+    "copy": "Números de vários módulos num mesmo corte. Um relatório está assentado quando todas as fontes provaram estar completas até o corte; antes disso, ainda pode mudar.",
+    "dashboardTitle": "Em resumo",
+    "dashboardCopy": "Todos os relatórios em {cutoff}.",
+    "askTitle": "Consultar um relatório",
+    "askCopy": "Escolha o relatório, o momento a que ele responde e, se quiser, uma só moeda.",
+    "report": "Relatório",
+    "cutoff": "Corte",
+    "cutoffHint": "Vazio significa agora.",
+    "currency": "Moeda",
+    "show": "Mostrar",
+    "settled": "assentado",
+    "settledCopy": "Todas as fontes estão completas até o corte: estes números não vão mudar.",
+    "unsettledCopy": "Algumas fontes ainda estão chegando: estes números podem mudar até se assentarem.",
+    "completeThrough": "completa até {when}",
+    "neverSealed": "ainda sem prova de completude",
+    "noFigures": "Nada a mostrar neste corte.",
+    "reconcileTitle": "Conciliação",
+    "reconcileCopy": "Compara estes números com o relatório de cada módulo dono, no mesmo corte.",
+    "reconcile": "Conciliar agora",
+    "reconciled": "Conciliação registrada.",
+    "reconcileFailed": "A conciliação não pôde rodar.",
+    "outcome": "Resultado",
+    "checks": "Verificações",
+    "startedBy": "Iniciada por",
+    "noRuns": "Ainda não conciliado.",
+    "outcomes": {
+      "matched": "conferido",
+      "different": "divergente",
+      "not-comparable": "não comparável"
+    },
+    "exportTitle": "Arquivos",
+    "exportCopy": "O relatório neste corte como arquivo, agora ou agendado. Cada arquivo traz seu digest SHA-256; o link vale 15 minutos.",
+    "format": "Formato",
+    "cadence": "Frequência",
+    "exportNow": "Exportar agora",
+    "schedule": "Agendar",
+    "exportRequested": "Exportação pedida; aparece abaixo quando estiver pronta.",
+    "scheduled": "Agendamento criado.",
+    "unscheduled": "Agendamento removido.",
+    "exportFailed": "O arquivo não pôde ser pedido.",
+    "linkFailed": "O link do arquivo não pôde ser gerado.",
+    "refresh": "Atualizar",
+    "requestedAt": "Pedido em",
+    "status": "Situação",
+    "digest": "Digest",
+    "download": "Baixar",
+    "noExports": "Ainda não há arquivo deste relatório.",
+    "scheduleLine": "{cadence} · {format} · próximo {next}",
+    "unschedule": "Remover",
+    "cadences": {
+      "daily": "Diário",
+      "weekly": "Semanal",
+      "monthly": "Mensal"
+    },
+    "names": {
+      "cash-position": "Posição de caixa",
+      "order-to-cash": "Do pedido ao recebimento",
+      "procure-to-pay": "Da compra ao pagamento",
+      "pipeline-to-revenue": "Do funil à receita"
+    }
+  },
+  "controls": {
+    "eyebrow": "Administração",
+    "title": "Controles",
+    "copy": "Quem pode aprovar por quem, acima de que valores é preciso uma segunda pessoa, se os livros batem e o que é guardado por quanto tempo. Você vê o que seus papéis alcançam; cada módulo continua decidindo.",
+    "noneReachable": "Nenhum dos seus papéis alcança um controle.",
+    "moduleSilent": "{module} não respondeu.",
+    "delegationsTitle": "Delegações",
+    "delegationsCopy": "Uma aprovação que você tem, emprestada a alguém por no máximo 90 dias. Quem recebe ainda precisa de um papel no módulo e nunca decide o que ele mesmo pediu.",
+    "module": "Módulo",
+    "permission": "Aprovação",
+    "delegate": "Delegado",
+    "delegateHint": "O id da pessoa, como em Pessoas e acesso.",
+    "delegator": "Emprestada por",
+    "from": "De",
+    "to": "Até",
+    "period": "Período",
+    "reason": "Motivo",
+    "status": "Situação",
+    "grant": "Emprestar",
+    "granted": "Delegação registrada.",
+    "grantFailed": "A delegação foi recusada.",
+    "periodInvalid": "O período precisa terminar no dia em que começa ou depois.",
+    "revoke": "Revogar",
+    "revoked": "Delegação revogada.",
+    "revokeFailed": "A delegação não pôde ser revogada.",
+    "noDelegations": "Nenhuma delegação.",
+    "permissions": {
+      "financial_payable_approve": "Aprovar contas a pagar",
+      "procurement_requisition_approve": "Aprovar requisições",
+      "procurement_order_approve": "Aprovar pedidos de compra",
+      "inventory_adjustment_approve": "Aprovar ajustes de estoque",
+      "inventory_count_approve": "Aprovar diferenças de contagem",
+      "ledger_entry_approve": "Aprovar lançamentos manuais",
+      "treasury_transfer_approve": "Aprovar transferências"
+    },
+    "thresholdsTitle": "Limites de aprovação",
+    "thresholdsCopy": "Acima destes valores, um lançamento manual ou uma transferência aguarda uma segunda pessoa. Sem limite para uma moeda, nada aguarda.",
+    "currency": "Moeda",
+    "threshold": "Limite",
+    "updatedAt": "Alterado em",
+    "noThreshold": "Sem limite: nada aguarda.",
+    "amountHint": "Na moeda, com até duas casas decimais.",
+    "saveThreshold": "Salvar limite",
+    "thresholdSaved": "Limite salvo.",
+    "thresholdFailed": "O limite foi recusado.",
+    "thresholdInvalid": "Informe o código da moeda e um valor.",
+    "consistencyTitle": "Checagens de consistência",
+    "consistencyCopy": "Se os saldos de cada módulo batem com o Ledger e se toda cadeia de auditoria está íntegra. O Reporting as roda diariamente.",
+    "runNow": "Rodar agora",
+    "runDone": "Checagem concluída.",
+    "runFailed": "A checagem não pôde rodar.",
+    "startedAt": "Início",
+    "trigger": "Origem",
+    "outcome": "Resultado",
+    "attention": "Pede atenção",
+    "nothing": "nada",
+    "unread": "não lido",
+    "difference": "{key}: módulo {owner}, ledger {ledger}",
+    "pendingPostings": "{count} lançamentos pendentes no Ledger",
+    "noRuns": "Nenhuma checagem rodou ainda.",
+    "triggers": {
+      "scheduled": "execução diária",
+      "manual": "por uma pessoa"
+    },
+    "outcomes": {
+      "consistent": "consistente",
+      "inconsistent": "inconsistente",
+      "incomplete": "incompleta"
+    },
+    "retentionTitle": "Retenção",
+    "retentionCopy": "O que é guardado e por quanto tempo. Definido na implantação; esta tela apenas mostra.",
+    "retention": {
+      "records": {
+        "what": "Registros lançados e de auditoria",
+        "rule": "Lançamentos, títulos, logs de auditoria e o journal do Reporting nunca são removidos."
+      },
+      "events": {
+        "what": "Histórico de eventos",
+        "rule": "Guardado: é de onde um módulo reenvia."
+      },
+      "bookkeeping": {
+        "what": "Controle de entrega",
+        "rule": "Registros de mensagens recebidas após 90 dias; recibos de comandos após 30."
+      },
+      "exports": {
+        "what": "Arquivos gerados",
+        "rule": "Removidos quando passam da validade."
+      },
+      "attachments": {
+        "what": "Anexos",
+        "rule": "Guardados pelo tempo que o tipo de registro exige."
+      }
+    }
   }
 }

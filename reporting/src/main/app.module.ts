@@ -3,6 +3,7 @@ import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { JOURNALED_EVENT_TYPES } from '@/application/journal-intake'
 import { NOTIFYING_EVENT_TYPES } from '@/application/notifications'
+import { FreshnessGauge } from '@/infrastructure/controls/freshness-gauge'
 import {
   RelayTenantScan,
   ScheduledControlsWorker,
@@ -94,6 +95,12 @@ export class AppModule {
             intervalMs: config.EXPORT_POLL_INTERVAL_MS,
             leaseMs: config.EXPORT_LEASE_MS,
           }),
+      })
+    if (relayUrl)
+      providers.push({
+        // Report freshness for its service level (Phase 70), read as the relay role.
+        provide: FreshnessGauge,
+        useFactory: () => new FreshnessGauge({ databaseUrl: relayUrl }),
       })
     const secret = config.SERVICE_TOKEN_SECRET
     if (relayUrl && secret)

@@ -36,3 +36,22 @@ describe('the imports screen', () => {
     ).toBe(false)
   })
 })
+
+describe('the Phase 70 screens', () => {
+  it('show reports to a Reporting role, and controls under Administration', () => {
+    const entries = (roles: { module: string; role: string }[]) =>
+      visibleNavigation(roles, false).flatMap((group) =>
+        group.entries.map((entry) => entry.labelKey),
+      )
+    expect(entries([{ module: 'reporting', role: 'viewer' }])).toContain('crossReports')
+    expect(entries([{ module: 'sales', role: 'admin' }])).not.toContain('crossReports')
+    expect(entries([])).toContain('controls')
+    expect(entryForPath('/app/reports')?.labelKey).toBe('crossReports')
+    expect(entryForPath('/app/settings/controls')?.labelKey).toBe('controls')
+    expect(
+      visibleNavigation([], true)
+        .flatMap((group) => group.entries)
+        .some((entry) => entry.labelKey === 'controls'),
+    ).toBe(false)
+  })
+})

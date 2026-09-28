@@ -476,7 +476,10 @@
     "title": "The books",
     "total": "Total",
     "type": "Type",
-    "unbalanced": "Debits and credits disagree"
+    "unbalanced": "Debits and credits disagree",
+    "awaitingTitle": "Manual entries waiting for approval",
+    "awaitingCopy": "Above the threshold a manual entry reaches the books only once a second person approves it. Whoever wrote it cannot decide it.",
+    "awaitingSummary": "{reference} · {amount} · posted on {postedOn}"
   },
   "login": {
     "demoNote": "Local demo password:",
@@ -591,7 +594,9 @@
       "imports": "Imports",
       "jobs": "Job centre",
       "security": "Security",
-      "audit": "Audit"
+      "audit": "Audit",
+      "crossReports": "Reports",
+      "controls": "Controls"
     }
   },
   "orders": {
@@ -1454,7 +1459,10 @@
     "transfers": "Transfers",
     "transfersCopy": "Money moved between accounts. A cancelled transfer keeps its legs and adds inverse entries.",
     "valueOn": "Value date",
-    "transferPending": "Transfer recorded. It waits for a second person to approve it."
+    "transferPending": "Transfer recorded. It waits for a second person to approve it.",
+    "awaitingTitle": "Transfers waiting for approval",
+    "awaitingCopy": "Above the threshold a transfer moves no money until a second person approves it. Whoever asked for it cannot decide it.",
+    "awaitingSummary": "{from} → {to} · {amount}"
   },
   "webhooks": {
     "activeCount": "{count} active",
@@ -2879,5 +2887,176 @@
     "sealed": "Sealed personal data",
     "onBehalfOf": "on behalf of",
     "rowBroken": "#{sequence} broken"
+  },
+  "approvals": {
+    "requested": "Asked",
+    "what": "Waiting",
+    "decision": "Decision",
+    "approve": "Approve",
+    "reject": "Reject",
+    "keep": "Keep waiting",
+    "reason": "Why it is rejected",
+    "approved": "Approved.",
+    "rejected": "Rejected.",
+    "failed": "The decision was not recorded.",
+    "unknownRequester": "unknown person"
+  },
+  "reports": {
+    "eyebrow": "Overview",
+    "title": "Reports",
+    "copy": "Figures from several modules at one cutoff. A report is settled once every source has proven it is complete through the cutoff; until then it may still change.",
+    "dashboardTitle": "At a glance",
+    "dashboardCopy": "Every report at {cutoff}.",
+    "askTitle": "Ask a report",
+    "askCopy": "Choose the report, the moment it answers for, and a currency if you want only one.",
+    "report": "Report",
+    "cutoff": "Cutoff",
+    "cutoffHint": "Empty means now.",
+    "currency": "Currency",
+    "show": "Show",
+    "settled": "settled",
+    "settledCopy": "Every source is complete through the cutoff: these figures will not change.",
+    "unsettledCopy": "Some sources are still arriving: these figures may change until they settle.",
+    "completeThrough": "complete through {when}",
+    "neverSealed": "no proof of completeness yet",
+    "noFigures": "Nothing to show at this cutoff.",
+    "reconcileTitle": "Reconciliation",
+    "reconcileCopy": "Compares these figures with each owning module's own report at the same cutoff.",
+    "reconcile": "Reconcile now",
+    "reconciled": "Reconciliation recorded.",
+    "reconcileFailed": "The reconciliation could not run.",
+    "outcome": "Outcome",
+    "checks": "Checks",
+    "startedBy": "Started by",
+    "noRuns": "Not reconciled yet.",
+    "outcomes": {
+      "matched": "matched",
+      "different": "different",
+      "not-comparable": "not comparable"
+    },
+    "exportTitle": "Files",
+    "exportCopy": "The report at this cutoff as a file, now or on a schedule. Each file carries its SHA-256 digest; its link lasts 15 minutes.",
+    "format": "Format",
+    "cadence": "Cadence",
+    "exportNow": "Export now",
+    "schedule": "Schedule",
+    "exportRequested": "Export requested; it appears below when ready.",
+    "scheduled": "Schedule created.",
+    "unscheduled": "Schedule removed.",
+    "exportFailed": "The file could not be requested.",
+    "linkFailed": "The file link could not be made.",
+    "refresh": "Refresh",
+    "requestedAt": "Asked",
+    "status": "Status",
+    "digest": "Digest",
+    "download": "Download",
+    "noExports": "No file of this report yet.",
+    "scheduleLine": "{cadence} · {format} · next {next}",
+    "unschedule": "Remove",
+    "cadences": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "names": {
+      "cash-position": "Cash position",
+      "order-to-cash": "Order to cash",
+      "procure-to-pay": "Procure to pay",
+      "pipeline-to-revenue": "Pipeline to revenue"
+    }
+  },
+  "controls": {
+    "eyebrow": "Administration",
+    "title": "Controls",
+    "copy": "Who may approve for whom, above which amounts a second person is needed, whether the books agree, and what is kept for how long. You see what your roles reach; each module still decides.",
+    "noneReachable": "None of your roles reaches a control.",
+    "moduleSilent": "{module} did not answer.",
+    "delegationsTitle": "Delegations",
+    "delegationsCopy": "An approval you hold, lent to someone for a period of at most 90 days. The delegate still needs a role in the module, and never decides what they asked for themselves.",
+    "module": "Module",
+    "permission": "Approval",
+    "delegate": "Delegate",
+    "delegateHint": "The person's id, as in People and access.",
+    "delegator": "Lent by",
+    "from": "From",
+    "to": "To",
+    "period": "Period",
+    "reason": "Reason",
+    "status": "Status",
+    "grant": "Lend",
+    "granted": "Delegation recorded.",
+    "grantFailed": "The delegation was refused.",
+    "periodInvalid": "The period must end on or after the day it starts.",
+    "revoke": "Revoke",
+    "revoked": "Delegation revoked.",
+    "revokeFailed": "The delegation could not be revoked.",
+    "noDelegations": "No delegation.",
+    "permissions": {
+      "financial_payable_approve": "Approve payables",
+      "procurement_requisition_approve": "Approve requisitions",
+      "procurement_order_approve": "Approve purchase orders",
+      "inventory_adjustment_approve": "Approve stock adjustments",
+      "inventory_count_approve": "Approve count differences",
+      "ledger_entry_approve": "Approve manual journal entries",
+      "treasury_transfer_approve": "Approve transfers"
+    },
+    "thresholdsTitle": "Approval thresholds",
+    "thresholdsCopy": "Above these amounts a manual entry or a transfer waits for a second person. Without a threshold for a currency, nothing waits.",
+    "currency": "Currency",
+    "threshold": "Threshold",
+    "updatedAt": "Changed",
+    "noThreshold": "No threshold: nothing waits.",
+    "amountHint": "In the currency, with up to two decimals.",
+    "saveThreshold": "Save threshold",
+    "thresholdSaved": "Threshold saved.",
+    "thresholdFailed": "The threshold was refused.",
+    "thresholdInvalid": "Type a currency code and an amount.",
+    "consistencyTitle": "Consistency checks",
+    "consistencyCopy": "Whether each module's balances agree with the Ledger, and every audit chain is intact. Reporting runs them daily.",
+    "runNow": "Run now",
+    "runDone": "Check finished.",
+    "runFailed": "The check could not run.",
+    "startedAt": "Started",
+    "trigger": "Started how",
+    "outcome": "Outcome",
+    "attention": "Needs a look",
+    "nothing": "nothing",
+    "unread": "not read",
+    "difference": "{key}: module {owner}, ledger {ledger}",
+    "pendingPostings": "{count} postings pending in the Ledger",
+    "noRuns": "No check has run yet.",
+    "triggers": {
+      "scheduled": "daily run",
+      "manual": "by a person"
+    },
+    "outcomes": {
+      "consistent": "consistent",
+      "inconsistent": "inconsistent",
+      "incomplete": "incomplete"
+    },
+    "retentionTitle": "Retention",
+    "retentionCopy": "What is kept, and for how long. Set by the deployment; this screen only shows it.",
+    "retention": {
+      "records": {
+        "what": "Posted and audit records",
+        "rule": "Journal entries, titles, audit logs and the reporting journal are never removed."
+      },
+      "events": {
+        "what": "Event history",
+        "rule": "Kept: it is what a module replays from."
+      },
+      "bookkeeping": {
+        "what": "Delivery bookkeeping",
+        "rule": "Received-message records after 90 days; command receipts after 30."
+      },
+      "exports": {
+        "what": "Generated files",
+        "rule": "Removed once past their expiry."
+      },
+      "attachments": {
+        "what": "Attachments",
+        "rule": "Kept for as long as their record type requires."
+      }
+    }
   }
 }

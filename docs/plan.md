@@ -2667,9 +2667,27 @@ implemented by Parties, Catalog, Inventory and Financial.
 
 ## Phase 70 — Service levels, synthetic monitoring, release evidence and closing Phase M
 
-**Planned.** SLIs and SLOs with tested alert rules, a synthetic probe of the critical path, the Phase M
-screens, golden path, browser workflow, drills and threat model. Phase M closes here.
-[Detailed work](production-readiness-implementation-plan.md#70--service-levels-synthetic-monitoring-release-evidence-and-closing-phase-m).
+**Delivered on 2026-09-28. Phase M is closed.**
+- **Service levels:** eight SLIs with recording rules, alerts each tested by `make
+  test-alerts` and a runbook, and a Grafana dashboard. The SLIs cover:
+  - sign-in availability and latency;
+  - order to shipment;
+  - invoice issuance (simulation);
+  - payment settlement;
+  - report freshness;
+  - import throughput;
+  - the probe.
+- **A synthetic probe** (`horizon-probe`) walks the critical path every minute with its own
+  account: sign in, the dashboard, a draft purchase order made and cancelled, sign out.
+- **Screens:**
+  - reports and their files, at a cutoff;
+  - controls: delegations, approval thresholds, consistency runs and retention;
+  - the Ledger and Treasury approval queues.
+- **Release evidence:** the Phase M golden path (import → operate → reconcile → export →
+  drills), the browser run, the threat model and the controls API reference.
+
+[Plan](readiness-phase70-implementation-plan.md), [evidence](readiness-phase70-evidence.md),
+[golden path](drills/2026-09-28-phase-m-golden-path.json).
 
 ---
 

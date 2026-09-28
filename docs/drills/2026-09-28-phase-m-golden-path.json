@@ -1,0 +1,112 @@
+{
+  "drill": "phase-m-golden-path",
+  "phase": 70,
+  "startedAt": "2026-09-28T20:35:23.169Z",
+  "baseUrl": "http://localhost:8000",
+  "tenantId": "01a0c5f8-798b-721e-912e-9b505406e614",
+  "passed": true,
+  "checks": [
+    {
+      "name": "an import interrupted by a restart ends with every row accounted for",
+      "passed": true,
+      "evidence": {
+        "jobId": "155cf4ac-c291-401c-a716-ae7744cffde3",
+        "previewErrors": 25,
+        "atRestart": {
+          "total": 1025,
+          "valid": 1000,
+          "written": 88,
+          "failed": 25,
+          "remaining": 912,
+          "cancelled": 0
+        },
+        "final": {
+          "total": 1025,
+          "valid": 1000,
+          "written": 1000,
+          "failed": 25,
+          "remaining": 0,
+          "cancelled": 0
+        },
+        "status": "completed-with-failures",
+        "partiesStored": 1000
+      }
+    },
+    {
+      "name": "a sale ships and its receivable is settled into a treasury account",
+      "passed": true,
+      "evidence": {
+        "quoteId": "01a0e9ba-e9d5-7632-b832-f526f10d757e",
+        "orderId": "01a0e9ba-e9e7-76a0-88ba-36e4f76729f2",
+        "shipmentId": "01a0e9ba-f1cd-7877-8165-700da54e5ce5",
+        "receivableId": "01a0e9ba-f46a-7dbd-b249-43a69a1ac77a",
+        "received": "1250",
+        "settlementId": "01a0e9ba-f603-7621-9e50-7b6c9244bdd5",
+        "accountId": "01a0e9b9-92a3-7652-a7d8-242759b3c25b",
+        "balanceBefore": "1250",
+        "balanceAfter": "2500",
+        "settlementState": "settled"
+      }
+    },
+    {
+      "name": "the cash position at the settled cutoff shows the account and reconciles",
+      "passed": true,
+      "evidence": {
+        "cutoff": "2026-09-28T20:35:52.971Z",
+        "seals": {
+          "financial": 15,
+          "treasury": 3
+        },
+        "settled": true,
+        "account": {
+          "accountId": "01a0e9b9-92a3-7652-a7d8-242759b3c25b",
+          "currency": "BRL",
+          "balance": "2500"
+        },
+        "runId": "01a0e9bd-0214-721e-a0c4-7caf53ae643b",
+        "outcome": "matched",
+        "checks": [
+          "receivables-outstanding: matched",
+          "payables-outstanding: matched",
+          "account-balances: matched"
+        ]
+      }
+    },
+    {
+      "name": "the report exports as XLSX whose bytes match its digest",
+      "passed": true,
+      "evidence": {
+        "jobId": "01a0e9bd-021a-769a-aebb-968cf29425cc",
+        "status": "ready",
+        "settled": true,
+        "rows": 2,
+        "bytes": 1866,
+        "sha256": "555092302d903d092991d0e13b70872e895deb8d3e31e4ca067bbe35767491f8",
+        "downloaded": "555092302d903d092991d0e13b70872e895deb8d3e31e4ca067bbe35767491f8",
+        "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      }
+    },
+    {
+      "name": "the security, controls and restore drills are on record and passed",
+      "passed": true,
+      "evidence": {
+        "phase67-security": {
+          "file": "2026-09-28-phase67-security-drill.json",
+          "passed": true,
+          "checks": 4
+        },
+        "phase68-controls": {
+          "file": "2026-09-28-phase68-controls-drill.json",
+          "passed": true,
+          "checks": 4
+        },
+        "phase69-restore": {
+          "file": "2026-09-28-phase69-restore-drill.json",
+          "passed": true,
+          "checks": 7
+        }
+      }
+    }
+  ],
+  "finishedAt": "2026-09-28T20:37:57.341Z"
+}

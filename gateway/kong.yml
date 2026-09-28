@@ -35,6 +35,20 @@ services:
               policy: local
               limit_by: ip
               fault_tolerant: true
+      # Sign-in has a route of its own, so its availability and latency are an SLI (Phase 70);
+      # it keeps the public routes' rate limit.
+      - name: identity-login
+        paths:
+          - /auth/login
+        methods: [POST]
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 30
+              policy: local
+              limit_by: ip
+              fault_tolerant: true
       - name: identity-api
         paths:
           - /identity

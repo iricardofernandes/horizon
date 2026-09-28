@@ -135,6 +135,19 @@ export type PendingFact = {
   receivedAt: string
 }
 
+/** A manual journal entry above the threshold, waiting for a second person (Phase 68). */
+export type ManualEntry = {
+  id: string
+  reference: string
+  postedOn: string
+  currency: string
+  memo: string | null
+  total: string
+  status: 'pending' | 'approved' | 'rejected'
+  requestedBy: string
+  requestedAt: string
+}
+
 export const GRAINS = ['day', 'week', 'month'] as const
 export type Grain = (typeof GRAINS)[number]
 
@@ -145,6 +158,7 @@ export type LedgerData = {
   outlook: CashFlowOutlook
   trial: TrialBalance
   pending: { data: PendingFact[]; total: number }
+  manualEntries: ManualEntry[]
   range: { from: string; to: string }
   grain: Grain
 }

@@ -23,8 +23,10 @@ import {
   ListChecks,
   Package,
   PaperPlaneTilt,
+  PresentationChart,
   Receipt,
   Repeat,
+  Scales,
   SealCheck,
   ShieldCheck,
   ShoppingCart,
@@ -60,7 +62,17 @@ export type NavigationGroup = { labelKey: string; entries: readonly NavigationEn
 export const navigation: readonly NavigationGroup[] = [
   {
     labelKey: 'overview',
-    entries: [{ href: '/app', labelKey: 'overview', icon: ChartBar, module: null, demo: true }],
+    entries: [
+      { href: '/app', labelKey: 'overview', icon: ChartBar, module: null, demo: true },
+      {
+        href: '/app/reports',
+        labelKey: 'crossReports',
+        icon: PresentationChart,
+        // Figures across modules at a cutoff (ADR 0058); screen since Phase 70.
+        module: 'reporting',
+        demo: false,
+      },
+    ],
   },
   {
     labelKey: 'registrations',
@@ -391,6 +403,15 @@ export const navigation: readonly NavigationGroup[] = [
         labelKey: 'security',
         icon: ShieldCheck,
         // Everyone's own second factors and sessions (Phase 67).
+        module: null,
+        demo: false,
+      },
+      {
+        href: '/app/settings/controls',
+        labelKey: 'controls',
+        icon: Scales,
+        // Delegations, thresholds and consistency runs: each panel asks only the modules the
+        // user holds a role in (Phase 70).
         module: null,
         demo: false,
       },

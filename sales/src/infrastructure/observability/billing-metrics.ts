@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common'
 import { metrics } from '@opentelemetry/api'
 import postgres from 'postgres'
 import type { BillingMetrics } from '@/application/ports/billing-metrics'
+import type { ShippingMetrics } from '@/application/ports/shipping-metrics'
 
 /**
  * Contract billing metrics (Phase 52). No label names a tenant, contract or customer:
@@ -16,6 +17,18 @@ const duration = meter.createHistogram('sales_contract_billing_run_duration_seco
   description: 'Seconds from the start of a billing run to its completion.',
   advice: { explicitBucketBoundaries: [0.5, 1, 2, 5, 10, 30, 60, 120, 300, 900, 3600] },
 })
+
+const shipments = metrics.getMeter('sales.shipping')
+const leadTime = shipments.createHistogram('sales_order_to_shipment_seconds', {
+  description: 'Seconds from an order confirmation to each of its shipments leaving (Phase 70).',
+  advice: {
+    explicitBucketBoundaries: [3600, 21_600, 43_200, 86_400, 172_800, 259_200, 604_800, 1_209_600],
+  },
+})
+
+export const openTelemetryShippingMetrics: ShippingMetrics = {
+  shipped: (seconds) => leadTime.record(Math.max(0, seconds)),
+}
 
 export const openTelemetryBillingMetrics: BillingMetrics = {
   decided: (outcome, reason) => outcomes.add(1, { outcome, reason: reason ?? 'none' }),

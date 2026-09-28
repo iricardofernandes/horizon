@@ -24,6 +24,10 @@ scrape_configs:
       - targets: ['kong:8001']
     metrics_path: /metrics
 
+  - job_name: horizon-probe
+    static_configs:
+      - targets: ['horizon-probe:9464']
+
   - job_name: prometheus
     static_configs:
       - targets: ['localhost:9090']

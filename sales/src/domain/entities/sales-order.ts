@@ -173,6 +173,11 @@ export class SalesOrder extends AggregateRoot<SalesOrderProps> {
     return this.props.fulfillmentWarehouseId
   }
 
+  /** When the order was confirmed; null while it is still a draft. */
+  get confirmationInstant(): Date | null {
+    return this.props.confirmedAt
+  }
+
   get version(): number {
     return this.props.version
   }

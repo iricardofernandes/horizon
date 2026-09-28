@@ -1,0 +1,179 @@
+# promtool test rules infra/observability/rules/slo.rules.test.yml
+rule_files:
+  - slo.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: sign-in failing in both windows burns the budget; 401s never do
+    interval: 1m
+    input_series:
+      - series: 'kong_http_requests_total{route="identity-login",code="200"}'
+        values: '0+80x70'
+      - series: 'kong_http_requests_total{route="identity-login",code="401"}'
+        values: '0+20x70'
+      - series: 'kong_http_requests_total{route="identity-login",code="502"}'
+        values: '0x10 0+20x60'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: LoginAvailabilityBurn
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: LoginAvailabilityBurn
+        exp_alerts:
+          - exp_labels: { severity: critical, slo: login-availability }
+            exp_annotations:
+              summary: 'Sign-in is failing fast enough to spend its monthly error budget in about two days'
+              runbook: docs/service-levels.md#loginavailabilityburn
+
+  - name: sign-in without a single 5xx is an error ratio of 0, not a missing series
+    interval: 1m
+    input_series:
+      - series: 'kong_http_requests_total{route="identity-login",code="200"}'
+        values: '0+60x70'
+    promql_expr_test:
+      - expr: sli:login_errors:ratio_rate1h
+        eval_time: 65m
+        exp_samples:
+          - labels: 'sli:login_errors:ratio_rate1h'
+            value: 0
+
+  - name: slow sign-ins fire after ten minutes below 95% under a second
+    interval: 1m
+    input_series:
+      - series: 'kong_request_latency_ms_bucket{route="identity-login",le="1000.0"}'
+        values: '0+80x30'
+      - series: 'kong_request_latency_ms_count{route="identity-login"}'
+        values: '0+100x30'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: LoginLatencySlow
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: LoginLatencySlow
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: login-latency }
+            exp_annotations:
+              summary: 'Fewer than 95% of sign-ins answer within a second'
+              runbook: docs/service-levels.md#loginlatencyslow
+
+  - name: shipments later than 48 hours
+    interval: 10m
+    input_series:
+      - series: 'sales_order_to_shipment_seconds_bucket{le="172800.0"}'
+        values: '0+9x200'
+      - series: 'sales_order_to_shipment_seconds_count'
+        values: '0+10x200'
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: OrderToShipmentSlow
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: order-to-shipment }
+            exp_annotations:
+              summary: 'Fewer than 95% of shipments left within 48 hours of their order'
+              runbook: docs/service-levels.md#ordertoshipmentslow
+
+  - name: fiscal documents rejected by the authority
+    interval: 1m
+    input_series:
+      - series: 'fiscal_authority_outcomes_total{outcome="authorized",model="55"}'
+        values: '0+10x100'
+      - series: 'fiscal_authority_outcomes_total{outcome="rejected",model="55"}'
+        values: '0+1x100'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: InvoiceIssuanceFailing
+        exp_alerts: []
+      - eval_time: 95m
+        alertname: InvoiceIssuanceFailing
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: invoice-issuance }
+            exp_annotations:
+              summary: 'Fewer than 99% of decided fiscal documents were authorized'
+              runbook: docs/service-levels.md#invoiceissuancefailing
+
+  - name: a dead letter in treasury or ledger is a settlement at risk
+    interval: 1m
+    input_series:
+      - series: 'inbox_consumed_total{service_name="treasury",event_type="financial.settlement.recorded"}'
+        values: '0+5x60'
+      - series: 'inbox_dead_lettered_total{service_name="ledger",reason="handler-failed"}'
+        values: '0x30 1x30'
+      - series: 'inbox_dead_lettered_total{service_name="crm",reason="handler-failed"}'
+        values: '0+1x60'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: SettlementsDeadLettered
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: SettlementsDeadLettered
+        exp_alerts:
+          - exp_labels: { severity: critical, slo: payment-settlement }
+            exp_annotations:
+              summary: 'Treasury or Ledger sent a message to a dead-letter queue: a settlement may not have landed'
+              runbook: docs/service-levels.md#settlementsdeadlettered
+    promql_expr_test:
+      - expr: sli:settlement_delivered:ratio_rate1h
+        eval_time: 20m
+        exp_samples:
+          - labels: 'sli:settlement_delivered:ratio_rate1h'
+            value: 1
+
+  - name: a source behind by more than 15 minutes, named
+    interval: 1m
+    input_series:
+      - series: 'reporting_source_freshness_seconds{source="financial",host_name="a"}'
+        values: '100+60x25'
+      - series: 'reporting_source_freshness_seconds{source="sales",host_name="a"}'
+        values: '60x25'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ReportsStale
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: ReportsStale
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: report-freshness, source: financial }
+            exp_annotations:
+              summary: 'Reports from financial are more than 15 minutes behind'
+              runbook: docs/service-levels.md#reportsstale
+
+  - name: a running import that writes nothing for 15 minutes
+    interval: 1m
+    input_series:
+      - series: 'import_jobs_active{service_name="parties"}'
+        values: '1x40'
+      - series: 'import_rows_written_total{service_name="parties"}'
+        values: '0+50x10 500x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ImportsStalled
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: ImportsStalled
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: import-throughput }
+            exp_annotations:
+              summary: 'An import job has been running for 15 minutes without accounting for a row'
+              runbook: docs/service-levels.md#importsstalled
+
+  - name: the probe fails three times, or stops succeeding
+    interval: 1m
+    input_series:
+      - series: 'horizon_probe_runs_total{outcome="success"}'
+        values: '0+1x10 10x10'
+      - series: 'horizon_probe_runs_total{outcome="failure"}'
+        values: '0x10 0+1x10'
+      - series: 'horizon_probe_last_success_timestamp_seconds'
+        values: '0+60x10 600x10'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: SyntheticProbeFailing
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: SyntheticProbeFailing
+        exp_alerts:
+          - exp_labels: { severity: critical, slo: synthetic-probe }
+            exp_annotations:
+              summary: 'The synthetic probe of sign-in, the dashboard and a draft order is failing'
+              runbook: docs/service-levels.md#syntheticprobefailing

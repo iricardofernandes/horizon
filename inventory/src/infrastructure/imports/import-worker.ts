@@ -7,6 +7,13 @@ const meter = metrics.getMeter('imports')
 const written = meter.createCounter('import_rows_written_total')
 const rejected = meter.createCounter('import_rows_rejected_total')
 const finished = meter.createCounter('import_jobs_finished_total')
+/** Running jobs at the last tick: with the row counters, the import throughput SLI (Phase 70). */
+let running = 0
+meter
+  .createObservableGauge('import_jobs_active', {
+    description: 'Import jobs running at the last worker tick.',
+  })
+  .addCallback((result) => result.observe(running))
 
 /** Asks across tenants only which ones have import work, as the relay role. */
 export class RelayImportScan {
@@ -29,6 +36,13 @@ export class RelayImportScan {
           or (status in ('uploaded', 'validated', 'previewed')
             and updated_at < ${staleBefore.toISOString()}::timestamptz)`
     return rows.map((row) => String(row.tenant_id))
+  }
+
+  /** How many jobs are running across tenants: a count, nothing about them. */
+  async runningJobs(): Promise<number> {
+    const [row] = await this.#client`
+      select count(*)::int as running from import_jobs where status = 'running'`
+    return Number(row?.running ?? 0)
   }
 
   close(): Promise<void> {
@@ -74,6 +88,7 @@ export class ImportWorker {
         now,
         new Date(now.getTime() - this.options.retentionMs),
       )
+      running = await this.options.scan.runningJobs()
       for (const tenantId of tenants) {
         if (this.stopped) return
         const outcome = await this.options.jobs.runTenant(tenantId)

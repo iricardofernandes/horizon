@@ -206,6 +206,8 @@ describe('importing open titles', () => {
     const scan = new RelayImportScan(relayUrl)
     try {
       expect(await scan.tenantsWithWork(new Date(), new Date(0))).toContain(tenantId)
+      // The import throughput SLI counts running jobs, and only counts them (Phase 70).
+      expect(await scan.runningJobs()).toBeGreaterThanOrEqual(0)
     } finally {
       await scan.close()
     }

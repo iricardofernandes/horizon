@@ -3530,3 +3530,99 @@ tbody tr.audit-broken td {
   display: grid;
   gap: 16px;
 }
+
+/* Phase 70 — reports, controls and the approval queues. */
+.reports-screen,
+.controls-screen {
+  display: grid;
+  gap: 16px;
+}
+.report-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.report-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+}
+.report-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.report-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.report-table-title {
+  margin: 12px 0 6px;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.report-sources,
+.report-schedules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.report-sources li,
+.report-schedules li {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.report-sources small {
+  color: var(--color-text-muted);
+}
+.retention-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.retention-item {
+  padding: 12px 14px;
+  border-left: 3px solid var(--color-accent-border);
+  background: var(--color-bg-subtle);
+  border-radius: 0 10px 10px 0;
+}
+.retention-list dt {
+  font-weight: 600;
+}
+.retention-list dd {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+}
+.delegation-form {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.approval-queue {
+  border-color: var(--color-warning-border);
+  background: linear-gradient(180deg, var(--color-warning-bg), var(--color-surface-raised) 72px);
+  margin-bottom: 14px;
+}
+.approval-queue td {
+  white-space: normal;
+  vertical-align: top;
+}
+.approval-queue .dialog-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}

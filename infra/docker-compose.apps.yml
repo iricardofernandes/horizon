@@ -595,6 +595,23 @@ services:
       kong:
         condition: service_healthy
 
+  # Synthetic probe (Phase 70): signs in, reads the dashboard, drafts and cancels a purchase
+  # order through Kong every minute, with its own account (`make probe-user`). Scraped by
+  # Prometheus on :9464; alerts in infra/observability/rules/slo.rules.yml.
+  probe:
+    <<: *service
+    build:
+      context: ../tooling/probe
+    container_name: horizon-probe
+    environment:
+      PROBE_BASE_URL: http://kong:8000
+      PROBE_EMAIL: ${HORIZON_PROBE_EMAIL:-probe@horizon.local}
+      PROBE_PASSWORD: ${HORIZON_PROBE_PASSWORD:-Horizon-probe-2026!}
+      PROBE_INTERVAL_SECONDS: ${HORIZON_PROBE_INTERVAL_SECONDS:-60}
+    depends_on:
+      kong:
+        condition: service_healthy
+
   # Retention (ADR 0063, Phase 69): removes delivery bookkeeping past its declared age, as
   # each module's relay role, and logs the counts per class, table and tenant.
   retention:
