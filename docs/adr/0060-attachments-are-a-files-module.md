@@ -1,6 +1,6 @@
 # 60. Attachments are a `files` module, scanned before served and shredded with their owner
 
-- Status: accepted; Phase 65 implements it.
+- Status: accepted; implemented in Phase 65 ([evidence](../readiness-phase65-evidence.md)).
 - Date: 2026-09-27
 
 ## Context

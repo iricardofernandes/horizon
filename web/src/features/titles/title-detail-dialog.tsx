@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingState, Notice } from '@/components/ui/state'
+import { AttachmentsPanel } from '@/features/attachments/attachments-panel'
 import { apiError, readJson } from '@/lib/api'
 import { idempotentJsonHeaders, jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
@@ -182,6 +183,14 @@ function DetailBody({
       <TitleActions {...section} postable={postable(data, detail)} />
       <InstallmentsTable {...section} data={data} />
       <SettlementsTable {...section} data={data} />
+      <AttachmentsPanel
+        record={{
+          module: 'financial',
+          recordType: direction,
+          recordId: detail.id,
+          ownerPartyId: detail.partyId,
+        }}
+      />
       <Timeline detail={detail} direction={direction} />
     </>
   )

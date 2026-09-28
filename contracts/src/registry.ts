@@ -4,6 +4,9 @@ import { instantSchema, moneySchema, quantitySchema, uuidSchema } from './common
 import { eventEnvelopeSchema } from './envelope'
 import { EVENTS } from './events'
 import {
+  attachmentLinkSchema,
+  attachmentRequestSchema,
+  attachmentSchema,
   fiscalArtifactKindSchema,
   fiscalArtifactKindV2Schema,
   fiscalArtifactListV2Schema,
@@ -690,6 +693,26 @@ const staticEntries: readonly RegistryEntry[] = [
     description:
       "An import job's counts, first errors and first valid rows, shown before confirming.",
     schema: importPreviewSchema,
+  },
+  {
+    id: 'http:attachment-request',
+    kind: 'http',
+    description:
+      'Asking files for an upload slot on a record of an owning module, with the type and size (ADR 0060).',
+    schema: attachmentRequestSchema,
+  },
+  {
+    id: 'http:attachment',
+    kind: 'http',
+    description:
+      'A file attached to a record, in its lifecycle: uploading, scanning, available, quarantined or deleted.',
+    schema: attachmentSchema,
+  },
+  {
+    id: 'http:attachment-link',
+    kind: 'http',
+    description: 'A signed, short-lived link to upload an attachment or download it.',
+    schema: attachmentLinkSchema,
   },
   {
     id: 'authorization:role-assignment',

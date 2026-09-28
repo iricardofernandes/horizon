@@ -31,10 +31,11 @@ volumes:
   grafana-data:
   mcp-debugger-audit:
   fiscal-artifacts:
+  clamav-signatures:
 
 services:
-  # Object storage for Fiscal's artifacts and, since Phase 63, reporting's exports; part of
-  # the default platform now that more than one module keeps files in it.
+  # Object storage for Fiscal's artifacts, reporting's exports (Phase 63) and the files
+  # module's attachments (Phase 65); part of the default platform.
   minio:
     <<: *restart
     # MinIO stopped publishing public images; a pinned community build from source.
@@ -65,6 +66,27 @@ services:
         mc version enable local/horizon-fiscal-artifacts
         mc mb --ignore-existing local/horizon-exports
         mc version enable local/horizon-exports
+        # Attachments are not versioned: a removed or expired file must really go (Phase 65).
+        mc mb --ignore-existing local/horizon-attachments
+
+  # ClamAV for the files module's scanner port (ADR 0060), opt-in with `make up-scanner`.
+  # It downloads its signatures at start, which is large and often refused from CI
+  # runners, so the default stack and CI use the deterministic EICAR adapter instead.
+  clamav:
+    <<: *restart
+    profiles: [scanner]
+    image: clamav/clamav:1.4@sha256:57deb108fc4c72778aa83eafbca7bb7153e28c3f57c005afd38d31f16da86f23
+    container_name: horizon-clamav
+    networks: [horizon]
+    ports: ['${HORIZON_CLAMD_PORT:-3310}:3310']
+    volumes:
+      - clamav-signatures:/var/lib/clamav
+    healthcheck:
+      test: ['CMD', 'clamdcheck.sh']
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
 
   # ---------------------------------------------------------------- data
   postgres:

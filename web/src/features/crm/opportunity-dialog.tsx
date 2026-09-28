@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { LoadingState, Notice } from '@/components/ui/state'
 import { TextField } from '@/components/ui/text-field'
+import { AttachmentsPanel } from '@/features/attachments/attachments-panel'
 import { reference } from '@/features/sales/types'
 import { useDate, useMoney } from '@/lib/use-format'
 import { ConvertDialog } from './convert-dialog'
@@ -124,6 +125,14 @@ export function OpportunityDialog({
                 <h3>{t('timeline.title')}</h3>
                 <Timeline directory={directory} entries={loaded.timeline} />
               </section>
+              <AttachmentsPanel
+                record={{
+                  module: 'crm',
+                  recordType: 'opportunity',
+                  recordId: loaded.detail.id,
+                  ownerPartyId: loaded.detail.accountId,
+                }}
+              />
               {converting && loaded.account ? (
                 <ConvertDialog
                   account={loaded.account}

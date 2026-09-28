@@ -645,7 +645,10 @@
     "status": "Status",
     "taxId": "CPF/CNPJ",
     "title": "Pessoas e empresas",
-    "tradeName": "Nome fantasia"
+    "tradeName": "Nome fantasia",
+    "attachments": "Anexos",
+    "attachmentsTitle": "Anexos de {name}",
+    "attachmentsDescription": "Contratos e documentos do parceiro. São apagados junto com os dados pessoais se o parceiro for eliminado."
   },
   "partyKinds": {
     "organization": "Empresa",
@@ -2551,6 +2554,30 @@
       "dueOn": "Vencimento",
       "amount": "Valor em aberto",
       "category": "Categoria"
+    }
+  },
+  "attachments": {
+    "title": "Anexos",
+    "attach": "Anexar arquivo",
+    "choose": "Escolher arquivo para anexar",
+    "empty": "Nenhum arquivo anexado.",
+    "failed": "Não foi possível concluir a operação com os anexos.",
+    "remove": "Remover",
+    "confirmRemove": "Remover o anexo {name}? O arquivo é apagado e não pode ser recuperado.",
+    "meta": "{size} · {date}",
+    "hint": "PDF, imagens, texto, CSV, DOCX ou XLSX, até 10 MB. Cada arquivo passa por antivírus antes de ficar disponível.",
+    "quarantinedNote": "O antivírus encontrou algo neste arquivo. Ele foi removido e não pode ser baixado.",
+    "refused": {
+      "type": "Este tipo de arquivo não é aceito. Envie PDF, imagem, texto, CSV, DOCX ou XLSX.",
+      "size": "O arquivo passa de 10 MB.",
+      "empty": "O arquivo está vazio."
+    },
+    "status": {
+      "uploading": "enviando",
+      "scanning": "verificando",
+      "available": "disponível",
+      "quarantined": "em quarentena",
+      "deleted": "removido"
     }
   }
 }

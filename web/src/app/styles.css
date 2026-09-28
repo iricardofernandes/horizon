@@ -1465,6 +1465,43 @@ tbody tr:last-child td {
   display: grid;
   gap: 10px;
 }
+/* Attachments (Phase 65): the files on a record, offered for download only once scanned. */
+.attachments-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.attachments-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.attachments-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.attachments-list small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.badge-scanning,
+.badge-uploading {
+  background: var(--amber-3);
+  color: var(--amber-11);
+}
+.badge-available {
+  background: var(--jade-3);
+  color: var(--jade-11);
+}
+.badge-quarantined {
+  background: var(--red-3);
+  color: var(--red-11);
+}
 .order-layout {
   grid-template-columns: minmax(300px, 0.65fr) minmax(0, 1.35fr);
 }

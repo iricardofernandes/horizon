@@ -160,6 +160,25 @@ services:
           - /reporting
         strip_path: true
 
+  # Attachments (Phase 65). An upload is the file itself, up to 10 MiB, so this route's
+  # body limit is above the global 8 MB one.
+  - name: files
+    url: http://files:3014
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 30000
+    read_timeout: 30000
+    routes:
+      - name: files-api
+        paths:
+          - /files
+        strip_path: true
+        plugins:
+          - name: request-size-limiting
+            config:
+              allowed_payload_size: 11
+              size_unit: megabytes
+
   - name: fiscal
     url: http://fiscal:3011
     retries: 3

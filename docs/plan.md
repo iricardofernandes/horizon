@@ -2583,9 +2583,19 @@ implemented by Parties, Catalog, Inventory and Financial.
 
 ## Phase 65 — Attachments
 
-**Planned.** `files/` on port 3014: uploads scanned before they are served, encrypted per owner and
-shredded on erasure, with retention per record type.
-[Detailed work](production-readiness-implementation-plan.md#65--attachments).
+**Delivered on 2026-09-28.** `files/` on port 3014, with contracts 0.48.0.
+- **Uploads:** through a signed link, with the type and size allow-listed and the first
+  bytes checked against the type.
+- **The scan:** through a port, EICAR in CI and ClamAV with `make up-scanner`. A file is
+  served only once it is clean.
+- **Encryption and erasure:** encrypted under its owner's key, which the party's or user's
+  erasure destroys.
+- **Retention:** per record type, with an expiry job and its log.
+- **The web:** an attachments panel on parties, purchase orders, titles, service orders and
+  opportunities.
+
+[Plan](readiness-phase65-implementation-plan.md), [evidence](readiness-phase65-evidence.md),
+[API](files-api.md).
 
 ## Phase 66 — Search, command palette, saved views, notifications and the job centre
 

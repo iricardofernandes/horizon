@@ -645,7 +645,10 @@
     "status": "Status",
     "taxId": "Tax ID",
     "title": "Parties",
-    "tradeName": "Trade name"
+    "tradeName": "Trade name",
+    "attachments": "Attachments",
+    "attachmentsTitle": "Attachments of {name}",
+    "attachmentsDescription": "The party's contracts and documents. They are shredded with its personal data if the party is erased."
   },
   "partyKinds": {
     "organization": "Organization",
@@ -2551,6 +2554,30 @@
       "dueOn": "Due on",
       "amount": "Open amount",
       "category": "Category"
+    }
+  },
+  "attachments": {
+    "title": "Attachments",
+    "attach": "Attach a file",
+    "choose": "Choose a file to attach",
+    "empty": "No files attached.",
+    "failed": "The attachment operation could not be completed.",
+    "remove": "Remove",
+    "confirmRemove": "Remove the attachment {name}? The file is deleted and cannot be recovered.",
+    "meta": "{size} · {date}",
+    "hint": "PDF, images, text, CSV, DOCX or XLSX, up to 10 MB. Every file is scanned for malware before it becomes available.",
+    "quarantinedNote": "The malware scanner found something in this file. It was removed and cannot be downloaded.",
+    "refused": {
+      "type": "This type of file is not accepted. Send a PDF, image, text, CSV, DOCX or XLSX file.",
+      "size": "The file is larger than 10 MB.",
+      "empty": "The file is empty."
+    },
+    "status": {
+      "uploading": "uploading",
+      "scanning": "scanning",
+      "available": "available",
+      "quarantined": "quarantined",
+      "deleted": "removed"
     }
   }
 }

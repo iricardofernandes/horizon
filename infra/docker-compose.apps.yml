@@ -421,6 +421,50 @@ services:
       AWS_SECRET_ACCESS_KEY: ${HORIZON_MINIO_PASSWORD:-horizon-fiscal-local-secret}
       EXPORT_LINK_SECRET: ${HORIZON_EXPORT_LINK_SECRET:-local-export-link-secret-change-me-0123456789}
 
+  files-migrate:
+    <<: *service
+    build:
+      context: ../files
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_files
+    command: ["npm", "run", "db:migrate"]
+
+  files:
+    <<: *service
+    build:
+      context: ../files
+      network: host
+    container_name: horizon-files
+    depends_on:
+      files-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *env
+      PORT: '3014'
+      OTEL_SERVICE_NAME: files
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_files
+      # The outbox relay and the attachment worker run as the relay role (Phase 65).
+      DATABASE_RELAY_URL: postgres://horizon_relay:horizon@postgres:5432/horizon_files
+      FILES_STORE: s3
+      FILES_BUCKET: horizon-attachments
+      FILES_S3_ENDPOINT: http://minio:9000
+      FILES_S3_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${HORIZON_MINIO_USER:-horizon-fiscal-local}
+      AWS_SECRET_ACCESS_KEY: ${HORIZON_MINIO_PASSWORD:-horizon-fiscal-local-secret}
+      FILES_MASTER_KEY: ${HORIZON_FILES_MASTER_KEY:-6c6f63616c2d66696c65732d6d61737465722d6b65792d6368616e67652d6d65}
+      FILES_LINK_SECRET: ${HORIZON_FILES_LINK_SECRET:-local-files-link-secret-change-me-0123456789}
+      # `clamav` once `make up-scanner` runs ClamAV; the EICAR adapter otherwise.
+      FILES_SCANNER: ${HORIZON_FILES_SCANNER:-eicar}
+      CLAMD_HOST: clamav
+      CLAMD_PORT: '3310'
+
   fiscal-migrate:
     <<: *service
     profiles: [fiscal]

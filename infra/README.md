@@ -40,6 +40,23 @@ before Phase 39, run `docker exec horizon-postgres createdb -U postgres -O horiz
 once before starting the profile. The `fiscal-migrate` job applies its own schema.
 Fiscal transmission remains disabled for every capability tuple.
 
+### Phase 65 files and ClamAV
+
+The `files` service stores attachments in the `horizon-attachments` bucket. That bucket is
+not versioned, so a removed file really goes. By default it scans with the deterministic
+EICAR adapter, as CI does. To scan with ClamAV:
+
+```bash
+make up-scanner   # starts clamav (profile `scanner`) and restarts files with FILES_SCANNER=clamav
+```
+
+- **Signatures.** ClamAV keeps them in the `clamav-signatures` volume and refreshes them
+  itself.
+- **Older volumes.** A PostgreSQL volume created before Phase 65 needs `horizon_files`
+  created once, with the grants of `postgres/init/01-roles-and-databases.sh`.
+- **Secrets.** Set `HORIZON_FILES_MASTER_KEY` (64 hex characters) and
+  `HORIZON_FILES_LINK_SECRET` in `infra/.env` for anything but local use.
+
 | Service | URL | Credentials |
 |---|---|---|
 | Gateway (Kong) | http://localhost:8000 | — |

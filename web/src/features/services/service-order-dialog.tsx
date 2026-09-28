@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingState, Notice } from '@/components/ui/state'
+import { AttachmentsPanel } from '@/features/attachments/attachments-panel'
 import { reference } from '@/features/sales/types'
 import { readJson } from '@/lib/api'
 import { useStatusLabel } from '@/lib/status'
@@ -95,14 +96,24 @@ export function ServiceOrderDialog({
           {failed ? <Notice copy={t('detailUnavailable')} /> : null}
           {!failed && !detail ? <LoadingState /> : null}
           {detail ? (
-            <Body
-              busy={busy}
-              canWrite={canWrite}
-              data={data}
-              detail={detail}
-              error={error}
-              run={run}
-            />
+            <>
+              <Body
+                busy={busy}
+                canWrite={canWrite}
+                data={data}
+                detail={detail}
+                error={error}
+                run={run}
+              />
+              <AttachmentsPanel
+                record={{
+                  module: 'sales',
+                  recordType: 'service-order',
+                  recordId: detail.id,
+                  ownerPartyId: detail.customerId,
+                }}
+              />
+            </>
           ) : null}
         </Dialog.Popup>
       </Dialog.Portal>

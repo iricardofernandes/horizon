@@ -2,13 +2,23 @@
 
 import { Checkbox } from '@base-ui/react/checkbox'
 import { Dialog } from '@base-ui/react/dialog'
-import { Buildings, Check, IdentificationCard, Plus, Tag, User, X } from '@phosphor-icons/react'
+import {
+  Buildings,
+  Check,
+  IdentificationCard,
+  Paperclip,
+  Plus,
+  Tag,
+  User,
+  X,
+} from '@phosphor-icons/react'
 import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
+import { AttachmentsPanel } from '@/features/attachments/attachments-panel'
 import { apiError } from '@/lib/api'
 import { jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
@@ -135,6 +145,7 @@ function PartiesTable({ parties, onChanged, setNotice }: { parties: Party[] } & 
                     />
                   ) : null}
                   <PartyRolesDialog party={party} onChanged={onChanged} setNotice={setNotice} />
+                  <PartyAttachmentsDialog party={party} />
                 </div>
               ) : null}
             </td>
@@ -403,6 +414,36 @@ function PartyRolesDialog({ party, onChanged, setNotice }: { party: Party } & Mu
           <div className="dialog-actions">
             <Dialog.Close className="ui-button ui-button-secondary">{common('close')}</Dialog.Close>
           </div>
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
+function PartyAttachmentsDialog({ party }: { party: Party }) {
+  const t = useTranslations('parties')
+  const common = useTranslations('common')
+  return (
+    <Dialog.Root>
+      <Dialog.Trigger className="ui-button ui-button-ghost row-action-button">
+        <Paperclip aria-hidden="true" size={16} />
+        {t('attachments')}
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="ui-dialog-backdrop" />
+        <Dialog.Popup className="ui-dialog-popup">
+          <div className="dialog-heading">
+            <Dialog.Title>{t('attachmentsTitle', { name: party.legalName })}</Dialog.Title>
+            <Dialog.Description className="dialog-description">
+              {t('attachmentsDescription')}
+            </Dialog.Description>
+          </div>
+          <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
+            <X aria-hidden="true" size={18} />
+          </Dialog.Close>
+          <AttachmentsPanel
+            record={{ module: 'parties', recordType: 'party', recordId: party.id }}
+          />
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

@@ -4,7 +4,7 @@
 # Makefile shells out per project rather than sharing state between them.
 
 PROJECTS_JSON := scripts/modules.json
-SERVICES := identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting
+SERVICES := identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting files
 
 .DEFAULT_GOAL := help
 
@@ -131,6 +131,12 @@ up-fiscal: infra/.env infra/keys/public kong-config ## Start the optional Fiscal
 	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
 		$(COMPOSE) -f infra/docker-compose.apps.yml --profile fiscal up -d --build --wait fiscal
 	@$(COMPOSE) -f infra/docker-compose.apps.yml restart kong
+
+.PHONY: up-scanner
+up-scanner: infra/.env ## Start ClamAV and point the files module at it (Phase 65)
+	@$(COMPOSE) --profile scanner up -d --wait clamav
+	@HORIZON_FILES_SCANNER=clamav HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
+		$(COMPOSE) -f infra/docker-compose.apps.yml up -d --no-deps files
 
 .PHONY: test-alerts
 test-alerts: ## Check and unit-test the Prometheus alert rules with promtool

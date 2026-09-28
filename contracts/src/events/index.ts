@@ -20,6 +20,11 @@ import {
 } from './crm'
 import type { EventDefinition } from './define'
 import {
+  filesAttachmentAvailable,
+  filesAttachmentDeleted,
+  filesAttachmentQuarantined,
+} from './files'
+import {
   financialPayablePosted,
   financialPayableReversed,
   financialReceivablePosted,
@@ -116,6 +121,7 @@ import {
 export * from './catalog'
 export * from './crm'
 export * from './define'
+export * from './files'
 export * from './financial'
 export * from './fiscal'
 export * from './identity'
@@ -225,6 +231,9 @@ export const EVENTS: readonly EventDefinition[] = [
   crmOpportunityReopened,
   crmOpportunityConverted,
   crmTaskDue,
+  filesAttachmentAvailable,
+  filesAttachmentQuarantined,
+  filesAttachmentDeleted,
 ] as const
 
 /** Look up an event definition by `eventType` and `eventVersion`. */

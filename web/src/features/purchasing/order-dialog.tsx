@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingState, Notice } from '@/components/ui/state'
+import { AttachmentsPanel } from '@/features/attachments/attachments-panel'
 import { apiError, readJson } from '@/lib/api'
 import { idempotentJsonHeaders, jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
@@ -103,14 +104,24 @@ export function OrderDialog({
           {failed ? <Notice copy={t('detailUnavailable')} /> : null}
           {!failed && !detail ? <LoadingState /> : null}
           {detail ? (
-            <Body
-              abilities={abilities}
-              busy={busy}
-              detail={detail}
-              error={error}
-              onCommand={command}
-              receipts={receipts}
-            />
+            <>
+              <Body
+                abilities={abilities}
+                busy={busy}
+                detail={detail}
+                error={error}
+                onCommand={command}
+                receipts={receipts}
+              />
+              <AttachmentsPanel
+                record={{
+                  module: 'procurement',
+                  recordType: 'purchase-order',
+                  recordId: detail.id,
+                  ownerPartyId: detail.supplierId,
+                }}
+              />
+            </>
           ) : null}
         </Dialog.Popup>
       </Dialog.Portal>

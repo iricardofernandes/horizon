@@ -869,6 +869,20 @@ The **rows an import refused**, downloaded in the format of the file that was se
 the original columns, then the line and every reason. It is kept for 72 hours after the
 job ends.
 
+### attachment
+A **file on a record of another module**, kept by `files/` (ADR 0060). It names the record
+as module, record type and id. It goes uploading → scanning → available or quarantined →
+deleted, and it is served only when available, through a link signed for five minutes.
+
+### owner key
+The **key of the party or user a file is about** (ADR 0060). Each file's own key is
+wrapped by it. Erasing the owner destroys it, and every file under it becomes unreadable:
+the same crypto-shredding as ADR 0026.
+
+### quarantine
+The **state of a file the scanner found something in.** Its bytes are removed at once, it
+is never served, and its row keeps the finding for 30 days.
+
 ### reconciliation run
 A **comparison of a report with its owners' own reports** at one settled cutoff, kept with
 every check it made. A check is matched, different (with each difference), or not

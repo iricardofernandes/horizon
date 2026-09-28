@@ -42,6 +42,7 @@ jobs:
           - { name: fiscal, context: fiscal }
           - { name: crm, context: crm }
           - { name: reporting, context: reporting }
+          - { name: files, context: files }
           - { name: web, context: web }
           - { name: gateway, context: gateway }
     steps:
