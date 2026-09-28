@@ -87,6 +87,13 @@ describe('property changes', () => {
 })
 
 describe('type and constraint changes', () => {
+  it('treats the same nullable type as unchanged, in any order', () => {
+    const before = object({ field: { type: ['string', 'null'] } })
+    assert.deepEqual(diff(before, object({ field: { type: ['string', 'null'] } })), [])
+    assert.deepEqual(diff(before, object({ field: { type: ['null', 'string'] } })), [])
+    assert.equal(diff(before, object({ field: { type: 'string' } }))[0]?.severity, BREAKING)
+  })
+
   it('flags a changed type as breaking', () => {
     const findings = diff({ type: 'string' }, { type: 'number' })
     assert.deepEqual(severities(findings), [BREAKING])

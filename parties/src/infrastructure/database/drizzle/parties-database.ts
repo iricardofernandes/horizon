@@ -30,6 +30,7 @@ import {
   PartyPhone,
   PartyRoles,
 } from '@/domain/value-objects/party-values'
+import type { SqlRun, TenantSql } from './import-store'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
@@ -59,7 +60,7 @@ export interface PartyFiscalExport {
 }
 
 /** Owns the connection; only tenant-bound repositories leave this module (ADR 0017). */
-export class PartiesDatabase extends PartiesUnitOfWork {
+export class PartiesDatabase extends PartiesUnitOfWork implements TenantSql {
   readonly #client: ReturnType<typeof postgres>
   readonly #db: Database
   readonly #transactions = new AsyncLocalStorage<{ tx: Transaction; tenantId: string }>()
@@ -89,6 +90,22 @@ export class PartiesDatabase extends PartiesUnitOfWork {
         work(makeScope(tx, tenantId, this.#privacy)),
       )
     })
+  }
+
+  /** A tenant transaction for the import store, which speaks SQL (ADR 0059). */
+  inTenantSql<T>(tenantId: string, work: (run: SqlRun) => Promise<T>): Promise<T> {
+    return this.inTenant(tenantId, () => {
+      const run = this.currentSql()
+      if (!run) throw new Error('Import work requires a tenant transaction')
+      return work(run)
+    })
+  }
+
+  currentSql(): SqlRun | null {
+    const current = this.#transactions.getStore()
+    if (!current) return null
+    return async (query) =>
+      (await current.tx.execute(query)) as unknown as readonly Record<string, unknown>[]
   }
 
   /** Exact encrypted revision for the restricted, asynchronous Fiscal projector. */

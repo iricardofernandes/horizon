@@ -853,6 +853,22 @@ A cutoff every source a report reads is **proven complete** through, by its wate
 figures can no longer change. A figure at a cutoff that is not settled is provisional.
 This differs from a CRM cutoff, which settles on the clock because its facts are local.
 
+### import job
+A **bulk load of one file into the module that owns its data** (ADR 0059). It goes
+uploaded → validated → previewed → running, and ends completed, completed with failures,
+or cancelled. Its rows go through the module's own use cases, never into its tables. Its
+counts always add up to the file's rows: written, failed, remaining and cancelled.
+
+### job key and row key
+The **job key** names an import: the same key with the same file is the same job, and with
+another file is refused. A **row key** is the job and the row's line. A write keyed by it
+happens once, even when a worker dies and another takes the job over.
+
+### failures file
+The **rows an import refused**, downloaded in the format of the file that was sent. It has
+the original columns, then the line and every reason. It is kept for 72 hours after the
+job ends.
+
 ### reconciliation run
 A **comparison of a report with its owners' own reports** at one settled cutoff, kept with
 every check it made. A check is matched, different (with each difference), or not

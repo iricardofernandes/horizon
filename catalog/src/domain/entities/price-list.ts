@@ -71,6 +71,13 @@ export class PriceList extends AggregateRoot<PriceListProps> {
     )
     return right(undefined)
   }
+  /** The name a file names the list by, and the currency its prices must be in (Phase 64). */
+  name(): string {
+    return this.props.name.value
+  }
+  currency(): string {
+    return this.props.currency.value
+  }
   priceOf(itemId: string): bigint | null {
     return this.props.prices.get(itemId) ?? null
   }

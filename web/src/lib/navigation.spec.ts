@@ -21,3 +21,18 @@ describe('the CRM navigation group', () => {
     expect(entryForPath('/app/crm/accounts')?.labelKey).toBe('accounts')
   })
 })
+
+describe('the imports screen', () => {
+  it('sits under Administration, and the screen itself narrows it to administered modules', () => {
+    const administration = visibleNavigation([{ module: 'catalog', role: 'admin' }], false).find(
+      (group) => group.labelKey === 'administration',
+    )
+    expect(administration?.entries.map((entry) => entry.labelKey)).toContain('imports')
+    expect(entryForPath('/app/administration/imports')?.labelKey).toBe('imports')
+    expect(
+      visibleNavigation([], true)
+        .flatMap((group) => group.entries)
+        .some((entry) => entry.labelKey === 'imports'),
+    ).toBe(false)
+  })
+})

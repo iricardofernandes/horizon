@@ -1,5 +1,9 @@
+import { IMPORT_MAX_BYTES, IMPORT_MAX_ROWS } from '@horizon/contracts'
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { FinancialModuleEventHandlers } from '@/application/consume-module-events'
+import { ImportJobs } from '@/application/imports/imports'
+import type { RowKey } from '@/application/imports/ports'
+import { TitleImporter } from '@/application/imports/title-importer'
 import {
   DecidePayableApprovalUseCase,
   DefineApprovalPolicyUseCase,
@@ -26,6 +30,9 @@ import {
 import type { TitleDirection } from '@/domain/entities/title'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { FinancialDatabase } from '@/infrastructure/database/drizzle/financial-database'
+import { PLAIN_ROWS, SqlImportStore } from '@/infrastructure/database/drizzle/import-store'
+import { RowWritingUnitOfWork } from '@/infrastructure/imports/financial-rows'
+import { TabularImportFiles } from '@/infrastructure/imports/tabular-files'
 import type { FinancialEnvironment } from './environment'
 
 export type TitleCommands = ReturnType<typeof titleCommands>
@@ -63,6 +70,7 @@ export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
   readonly payableApprovals: DecidePayableApprovalUseCase
   readonly defineApprovalPolicy: DefineApprovalPolicyUseCase
   readonly eventHandlers: FinancialModuleEventHandlers
+  readonly imports: ImportJobs
 
   constructor(config: FinancialEnvironment) {
     const clock = { now: () => new Date() }
@@ -89,6 +97,24 @@ export class FinancialRuntime implements OnModuleInit, OnModuleDestroy {
     this.payableApprovals = new DecidePayableApprovalUseCase(this.database, clock)
     this.defineApprovalPolicy = new DefineApprovalPolicyUseCase(this.database, clock)
     this.eventHandlers = new FinancialModuleEventHandlers(this.database, clock)
+    const database = this.database
+    const rows = (key: RowKey) => new RowWritingUnitOfWork(database, key)
+    this.imports = new ImportJobs(
+      new SqlImportStore(database, PLAIN_ROWS),
+      new TabularImportFiles(),
+      [
+        new TitleImporter('receivable', database, clock, rows),
+        new TitleImporter('payable', database, clock, rows),
+      ],
+      clock,
+      {
+        maxRows: IMPORT_MAX_ROWS,
+        maxBytes: IMPORT_MAX_BYTES,
+        batchSize: config.IMPORT_BATCH_SIZE,
+        leaseMs: config.IMPORT_LEASE_MS,
+        retentionMs: config.IMPORT_RETENTION_HOURS * 3_600_000,
+      },
+    )
   }
 
   onModuleInit(): Promise<void> {

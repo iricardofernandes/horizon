@@ -12,7 +12,7 @@ import type { InventoryRuntime } from '@/main/inventory-runtime'
 const PUBLIC = 'inventory:public'
 const ACTION = 'inventory:action'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
-export type InventoryAction = 'read' | 'manage' | 'approve'
+export type InventoryAction = 'read' | 'manage' | 'approve' | 'import'
 export const RequireInventoryAction = (action: InventoryAction) => SetMetadata(ACTION, action)
 
 export interface InventoryRequest {
@@ -50,7 +50,8 @@ export class InventoryAuthGuard implements CanActivate {
     }
     const action = this.reflector.getAllAndOverride<InventoryAction>(ACTION, targets)
     if (!action) return true
-    // An operator moves stock; allowing a write-off takes an admin. An admin can do both,
+    // An operator moves stock; allowing a write-off, or loading opening balances in bulk
+    // (Phase 64), takes an admin. An admin can do both,
     // which is deliberate — the four-eyes rule is about who a person is, not what they
     // may do, and it is the aggregate and the table that refuse one's own approval.
     const allowed = request.principal.roles.some(

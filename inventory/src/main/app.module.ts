@@ -1,7 +1,9 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { InventoryAuthGuard } from '@/infrastructure/http/authorization'
+import { ImportsController } from '@/infrastructure/http/imports.controller'
 import { InventoryController } from '@/infrastructure/http/inventory.controller'
+import { ImportWorker, RelayImportScan } from '@/infrastructure/imports/import-worker'
 import { JournalSealWorker } from '@/infrastructure/messaging/journal-replay'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { InventoryEnvironment } from './environment'
@@ -45,6 +47,17 @@ export class AppModule {
     if (config.DATABASE_RELAY_URL) {
       const relayUrl = config.DATABASE_RELAY_URL
       providers.push({
+        provide: ImportWorker,
+        inject: [InventoryRuntime],
+        useFactory: (runtime: InventoryRuntime) =>
+          new ImportWorker({
+            scan: new RelayImportScan(relayUrl),
+            jobs: runtime.imports,
+            intervalMs: config.IMPORT_POLL_INTERVAL_MS,
+            retentionMs: config.IMPORT_RETENTION_HOURS * 3_600_000,
+          }),
+      })
+      providers.push({
         // Seals every tenant's history for reporting, as the relay role (Phase 62).
         provide: JournalSealWorker,
         useFactory: () =>
@@ -57,7 +70,7 @@ export class AppModule {
     }
     return {
       module: AppModule,
-      controllers: [InventoryController],
+      controllers: [InventoryController, ImportsController],
       providers,
       exports: [InventoryRuntime],
     }

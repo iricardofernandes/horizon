@@ -39,6 +39,10 @@ export class Warehouse extends AggregateRoot<WarehouseProps> {
   isActive(): boolean {
     return this.props.active
   }
+  /** The name a file names the warehouse by (Phase 64). */
+  name(): string {
+    return this.props.name.value
+  }
   deactivate(now: Date): Either<ConflictError, void> {
     if (!this.props.active) return left(new ConflictError('warehouse is already inactive'))
     this.props.active = false

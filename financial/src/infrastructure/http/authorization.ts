@@ -11,7 +11,7 @@ import type { FinancialRuntime } from '@/main/financial-runtime'
 
 const PUBLIC = 'financial:public'
 const ACTION = 'financial:action'
-export type FinancialAction = 'read' | 'configure' | 'record' | 'reverse' | 'approve'
+export type FinancialAction = 'read' | 'configure' | 'record' | 'reverse' | 'approve' | 'import'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
 export const RequireFinancialAction = (action: FinancialAction) => SetMetadata(ACTION, action)
 
@@ -36,9 +36,10 @@ export function tenantOf(request: FinancialRequest): string {
  * Operators draft, post and settle titles. Reversing something already posted or settled
  * undoes a fact other contexts acted on, so it stays with admins (ADR 0042), as does
  * approving a payable — and the aggregate refuses an approval by whoever requested it.
+ * Loading the open titles of a go-live in bulk is an administrator's work too (Phase 64).
  */
 const PERMITS: Readonly<Record<string, readonly FinancialAction[]>> = {
-  admin: ['read', 'configure', 'record', 'reverse', 'approve'],
+  admin: ['read', 'configure', 'record', 'reverse', 'approve', 'import'],
   operator: ['read', 'record'],
   viewer: ['read'],
 }

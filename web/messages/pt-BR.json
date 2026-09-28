@@ -528,7 +528,8 @@
       "accounts": "Contas",
       "agenda": "Minha agenda",
       "forecast": "Previsão e métricas",
-      "crmSettings": "Configurações do CRM"
+      "crmSettings": "Configurações do CRM",
+      "imports": "Importações"
     }
   },
   "orders": {
@@ -2453,6 +2454,103 @@
       "entryName": "Nome",
       "addEntry": "Adicionar",
       "noEntries": "Nada aqui ainda."
+    }
+  },
+  "imports": {
+    "eyebrow": "Administração",
+    "title": "Importações",
+    "copy": "Carregue cadastros, saldos iniciais e títulos em aberto a partir de uma planilha. Cada módulo valida as linhas com as próprias regras; nenhuma linha é gravada duas vezes.",
+    "module": "Módulo",
+    "kind": "O que importar",
+    "file": "Arquivo (CSV ou XLSX, até 5 MB e 10.000 linhas)",
+    "upload": "Enviar arquivo",
+    "uploading": "Enviando…",
+    "fileInvalid": "Escolha um arquivo CSV ou XLSX com até 5 MB.",
+    "failed": "A importação não pôde ser concluída.",
+    "noModule": "Você não administra nenhum módulo que importe dados.",
+    "counts": "{total} linhas: {written} gravadas, {failed} com falha, {remaining} restantes, {cancelled} canceladas.",
+    "countsMismatch": "As contagens não fecham com o total do arquivo; recarregue a importação.",
+    "confirm": "Importar {count} linhas válidas",
+    "cancel": "Cancelar importação",
+    "downloadFailures": "Baixar falhas",
+    "another": "Nova importação",
+    "wizard": {
+      "title": "Importar um arquivo",
+      "copy": "Envie o arquivo, relacione as colunas, confira a prévia e confirme. O progresso aparece aqui."
+    },
+    "mapping": {
+      "title": "Colunas do arquivo",
+      "none": "(não importar)",
+      "validate": "Validar e ver prévia"
+    },
+    "preview": {
+      "errors": "Primeiras linhas com erro",
+      "noErrors": "Nenhuma linha com erro.",
+      "sample": "Primeiras linhas válidas",
+      "line": "Linha",
+      "reason": "Motivo"
+    },
+    "recent": {
+      "title": "Importações recentes",
+      "copy": "As últimas importações deste módulo, de qualquer administrador.",
+      "empty": "Nenhuma importação ainda.",
+      "file": "Arquivo",
+      "status": "Situação",
+      "progress": "Progresso",
+      "created": "Enviada em",
+      "summary": "{percent}% · {written} gravadas, {failed} com falha, de {total}"
+    },
+    "status": {
+      "uploaded": "enviada",
+      "validated": "validada",
+      "previewed": "pronta para confirmar",
+      "running": "em andamento",
+      "completed": "concluída",
+      "completed-with-failures": "concluída com falhas",
+      "cancelled": "cancelada"
+    },
+    "kinds": {
+      "parties": "Pessoas e empresas",
+      "units": "Unidades de medida",
+      "items": "Itens",
+      "prices": "Preços",
+      "opening-stock": "Saldos iniciais de estoque",
+      "receivables": "Contas a receber em aberto",
+      "payables": "Contas a pagar em aberto"
+    },
+    "fields": {
+      "kind": "Tipo",
+      "legalName": "Razão social ou nome",
+      "tradeName": "Nome fantasia",
+      "documentType": "Tipo de documento",
+      "documentNumber": "Documento",
+      "documentCountry": "País do documento",
+      "email": "E-mail",
+      "phone": "Telefone",
+      "address": "Endereço",
+      "roles": "Papéis",
+      "code": "Código",
+      "name": "Nome",
+      "decimalPlaces": "Casas decimais",
+      "sku": "SKU",
+      "unit": "Unidade",
+      "ncm": "NCM",
+      "priceList": "Lista de preços",
+      "currency": "Moeda",
+      "price": "Preço",
+      "warehouse": "Depósito",
+      "itemId": "Id do item",
+      "quantity": "Quantidade",
+      "unitCost": "Custo unitário",
+      "lot": "Lote",
+      "expiresOn": "Validade",
+      "serials": "Números de série",
+      "partyId": "Id do parceiro",
+      "description": "Descrição",
+      "issuedOn": "Emissão",
+      "dueOn": "Vencimento",
+      "amount": "Valor em aberto",
+      "category": "Categoria"
     }
   }
 }

@@ -394,6 +394,9 @@ class InMemoryWarehouses extends WarehousesRepository {
       }) ?? null,
     )
   }
+  list(): Promise<readonly Warehouse[]> {
+    return Promise.resolve(this.records.filter((warehouse) => warehouse.belongsTo(this.tenantId)))
+  }
   create(warehouse: Warehouse): Promise<void> {
     if (!warehouse.belongsTo(this.tenantId)) throw new Error('tenant mismatch')
     this.records.push(warehouse)

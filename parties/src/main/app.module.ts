@@ -1,7 +1,9 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { PartiesAuthGuard } from '@/infrastructure/http/authorization'
+import { ImportsController } from '@/infrastructure/http/imports.controller'
 import { PartiesController } from '@/infrastructure/http/parties.controller'
+import { ImportWorker, RelayImportScan } from '@/infrastructure/imports/import-worker'
 import { OutboxWorker } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { PartiesEnvironment } from './environment'
 import { PartiesRuntime } from './parties-runtime'
@@ -30,9 +32,21 @@ export class AppModule {
             batchSize: config.OUTBOX_BATCH_SIZE,
           }),
       })
+    if (config.DATABASE_RELAY_URL)
+      providers.push({
+        provide: ImportWorker,
+        inject: [PartiesRuntime],
+        useFactory: (runtime: PartiesRuntime) =>
+          new ImportWorker({
+            scan: new RelayImportScan(config.DATABASE_RELAY_URL ?? ''),
+            jobs: runtime.imports,
+            intervalMs: config.IMPORT_POLL_INTERVAL_MS,
+            retentionMs: config.IMPORT_RETENTION_HOURS * 3_600_000,
+          }),
+      })
     return {
       module: AppModule,
-      controllers: [PartiesController],
+      controllers: [PartiesController, ImportsController],
       providers,
       exports: [PartiesRuntime],
     }

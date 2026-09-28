@@ -7,8 +7,10 @@ import { PartiesAuthGuard, type PartiesRequest, RequirePartiesAction } from './a
 
 const handler = () => undefined
 RequirePartiesAction('fiscal-read')(handler)
+const importHandler = () => undefined
+RequirePartiesAction('import')(importHandler)
 
-function authorize(roles: AccessClaims['roles']): Promise<boolean> {
+function authorize(roles: AccessClaims['roles'], target = handler): Promise<boolean> {
   const request: PartiesRequest = { headers: { authorization: 'Bearer test-token' } }
   const principal: AccessClaims = {
     subject: 'service',
@@ -19,7 +21,7 @@ function authorize(roles: AccessClaims['roles']): Promise<boolean> {
     accessTokens: { verify: async () => principal },
   } as unknown as PartiesRuntime
   const context = {
-    getHandler: () => handler,
+    getHandler: () => target,
     getClass: () => class FiscalExports {},
     switchToHttp: () => ({ getRequest: () => request }),
   } as unknown as ExecutionContext
@@ -39,5 +41,19 @@ describe('restricted recipient fiscal exports', () => {
     ]) {
       await expect(authorize(roles)).rejects.toThrow('does not permit')
     }
+  })
+})
+
+describe('bulk imports', () => {
+  it("are an administrator's work only", async () => {
+    await expect(authorize([{ module: 'parties', role: 'admin' }], importHandler)).resolves.toBe(
+      true,
+    )
+    for (const roles of [
+      [{ module: 'parties', role: 'editor' }],
+      [{ module: 'sales', role: 'admin' }],
+      [{ module: 'catalog', role: 'admin' }],
+    ])
+      await expect(authorize(roles, importHandler)).rejects.toThrow('does not permit')
   })
 })

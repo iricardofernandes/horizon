@@ -33,6 +33,7 @@ import {
 import { PaymentTerm, type PaymentTermSnapshot } from '@/domain/entities/payment-term'
 import type { TitleDirection } from '@/domain/entities/title'
 import { Code, Name, Share } from '@/domain/value-objects/financial-values'
+import type { SqlRun, TenantSql } from './import-store'
 import { cashFlowOutlook, type OutlookGrain } from './outlook-reads'
 import * as schema from './schema'
 import {
@@ -61,7 +62,7 @@ export interface FinancialDatabaseOptions {
 }
 
 /** Owns the connection; only tenant-bound repositories leave this module (ADR 0017). */
-export class FinancialDatabase extends FinancialUnitOfWork {
+export class FinancialDatabase extends FinancialUnitOfWork implements TenantSql {
   readonly #client: ReturnType<typeof postgres>
   readonly #db: Database
   readonly #transactions = new AsyncLocalStorage<{ tx: Transaction }>()
@@ -84,6 +85,22 @@ export class FinancialDatabase extends FinancialUnitOfWork {
       await tx.insert(schema.tenants).values({ id: tenantId }).onConflictDoNothing()
       return this.#transactions.run({ tx }, () => work(makeScope(tx, tenantId)))
     })
+  }
+
+  /** A tenant transaction for the import store, which speaks SQL (ADR 0059). */
+  inTenantSql<T>(tenantId: string, work: (run: SqlRun) => Promise<T>): Promise<T> {
+    return this.inTenant(tenantId, () => {
+      const run = this.currentSql()
+      if (!run) throw new Error('Import work requires a tenant transaction')
+      return work(run)
+    })
+  }
+
+  currentSql(): SqlRun | null {
+    const current = this.#transactions.getStore()
+    if (!current) return null
+    return async (query) =>
+      (await current.tx.execute(query)) as unknown as readonly Record<string, unknown>[]
   }
 
   async once<E, T>(

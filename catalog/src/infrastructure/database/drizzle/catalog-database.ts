@@ -35,6 +35,7 @@ import {
   UnitCode,
 } from '@/domain/value-objects/catalog-values'
 import { compositionInForce, explodeComposition, listVariants } from './composition-reads'
+import type { SqlRun, TenantSql } from './import-store'
 import * as schema from './schema'
 
 type Database = PostgresJsDatabase<typeof schema>
@@ -47,7 +48,7 @@ export interface CatalogDatabaseOptions {
   readonly statementTimeoutMs?: number
 }
 
-export class CatalogDatabase extends UnitOfWork {
+export class CatalogDatabase extends UnitOfWork implements TenantSql {
   readonly #client: ReturnType<typeof postgres>
   readonly #db: Database
   readonly #transactions = new AsyncLocalStorage<{ tx: Transaction; tenantId: string }>()
@@ -69,6 +70,22 @@ export class CatalogDatabase extends UnitOfWork {
       await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
       return this.#transactions.run({ tx, tenantId }, () => work(makeScope(tx, tenantId)))
     })
+  }
+
+  /** A tenant transaction for the import store, which speaks SQL (ADR 0059). */
+  inTenantSql<T>(tenantId: string, work: (run: SqlRun) => Promise<T>): Promise<T> {
+    return this.inTenant(tenantId, () => {
+      const run = this.currentSql()
+      if (!run) throw new Error('Import work requires a tenant transaction')
+      return work(run)
+    })
+  }
+
+  currentSql(): SqlRun | null {
+    const current = this.#transactions.getStore()
+    if (!current) return null
+    return async (query) =>
+      (await current.tx.execute(query)) as unknown as readonly Record<string, unknown>[]
   }
 
   async provisionTenant(tenantId: string): Promise<void> {

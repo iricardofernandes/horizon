@@ -3,6 +3,7 @@ import '@/infrastructure/observability/telemetry'
 import 'reflect-metadata'
 
 import { NestFactory } from '@nestjs/core'
+import type { NestExpressApplication } from '@nestjs/platform-express'
 
 import { stopTelemetry } from '@/infrastructure/observability/telemetry'
 import { AppModule } from '@/main/app.module'
@@ -18,7 +19,9 @@ async function bootstrap(): Promise<void> {
       useValue: { onApplicationShutdown: stopTelemetry },
     },
   ]
-  const app = await NestFactory.create(runtimeModule)
+  const app = await NestFactory.create<NestExpressApplication>(runtimeModule)
+  // An import file travels as JSON: five megabytes of XLSX, in base64, fit in eight.
+  app.useBodyParser('json', { limit: '8mb' })
 
   app.enableShutdownHooks()
 

@@ -48,6 +48,10 @@ export class UnitOfMeasure extends AggregateRoot<UnitProps> {
   isActive(): boolean {
     return this.props.active
   }
+  /** The code a file names the unit by (Phase 64). */
+  code(): string {
+    return this.props.code.value
+  }
   belongsTo(tenantId: string): boolean {
     return this.props.tenantId === tenantId
   }

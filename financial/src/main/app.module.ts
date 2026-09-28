@@ -2,7 +2,9 @@ import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { FinancialAuthGuard } from '@/infrastructure/http/authorization'
 import { DimensionsController } from '@/infrastructure/http/dimensions.controller'
+import { ImportsController } from '@/infrastructure/http/imports.controller'
 import { PayablesController, ReceivablesController } from '@/infrastructure/http/titles.controller'
+import { ImportWorker, RelayImportScan } from '@/infrastructure/imports/import-worker'
 import { JournalSealWorker } from '@/infrastructure/messaging/journal-replay'
 import { OutboxWorker, RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { FinancialEnvironment } from './environment'
@@ -46,6 +48,17 @@ export class AppModule {
     if (config.DATABASE_RELAY_URL) {
       const relayUrl = config.DATABASE_RELAY_URL
       providers.push({
+        provide: ImportWorker,
+        inject: [FinancialRuntime],
+        useFactory: (runtime: FinancialRuntime) =>
+          new ImportWorker({
+            scan: new RelayImportScan(relayUrl),
+            jobs: runtime.imports,
+            intervalMs: config.IMPORT_POLL_INTERVAL_MS,
+            retentionMs: config.IMPORT_RETENTION_HOURS * 3_600_000,
+          }),
+      })
+      providers.push({
         // Seals every tenant's history for reporting, as the relay role (Phase 62).
         provide: JournalSealWorker,
         useFactory: () =>
@@ -58,7 +71,12 @@ export class AppModule {
     }
     return {
       module: AppModule,
-      controllers: [DimensionsController, ReceivablesController, PayablesController],
+      controllers: [
+        DimensionsController,
+        ReceivablesController,
+        PayablesController,
+        ImportsController,
+      ],
       providers,
       exports: [FinancialRuntime],
     }

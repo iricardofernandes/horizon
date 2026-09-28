@@ -80,6 +80,14 @@ import {
   fiscalServiceSourceKeySchema,
   fiscalServiceSubstitutionRequestSchema,
   fiscalSupportOverviewSchema,
+  importFieldSchema,
+  importJobSchema,
+  importKindSchema,
+  importMappingSchema,
+  importPreviewSchema,
+  importProgressSchema,
+  importRowErrorSchema,
+  importUploadSchema,
   journalSealSchema,
   paginationQuerySchema,
   problemDetailsSchema,
@@ -631,6 +639,57 @@ const staticEntries: readonly RegistryEntry[] = [
     description:
       "A producer's count of a tenant's outbox rows up to an instant, sent to the reporting replay queue (ADR 0058).",
     schema: journalSealSchema,
+  },
+  {
+    id: 'http:import-field',
+    kind: 'http',
+    description: 'One column an importer understands, with the headers it recognises.',
+    schema: importFieldSchema,
+  },
+  {
+    id: 'http:import-progress',
+    kind: 'http',
+    description:
+      'Where every row of an import is: total = written + failed + remaining + cancelled.',
+    schema: importProgressSchema,
+  },
+  {
+    id: 'http:import-row-error',
+    kind: 'http',
+    description: 'A refused import row: its line in the file and every reason.',
+    schema: importRowErrorSchema,
+  },
+  {
+    id: 'http:import-kind',
+    kind: 'http',
+    description: 'A kind of bulk import a module offers, and the fields it maps (ADR 0059).',
+    schema: importKindSchema,
+  },
+  {
+    id: 'http:import-upload',
+    kind: 'http',
+    description: 'A CSV or XLSX file sent to a module to start an import job (ADR 0059).',
+    schema: importUploadSchema,
+  },
+  {
+    id: 'http:import-mapping',
+    kind: 'http',
+    description: "An import job's field-to-column mapping (ADR 0059).",
+    schema: importMappingSchema,
+  },
+  {
+    id: 'http:import-job',
+    kind: 'http',
+    description:
+      'A bulk import job in its owning module, with progress that accounts for every row (ADR 0059).',
+    schema: importJobSchema,
+  },
+  {
+    id: 'http:import-preview',
+    kind: 'http',
+    description:
+      "An import job's counts, first errors and first valid rows, shown before confirming.",
+    schema: importPreviewSchema,
   },
   {
     id: 'authorization:role-assignment',

@@ -12,7 +12,7 @@ import type { PartiesRuntime } from '@/main/parties-runtime'
 const PUBLIC = 'parties:public'
 const ACTION = 'parties:action'
 export const PublicRoute = () => SetMetadata(PUBLIC, true)
-type PartiesAction = 'read' | 'manage' | 'erase' | 'fiscal-read'
+type PartiesAction = 'read' | 'manage' | 'erase' | 'fiscal-read' | 'import'
 export const RequirePartiesAction = (action: PartiesAction) => SetMetadata(ACTION, action)
 
 export interface PartiesRequest {
@@ -27,10 +27,11 @@ export function tenantOf(request: PartiesRequest): string {
 
 /**
  * The static role map for this module (ADR 0023). Erasure is admin-only: it is
- * irreversible and reaches every context that projects the party.
+ * irreversible and reaches every context that projects the party. So is a bulk import,
+ * which registers thousands of parties at once (Phase 64).
  */
 const PERMITS: Readonly<Record<string, readonly PartiesAction[]>> = {
-  admin: ['read', 'manage', 'erase'],
+  admin: ['read', 'manage', 'erase', 'import'],
   editor: ['read', 'manage'],
   viewer: ['read'],
   'fiscal-reader': ['fiscal-read'],

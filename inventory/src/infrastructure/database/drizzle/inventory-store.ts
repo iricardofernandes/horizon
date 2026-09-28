@@ -622,6 +622,7 @@ export function makeScope(tx: Transaction, tenantId: string): InventoryScope {
           .limit(1)
         return row ? mapWarehouse(row) : null
       },
+      list: async () => (await tx.select().from(schema.warehouses)).map(mapWarehouse),
       create: async (warehouse) => {
         const row = warehouse.toSnapshot()
         assertTenant(row.tenantId)

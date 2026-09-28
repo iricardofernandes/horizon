@@ -8,11 +8,13 @@ import { CompositionsController } from '@/infrastructure/http/compositions.contr
 import { FamiliesController } from '@/infrastructure/http/families.controller'
 import { IdempotencyInterceptor } from '@/infrastructure/http/idempotency-interceptor'
 import { IdempotencyStore } from '@/infrastructure/http/idempotency-store'
+import { ImportsController } from '@/infrastructure/http/imports.controller'
 import { ItemsController } from '@/infrastructure/http/items.controller'
 import { PriceListsController } from '@/infrastructure/http/price-lists.controller'
 import { ProblemDetailsFilter } from '@/infrastructure/http/problem-details-filter'
 import { SystemController } from '@/infrastructure/http/system.controller'
 import { UnitsController } from '@/infrastructure/http/units.controller'
+import { ImportWorker, RelayImportScan } from '@/infrastructure/imports/import-worker'
 import { RabbitMqEventConsumer } from '@/infrastructure/messaging/event-consumer'
 import { OutboxWorker } from '@/infrastructure/messaging/outbox-worker'
 import { CatalogRuntime } from './catalog-runtime'
@@ -70,6 +72,18 @@ export class AppModule {
     // one, this process serves HTTP and something else delivers the outbox.
     if (config.DATABASE_RELAY_URL !== undefined)
       providers.push({
+        provide: ImportWorker,
+        inject: [CatalogRuntime],
+        useFactory: (runtime: CatalogRuntime) =>
+          new ImportWorker({
+            scan: new RelayImportScan(config.DATABASE_RELAY_URL ?? ''),
+            jobs: runtime.imports,
+            intervalMs: config.IMPORT_POLL_INTERVAL_MS,
+            retentionMs: config.IMPORT_RETENTION_HOURS * 3_600_000,
+          }),
+      })
+    if (config.DATABASE_RELAY_URL !== undefined)
+      providers.push({
         provide: OutboxWorker,
         useFactory: () =>
           new OutboxWorker({
@@ -112,6 +126,7 @@ export class AppModule {
         FamiliesController,
         CompositionsController,
         PriceListsController,
+        ImportsController,
         SystemController,
       ],
       providers,

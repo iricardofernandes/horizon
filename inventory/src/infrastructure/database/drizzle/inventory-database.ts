@@ -11,6 +11,7 @@ import type {
 import { InventoryUnitOfWork } from '@/application/ports/unit-of-work'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
+import type { SqlRun, TenantSql } from './import-store'
 import {
   countDetail,
   listAdjustments,
@@ -51,7 +52,7 @@ class Refused<E> extends Error {
 }
 
 /** Owns the connection; only tenant-bound repositories leave this module (ADR 0017). */
-export class InventoryDatabase extends InventoryUnitOfWork {
+export class InventoryDatabase extends InventoryUnitOfWork implements TenantSql {
   readonly #client: ReturnType<typeof postgres>
   readonly #db
   readonly #transactions = new AsyncLocalStorage<{ tx: Transaction; tenantId: string }>()
@@ -82,6 +83,22 @@ export class InventoryDatabase extends InventoryUnitOfWork {
       await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
       return this.#transactions.run({ tx, tenantId }, () => work(makeScope(tx, tenantId)))
     })
+  }
+
+  /** A tenant transaction for the import store, which speaks SQL (ADR 0059). */
+  inTenantSql<T>(tenantId: string, work: (run: SqlRun) => Promise<T>): Promise<T> {
+    return this.inTenant(tenantId, () => {
+      const run = this.currentSql()
+      if (!run) throw new Error('Import work requires a tenant transaction')
+      return work(run)
+    })
+  }
+
+  currentSql(): SqlRun | null {
+    const current = this.#transactions.getStore()
+    if (!current) return null
+    return async (query) =>
+      (await current.tx.execute(query)) as unknown as readonly Record<string, unknown>[]
   }
 
   async once<E, T>(

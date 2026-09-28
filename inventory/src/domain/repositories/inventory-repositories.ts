@@ -13,6 +13,8 @@ import type { ItemTracking } from '../value-objects/tracking'
 export abstract class WarehousesRepository {
   abstract findById(id: string): Promise<Warehouse | null>
   abstract findByName(name: string): Promise<Warehouse | null>
+  /** Every warehouse of the tenant, for resolving names in bulk (an import). */
+  abstract list(): Promise<readonly Warehouse[]>
   abstract create(warehouse: Warehouse): Promise<void>
   abstract save(warehouse: Warehouse): Promise<void>
 }

@@ -29,6 +29,7 @@ import {
   ShoppingCart,
   TrendUp,
   Truck,
+  UploadSimple,
   UsersThree,
   Van,
   Warehouse,
@@ -373,6 +374,15 @@ export const navigation: readonly NavigationGroup[] = [
         labelKey: 'classifications',
         icon: Books,
         module: 'financial',
+        demo: false,
+      },
+      {
+        href: '/app/administration/imports',
+        labelKey: 'imports',
+        icon: UploadSimple,
+        // Parties, Catalog, Inventory and Financial each import; the screen offers only the
+        // ones the user administers (Phase 64).
+        module: null,
         demo: false,
       },
       {

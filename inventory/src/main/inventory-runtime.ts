@@ -1,7 +1,11 @@
+import { IMPORT_MAX_BYTES, IMPORT_MAX_ROWS } from '@horizon/contracts'
 import { type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
 import { InventoryCatalogEventHandlers } from '@/application/consume-catalog-events'
 import { InventoryProcurementEventHandlers } from '@/application/consume-procurement-events'
 import { InventorySalesEventHandlers } from '@/application/consume-sales-events'
+import { ImportJobs } from '@/application/imports/imports'
+import { OpeningStockImporter } from '@/application/imports/opening-stock-importer'
+import type { RowKey } from '@/application/imports/ports'
 import { AdjustStockUseCase, DecideAdjustmentUseCase } from '@/application/use-cases/adjust-stock'
 import {
   CloseStockCountUseCase,
@@ -30,7 +34,10 @@ import {
 } from '@/application/use-cases/produce'
 import { TransferStockUseCase } from '@/application/use-cases/transfer-stock'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
+import { PLAIN_ROWS, SqlImportStore } from '@/infrastructure/database/drizzle/import-store'
 import { InventoryDatabase } from '@/infrastructure/database/drizzle/inventory-database'
+import { RowWritingUnitOfWork } from '@/infrastructure/imports/inventory-rows'
+import { TabularImportFiles } from '@/infrastructure/imports/tabular-files'
 import type { EventHandler } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { InventoryEnvironment } from './environment'
 
@@ -45,6 +52,7 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
   readonly createWarehouse: CreateWarehouseUseCase
   readonly deactivateWarehouse: DeactivateWarehouseUseCase
   readonly receiveStock: ReceiveStockUseCase
+  readonly imports: ImportJobs
   readonly transferStock: TransferStockUseCase
   readonly adjustStock: AdjustStockUseCase
   readonly decideAdjustment: DecideAdjustmentUseCase
@@ -73,6 +81,26 @@ export class InventoryRuntime implements OnModuleInit, OnModuleDestroy {
     this.createWarehouse = new CreateWarehouseUseCase(this.database, clock)
     this.deactivateWarehouse = new DeactivateWarehouseUseCase(this.database, clock)
     this.receiveStock = new ReceiveStockUseCase(this.database, clock)
+    const database = this.database
+    this.imports = new ImportJobs(
+      new SqlImportStore(database, PLAIN_ROWS),
+      new TabularImportFiles(),
+      [
+        new OpeningStockImporter(
+          database,
+          clock,
+          (key: RowKey) => new RowWritingUnitOfWork(database, key),
+        ),
+      ],
+      clock,
+      {
+        maxRows: IMPORT_MAX_ROWS,
+        maxBytes: IMPORT_MAX_BYTES,
+        batchSize: config.IMPORT_BATCH_SIZE,
+        leaseMs: config.IMPORT_LEASE_MS,
+        retentionMs: config.IMPORT_RETENTION_HOURS * 3_600_000,
+      },
+    )
     this.transferStock = new TransferStockUseCase(this.database, clock)
     this.adjustStock = new AdjustStockUseCase(this.database, clock)
     this.decideAdjustment = new DecideAdjustmentUseCase(this.database, clock)

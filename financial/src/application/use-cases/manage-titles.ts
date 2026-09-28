@@ -222,7 +222,7 @@ export class PostTitleUseCase extends TitleCommand {
 }
 
 /** Receivables never wait for approval; payables do unless the policy exempts their size. */
-async function approvalRequired(scope: FinancialScope, title: Title): Promise<boolean> {
+export async function approvalRequired(scope: FinancialScope, title: Title): Promise<boolean> {
   if (title.direction !== 'payable') return false
   const policy = await scope.approvalPolicies.find('payable', title.currency.value)
   return policy === null || title.total().amount >= policy.threshold

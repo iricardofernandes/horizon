@@ -1,6 +1,6 @@
 # Production readiness implementation plan — Phase M
 
-Status: **in progress** — Phases 61 to 63 delivered on 2026-09-27 ([61](readiness-phase61-evidence.md), [62](readiness-phase62-evidence.md), [63](readiness-phase63-evidence.md)). This is the execution plan for Phase M of the
+Status: **in progress** — Phases 61 to 63 delivered on 2026-09-27 ([61](readiness-phase61-evidence.md), [62](readiness-phase62-evidence.md), [63](readiness-phase63-evidence.md)), Phase 64 on 2026-09-28 ([64](readiness-phase64-evidence.md)). This is the execution plan for Phase M of the
 [ERP expansion plan](erp-expansion-plan.md#phase-m--reporting-data-operations-and-product-hardening),
 split into phases 61–70 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to L.
@@ -273,6 +273,9 @@ Gaps:
 - Formula injection is neutralized: cells starting with `=`, `+`, `-` or `@` are quoted.
 
 ### 64 — Bulk imports with preview and failures you can download
+
+[Detailed Phase 64 plan](readiness-phase64-implementation-plan.md) ·
+[evidence](readiness-phase64-evidence.md).
 
 **Work**
 1. **The import job contract:**

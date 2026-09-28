@@ -20,6 +20,11 @@ const environmentSchema = z.object({
   /** How often the relay seals every tenant's history for reporting (ADR 0058). */
   JOURNAL_SEAL_INTERVAL_MS: positive.min(10_000).max(3_600_000).default(300_000),
   RESERVATION_TTL_SECONDS: positive.default(1800),
+  /** Bulk imports (ADR 0059): rows per batch, a worker's lease, and how long failures stay. */
+  IMPORT_BATCH_SIZE: positive.max(1000).default(100),
+  IMPORT_LEASE_MS: positive.min(1000).default(60_000),
+  IMPORT_POLL_INTERVAL_MS: positive.min(100).default(1000),
+  IMPORT_RETENTION_HOURS: positive.max(24 * 30).default(72),
 })
 
 export type InventoryEnvironment = z.infer<typeof environmentSchema>

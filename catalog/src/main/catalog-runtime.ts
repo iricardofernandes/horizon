@@ -1,5 +1,9 @@
+import { IMPORT_MAX_BYTES, IMPORT_MAX_ROWS } from '@horizon/contracts'
 import { Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
 import Redis from 'ioredis'
+import { ItemImporter, PriceImporter, UnitImporter } from '@/application/imports/catalog-importers'
+import { ImportJobs } from '@/application/imports/imports'
+import type { RowKey } from '@/application/imports/ports'
 import { ClassifyCatalogItemUseCase } from '@/application/use-cases/classify-catalog-item'
 import { CreateCatalogItemUseCase } from '@/application/use-cases/create-catalog-item'
 import { CreateUnitUseCase } from '@/application/use-cases/create-unit'
@@ -21,6 +25,9 @@ import { RedisTokenDenylist } from '@/infrastructure/cache/redis-token-denylist'
 import { JwksAccessTokenVerifier } from '@/infrastructure/cryptography/jwks-access-token-verifier'
 import { SystemClock } from '@/infrastructure/cryptography/system-clock'
 import { CatalogDatabase } from '@/infrastructure/database/drizzle/catalog-database'
+import { PLAIN_ROWS, SqlImportStore } from '@/infrastructure/database/drizzle/import-store'
+import { RowWritingUnitOfWork } from '@/infrastructure/imports/catalog-rows'
+import { TabularImportFiles } from '@/infrastructure/imports/tabular-files'
 import type { CatalogEnvironment } from './environment'
 
 /** Explicit composition avoids erased interface metadata in the application layer. */
@@ -43,6 +50,7 @@ export class CatalogRuntime implements OnModuleInit, OnModuleDestroy {
   readonly listPriceLists: ListPriceListsUseCase
   readonly setPrice: SetPriceUseCase
   readonly provisionTenantCatalog: ProvisionTenantCatalogUseCase
+  readonly imports: ImportJobs
 
   constructor(readonly config: CatalogEnvironment) {
     const clock = new SystemClock()
@@ -85,6 +93,24 @@ export class CatalogRuntime implements OnModuleInit, OnModuleDestroy {
     this.provisionTenantCatalog = new ProvisionTenantCatalogUseCase(db, clock, {
       priceListCurrency: config.DEFAULT_PRICE_LIST_CURRENCY,
     })
+    const rows = (key: RowKey) => new RowWritingUnitOfWork(db, key)
+    this.imports = new ImportJobs(
+      new SqlImportStore(db, PLAIN_ROWS),
+      new TabularImportFiles(),
+      [
+        new UnitImporter(clock, rows),
+        new ItemImporter(db, clock, rows),
+        new PriceImporter(db, clock, rows),
+      ],
+      clock,
+      {
+        maxRows: IMPORT_MAX_ROWS,
+        maxBytes: IMPORT_MAX_BYTES,
+        batchSize: config.IMPORT_BATCH_SIZE,
+        leaseMs: config.IMPORT_LEASE_MS,
+        retentionMs: config.IMPORT_RETENTION_HOURS * 3_600_000,
+      },
+    )
   }
 
   async onModuleInit(): Promise<void> {

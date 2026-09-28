@@ -19,10 +19,16 @@ export const ADDITIVE = 'additive'
  * direction is often breaking in the other — narrowing a type breaks producers, removing
  * a field breaks consumers — so anything that could break either is breaking.
  */
+/** A nullable type is an array (`["string", "null"]`): compared by its members, in any order. */
+function sameType(before, after) {
+  const members = (type) => JSON.stringify([type].flat().sort())
+  return members(before) === members(after)
+}
+
 export function diffSchema(before, after, path, findings) {
   if (before === undefined || after === undefined) return
 
-  if (before.type !== after.type) {
+  if (!sameType(before.type, after.type)) {
     findings.push({
       severity: BREAKING,
       path,

@@ -3,6 +3,7 @@ import '@/infrastructure/observability/telemetry'
 import 'reflect-metadata'
 
 import { NestFactory } from '@nestjs/core'
+import type { NestExpressApplication } from '@nestjs/platform-express'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { Logger } from 'nestjs-pino'
 import { stopTelemetry } from '@/infrastructure/observability/telemetry'
@@ -19,7 +20,9 @@ async function bootstrap(): Promise<void> {
       useValue: { onApplicationShutdown: stopTelemetry },
     },
   ]
-  const app = await NestFactory.create(runtimeModule, { bufferLogs: true })
+  const app = await NestFactory.create<NestExpressApplication>(runtimeModule, { bufferLogs: true })
+  // An import file travels as JSON: five megabytes of XLSX, in base64, fit in eight.
+  app.useBodyParser('json', { limit: '8mb' })
   app.useLogger(app.get(Logger))
   app.enableShutdownHooks()
   const document = SwaggerModule.createDocument(

@@ -2565,9 +2565,20 @@ Each says whether its sources are sealed through that cutoff.
 
 ## Phase 64 — Bulk imports with preview and failures you can download
 
-**Planned.** One import job contract implemented by Parties, Catalog, Inventory and Financial: map,
-validate, preview, confirm and follow. Resumable, idempotent per row, and every failed row
-reported with its reason.
+**Delivered on 2026-09-28.** One import job contract, published in contracts 0.47.0,
+implemented by Parties, Catalog, Inventory and Financial.
+- **The flow:** upload a CSV or XLSX, map its columns, validate every row with the
+  module's own rules, preview, confirm and follow.
+- **What imports:** parties; units, items and prices; opening stock; open receivables and
+  payables.
+- **Exactly once:** each row is written once, through the module's own use cases, even
+  when the service dies mid-import. The same file under the same key is the same job.
+- **Failures:** every failed row downloads in the input's format, with its line and
+  reason.
+- **The web:** one wizard drives any of the four.
+
+[Evidence](readiness-phase64-evidence.md).
+[Detailed plan](readiness-phase64-implementation-plan.md).
 [Detailed work](production-readiness-implementation-plan.md#64--bulk-imports-with-preview-and-failures-you-can-download).
 
 ## Phase 65 — Attachments

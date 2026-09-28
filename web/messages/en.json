@@ -528,7 +528,8 @@
       "accounts": "Accounts",
       "agenda": "My agenda",
       "forecast": "Forecast and metrics",
-      "crmSettings": "CRM settings"
+      "crmSettings": "CRM settings",
+      "imports": "Imports"
     }
   },
   "orders": {
@@ -2453,6 +2454,103 @@
       "entryName": "Name",
       "addEntry": "Add",
       "noEntries": "Nothing here yet."
+    }
+  },
+  "imports": {
+    "eyebrow": "Administration",
+    "title": "Imports",
+    "copy": "Load registrations, opening balances and open titles from a spreadsheet. Each module validates the rows by its own rules; no row is ever written twice.",
+    "module": "Module",
+    "kind": "What to import",
+    "file": "File (CSV or XLSX, up to 5 MB and 10,000 rows)",
+    "upload": "Upload file",
+    "uploading": "Uploading…",
+    "fileInvalid": "Choose a CSV or XLSX file of up to 5 MB.",
+    "failed": "The import could not be completed.",
+    "noModule": "You administer no module that imports data.",
+    "counts": "{total} rows: {written} written, {failed} failed, {remaining} remaining, {cancelled} cancelled.",
+    "countsMismatch": "The counts do not add up to the file's total; reload the import.",
+    "confirm": "Import {count} valid rows",
+    "cancel": "Cancel import",
+    "downloadFailures": "Download failures",
+    "another": "New import",
+    "wizard": {
+      "title": "Import a file",
+      "copy": "Upload the file, match its columns, check the preview and confirm. The progress shows here."
+    },
+    "mapping": {
+      "title": "File columns",
+      "none": "(do not import)",
+      "validate": "Validate and preview"
+    },
+    "preview": {
+      "errors": "First rows with errors",
+      "noErrors": "No row has an error.",
+      "sample": "First valid rows",
+      "line": "Line",
+      "reason": "Reason"
+    },
+    "recent": {
+      "title": "Recent imports",
+      "copy": "This module's latest imports, by any administrator.",
+      "empty": "No imports yet.",
+      "file": "File",
+      "status": "Status",
+      "progress": "Progress",
+      "created": "Uploaded",
+      "summary": "{percent}% · {written} written, {failed} failed, of {total}"
+    },
+    "status": {
+      "uploaded": "uploaded",
+      "validated": "validated",
+      "previewed": "ready to confirm",
+      "running": "running",
+      "completed": "completed",
+      "completed-with-failures": "completed with failures",
+      "cancelled": "cancelled"
+    },
+    "kinds": {
+      "parties": "People and companies",
+      "units": "Units of measure",
+      "items": "Items",
+      "prices": "Prices",
+      "opening-stock": "Opening stock balances",
+      "receivables": "Open receivables",
+      "payables": "Open payables"
+    },
+    "fields": {
+      "kind": "Kind",
+      "legalName": "Legal name",
+      "tradeName": "Trade name",
+      "documentType": "Document type",
+      "documentNumber": "Document",
+      "documentCountry": "Document country",
+      "email": "Email",
+      "phone": "Phone",
+      "address": "Address",
+      "roles": "Roles",
+      "code": "Code",
+      "name": "Name",
+      "decimalPlaces": "Decimal places",
+      "sku": "SKU",
+      "unit": "Unit",
+      "ncm": "NCM",
+      "priceList": "Price list",
+      "currency": "Currency",
+      "price": "Price",
+      "warehouse": "Warehouse",
+      "itemId": "Item id",
+      "quantity": "Quantity",
+      "unitCost": "Unit cost",
+      "lot": "Lot",
+      "expiresOn": "Expiry",
+      "serials": "Serial numbers",
+      "partyId": "Party id",
+      "description": "Description",
+      "issuedOn": "Issued on",
+      "dueOn": "Due on",
+      "amount": "Open amount",
+      "category": "Category"
     }
   }
 }

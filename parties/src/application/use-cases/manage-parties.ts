@@ -44,7 +44,7 @@ function optional<T>(
   return value?.trim() ? create(value) : right(null)
 }
 
-function detailsOf(input: PartyDetailsInput): Either<InvalidInputError, Details> {
+export function detailsOf(input: PartyDetailsInput): Either<InvalidInputError, Details> {
   const legalName = PartyName.create(input.legalName)
   if (legalName.isLeft()) return left(legalName.value)
   const trade = optional(input.tradeName, (value) => PartyName.create(value, '/tradeName'))
