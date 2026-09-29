@@ -1,0 +1,19 @@
+{
+  "phase": 77,
+  "kind": "suggestions-off-smoke",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T18:48:20.672Z",
+  "finishedAt": "2026-09-29T18:48:20.820Z",
+  "passed": true,
+  "tenantId": "01a0ee7f-13e1-74d7-8b51-23643bab7da9",
+  "checks": [
+    {
+      "name": "without the ai profile, suggestions are off and the form gets none",
+      "passed": true,
+      "detail": {
+        "available": false,
+        "suggestions": []
+      }
+    }
+  ]
+}

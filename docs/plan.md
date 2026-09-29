@@ -2815,8 +2815,21 @@ caller's workspace.
 
 ## Phase 77 — Suggestions confirmed by a person
 
-**Planned.** NCM and financial category suggestions from the tenant's own history. Accepting one calls the owning
-module's command; nothing is written by the suggestion.
+**Delivered on 2026-09-29.** `knowledge/` suggests while a person fills a form:
+- **An item's NCM** from its name, voted by the workspace's own classified items. The
+  official NCM table (10,515 codes, Resolução Gecex nº 926/2026), embedded once as public
+  data, answers only when the history has nothing.
+- **A payable's category** from its supplier and description, voted by the workspace's
+  posted payables, the same supplier's first.
+- **Isolation:** the history is kept one pgvector partition per tenant, and a reversal or
+  the supplier's erasure takes a payable out of it.
+- **Nothing is written by a suggestion.** Accepting fills the field for the module's own
+  form, and a decision is only counted.
+- **Availability:** suggestions need the local model. Without the `ai` profile, the forms
+  show none.
+
+[Plan](ai-phase77-implementation-plan.md), [evidence](ai-phase77-evidence.md),
+[smoke](drills/2026-09-29-phase77-suggestions-smoke.json).
 [Detailed work](ai-implementation-plan.md#77--suggestions-confirmed-by-a-person).
 
 ## Phase 78 — Threat model, service levels, screens and closing Phase N

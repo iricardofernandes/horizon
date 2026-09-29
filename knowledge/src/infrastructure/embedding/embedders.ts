@@ -43,6 +43,8 @@ export class HashEmbedder extends Embedder {
   readonly dimensions = DIMENSIONS
   /** Beyond this, a chunk shares next to no word or pair with the question. */
   readonly relevantDistance = 0.85
+  /** Most words shared: a name that differs by a size or a pack still votes. */
+  readonly exampleDistance = 0.6
 
   embed(text: string): number[] {
     const vector = new Array<number>(DIMENSIONS).fill(0)
@@ -77,6 +79,8 @@ export class TeiEmbedder extends Embedder {
   readonly dimensions = DIMENSIONS
   /** E5 places unrelated passages close together: only the near ones answer (Phase 75). */
   readonly relevantDistance = 0.25
+  /** Measured: the same product named twice ≈ 0.06, an unrelated one ≈ 0.16 (Phase 77). */
+  readonly exampleDistance = 0.1
 
   constructor(
     private readonly url: string,

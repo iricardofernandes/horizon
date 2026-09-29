@@ -29,6 +29,13 @@ const environmentSchema = z
     KNOWLEDGE_POLL_INTERVAL_MS: positive.min(500).max(600_000).default(5000),
     KNOWLEDGE_LEASE_MS: positive.min(10_000).default(120_000),
     KNOWLEDGE_BATCH: positive.max(100).default(10),
+    /**
+     * Suggestions (Phase 77): `auto` answers them only with the local model (`tei`), so a
+     * stack without the `ai` profile shows none; `on` and `off` force it.
+     */
+    KNOWLEDGE_SUGGESTIONS: z.enum(['auto', 'on', 'off']).default('auto'),
+    /** The official NCM table, as `scripts/build-ncm-table.mjs` writes it. */
+    KNOWLEDGE_NCM_TABLE: z.string().min(1).default('data/ncm-table.json.gz'),
   })
   .refine((config) => config.KNOWLEDGE_EMBEDDER !== 'tei' || Boolean(config.TEI_URL))
 

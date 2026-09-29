@@ -79,6 +79,33 @@ through Kong at `/knowledge`, sharing no source with any other module (ADR 0001)
 
   The question is never logged.
 
+## Suggestions (Phase 77)
+
+- **`GET /knowledge/suggestions/ncm?text=`** needs a Catalog role.
+  **`GET /knowledge/suggestions/payable-category?text=&partyId=`** needs a Financial read
+  role. **`POST /knowledge/suggestions/decisions`** counts an acceptance or a rejection,
+  and keeps nothing.
+- **The history** comes from events, into `examples PARTITION BY LIST (tenant_id)`, which
+  has its own HNSW index per tenant:
+  - every item (`catalog.item.created`), labelled with its NCM once it has one
+    (`classification-changed`);
+  - every posted payable, read through Kong as the service client: the supplier's name and
+    the description, labelled with the category. A reversal or `parties.party.erased`
+    removes it.
+
+  Only the vector, the label, the source id and a short reference (name and SKU, or the
+  document number) are kept.
+- **The official NCM table** is `data/ncm-table.json.gz`, built by
+  `scripts/build-ncm-table.mjs` from the Siscomex download. It is loaded into
+  `ncm_codes` in the background, once per act and embedder, retrying until the model
+  answers.
+- **Ranking:**
+  - examples within the embedder's example distance vote by similarity, the same supplier
+    counting more;
+  - official codes vote at half weight, and only when no example does.
+- **Availability:** `KNOWLEDGE_SUGGESTIONS=auto` (the default) answers only with the `tei`
+  embedder. Otherwise every route answers `available: false`, and the forms show nothing.
+
 ## Embedders
 
 | `KNOWLEDGE_EMBEDDER` | Version | What it is |
@@ -112,8 +139,11 @@ npm run test:e2e  # pgvector: partitions, RLS, erasure, a lost lease, hybrid sea
 node ../scripts/phase74-smoke.mjs   # the real stack, through files and Kong
 node ../scripts/phase75-smoke.mjs   # search through Kong, a narrowed key, the agent, a canary
 make -C .. eval-retrieval           # recall@5 with e5, recorded
+node ../scripts/phase77-smoke.mjs --expect-off   # without the ai profile: no suggestion
+node ../scripts/phase77-smoke.mjs   # with make up-ai: history, table, canary, category, audit
 ```
 
 Metrics: `knowledge_index_lag_seconds`, `knowledge_documents_settled{state}`,
-`knowledge_embedding_seconds` and `knowledge_search_seconds{outcome}`, with no tenant
-label.
+`knowledge_embedding_seconds`, `knowledge_search_seconds{outcome}`,
+`knowledge_suggestion_seconds{kind,outcome}` and
+`knowledge_suggestion_decisions_total{kind,decision}`, with no tenant label.

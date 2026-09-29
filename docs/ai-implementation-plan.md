@@ -1,6 +1,6 @@
 # AI with isolation implementation plan — Phase N
 
-Status: **in progress** — Phases 71 to 76 delivered on 2026-09-29 ([71](ai-phase71-evidence.md), [72](ai-phase72-evidence.md), [73](ai-phase73-evidence.md), [74](ai-phase74-evidence.md), [75](ai-phase75-evidence.md), [76](ai-phase76-evidence.md)). This is the execution plan for Phase N of the
+Status: **in progress** — Phases 71 to 77 delivered on 2026-09-29 ([71](ai-phase71-evidence.md), [72](ai-phase72-evidence.md), [73](ai-phase73-evidence.md), [74](ai-phase74-evidence.md), [75](ai-phase75-evidence.md), [76](ai-phase76-evidence.md), [77](ai-phase77-evidence.md)). This is the execution plan for Phase N of the
 [ERP expansion plan](erp-expansion-plan.md#phase-n--ai-with-isolation), split into phases
 71–78 of [plan.md](plan.md). Each numbered phase gets its own detailed plan before
 implementation, one local commit and an evidence record, as in Phases J to M.
@@ -347,6 +347,12 @@ only answer.
 - The budget stops the assistant at its limit.
 
 ### 77 — Suggestions confirmed by a person
+
+Delivered: [plan](ai-phase77-implementation-plan.md), [evidence](ai-phase77-evidence.md).
+Revisions:
+- two kinds, not three: statement lines have no category (ADR 0046), and every payable,
+  including one from a supplier's XML, is drafted in Financial's form;
+- no model re-ranks the suggestions.
 
 **Work**
 1. **Suggestions:**

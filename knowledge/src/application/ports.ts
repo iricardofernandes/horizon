@@ -98,6 +98,11 @@ export abstract class Embedder {
    * answer (Phase 75): each model spreads unrelated texts differently.
    */
   abstract readonly relevantDistance: number
+  /**
+   * The distance within which a confirmed example still votes for a suggestion (Phase 77):
+   * the same product named twice sits much closer than any document to its question.
+   */
+  abstract readonly exampleDistance: number
   abstract embedDocuments(texts: readonly string[]): Promise<number[][]>
   abstract embedQuery(text: string): Promise<number[]>
 }

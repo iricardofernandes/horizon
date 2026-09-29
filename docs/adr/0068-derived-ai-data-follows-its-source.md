@@ -5,7 +5,9 @@
   ([plan](../ai-phase75-implementation-plan.md)) extends it to full text: a chunk's words
   are stored only as HMAC hashes under a key derived for the tenant, never as a plaintext
   `tsvector`, and they go with the chunk. Phase 76 keeps conversations sealed under each
-  person's own key in `agent/`, for 30 days, and erases them with the person.
+  person's own key in `agent/`, for 30 days, and erases them with the person. Phase 77's
+  payable examples, derived from a supplier's name, go with `parties.party.erased` and
+  with a reversal.
 - Date: 2026-09-29
 
 ## Context

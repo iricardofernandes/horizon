@@ -7,6 +7,7 @@ import { type FormEvent, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
+import { SuggestionChips, useSuggestions } from '@/features/suggestions/suggestion-chips'
 import { apiError } from '@/lib/api'
 import { minorUnits } from '@/lib/format'
 import { idempotentJsonHeaders } from '@/lib/http'
@@ -29,6 +30,9 @@ export function CreateTitleDialog({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [partyId, setPartyId] = useState<string | null>(null)
+  const [description, setDescription] = useState('')
+  const [categoryId, setCategoryId] = useState<string | null>(null)
   const today = localToday()
   const counterparties = data.counterparties.map((party) => ({
     value: party.partyId,
@@ -37,6 +41,16 @@ export function CreateTitleDialog({
   const categories = data.categories
     .filter((category) => category.active && category.nature === natureOf(direction))
     .map((category) => ({ value: category.id, label: `${category.code} · ${category.name}` }))
+  const chosenParty = partyId ?? counterparties[0]?.value ?? null
+  const chosenCategory = categoryId ?? categories[0]?.value ?? NO_CATEGORY
+  // A payable's category suggested from its supplier and description (Phase 77).
+  const suggested = useSuggestions(
+    'payable-category',
+    direction === 'payable'
+      ? `${counterparties.find((party) => party.value === chosenParty)?.label ?? ''} ${description}`
+      : '',
+    chosenParty ?? undefined,
+  )
   const terms = [
     { value: SINGLE, label: t('singleInstallment') },
     ...data.paymentTerms
@@ -85,6 +99,9 @@ export function CreateTitleDialog({
       setBusy(false)
       return
     }
+    setDescription('')
+    setCategoryId(null)
+    setPartyId(null)
     setOpen(false)
     setNotice(t('created'))
     await onChanged()
@@ -114,18 +131,29 @@ export function CreateTitleDialog({
               <SelectField
                 label={t('counterparty')}
                 name="partyId"
+                onValueChange={setPartyId}
                 options={counterparties}
                 required
               />
               <div className="form-grid two-columns">
                 <TextField label={t('document')} maxLength={40} name="documentNumber" required />
                 <SelectField
-                  defaultValue={categories[0]?.value ?? NO_CATEGORY}
                   label={t('category')}
                   name="categoryId"
+                  onValueChange={setCategoryId}
                   options={[...categories, { value: NO_CATEGORY, label: t('noCategory') }]}
+                  value={chosenCategory}
                 />
               </div>
+              <SuggestionChips
+                answer={suggested}
+                current={chosenCategory}
+                kind="payable-category"
+                labelOf={(suggestion) =>
+                  categories.find((category) => category.value === suggestion.value)?.label ?? null
+                }
+                onAccept={setCategoryId}
+              />
               <div className="form-grid two-columns">
                 <TextField
                   inputMode="decimal"
@@ -153,7 +181,13 @@ export function CreateTitleDialog({
                   type="date"
                 />
               </div>
-              <TextField label={t('description')} maxLength={500} name="description" />
+              <TextField
+                label={t('description')}
+                maxLength={500}
+                name="description"
+                onChange={(event) => setDescription(event.currentTarget.value)}
+                value={description}
+              />
               {error ? (
                 <p className="form-error" role="alert">
                   {error}

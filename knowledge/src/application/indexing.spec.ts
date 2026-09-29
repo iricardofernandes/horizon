@@ -72,6 +72,7 @@ class FakeEmbedder extends Embedder {
   readonly version = 'test-v1'
   readonly dimensions = 3
   readonly relevantDistance = 0.5
+  readonly exampleDistance = 0.5
   async embedDocuments(texts: readonly string[]) {
     return texts.map(() => [1, 0, 0])
   }

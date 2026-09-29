@@ -11,9 +11,11 @@ import { Button } from '@/components/ui/button'
 import { ExportButton } from '@/components/ui/export-button'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
+import { SuggestionChips, useSuggestions } from '@/features/suggestions/suggestion-chips'
 import { minorUnits } from '@/lib/format'
 import { jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
+import { formatNcm, ncmDigits } from '@/lib/suggestions'
 import { tracedFetch } from '@/lib/telemetry'
 import { useMoney, useQuantity } from '@/lib/use-format'
 
@@ -422,6 +424,10 @@ function CreateItemDialog({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [name, setName] = useState('')
+  const [ncmValue, setNcmValue] = useState('')
+  // An NCM suggested from the name (Phase 77); accepting only fills the field.
+  const suggested = useSuggestions('ncm', name)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -447,6 +453,8 @@ function CreateItemDialog({
       return
     }
     form.reset()
+    setName('')
+    setNcmValue('')
     setOpen(false)
     setNotice(t('itemCreated'))
     await onChanged()
@@ -477,8 +485,10 @@ function CreateItemDialog({
             label={t('name')}
             maxLength={160}
             name="name"
+            onChange={(event) => setName(event.currentTarget.value)}
             placeholder={t('namePlaceholder')}
             required
+            value={name}
           />
           <SelectField
             label={t('unitOfMeasure')}
@@ -492,8 +502,21 @@ function CreateItemDialog({
             description={t('ncmHelp')}
             label="NCM"
             name="ncm"
+            onChange={(event) => setNcmValue(event.currentTarget.value)}
             pattern="[0-9. ]{8,16}"
             placeholder="0901.21.00"
+            value={ncmValue}
+          />
+          <SuggestionChips
+            answer={suggested}
+            current={ncmDigits(ncmValue)}
+            kind="ncm"
+            labelOf={(suggestion) =>
+              suggestion.description
+                ? `${formatNcm(suggestion.value)} · ${suggestion.description.split(' — ').at(-1)}`
+                : formatNcm(suggestion.value)
+            }
+            onAccept={(value) => setNcmValue(formatNcm(value))}
           />
           <DialogActions busy={busy} error={error} submitLabel={t('createItemSubmit')} />
         </form>

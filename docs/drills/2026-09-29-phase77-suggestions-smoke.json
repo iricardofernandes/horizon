@@ -1,0 +1,239 @@
+{
+  "phase": 77,
+  "kind": "suggestions-smoke",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T18:54:45.207Z",
+  "finishedAt": "2026-09-29T18:54:51.030Z",
+  "passed": true,
+  "tenantId": "01a0ee84-f1f5-7984-bc14-d583accb6638",
+  "otherTenantId": "01a0ee84-f9ab-70d7-9e46-89db5d2b0321",
+  "officialTable": {
+    "headingHitAt3": 5,
+    "of": 12,
+    "probes": [
+      {
+        "name": "Café torrado em grãos",
+        "heading": "0901",
+        "suggested": [
+          "09011110",
+          "10039080",
+          "10079000"
+        ],
+        "hit": true
+      },
+      {
+        "name": "Parafuso sextavado de aço inoxidável",
+        "heading": "7318",
+        "suggested": [
+          "72210000",
+          "72230000",
+          "28020000"
+        ],
+        "hit": false
+      },
+      {
+        "name": "Cadeira de escritório giratória",
+        "heading": "9401",
+        "suggested": [
+          "71179000",
+          "25049000",
+          "91143000"
+        ],
+        "hit": false
+      },
+      {
+        "name": "Notebook 14 polegadas",
+        "heading": "8471",
+        "suggested": [
+          "36010000",
+          "85340040",
+          "52030000"
+        ],
+        "hit": false
+      },
+      {
+        "name": "Papel sulfite A4",
+        "heading": "4802",
+        "suggested": [
+          "25049000",
+          "29359099",
+          "25241000"
+        ],
+        "hit": false
+      },
+      {
+        "name": "Açúcar cristal",
+        "heading": "1701",
+        "suggested": [
+          "22030000",
+          "25241000",
+          "20060000"
+        ],
+        "hit": false
+      },
+      {
+        "name": "Camiseta de algodão",
+        "heading": "6109",
+        "suggested": [
+          "62052000",
+          "61142000",
+          "63029100"
+        ],
+        "hit": false
+      },
+      {
+        "name": "Detergente líquido",
+        "heading": "3402",
+        "suggested": [
+          "38200000",
+          "29027000",
+          "29025000"
+        ],
+        "hit": false
+      },
+      {
+        "name": "Cimento Portland",
+        "heading": "2523",
+        "suggested": [
+          "25232910",
+          "25232100",
+          "25232990"
+        ],
+        "hit": true
+      },
+      {
+        "name": "Pneu para automóvel",
+        "heading": "4011",
+        "suggested": [
+          "40112010",
+          "87049000",
+          "40112090"
+        ],
+        "hit": true
+      },
+      {
+        "name": "Arroz branco tipo 1",
+        "heading": "1006",
+        "suggested": [
+          "10064000",
+          "10063021",
+          "10063029"
+        ],
+        "hit": true
+      },
+      {
+        "name": "Leite UHT integral",
+        "heading": "0401",
+        "suggested": [
+          "04012010",
+          "04011010",
+          "04014021"
+        ],
+        "hit": true
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "an item named like an earlier one gets its NCM, with that item as the reason",
+      "passed": true,
+      "detail": {
+        "value": "09012100",
+        "score": 0.9388,
+        "description": null,
+        "reason": {
+          "examples": [
+            {
+              "sourceId": "01a0ee84-f476-7f46-9da7-e50572a9b864",
+              "reference": "Café torrado em grãos 500g (P77-D89493)",
+              "similarity": 0.939,
+              "sameParty": false
+            }
+          ],
+          "officialTable": false
+        }
+      }
+    },
+    {
+      "name": "an item the workspace never classified gets official codes only, not its unrelated items",
+      "passed": true,
+      "detail": [
+        [
+          "72210000",
+          0
+        ],
+        [
+          "72230000",
+          0
+        ],
+        [
+          "28020000",
+          0
+        ]
+      ]
+    },
+    {
+      "name": "another workspace’s item never votes",
+      "passed": true,
+      "detail": [
+        {
+          "value": "09030010",
+          "examples": 0
+        },
+        {
+          "value": "09030090",
+          "examples": 0
+        },
+        {
+          "value": "25241000",
+          "examples": 0
+        }
+      ]
+    },
+    {
+      "name": "a payable for a known supplier gets the category of that supplier’s payables",
+      "passed": true,
+      "detail": {
+        "value": "01a0ee85-004f-7ec1-851a-c1d7ad38a5b2",
+        "score": 1.4484,
+        "description": null,
+        "reason": {
+          "examples": [
+            {
+              "sourceId": "01a0ee85-0451-752c-9e66-d6b807a75f34",
+              "reference": "NF-77-09b8eb",
+              "similarity": 0.948,
+              "sameParty": true
+            }
+          ],
+          "officialTable": false
+        }
+      }
+    },
+    {
+      "name": "an item saved with an accepted suggestion leaves the same audit entry as one typed",
+      "passed": true,
+      "detail": {
+        "decision": 204,
+        "typed": {
+          "action": "catalog.item.created",
+          "actor": "01a0ee84-f1f9-7fe1-a15f-ea01974784c4",
+          "keys": [
+            "after",
+            "before",
+            "redacted"
+          ]
+        },
+        "accepted": {
+          "action": "catalog.item.created",
+          "actor": "01a0ee84-f1f9-7fe1-a15f-ea01974784c4",
+          "keys": [
+            "after",
+            "before",
+            "redacted"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 - Status: accepted; the index is implemented in Phase 74 ([plan](../ai-phase74-implementation-plan.md),
   [evidence](../ai-phase74-evidence.md)), and search with roles inside the scan in Phase 75
   ([plan](../ai-phase75-implementation-plan.md), [evidence](../ai-phase75-evidence.md)).
+  Phase 77 keeps the suggestion history the same way: `examples`, one partition per tenant.
   Revised in Phase 74: pgvector
   is compiled into the platform's own `postgres:17-alpine` image, not the Debian
   `pgvector/pgvector` one, because glibc would collate the cluster's `en_US.utf8` text

@@ -7,7 +7,9 @@
   - the stack's default generator is the extractive one;
   - once document text has been read, the model may only answer.
 
-  Suggestions arrive in Phase 77.
+  Suggestions are implemented in Phase 77 ([plan](../ai-phase77-implementation-plan.md),
+  [evidence](../ai-phase77-evidence.md)). They answer only with the local model, and no
+  model re-ranks them: `knowledge/` has no generation path of its own.
 - Date: 2026-09-29
 
 ## Context

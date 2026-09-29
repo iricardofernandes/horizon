@@ -3182,5 +3182,13 @@
     "budgetLabel": "Tokens per month",
     "saveBudget": "Save budget",
     "failed": "The assistant settings could not be saved."
+  },
+  "suggestions": {
+    "title": "Suggestions",
+    "fromExamples": "{count, plural, one {As in # of your records} other {As in # of your records}}: {examples}",
+    "fromTable": "From the official NCM table",
+    "use": "Use",
+    "accept": "Use the suggestion {value}",
+    "reject": "Dismiss the suggestion {value}"
   }
 }
