@@ -1,6 +1,6 @@
 # AI with isolation implementation plan — Phase N
 
-Status: **in progress** — Phases 71 to 77 delivered on 2026-09-29 ([71](ai-phase71-evidence.md), [72](ai-phase72-evidence.md), [73](ai-phase73-evidence.md), [74](ai-phase74-evidence.md), [75](ai-phase75-evidence.md), [76](ai-phase76-evidence.md), [77](ai-phase77-evidence.md)). This is the execution plan for Phase N of the
+Status: **closed on 2026-09-29** — Phases 71 to 78 delivered ([71](ai-phase71-evidence.md), [72](ai-phase72-evidence.md), [73](ai-phase73-evidence.md), [74](ai-phase74-evidence.md), [75](ai-phase75-evidence.md), [76](ai-phase76-evidence.md), [77](ai-phase77-evidence.md), [78](ai-phase78-evidence.md)). The four exit criteria are proven by the [golden path](drills/2026-09-29-phase-n-golden-path-ai-on.json), the [drill](drills/2026-09-29-phase-n-drill-ai-on.json), the [retrieval evaluation](drills/2026-09-29-phase75-retrieval-tei.json) and the [ai-off run](drills/2026-09-29-phase-n-ai-off-run.json). This is the execution plan for Phase N of the
 [ERP expansion plan](erp-expansion-plan.md#phase-n--ai-with-isolation), split into phases
 71–78 of [plan.md](plan.md). Each numbered phase gets its own detailed plan before
 implementation, one local commit and an evidence record, as in Phases J to M.
@@ -377,6 +377,9 @@ Revisions:
 - With the `ai` profile off, the screens work and show no suggestion.
 
 ### 78 — Threat model, service levels, screens and closing Phase N
+
+Delivered: [plan](ai-phase78-implementation-plan.md), [evidence](ai-phase78-evidence.md),
+[threat model](phase-n-threat-model.md).
 
 **Work**
 1. **The threat model:**

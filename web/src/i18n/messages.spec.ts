@@ -37,6 +37,30 @@ describe('message catalogues', () => {
   })
 })
 
+describe('the Phase N screens (Phase 78)', () => {
+  const namespaces = [
+    'agent',
+    'agentDrafts',
+    'assistant',
+    'assistantSettings',
+    'suggestions',
+    'attachments.search',
+    'palette.recordTypes',
+  ]
+
+  it('exist in both locales, and Portuguese is a translation, not a copy of English', () => {
+    const english = flatten(en)
+    const portuguese = flatten(ptBR)
+    for (const namespace of namespaces) {
+      const keys = Object.keys(english).filter((key) => key.startsWith(`${namespace}.`))
+      expect(keys.length, namespace).toBeGreaterThan(0)
+      const copied = keys.filter((key) => portuguese[key] === english[key])
+      // A few words are the same in both (a code, "OK"); most are not.
+      expect(copied.length / keys.length, `${namespace}: ${copied.join(', ')}`).toBeLessThan(0.2)
+    }
+  })
+})
+
 describe('locale negotiation', () => {
   it('prefers an exact match', () => {
     expect(localeFromAcceptLanguage('en-GB,en;q=0.9')).toBe('en')

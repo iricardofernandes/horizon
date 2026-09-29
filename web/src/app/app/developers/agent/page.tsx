@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback } from 'react'
 import { useSession } from '@/components/shell/workspace-context'
 import { Resource } from '@/components/ui/resource'
 import { type AgentState, AgentView } from '@/features/developers/agent-view'
@@ -25,7 +26,9 @@ async function optional<T>(name: string, url: string): Promise<T | null> {
 export default function AgentPage() {
   const session = useSession()
   const tenantId = session?.workspace?.tenantId ?? ''
-  const state = useLoader(async (): Promise<AgentState> => {
+  // Stable per workspace: `useLoader` loads again whenever its function changes, so an inline
+  // one would ask the agent on every render (Phase 78 found this page doing it).
+  const load = useCallback(async (): Promise<AgentState> => {
     const [settings, audit] = await Promise.all([
       optional<AgentSettings>('agent.settings', '/api/horizon/agent/settings'),
       optional<AuditPage>(
@@ -39,7 +42,8 @@ export default function AgentPage() {
       calls: audit ? audit.data.map(callOf) : null,
       chain: audit ? audit.chain.status : null,
     }
-  })
+  }, [tenantId])
+  const state = useLoader(load)
   return (
     <Resource state={state}>
       {(value) => <AgentView onChanged={state.reload} state={value} />}

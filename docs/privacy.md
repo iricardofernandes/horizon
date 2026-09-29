@@ -40,10 +40,46 @@ it does not adjudicate the request.
 | Free text of activities, tasks and notes (titles, summaries, note revisions) | `crm/` | Whoever the text names | Recording the relationship with an account; sealed under a key of the account, destroyed when its party is erased, and never published |
 | Restricted encrypted copy of issuer and recipient fiscal profiles | `fiscal/` | Issuer or recipient | Preparing a document against an exact effective-dated owner revision |
 | Actor identity on every audit entry | all modules | User | Legal obligation and legitimate interest in an accountable record |
+| Chunks of attachments' text, sealed under a key per document; their embeddings; their words as keyed hashes (HMAC per tenant) | `knowledge/` | Whoever the documents name | Search by meaning and words, only for people who may read the attachment (Phase 74–75). Deleted, key destroyed, with the attachment |
+| Suggestion history: an embedding of an item's name or of a supplier's name and a payable's description, with its label | `knowledge/` | A supplier who is a person | Suggesting an NCM or a category from the workspace's own decisions (Phase 77). Removed with the payable's reversal or the supplier's erasure |
+| Assistant conversations: questions, answers and the sources they cited, sealed under a key per person | `agent/` | The person asking, and whoever the answers name | Keeping a person's own conversations for 30 days (Phase 76). Erased with the person |
+| Agent call log: the key, the issuer, the tool, a digest of the arguments, the outcome | `agent/` | The key's issuer | Accountability for what an agent read or drafted (Phase 72). Never the arguments or the answer |
 
 Product codes, quantities, prices and movements are generally non-personal, but may
 become identifying when attached to a sole trader or individual. Classification is
 made per field and use, rather than inferred from the table name alone.
+
+---
+
+## AI data and its subprocessor (Phase N)
+
+- **What never leaves the stack.** Embeddings are computed inside it: a deterministic hash
+  by default, or `multilingual-e5-small` on Text Embeddings Inference with the `ai` profile.
+  No tenant text is sent anywhere to be embedded.
+- **The one subprocessor, and only if a workspace chooses it.** When an owner turns the
+  assistant on with the Anthropic generator and a key is configured, Anthropic receives:
+  - the question;
+  - the conversation so far;
+  - what the person's own tools answered: record data and attachment excerpts that person
+    may already read.
+
+  The owner accepts a notice (`assistant-notice-v1`) naming the provider and model first.
+  A monthly token budget stops sending, and turning the assistant off stops it before the
+  next call. The stack's default generator is extractive and sends nothing outside.
+- **No training set.** Suggestion decisions are counted per kind, with no person and no
+  example (see [`roadmap.md`](roadmap.md) under Fine-tuning).
+- **Erasure reaches derived data** (ADR 0068):
+  - an attachment's end deletes its chunks, vectors and keyed hashes, destroys its key,
+    and leaves a tombstone that refuses a late re-index;
+  - a party's erasure ends each of its attachments, which is the same path, and removes
+    its payable examples from the suggestion history;
+  - a person's erasure destroys their conversation key and deletes their conversations.
+- **The backup window, stated with its length.** A base backup is taken every 6 hours and
+  the last 7 are kept, so a deleted vector, keyed hash or sealed chunk can survive in a
+  backup for about **42 hours** after its deletion. The sealed chunks and conversations in
+  such a backup are unreadable without the master keys (`KNOWLEDGE_MASTER_KEY`,
+  `ASSISTANT_MASTER_KEY`), which are configuration, not data. Embeddings are not sealed,
+  and can be partly inverted. That window is not zero.
 
 ---
 
@@ -194,6 +230,10 @@ is auditable on its own.
 - **The audit chain proves detection, not prevention.** An operator with database access
   can still delete rows; they cannot do so *undetectably*. Stronger guarantees need an
   external append-only store, which is noted as the future direction in ADR 0025.
+- **Embeddings are personal data when their text is, and they are not encrypted.** A
+  vector can be partly inverted into its text. Horizon keeps them inside one tenant's
+  partition, never returns them through any API (proven by the Phase N drill), and
+  deletes them with their source. They remain in backups for the window above.
 - **Model training is constrained and currently forbidden.** A model trained on personal
   data does not forget a subject when their key is destroyed, which would silently break
   the erasure guarantee. See [`roadmap.md`](roadmap.md) under Fine-tuning for the three

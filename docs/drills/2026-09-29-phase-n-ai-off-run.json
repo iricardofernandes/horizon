@@ -1,0 +1,44 @@
+{
+  "phase": 78,
+  "kind": "phase-n-ai-off-run",
+  "recordedAt": "2026-09-29T19:23:30.666Z",
+  "environment": {
+    "aiProfile": "off (horizon-tei not running)",
+    "embedder": "hash-384-v1+lex-v1",
+    "suggestionsAvailable": false,
+    "assistantGenerator": "extractive-v1",
+    "modelProviderKey": "none (ANTHROPIC_API_KEY empty)"
+  },
+  "runs": {
+    "phase-n-golden-path": {
+      "file": "2026-09-29-phase-n-golden-path-ai-off.json",
+      "passed": true,
+      "checks": 9
+    },
+    "phase-m-golden-path": {
+      "file": "2026-09-29-phase-m-golden-path.json",
+      "passed": true,
+      "checks": 5
+    },
+    "phase-10-browser-golden-path": {
+      "command": "make test-phase10",
+      "passed": true,
+      "services": [
+        "financial",
+        "gateway",
+        "inventory",
+        "reporting",
+        "sales",
+        "web",
+        "webhooks"
+      ],
+      "responsiveWidth": 390
+    },
+    "phase-n-drill": {
+      "file": "2026-09-29-phase-n-drill-ai-off.json",
+      "passed": true,
+      "checks": 10
+    }
+  },
+  "passed": true
+}

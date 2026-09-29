@@ -103,3 +103,55 @@ Prometheus scrapes it on `horizon-probe:9464`:
 - `horizon_probe_runs_total{outcome}`;
 - `horizon_probe_step_seconds{step}`, the latest duration of each step;
 - `horizon_probe_last_success_timestamp_seconds`.
+
+## Phase N — the agent, the index, search and suggestions
+
+Delivered in [Phase 78](ai-phase78-implementation-plan.md).
+- **Rules:** `infra/observability/rules/phase-n.rules.yml`, tested with `make test-alerts`.
+- **Dashboard:** *Horizon — Phase N* in Grafana.
+
+| Service level | SLI (recording rule) | Objective | Alert |
+|---|---|---|---|
+| Agent calls answered | `sli:agent_calls_failed:ratio_rate10m`: tool calls whose outcome is `failed`, where Horizon could not answer (`agent_tool_calls_total`). A refusal (scope, arguments, not found) is a correct answer | under 1% | [AgentCallsFailing](#agentcallsfailing) |
+| Agent call latency | `sli:agent_calls_under_2s:ratio_rate10m`: from `tools/call` to its audited answer, within two seconds (`agent_tool_call_seconds`) | 95% | [AgentCallsSlow](#agentcallsslow) |
+| Index freshness | `sli:document_index_lag_seconds:max`: how long the oldest due document has waited, across tenants (`knowledge_index_lag_seconds`) | under 10 minutes | [DocumentIndexBehind](#documentindexbehind) |
+| Search latency | `sli:document_search_under_1s:ratio_rate10m`: searches answered within a second (`knowledge_search_seconds`) | 95% | [DocumentSearchSlow](#documentsearchslow) |
+| Suggestion acceptance | `sli:suggestions_accepted:ratio_1d`: accepted among decided suggestions over a day, per kind (`knowledge_suggestion_decisions_total`). A quality signal, never a training set | 30% or more, with at least 20 decisions | [SuggestionsRarelyAccepted](#suggestionsrarelyaccepted) |
+
+Every Phase N duration histogram has bounds in seconds, from 5 ms to 60 s (300 s for the
+assistant and for embedding). Before Phase 78 they used OpenTelemetry's millisecond
+defaults, so every measurement fell into the first bucket.
+
+### AgentCallsFailing
+Horizon could not answer the tenants' agents: the gateway or a module was unreachable, or
+the call could not be audited. An unaudited call returns no data (ADR 0065), so an audit
+failure shows up here too.
+1. `docker logs horizon-agent`, and the module named by the failing tools
+   (`sum by (tool) (rate(agent_tool_calls_total{outcome="failed"}[10m]))`).
+2. Kong's `agent-api` route, and the module's own health.
+3. The agent's database: an audit append that fails fails the call.
+
+### AgentCallsSlow
+Each call exchanges the key (`agent_exchange_seconds`), then reads through Kong. Compare the
+exchange's p95 with the call's. If the exchange is slow, Identity's Argon2id verification
+or Redis is the cause; otherwise the module being read is.
+
+### DocumentIndexBehind
+The worker is not keeping up, or a document is stuck due.
+1. `docker logs horizon-knowledge`: failed passes are logged by error class.
+2. `knowledge_documents_settled_total{state="pending"}` growing means files are failing and
+   being retried: check `files/` through Kong, and the service token.
+3. With `make up-ai`, a stopped TEI stops embedding: `curl 127.0.0.1:8088/health`.
+
+### DocumentSearchSlow
+A search embeds the question and asks two lists of one tenant's partition.
+- With e5, TEI's latency comes first.
+- Otherwise look at the partition's size and plan: `EXPLAIN` a nearest query in the tenant,
+  which must name one partition and its HNSW index.
+
+### SuggestionsRarelyAccepted
+People reject most suggestions of one kind. That is a quality signal, not an outage.
+- For `ncm`, the official table alone is a weak prior (heading hit@3 of 5 in 12, Phase 77):
+  a workspace with little classified history sees mostly table candidates.
+- For `payable-category`, a change in how the workspace categorizes makes old payables vote
+  for categories no longer used.

@@ -2834,9 +2834,33 @@ caller's workspace.
 
 ## Phase 78 — Threat model, service levels, screens and closing Phase N
 
-**Planned.** The red-team drill, the SLIs, the screens in pt-BR and en, and the Phase N golden path, run once with
-every AI component off.
-[Detailed work](ai-implementation-plan.md#78--threat-model-service-levels-screens-and-closing-phase-n).
+**Delivered on 2026-09-29. Phase N is closed.**
+- **Threat model:** each of its seven threats, and the others found, has a control and a
+  proof.
+- **The red-team drill,** with the local model and without it, 10 of 10 each:
+  - canaries across workspaces;
+  - an injected document;
+  - revoked, stolen and over-grown keys;
+  - writes outside the catalogue;
+  - a flood of exchanges;
+  - a spent budget;
+  - no vector in any answer.
+- **Service levels** for agent calls and their latency, index freshness, search latency
+  and suggestion acceptance, with rules, promtool tests and the *Horizon — Phase N*
+  dashboard. Every Phase N histogram now has bounds in seconds.
+- **The Phase N golden path,** 9 of 9, with the `ai` profile on and off: a key, the agent
+  reads and drafts, the issuer is refused and another approves, a document is indexed,
+  found and cited, and the party's erasure takes it out of every answer. With every AI
+  component off, Phase M's golden path and the browser golden path pass too.
+- **Screens and documents:**
+  - the screens in pt-BR, checked in the browser;
+  - `roadmap.md`, `privacy.md`, and the API references of `agent/` and `knowledge/`.
+
+[Plan](ai-phase78-implementation-plan.md), [evidence](ai-phase78-evidence.md),
+[threat model](phase-n-threat-model.md),
+[golden path](drills/2026-09-29-phase-n-golden-path-ai-on.json),
+[AI off](drills/2026-09-29-phase-n-ai-off-run.json),
+[drill](drills/2026-09-29-phase-n-drill-ai-on.json).
 
 ---
 

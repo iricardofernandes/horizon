@@ -704,6 +704,14 @@ See the [Phase 70 evidence](readiness-phase70-evidence.md).
 
 Split into phases 71–78: [AI with isolation implementation plan](ai-implementation-plan.md).
 It builds the roadmap's customer-facing MCP server and RAG over tenant documents.
+**Closed on 2026-09-29.** The four exit criteria are proven by stored records:
+- the Phase N golden path, [with the local model](drills/2026-09-29-phase-n-golden-path-ai-on.json)
+  and [with every AI component off](drills/2026-09-29-phase-n-golden-path-ai-off.json);
+- the red-team drill ([ai-on](drills/2026-09-29-phase-n-drill-ai-on.json),
+  [ai-off](drills/2026-09-29-phase-n-drill-ai-off.json));
+- the [retrieval evaluation](drills/2026-09-29-phase75-retrieval-tei.json);
+- the [ai-off run](drills/2026-09-29-phase-n-ai-off-run.json), with Phase M's golden path
+  and the browser golden path.
 
 **Deliverables**
 
@@ -832,4 +840,4 @@ The first executable backlog, in order, is:
 to 25, Phase G as 26 to 28, Phase H as 29 to 31 and Phase I as 32 to 38. Phase J is
 planned as phases 39 to 48 in the [fiscal implementation plan](fiscal-implementation-plan.md).
 Phase K is delivered as phases 49 to 53 and Phase L as phases 54 to 60. Phase M is
-planned as phases 61 to 70.
+delivered as phases 61 to 70, and Phase N as phases 71 to 78.

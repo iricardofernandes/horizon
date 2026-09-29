@@ -61,7 +61,11 @@ class FakeGateway extends Gateway {
   }
 }
 
-const metrics: CallMetrics = { called: () => undefined, exchanged: () => undefined }
+const recorded: { tool: string; outcome: string; seconds?: number }[] = []
+const metrics: CallMetrics = {
+  called: (record) => recorded.push(record),
+  exchanged: () => undefined,
+}
 
 let store: FakeStore
 let keys: FakeKeys
@@ -245,5 +249,16 @@ describe('drafts (ADR 0066)', () => {
     }
     await calls.call(await session(), 'create_crm_task', task, 1)
     expect(gateway.written.at(-1)?.body.assigneeId).toBe('ana-uuid')
+  })
+})
+
+describe('the MCP latency SLI (Phase 78)', () => {
+  it('records how long each call took, refused or answered', async () => {
+    recorded.length = 0
+    const opened = await session()
+    await calls.call(opened, 'list_parties', {})
+    await calls.call(opened, 'post_payable', {})
+    expect(recorded.map((record) => record.outcome)).toEqual(['ok', 'refused'])
+    for (const record of recorded) expect(record.seconds).toBeGreaterThanOrEqual(0)
   })
 })

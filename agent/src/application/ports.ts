@@ -59,6 +59,8 @@ export interface AuditRecord {
 export interface CallRecord {
   readonly tool: string
   readonly outcome: CallOutcome
+  /** From the call to its audited answer: the MCP latency SLI (Phase 78). */
+  readonly seconds?: number
 }
 
 export abstract class AgentStore {

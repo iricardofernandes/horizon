@@ -1,0 +1,113 @@
+{
+  "phase": 78,
+  "kind": "phase-n-golden-path",
+  "ai": "on",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T19:24:51.742Z",
+  "finishedAt": "2026-09-29T19:24:57.008Z",
+  "passed": true,
+  "tenantId": "01a0eea0-82b3-7a62-930c-074e3201a432",
+  "environment": {
+    "indexVersion": "e5-small-v1+lex-v1",
+    "suggestionsAvailable": true,
+    "assistant": {
+      "provider": "Horizon (extractive, inside the stack)",
+      "model": "extractive-v1",
+      "available": true,
+      "enabled": false
+    }
+  },
+  "timingsMs": {
+    "setup": 238,
+    "environment": 55,
+    "key": 27,
+    "agent reads": 31,
+    "agent drafts": 554,
+    "approval": 25,
+    "attach": 21,
+    "indexed": 2574,
+    "found and cited": 103,
+    "erasure": 1625,
+    "audit": 5
+  },
+  "checks": [
+    {
+      "name": "the stack runs with the ai profile on",
+      "passed": true,
+      "detail": {
+        "indexVersion": "e5-small-v1+lex-v1",
+        "suggestionsAvailable": true,
+        "assistant": {
+          "provider": "Horizon (extractive, inside the stack)",
+          "model": "extractive-v1",
+          "available": true,
+          "enabled": false
+        }
+      }
+    },
+    {
+      "name": "the agent reads the workspace through the key",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "isError": false
+      }
+    },
+    {
+      "name": "the agent drafts a payable through the key",
+      "passed": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "the key’s issuer is refused approval of what the agent drafted, and another person approves",
+      "passed": true,
+      "detail": {
+        "request": 200,
+        "issuer": 403,
+        "other": 200,
+        "status": "draft"
+      }
+    },
+    {
+      "name": "Financial’s audit counts the draft as the issuer’s, and names the key it came through",
+      "passed": true,
+      "detail": {
+        "actorIsIssuer": true,
+        "viaNamesTheKey": true
+      }
+    },
+    {
+      "name": "search finds the document and cites its attachment, record and excerpt",
+      "passed": true,
+      "detail": {
+        "rank": 1
+      }
+    },
+    {
+      "name": "the agent’s search_documents and the assistant cite it too",
+      "passed": true,
+      "detail": {
+        "agent": true,
+        "assistantStatements": 1
+      }
+    },
+    {
+      "name": "erasing the party takes its document out of search and out of every answer",
+      "passed": true,
+      "detail": {
+        "erased": 204,
+        "agent": true
+      }
+    },
+    {
+      "name": "every agent call is in the workspace’s hash-chained log, naming the key",
+      "passed": true,
+      "detail": {
+        "calls": 4,
+        "chain": "intact"
+      }
+    }
+  ]
+}

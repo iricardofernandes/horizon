@@ -20,6 +20,26 @@ const KEYWORDS: readonly (readonly [RegExp, string])[] = [
 const DATA =
   /<data source="(S\d+)" kind="(document|record)"(?: tool="([^"]+)")?>([\s\S]*?)<\/data>/g
 
+/** Portuguese or English, as the question reads: the extractive answer speaks its language. */
+const PORTUGUESE =
+  /[ãõçáéíóúâêô]|\b(que|qual|quais|como|onde|quem|quanto|quantos|existem|diz|são|está|não)\b/i
+
+type Words = { records: (tool: string, rows: number | null) => string; nothing: string }
+const WORDS: Readonly<Record<'pt' | 'en', Words>> = {
+  pt: {
+    records: (tool, rows) =>
+      rows === null ? `${tool}: 1 registro` : `${tool}: ${rows} registro(s)`,
+    nothing: 'Nada do que posso ler responde a isso.',
+  },
+  en: {
+    records: (tool, rows) => (rows === null ? `${tool}: 1 record` : `${tool}: ${rows} record(s)`),
+    nothing: 'Nothing I can read answers this.',
+  },
+}
+
+export const languageOf = (question: string): 'pt' | 'en' =>
+  PORTUGUESE.test(question) ? 'pt' : 'en'
+
 /** Characters over four: near enough to what a provider would count, and deterministic. */
 const tokensOf = (text: string) => Math.ceil(text.length / 4)
 
@@ -45,17 +65,14 @@ function rowsIn(json: string): number | null {
 }
 
 /** One statement per quoted source in a tool result: a document quoted, a record counted. */
-function statementsIn(content: string): { text: string; sources: string[] }[] {
+function statementsIn(content: string, words: Words): { text: string; sources: string[] }[] {
   return [...content.matchAll(DATA)].flatMap(([, id, kind, tool, body]) => {
     if (!id || !body) return []
     if (kind === 'document') {
       const { excerpt } = JSON.parse(body) as { excerpt?: string }
       return [{ text: `“${(excerpt ?? '').slice(0, 300)}”`, sources: [id] }]
     }
-    const rows = rowsIn(body)
-    return [
-      { text: rows === null ? `${tool}: 1 record` : `${tool}: ${rows} record(s)`, sources: [id] },
-    ]
+    return [{ text: words.records(tool ?? '', rowsIn(body)), sources: [id] }]
   })
 }
 
@@ -78,7 +95,7 @@ export class ExtractiveGenerator extends Generator {
     const planned = !hasResults && request.force === 'any' ? this.plan(question.text, request) : []
     const content: GeneratedBlock[] = planned.length
       ? planned
-      : [this.answer(request.messages.slice(question.index + 1))]
+      : [this.answer(request.messages.slice(question.index + 1), WORDS[languageOf(question.text)])]
     return {
       content,
       usage: {
@@ -109,11 +126,13 @@ export class ExtractiveGenerator extends Generator {
     return uses
   }
 
-  private answer(since: readonly GenerationMessage[]): GeneratedBlock {
+  private answer(since: readonly GenerationMessage[], words: Words): GeneratedBlock {
     const statements = since.flatMap((message) =>
       message.role === 'user'
         ? message.content.flatMap((block) =>
-            block.type === 'tool_result' && !block.isError ? statementsIn(block.content) : [],
+            block.type === 'tool_result' && !block.isError
+              ? statementsIn(block.content, words)
+              : [],
           )
         : [],
     )
@@ -124,7 +143,7 @@ export class ExtractiveGenerator extends Generator {
       input: {
         statements: statements.length
           ? statements.slice(0, 20)
-          : [{ text: 'Nothing I can read answers this.', sources: [] }],
+          : [{ text: words.nothing, sources: [] }],
       },
     }
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GenerationRequest } from '@/application/generation'
 import { AnthropicGenerator, GenerationError } from './anthropic-generator'
-import { ExtractiveGenerator } from './extractive-generator'
+import { ExtractiveGenerator, languageOf } from './extractive-generator'
 
 const tools = [
   { name: 'search_documents', description: 'd', inputSchema: {} },
@@ -178,10 +178,25 @@ describe('the extractive generator (ADR 0069)', () => {
     expect(forced.content).toMatchObject([
       {
         name: 'answer',
-        input: { statements: [{ text: 'Nothing I can read answers this.', sources: [] }] },
+        input: { statements: [{ text: 'Nada do que posso ler responde a isso.', sources: [] }] },
       },
     ])
     const bare = await generator.generate(request({ tools: tools.slice(2) }))
     expect(bare.content).toMatchObject([{ name: 'answer' }])
+  })
+
+  it('answers in the language of the question', async () => {
+    expect(languageOf('Quais clientes têm contrato?')).toBe('pt')
+    expect(languageOf('O que diz o contrato')).toBe('pt')
+    expect(languageOf('Which customers have a contract?')).toBe('en')
+    const english = await generator.generate(
+      request({
+        force: { tool: 'answer' },
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'Which customers?' }] }],
+      }),
+    )
+    expect(english.content).toMatchObject([
+      { input: { statements: [{ text: 'Nothing I can read answers this.' }] } },
+    ])
   })
 })

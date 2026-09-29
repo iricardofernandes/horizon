@@ -13,10 +13,24 @@ export class OtelCallMetrics implements CallMetrics {
   readonly #exchange = meter.createHistogram('agent_exchange_seconds', {
     description: 'Time to exchange an API key for a token through the gateway',
     unit: 's',
+    // Seconds, not OpenTelemetry's default millisecond bounds (Phase 78).
+    advice: {
+      explicitBucketBoundaries: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60],
+    },
+  })
+
+  readonly #callSeconds = meter.createHistogram('agent_tool_call_seconds', {
+    description: 'Time from a tools/call to its audited answer, by outcome (Phase 78)',
+    unit: 's',
+    advice: {
+      explicitBucketBoundaries: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60],
+    },
   })
 
   called(record: CallRecord): void {
     this.#calls.add(1, { tool: record.tool, outcome: record.outcome })
+    if (record.seconds !== undefined)
+      this.#callSeconds.record(record.seconds, { outcome: record.outcome })
   }
 
   exchanged(seconds: number): void {
@@ -35,6 +49,8 @@ export class OtelAssistantMetrics implements AssistantMetrics {
   readonly #seconds = meter.createHistogram('assistant_answer_seconds', {
     description: 'Time to answer one question',
     unit: 's',
+    // Seconds, not OpenTelemetry's default millisecond bounds (Phase 78).
+    advice: { explicitBucketBoundaries: [0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300] },
   })
 
   answered(outcome: string, seconds: number): void {

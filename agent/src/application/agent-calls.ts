@@ -132,33 +132,46 @@ export class AgentCalls {
     args: Readonly<Record<string, unknown>>,
     requestId: string | number | null = null,
   ): Promise<ToolAnswer> {
+    const started = performance.now()
     const tool = this.tools(session).find((entry) => entry.name === name)
     if (!tool)
-      return this.finish(session, name, args, {
-        text: `No tool named ${name} is available to this key`,
-        isError: true,
-        outcome: 'refused',
-        status: 403,
-        rows: null,
-        bytes: 0,
-        truncated: false,
-      })
+      return this.finish(
+        session,
+        name,
+        args,
+        {
+          text: `No tool named ${name} is available to this key`,
+          isError: true,
+          outcome: 'refused',
+          status: 403,
+          rows: null,
+          bytes: 0,
+          truncated: false,
+        },
+        started,
+      )
 
     // Validated here, not by the protocol layer, so a malformed call is audited too.
     const parsed = z.strictObject(tool.input).safeParse(args)
     if (!parsed.success)
-      return this.finish(session, name, args, {
-        text: `Invalid arguments: ${parsed.error.issues
-          .map((issue) => `${issue.path.join('.') || '(root)'} ${issue.message}`)
-          .join('; ')
-          .slice(0, 300)}`,
-        isError: true,
-        outcome: 'refused',
-        status: 400,
-        rows: null,
-        bytes: 0,
-        truncated: false,
-      })
+      return this.finish(
+        session,
+        name,
+        args,
+        {
+          text: `Invalid arguments: ${parsed.error.issues
+            .map((issue) => `${issue.path.join('.') || '(root)'} ${issue.message}`)
+            .join('; ')
+            .slice(0, 300)}`,
+          isError: true,
+          outcome: 'refused',
+          status: 400,
+          rows: null,
+          bytes: 0,
+          truncated: false,
+        },
+        started,
+      )
 
     let answer: { status: number; body: unknown }
     try {
@@ -167,44 +180,62 @@ export class AgentCalls {
           ? await this.draft(session, tool, parsed.data, requestId)
           : await this.read(session, tool, parsed.data)
     } catch {
-      return this.finish(session, name, args, {
-        text: 'Horizon could not be reached; try again later',
-        isError: true,
-        outcome: 'failed',
-        status: 0,
-        rows: null,
-        bytes: 0,
-        truncated: false,
-      })
+      return this.finish(
+        session,
+        name,
+        args,
+        {
+          text: 'Horizon could not be reached; try again later',
+          isError: true,
+          outcome: 'failed',
+          status: 0,
+          rows: null,
+          bytes: 0,
+          truncated: false,
+        },
+        started,
+      )
     }
 
     const outcome = outcomeOf(answer.status)
     if (outcome !== 'ok') {
       const detail = outcome === 'failed' ? 'the module failed' : detailOf(answer.body)
-      return this.finish(session, name, args, {
-        text: `Horizon answered ${answer.status}${detail ? `: ${detail}` : ''}`,
-        isError: true,
-        outcome,
-        status: answer.status,
-        rows: null,
-        bytes: 0,
-        truncated: false,
-      })
+      return this.finish(
+        session,
+        name,
+        args,
+        {
+          text: `Horizon answered ${answer.status}${detail ? `: ${detail}` : ''}`,
+          isError: true,
+          outcome,
+          status: answer.status,
+          rows: null,
+          bytes: 0,
+          truncated: false,
+        },
+        started,
+      )
     }
     const capped = capResult(answer.body, this.limits.maxRows, this.limits.maxBytes)
     const created = tool.kind === 'draft' ? createdIdOf(answer.body) : null
-    return this.finish(session, name, args, {
-      text: capped.text,
-      isError: false,
-      outcome,
-      status: answer.status,
-      rows: capped.rows,
-      bytes: capped.bytes,
-      truncated: capped.truncated,
-      ...(created
-        ? { record: { module: tool.module, type: tool.record ?? tool.name, id: created } }
-        : {}),
-    })
+    return this.finish(
+      session,
+      name,
+      args,
+      {
+        text: capped.text,
+        isError: false,
+        outcome,
+        status: answer.status,
+        rows: capped.rows,
+        bytes: capped.bytes,
+        truncated: capped.truncated,
+        ...(created
+          ? { record: { module: tool.module, type: tool.record ?? tool.name, id: created } }
+          : {}),
+      },
+      started,
+    )
   }
 
   private read(session: AgentSession, tool: ToolEntry, args: Readonly<Record<string, unknown>>) {
@@ -249,6 +280,7 @@ export class AgentCalls {
       truncated: boolean
       record?: { module: string; type: string; id: string }
     },
+    started = performance.now(),
   ): Promise<ToolAnswer> {
     try {
       await this.store.audit(session.tenantId, {
@@ -269,14 +301,22 @@ export class AgentCalls {
         },
       })
     } catch {
-      this.metrics.called({ tool, outcome: 'failed' })
+      this.metrics.called({
+        tool,
+        outcome: 'failed',
+        seconds: (performance.now() - started) / 1000,
+      })
       return {
         text: 'The call could not be recorded, so nothing was returned',
         isError: true,
         outcome: 'failed',
       }
     }
-    this.metrics.called({ tool, outcome: result.outcome })
+    this.metrics.called({
+      tool,
+      outcome: result.outcome,
+      seconds: (performance.now() - started) / 1000,
+    })
     return { text: result.text, isError: result.isError, outcome: result.outcome }
   }
 }

@@ -1,0 +1,123 @@
+# promtool test rules infra/observability/rules/phase-n.rules.test.yml
+rule_files:
+  - phase-n.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: failed agent calls fire after ten minutes; refusals never count
+    interval: 1m
+    input_series:
+      - series: 'agent_tool_calls_total{tool="list_parties",outcome="ok"}'
+        values: '0+80x40'
+      - series: 'agent_tool_calls_total{tool="post_payable",outcome="refused"}'
+        values: '0+100x40'
+      - series: 'agent_tool_calls_total{tool="list_parties",outcome="failed"}'
+        values: '0x5 0+20x35'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: AgentCallsFailing
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: AgentCallsFailing
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: agent-calls }
+            exp_annotations:
+              summary: 'More than 5% of agent tool calls failed, where Horizon could not answer'
+              runbook: docs/service-levels.md#agentcallsfailing
+
+  - name: agent calls without a single failure are a ratio of 0, not a missing series
+    interval: 1m
+    input_series:
+      - series: 'agent_tool_calls_total{tool="list_parties",outcome="ok"}'
+        values: '0+50x20'
+    promql_expr_test:
+      - expr: sli:agent_calls_failed:ratio_rate10m
+        eval_time: 15m
+        exp_samples:
+          - labels: 'sli:agent_calls_failed:ratio_rate10m'
+            value: 0
+
+  - name: slow agent calls fire below 95% within two seconds
+    interval: 1m
+    input_series:
+      - series: 'agent_tool_call_seconds_bucket{outcome="ok",le="2.0"}'
+        values: '0+90x30'
+      - series: 'agent_tool_call_seconds_count{outcome="ok"}'
+        values: '0+100x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: AgentCallsSlow
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: agent-latency }
+            exp_annotations:
+              summary: 'Fewer than 95% of agent tool calls answer within two seconds'
+              runbook: docs/service-levels.md#agentcallsslow
+
+  - name: a document waiting over ten minutes fires after fifteen
+    interval: 1m
+    input_series:
+      - series: 'knowledge_index_lag_seconds{service_name="knowledge"}'
+        values: '30x10 700x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: DocumentIndexBehind
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: DocumentIndexBehind
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: index-freshness }
+            exp_annotations:
+              summary: 'A document has waited more than ten minutes to be indexed'
+              runbook: docs/service-levels.md#documentindexbehind
+
+  - name: searches fast enough never fire; slow ones do
+    interval: 1m
+    input_series:
+      - series: 'knowledge_search_seconds_bucket{outcome="ok",le="1.0"}'
+        values: '0+99x20 1980+50x20'
+      - series: 'knowledge_search_seconds_count{outcome="ok"}'
+        values: '0+100x40'
+    alert_rule_test:
+      - eval_time: 18m
+        alertname: DocumentSearchSlow
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: DocumentSearchSlow
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: search-latency }
+            exp_annotations:
+              summary: 'Fewer than 95% of document searches answer within a second'
+              runbook: docs/service-levels.md#documentsearchslow
+
+  - name: a kind whose suggestions are mostly rejected fires, per kind; a well-taken one does not
+    interval: 10m
+    input_series:
+      - series: 'knowledge_suggestion_decisions_total{kind="ncm",decision="rejected"}'
+        values: '0+9x60'
+      - series: 'knowledge_suggestion_decisions_total{kind="ncm",decision="accepted"}'
+        values: '0+1x60'
+      - series: 'knowledge_suggestion_decisions_total{kind="payable-category",decision="accepted"}'
+        values: '0+6x60'
+      - series: 'knowledge_suggestion_decisions_total{kind="payable-category",decision="rejected"}'
+        values: '0+4x60'
+    alert_rule_test:
+      - eval_time: 8h
+        alertname: SuggestionsRarelyAccepted
+        exp_alerts:
+          - exp_labels: { severity: info, slo: suggestion-acceptance, kind: ncm }
+            exp_annotations:
+              summary: 'Fewer than 30% of ncm suggestions were accepted over a day'
+              runbook: docs/service-levels.md#suggestionsrarelyaccepted
+
+  - name: a kind with no suggestion accepted is an acceptance of 0, not absent
+    interval: 10m
+    input_series:
+      - series: 'knowledge_suggestion_decisions_total{kind="ncm",decision="rejected"}'
+        values: '0+5x20'
+    promql_expr_test:
+      - expr: sli:suggestions_accepted:ratio_1d
+        eval_time: 3h
+        exp_samples:
+          - labels: 'sli:suggestions_accepted:ratio_1d{kind="ncm"}'
+            value: 0

@@ -8,6 +8,13 @@ roadmap entry reads as sequencing.
 Each entry states the problem it solves, why it was deferred, and what would have to
 be true before it starts.
 
+**Built, and moved out:** the customer-facing MCP server and RAG over tenant documents,
+in [Phase N](ai-implementation-plan.md) (Phases 71–78). The MCP server became `agent/`
+(ADR 0065), not `tooling/mcp-agent/`. The index is `knowledge/`, one pgvector partition per
+tenant (ADR 0067). Both entries' statements are its acceptance tests, proven by the
+[Phase N golden path](drills/2026-09-29-phase-n-golden-path-ai-on.json) and
+[drill](drills/2026-09-29-phase-n-drill-ai-on.json).
+
 ---
 
 ## `financial/` — accounts payable and receivable
@@ -96,60 +103,6 @@ are labeled as such and cannot be mistaken for authorized fiscal documents.
 
 ---
 
-## `tooling/mcp-agent/` — a customer-facing MCP server
-
-**Problem it solves.** A tenant wants their own AI agent to query their own ERP
-data. The naive implementation gives the agent a privileged service account, which
-means the agent can read every tenant's data and the audit trail records the service
-account rather than the person.
-
-**Scope when built.** An MCP server that a tenant's agent connects to using **an API
-key issued through the existing model in §3** — the same key format, the same
-explicit scope list, the same per-key rate limits at Kong, the same `tenant_id` in
-the request context, the same RLS policies, the same audit entries naming the key
-and therefore the person who issued it.
-
-**Why it matters more as a security argument than as a feature.** The point is the
-absence of a privileged path: there is no agent-specific bypass, no elevated role, no
-"the model needs broader access to be useful". If an agent can read it, a human with
-that key could have read it, and the audit log will say so. Any design that cannot
-make that statement is not shippable.
-
-**Why deferred.** It requires the API key scope model, RLS, and the audit chain all
-to be real and tested (Phase 4), a business surface worth querying (Phases 6–7), and
-the read-only MCP discipline already established internally by
-`tooling/mcp-debugger/` (Phase 12).
-
-**Preconditions.** Phases 4, 6, 7 and 12 complete.
-
----
-
-## RAG over tenant documents
-
-**Problem it solves.** Tenants accumulate documents — contracts, purchase orders,
-correspondence — and want to ask questions across them.
-
-**The isolation requirement, stated now so it is not retrofitted.** Retrieval must be
-scoped by `tenant_id` **at the index level**, not by filtering results after
-retrieval. Post-filtering means a vector search ranks across every tenant's content
-and then discards what it should never have scored; it leaks through ranking
-behaviour, through latency, and through any bug in the filter. The design must use
-per-tenant indexes or a store with enforced partition-level scoping, so that a query
-issued in tenant A's context is structurally incapable of touching tenant B's
-vectors — the same guarantee RLS gives the relational store.
-
-Stating this before any code exists is the entire reason the entry is here. It is the
-kind of constraint that is cheap now and expensive after an index exists.
-
-**Why deferred.** There are no tenant documents to index until the ERP is in use, and
-an embedding pipeline built against synthetic data proves nothing.
-
-**Preconditions.** Document storage in a business module; the tenant context
-propagation of Phase 4; a decision, recorded as an ADR, on the vector store and its
-partitioning guarantees.
-
----
-
 ## Fine-tuning
 
 **Problem it would solve.** Domain-specific behaviour — classifying a purchase
@@ -186,6 +139,12 @@ Therefore any future fine-tuning must satisfy, before a single example is collec
 
 If none of those can be met, the answer is not to fine-tune. That conclusion is
 recorded here rather than discovered later.
+
+**What Phase N collects, and does not.** Phase 77's suggestions record each acceptance or
+rejection only as a counter, per kind (`knowledge_suggestion_decisions_total`), with no
+tenant, no person and no example. There is no training set, and none is being built.
+The workspace's confirmed history that suggestions read lives in `knowledge/`'s
+per-tenant partitions, and leaves with its source (ADR 0068).
 
 **Preconditions.** Real usage; a completed data-protection assessment; an ADR that
 picks one of the three options above and says why.

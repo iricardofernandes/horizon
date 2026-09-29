@@ -10,6 +10,8 @@ export class OtelIndexMetrics implements IndexMetrics, SearchMetrics, Suggestion
   readonly #embedding = meter.createHistogram('knowledge_embedding_seconds', {
     description: 'Time to embed one document',
     unit: 's',
+    // Seconds, not OpenTelemetry's default millisecond bounds (Phase 78).
+    advice: { explicitBucketBoundaries: [0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300] },
   })
   readonly #settled = meter.createCounter('knowledge_documents_settled', {
     description: 'Documents that reached a state: indexed, no-text, pending (retry) or failed',
@@ -22,11 +24,19 @@ export class OtelIndexMetrics implements IndexMetrics, SearchMetrics, Suggestion
   readonly #search = meter.createHistogram('knowledge_search_seconds', {
     description: 'Time to answer one search, and whether it found anything',
     unit: 's',
+    // Seconds, not OpenTelemetry's default millisecond bounds (Phase 78).
+    advice: {
+      explicitBucketBoundaries: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60],
+    },
   })
 
   readonly #suggested = meter.createHistogram('knowledge_suggestion_seconds', {
     description: 'Time to answer one suggestion request, by kind',
     unit: 's',
+    // Seconds, not OpenTelemetry's default millisecond bounds (Phase 78).
+    advice: {
+      explicitBucketBoundaries: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60],
+    },
   })
   readonly #decisions = meter.createCounter('knowledge_suggestion_decisions', {
     description:

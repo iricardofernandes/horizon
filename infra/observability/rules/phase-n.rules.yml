@@ -1,0 +1,81 @@
+# Service levels of Phase N (Phase 78): the tenant's agent, the document index, search and
+# suggestions. Recording rules name each SLI once; alerts read them. Objectives and
+# runbooks: docs/service-levels.md. Thresholds are local defaults.
+# Tested by `promtool test rules infra/observability/rules/phase-n.rules.test.yml`.
+groups:
+  - name: phase-n-recording
+    rules:
+      # Agent calls Horizon could not answer. A refusal (scope, arguments, not found) is a
+      # correct answer, and no failure at all is a ratio of 0, not a missing series.
+      - record: sli:agent_calls_failed:ratio_rate10m
+        expr: |
+          (sum(rate(agent_tool_calls_total{outcome="failed"}[10m])) or vector(0))
+            / sum(rate(agent_tool_calls_total[10m]))
+      # From a tools/call to its audited answer. The exporter writes bounds as floats.
+      - record: sli:agent_calls_under_2s:ratio_rate10m
+        expr: |
+          sum(rate(agent_tool_call_seconds_bucket{le="2.0"}[10m]))
+            / sum(rate(agent_tool_call_seconds_count[10m]))
+
+      # How long the oldest due document has waited, across tenants.
+      - record: sli:document_index_lag_seconds:max
+        expr: max(knowledge_index_lag_seconds)
+
+      - record: sli:document_search_under_1s:ratio_rate10m
+        expr: |
+          sum(rate(knowledge_search_seconds_bucket{le="1.0"}[10m]))
+            / sum(rate(knowledge_search_seconds_count[10m]))
+
+      # Suggestion decisions over a day, per kind; a kind with none accepted is 0, not absent.
+      - record: sli:suggestion_decisions:increase1d
+        expr: sum by (kind) (increase(knowledge_suggestion_decisions_total[1d]))
+      - record: sli:suggestions_accepted:ratio_1d
+        expr: |
+          (
+            sum by (kind) (increase(knowledge_suggestion_decisions_total{decision="accepted"}[1d]))
+              or sum by (kind) (increase(knowledge_suggestion_decisions_total[1d])) * 0
+          )
+            / sum by (kind) (increase(knowledge_suggestion_decisions_total[1d]))
+
+  - name: phase-n-alerts
+    rules:
+      - alert: AgentCallsFailing
+        expr: sli:agent_calls_failed:ratio_rate10m > 0.05
+        for: 10m
+        labels: { severity: warning, slo: agent-calls }
+        annotations:
+          summary: 'More than 5% of agent tool calls failed, where Horizon could not answer'
+          runbook: docs/service-levels.md#agentcallsfailing
+
+      - alert: AgentCallsSlow
+        expr: sli:agent_calls_under_2s:ratio_rate10m < 0.95
+        for: 10m
+        labels: { severity: warning, slo: agent-latency }
+        annotations:
+          summary: 'Fewer than 95% of agent tool calls answer within two seconds'
+          runbook: docs/service-levels.md#agentcallsslow
+
+      - alert: DocumentIndexBehind
+        expr: sli:document_index_lag_seconds:max > 600
+        for: 15m
+        labels: { severity: warning, slo: index-freshness }
+        annotations:
+          summary: 'A document has waited more than ten minutes to be indexed'
+          runbook: docs/service-levels.md#documentindexbehind
+
+      - alert: DocumentSearchSlow
+        expr: sli:document_search_under_1s:ratio_rate10m < 0.95
+        for: 10m
+        labels: { severity: warning, slo: search-latency }
+        annotations:
+          summary: 'Fewer than 95% of document searches answer within a second'
+          runbook: docs/service-levels.md#documentsearchslow
+
+      # Quality, not availability: people keep rejecting what is suggested.
+      - alert: SuggestionsRarelyAccepted
+        expr: sli:suggestions_accepted:ratio_1d < 0.3 and sli:suggestion_decisions:increase1d >= 20
+        for: 6h
+        labels: { severity: info, slo: suggestion-acceptance }
+        annotations:
+          summary: 'Fewer than 30% of {{ $labels.kind }} suggestions were accepted over a day'
+          runbook: docs/service-levels.md#suggestionsrarelyaccepted

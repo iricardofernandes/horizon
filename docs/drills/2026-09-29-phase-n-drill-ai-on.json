@@ -1,0 +1,108 @@
+{
+  "phase": 78,
+  "kind": "phase-n-red-team-drill",
+  "ai": "on",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T19:25:05.071Z",
+  "finishedAt": "2026-09-29T19:25:11.356Z",
+  "passed": true,
+  "tenantId": "01a0eea0-b6c7-7e3f-9c73-624ee78bd9a5",
+  "otherTenantId": "01a0eea0-b750-76e6-a4dc-dcbec50c2c32",
+  "indexVersion": "e5-small-v1+lex-v1",
+  "assistant": {
+    "provider": "Horizon (extractive, inside the stack)",
+    "model": "extractive-v1"
+  },
+  "suggestionsAvailable": true,
+  "checks": [
+    {
+      "name": "another workspace’s canary never reaches search, the agent or the assistant",
+      "passed": true,
+      "detail": {
+        "searches": 3,
+        "agent": 3,
+        "assistant": 201,
+        "leaks": 0
+      }
+    },
+    {
+      "name": "an injected document fetches nothing beyond the question’s own reads",
+      "passed": true,
+      "detail": {
+        "toolsCalled": [
+          "search_documents"
+        ],
+        "toolsRefused": []
+      }
+    },
+    {
+      "name": "a revoked key works until revoked, and not once after",
+      "passed": true,
+      "detail": {
+        "before": 200,
+        "after": 401
+      }
+    },
+    {
+      "name": "a stolen key is useless against another workspace",
+      "passed": true,
+      "detail": {
+        "mcp": 401,
+        "exchange": 401
+      }
+    },
+    {
+      "name": "a key cannot be issued with scopes beyond its issuer’s roles",
+      "passed": true,
+      "detail": {
+        "status": 403
+      }
+    },
+    {
+      "name": "a key follows its issuer’s current roles: once a role is taken away, the key is refused whole",
+      "passed": true,
+      "detail": {
+        "withRole": true,
+        "mcpAfterRevoke": 403,
+        "exchangeAfterRevoke": 403
+      }
+    },
+    {
+      "name": "writes outside the catalogue, or without a write scope, are refused and audited as refused",
+      "passed": true,
+      "detail": {
+        "refused": [
+          true,
+          true,
+          true
+        ],
+        "audited": 3,
+        "chain": "intact"
+      }
+    },
+    {
+      "name": "a flood of exchanges is stopped per key, with a time to wait",
+      "passed": true,
+      "detail": {
+        "sent": 130,
+        "limited": 10,
+        "ok": 120
+      }
+    },
+    {
+      "name": "a spent budget stops the assistant before anything is sent",
+      "passed": true,
+      "detail": {
+        "status": 429,
+        "spent": 1212
+      }
+    },
+    {
+      "name": "no answer carries an embedding or a lexeme hash",
+      "passed": true,
+      "detail": {
+        "bytesChecked": 4139
+      }
+    }
+  ]
+}

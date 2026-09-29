@@ -160,7 +160,7 @@ describe('asking (Phase 76)', () => {
       toolsCalled: ['search_documents', 'list_parties'],
       statements: [
         { sources: ['S1'], found: true },
-        { text: 'list_parties: 1 record(s)', sources: ['S2'], found: true },
+        { text: 'list_parties: 1 registro(s)', sources: ['S2'], found: true },
       ],
       sources: [
         { id: 'S1', kind: 'document', cited: true },
