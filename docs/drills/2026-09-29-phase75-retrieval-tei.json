@@ -1,0 +1,26 @@
+{
+  "phase": 75,
+  "kind": "retrieval-evaluation",
+  "recordedAt": "2026-09-29T17:46:11.646Z",
+  "embedder": "e5-small-v1",
+  "indexVersion": "e5-small-v1+lex-v1",
+  "corpus": {
+    "documents": 24,
+    "questions": {
+      "lexical": 24,
+      "semantic": 12
+    }
+  },
+  "k": 5,
+  "recallAtK": {
+    "lexical": 1,
+    "semantic": 0.667,
+    "all": 0.889
+  },
+  "meanReciprocalRank": 0.766,
+  "gate": {
+    "on": "all",
+    "recallAtLeast": 0.8
+  },
+  "passed": true
+}

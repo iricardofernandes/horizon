@@ -1,8 +1,10 @@
 # 68. Derived AI data follows its source's erasure and retention
 
 - Status: accepted; the index side is implemented in Phase 74
-  ([plan](../ai-phase74-implementation-plan.md)), with the revision below. Conversations
-  arrive in Phase 76.
+  ([plan](../ai-phase74-implementation-plan.md)), with the revision below. Phase 75
+  ([plan](../ai-phase75-implementation-plan.md)) extends it to full text: a chunk's words
+  are stored only as HMAC hashes under a key derived for the tenant, never as a plaintext
+  `tsvector`, and they go with the chunk. Conversations arrive in Phase 76.
 - Date: 2026-09-29
 
 ## Context

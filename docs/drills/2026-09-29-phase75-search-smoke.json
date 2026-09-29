@@ -1,0 +1,113 @@
+{
+  "phase": 75,
+  "kind": "document-search-smoke",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T18:06:33.728Z",
+  "finishedAt": "2026-09-29T18:06:41.829Z",
+  "passed": true,
+  "tenantId": "01a0ee58-d316-7228-a59e-60401aea1d0c",
+  "otherTenantId": "01a0ee58-d864-71ab-bb22-aace89cfb108",
+  "checks": [
+    {
+      "name": "a search finds the party’s contract and cites its attachment, record, screen, position and text",
+      "passed": true,
+      "detail": {
+        "attachmentId": "01a0ee58-d58a-799f-9865-8af719092807",
+        "record": {
+          "module": "parties",
+          "recordType": "party",
+          "recordId": "01a0ee58-d379-7106-be67-017455d9f82d"
+        },
+        "screen": "/app/registrations/parties",
+        "position": {
+          "chunk": 1,
+          "of": 1
+        },
+        "excerpt": "Contrato de fornecimento de café torrado, com entregas mensais em Campinas e pagamento em 30 dias.",
+        "score": 0.032787,
+        "matchedBy": [
+          "meaning",
+          "words"
+        ]
+      }
+    },
+    {
+      "name": "a payable’s invoice is cited with the screen that opens the payable",
+      "passed": true,
+      "detail": {
+        "attachmentId": "01a0ee58-d59c-73ec-ae65-d383ef694dc9",
+        "record": {
+          "module": "financial",
+          "recordType": "payable",
+          "recordId": "01a0ee58-d57a-786b-96b8-4d00288880eb"
+        },
+        "screen": "/app/finance/payables?open=01a0ee58-d57a-786b-96b8-4d00288880eb",
+        "position": {
+          "chunk": 1,
+          "of": 1
+        },
+        "excerpt": "Fatura de manutenção do geradordc991d: troca de óleo e bateria da unidade de Sorocaba.",
+        "score": 0.032787,
+        "matchedBy": [
+          "meaning",
+          "words"
+        ]
+      }
+    },
+    {
+      "name": "Portuguese stems and folded accents still find it",
+      "passed": true,
+      "detail": [
+        "01a0ee58-d58a-799f-9865-8af719092807",
+        "01a0ee58-d59c-73ec-ae65-d383ef694dc9"
+      ]
+    },
+    {
+      "name": "a key without Financial gets no chunk of the invoice, answered exactly as nonsense is",
+      "passed": true,
+      "detail": {
+        "hidden": [],
+        "nonsense": [],
+        "searched": [
+          "parties"
+        ]
+      }
+    },
+    {
+      "name": "the same key still finds the contract",
+      "passed": true
+    },
+    {
+      "name": "a key without knowledge:read is refused",
+      "passed": true,
+      "detail": 403
+    },
+    {
+      "name": "the agent’s search_documents cites the contract and never the invoice",
+      "passed": true,
+      "detail": {
+        "found": 1,
+        "blind": []
+      }
+    },
+    {
+      "name": "a canary in another workspace never appears, whatever is asked",
+      "passed": true,
+      "detail": [
+        [
+          "01a0ee58-d58a-799f-9865-8af719092807"
+        ],
+        [],
+        [],
+        [
+          "01a0ee58-d58a-799f-9865-8af719092807",
+          "01a0ee58-d59c-73ec-ae65-d383ef694dc9"
+        ]
+      ]
+    },
+    {
+      "name": "erasing the party takes its contract out of search",
+      "passed": true
+    }
+  ]
+}

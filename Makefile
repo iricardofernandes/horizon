@@ -138,6 +138,13 @@ up-ai: infra/.env ## Run the local embedding model and point the document index 
 	@HORIZON_KNOWLEDGE_EMBEDDER=tei HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
 		$(COMPOSE) -f infra/docker-compose.apps.yml up -d --no-deps knowledge
 
+.PHONY: eval-retrieval
+eval-retrieval: infra/.env ## Measure recall@5 of document search with the local model and store it (Phase 75)
+	@$(COMPOSE) -f infra/docker-compose.apps.yml --profile ai up -d tei
+	@until curl -sf http://127.0.0.1:8088/health >/dev/null; do sleep 3; done
+	@cd knowledge && RETRIEVAL_EMBEDDER=tei TEI_URL=http://127.0.0.1:8088 \
+		RETRIEVAL_RECORD=$(CURDIR)/docs/drills npx vitest run --config vitest.config.e2e.mts test/retrieval.e2e-spec.ts
+
 .PHONY: up-scanner
 up-scanner: infra/.env ## Start ClamAV and point the files module at it (Phase 65)
 	@$(COMPOSE) --profile scanner up -d --wait clamav

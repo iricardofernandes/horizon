@@ -1,0 +1,26 @@
+{
+  "phase": 75,
+  "kind": "retrieval-evaluation",
+  "recordedAt": "2026-09-29T17:46:14.651Z",
+  "embedder": "hash-384-v1",
+  "indexVersion": "hash-384-v1+lex-v1",
+  "corpus": {
+    "documents": 24,
+    "questions": {
+      "lexical": 24,
+      "semantic": 12
+    }
+  },
+  "k": 5,
+  "recallAtK": {
+    "lexical": 1,
+    "semantic": 0,
+    "all": 0.667
+  },
+  "meanReciprocalRank": 0.667,
+  "gate": {
+    "on": "lexical",
+    "recallAtLeast": 0.9
+  },
+  "passed": true
+}

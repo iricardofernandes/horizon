@@ -22,6 +22,9 @@ through Kong at `/agent`, sharing no source with any other module (ADR 0001).
   Catalog, Sales, Inventory, Procurement, Financial, Treasury, CRM, Fiscal documents and
   Reporting. Each tool is one `GET` route, with the scope it needs, an input schema that
   mirrors the route's own, and a row cap. There is no tool that takes a path.
+- **`search_documents`** (Phase 75): the workspace's attachments searched by meaning and by
+  words through `GET /knowledge/search`, with `knowledge:read`. Only the modules the key
+  reaches are searched, and every result cites its attachment, record and excerpt.
 - **Six draft tools** (Phase 73, ADR 0066): `draft_quote`, `draft_purchase_requisition`,
   `draft_payable`, `create_crm_task`, `record_crm_activity`, `write_crm_note`. They need
   `<module>:write`, write only to the six creation routes in `DRAFT_ROUTES`, and are

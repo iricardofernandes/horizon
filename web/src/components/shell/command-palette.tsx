@@ -6,6 +6,12 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { type KeyboardEvent, useEffect, useId, useMemo, useState } from 'react'
 import { useSession } from '@/components/shell/workspace-context'
+import {
+  canSearchDocuments,
+  type DocumentCitation,
+  documentSearchPath,
+  excerptLine,
+} from '@/lib/documents'
 import type { SearchResult, SourceReport } from '@/lib/federation'
 import {
   allowedActions,
@@ -50,6 +56,37 @@ function useSearch(query: string, enabled: boolean): Found | null {
   return found
 }
 
+const DOCUMENT_RESULTS = 5
+
+/** Asks the document search (Phase 75) once the person stops typing, if they read any. */
+function useDocuments(query: string, enabled: boolean): DocumentCitation[] {
+  const [found, setFound] = useState<DocumentCitation[]>([])
+  useEffect(() => {
+    if (!enabled || query.trim().length < 2) {
+      setFound([])
+      return
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const response = await tracedFetch(
+          'knowledge.search',
+          documentSearchPath(query, { limit: DOCUMENT_RESULTS }),
+          { signal: controller.signal },
+        )
+        if (response.ok) setFound(((await response.json()) as { data: DocumentCitation[] }).data)
+      } catch {
+        // A cancelled or failed search leaves the rest of the palette as it is.
+      }
+    }, QUIET_MS)
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+    }
+  }, [query, enabled])
+  return found
+}
+
 /**
  * Ctrl/⌘ K (Phase 66): the screens and actions the roles allow, and search results from
  * every module the person can read. A combobox over a listbox: arrows move, Enter opens,
@@ -66,6 +103,7 @@ export function CommandPalette() {
   const [active, setActive] = useState(-1)
   const listId = useId()
   const found = useSearch(query, open)
+  const documents = useDocuments(query, open && !hostedDemo && canSearchDocuments(roles))
 
   useEffect(() => {
     function onKey(event: globalThis.KeyboardEvent) {
@@ -103,8 +141,19 @@ export function CommandPalette() {
       detail: result.subtitle,
       href: result.href,
     }))
-    return [...screens.slice(0, 8), ...actions, ...results]
-  }, [roles, query, found, navigation, t])
+    const cited = documents.map((citation) => ({
+      group: 'documents' as const,
+      key: `document:${citation.attachmentId}:${citation.position.chunk}`,
+      label: excerptLine(citation.excerpt),
+      detail: t('documentDetail', {
+        record: t(`recordTypes.${citation.record.recordType}`),
+        chunk: citation.position.chunk,
+        of: citation.position.of,
+      }),
+      href: citation.screen,
+    }))
+    return [...screens.slice(0, 8), ...actions, ...results, ...cited]
+  }, [roles, query, found, documents, navigation, t])
 
   useEffect(() => {
     setActive(options.length > 0 ? 0 : -1)
@@ -172,7 +221,7 @@ export function CommandPalette() {
               >
                 <span className="palette-group">{t(`groups.${option.group}`)}</span>
                 <span>{option.label}</span>
-                {option.group === 'results' && option.detail ? (
+                {(option.group === 'results' || option.group === 'documents') && option.detail ? (
                   <small>{option.detail}</small>
                 ) : null}
               </div>

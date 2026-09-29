@@ -54,6 +54,11 @@ describe('toolsFor', () => {
     expect(toolsFor(['crm:write']).filter((tool) => tool.kind === 'draft')).toHaveLength(3)
     expect(toolsFor(['agent:connect'])).toEqual([])
   })
+
+  it('searches documents only with knowledge:read, which the modules’ scopes then narrow', () => {
+    expect(toolsFor(['parties:read']).map((tool) => tool.name)).not.toContain('search_documents')
+    expect(toolsFor(['knowledge:read']).map((tool) => tool.name)).toEqual(['search_documents'])
+  })
 })
 
 describe('requestFor', () => {
@@ -75,6 +80,14 @@ describe('requestFor', () => {
     expect(requestFor(byName('list_parties'), { limit: 200 }, 50).query).toEqual({ limit: '50' })
     expect(requestFor(byName('list_parties'), {}, 50).query).toEqual({ limit: '50' })
     expect(requestFor(byName('list_quotes'), {}, 50).query).toEqual({})
+  })
+
+  it('asks a search for ten results unless told otherwise, and never more than the cap', () => {
+    expect(requestFor(byName('search_documents'), { q: 'contrato' }, 50).query).toEqual({
+      q: 'contrato',
+      limit: '10',
+    })
+    expect(requestFor(byName('search_documents'), { q: 'x', limit: 20 }, 5).query.limit).toBe('5')
   })
 
   it('drops an argument the tool does not declare', () => {

@@ -88,6 +88,7 @@ export type PaletteOption =
   | { group: 'screens'; key: string; label: string; href: string; entry: NavigationEntry }
   | { group: 'actions'; key: string; label: string; href: string }
   | { group: 'results'; key: string; label: string; detail: string | null; href: string }
+  | { group: 'documents'; key: string; label: string; detail: string | null; href: string }
 
 /** Moves the active option with the arrows, wrapping at both ends. */
 export function nextIndex(

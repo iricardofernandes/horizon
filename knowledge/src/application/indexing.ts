@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { chunkText } from '@/domain/chunking'
 import { afterFailure } from '@/domain/documents'
+import { indexVersionOf, type Lexemes } from './lexemes'
 import type {
   Clock,
   DocumentReference,
@@ -35,6 +36,7 @@ export class Indexing {
     private readonly extractor: TextExtractor,
     private readonly embedder: Embedder,
     private readonly sealer: Sealer,
+    private readonly lexemes: Lexemes,
     private readonly clock: Clock,
     private readonly metrics: IndexMetrics,
     private readonly options: IndexingOptions,
@@ -54,7 +56,7 @@ export class Indexing {
   /** One pass over a tenant: stale versions requeued, then a batch of due documents. */
   async indexDue(tenantId: string): Promise<number> {
     const now = this.clock.now()
-    await this.store.requeueStale(tenantId, this.embedder.version, now)
+    await this.store.requeueStale(tenantId, indexVersionOf(this.embedder), now)
     const due = await this.store.claimDue(tenantId, now, this.options.leaseMs, this.options.batch)
     for (const document of due) await this.indexOne(document)
     return due.length
@@ -72,13 +74,14 @@ export class Indexing {
       const vectors = await this.embedder.embedDocuments(chunks)
       this.metrics.embedded((performance.now() - started) / 1000)
       if (vectors.length !== chunks.length) throw new Error('the embedder lost chunks')
+      const lexemes = await this.lexemes.ofChunks(document.tenantId, chunks)
 
       const wrappedKey = this.sealer.newKey(document.tenantId, document.attachmentId)
       const written = await this.store.complete(
         document,
         {
           digest: createHash('sha256').update(content.bytes).digest('hex'),
-          indexVersion: this.embedder.version,
+          indexVersion: indexVersionOf(this.embedder),
           wrappedKey,
           truncated,
           chunks: chunks.map((chunk, ordinal) => ({
@@ -91,6 +94,7 @@ export class Indexing {
               chunk,
             ),
             embedding: vectors[ordinal] ?? [],
+            lexemes: lexemes[ordinal] ?? '',
           })),
         },
         this.clock.now(),

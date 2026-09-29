@@ -1,13 +1,19 @@
 import postgres from 'postgres'
 import {
+  type CandidateQuery,
+  type Candidates,
   type DocumentReference,
   type DueDocument,
   type IndexedDocument,
   KnowledgeStore,
+  Lexicon,
   type ReceivedEvent,
   type Recorded,
+  SearchStore,
+  type StoredChunk,
 } from '@/application/ports'
 import type { DocumentState } from '@/domain/documents'
+import type { ChunkKey } from '@/domain/ranking'
 
 type Sql = postgres.Sql
 type Tx = postgres.TransactionSql
@@ -31,12 +37,45 @@ export interface Neighbour {
   readonly distance: number
 }
 
+/** One stemmed lexeme of one text, as `lexemesOf` reads it from PostgreSQL. */
+interface StemmedRow {
+  readonly index: number
+  readonly language: string
+  readonly lexeme: string
+  readonly positions: number[] | null
+}
+
+/**
+ * Both parsers number words alike, so a position is one word, and a stop word has none in
+ * that language: a lexeme is kept only at positions both languages found meaningful.
+ */
+function keptLexemes(count: number, rows: readonly StemmedRow[]): Map<string, number[]>[] {
+  const spoken = Array.from({ length: count }, () => ({
+    pt: new Set<number>(),
+    en: new Set<number>(),
+  }))
+  for (const row of rows) {
+    const words = spoken[row.index]?.[row.language === 'pt' ? 'pt' : 'en']
+    for (const position of row.positions ?? []) words?.add(position)
+  }
+  const lexemes = Array.from({ length: count }, () => new Map<string, number[]>())
+  for (const row of rows) {
+    const words = spoken[row.index]
+    const map = lexemes[row.index]
+    const kept = (row.positions ?? []).filter(
+      (position) => words?.pt.has(position) && words.en.has(position),
+    )
+    if (map && kept.length) map.set(row.lexeme, [...(map.get(row.lexeme) ?? []), ...kept])
+  }
+  return lexemes
+}
+
 /**
  * The index's store (ADR 0067). Every statement runs inside one tenant's transaction, with
  * `app.current_tenant` set, under forced RLS; chunks are read only through the partitioned
  * parent, and a search names its tenant so the planner prunes to that partition.
  */
-export class KnowledgeDatabase extends KnowledgeStore {
+export class KnowledgeDatabase extends KnowledgeStore implements Lexicon, SearchStore {
   readonly #sql: Sql
 
   constructor(options: KnowledgeDatabaseOptions) {
@@ -171,10 +210,11 @@ export class KnowledgeDatabase extends KnowledgeStore {
       for (const chunk of indexed.chunks)
         await tx`
           insert into chunks (tenant_id, attachment_id, ordinal, module, record_type, record_id,
-            sealed_text, embedding, index_version, created_at)
+            sealed_text, embedding, lexemes, index_version, created_at)
           values (${document.tenantId}, ${document.attachmentId}, ${chunk.ordinal},
             ${document.module}, ${document.recordType}, ${document.recordId}, ${chunk.sealedText},
-            ${vectorLiteral(chunk.embedding)}::vector, ${indexed.indexVersion}, ${now})`
+            ${vectorLiteral(chunk.embedding)}::vector, ${chunk.lexemes}::tsvector,
+            ${indexed.indexVersion}, ${now})`
       await tx`
         update documents set state = 'indexed', digest = ${indexed.digest},
           index_version = ${indexed.indexVersion}, wrapped_key = ${indexed.wrappedKey},
@@ -273,6 +313,106 @@ export class KnowledgeDatabase extends KnowledgeStore {
         wrappedKey: document?.wrapped_key ?? null,
         chunks: chunks.map((row) => ({ ordinal: row.ordinal, sealedText: row.sealed_text })),
       }
+    })
+  }
+
+  /**
+   * Lexemes as PostgreSQL's Portuguese and English stemmers read each text (Phase 75). The
+   * text is only passed through, never stored: the caller hashes what comes back. A word is
+   * kept only where neither language holds it a stop word, so "de" or "the" matches nothing.
+   */
+  async lexemesOf(texts: readonly string[]): Promise<Map<string, number[]>[]> {
+    if (!texts.length) return []
+    const rows = await this.#sql<StemmedRow[]>`
+      select (t.ordinal - 1)::int as index, l.language, l.lexeme, l.positions::int[] as positions
+      from unnest(${this.#sql.array(texts as string[])}::text[]) with ordinality as t(body, ordinal)
+      cross join lateral (
+        select 'pt' as language, lexeme, positions from unnest(to_tsvector('portuguese', t.body))
+        union all
+        select 'en', lexeme, positions from unnest(to_tsvector('english', t.body))
+      ) l`
+    return keptLexemes(texts.length, rows)
+  }
+
+  /**
+   * Both candidate lists of a search, in one tenant (ADR 0067). The modules the caller reads
+   * filter each scan: the vector one with pgvector's iterative scan, which keeps walking the
+   * index until enough readable chunks are found, and the full-text one through its GIN
+   * index. Neither ever ranks a chunk the caller cannot read.
+   */
+  candidates(tenantId: string, query: CandidateQuery): Promise<Candidates> {
+    return this.inTenant(tenantId, async (tx) => {
+      await tx`select set_config('hnsw.iterative_scan', 'relaxed_order', true)`
+      await tx`select set_config('hnsw.ef_search', ${String(Math.max(query.depth, 40))}, true)`
+      const modules = tx.array(query.modules as string[])
+      const record = query.record
+      const inRecord = record
+        ? tx`and module = ${record.module} and record_type = ${record.recordType}
+             and record_id = ${record.recordId}`
+        : tx``
+      const vector = vectorLiteral(query.vector)
+      const nearest = await tx<{ attachment_id: string; ordinal: number; distance: number }[]>`
+        select attachment_id, ordinal, embedding <=> ${vector}::vector as distance
+        from chunks where tenant_id = ${tenantId} and module = any(${modules}::text[]) ${inRecord}
+        order by embedding <=> ${vector}::vector limit ${query.depth}`
+      const words = query.words
+        ? await tx<{ attachment_id: string; ordinal: number }[]>`
+            select attachment_id, ordinal from chunks
+            where tenant_id = ${tenantId} and module = any(${modules}::text[]) ${inRecord}
+              and lexemes @@ ${query.words}::tsquery
+            order by ts_rank_cd(lexemes, ${query.words}::tsquery) desc, attachment_id, ordinal
+            limit ${query.depth}`
+        : []
+      return {
+        vector: nearest.map((row) => ({
+          attachmentId: row.attachment_id,
+          ordinal: row.ordinal,
+          distance: Number(row.distance),
+        })),
+        words: words.map((row) => ({ attachmentId: row.attachment_id, ordinal: row.ordinal })),
+      }
+    })
+  }
+
+  /** The chunks a search ranked, with their document's key, still indexed and readable. */
+  chunksOf(
+    tenantId: string,
+    keys: readonly ChunkKey[],
+    modules: readonly string[],
+  ): Promise<StoredChunk[]> {
+    if (!keys.length) return Promise.resolve([])
+    return this.inTenant(tenantId, async (tx) => {
+      const rows = await tx<
+        {
+          attachment_id: string
+          ordinal: number
+          module: string
+          record_type: string
+          record_id: string
+          sealed_text: Buffer
+          wrapped_key: string
+          chunks: number
+        }[]
+      >`
+        select c.attachment_id, c.ordinal, c.module, c.record_type, c.record_id, c.sealed_text,
+          d.wrapped_key, d.chunks
+        from chunks c
+        join documents d on d.tenant_id = c.tenant_id and d.attachment_id = c.attachment_id
+        where c.tenant_id = ${tenantId} and d.state = 'indexed'
+          and c.module = any(${tx.array(modules as string[])}::text[])
+          and (c.attachment_id, c.ordinal) in (
+            select * from unnest(${tx.array(keys.map((key) => key.attachmentId))}::uuid[],
+              ${tx.array(keys.map((key) => key.ordinal))}::int[]))`
+      return rows.map((row) => ({
+        attachmentId: row.attachment_id,
+        ordinal: row.ordinal,
+        module: row.module,
+        recordType: row.record_type,
+        recordId: row.record_id,
+        sealedText: row.sealed_text,
+        wrappedKey: row.wrapped_key,
+        of: row.chunks,
+      }))
     })
   }
 

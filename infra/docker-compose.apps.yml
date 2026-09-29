@@ -554,6 +554,9 @@ services:
     container_name: horizon-tei
     networks: [horizon]
     command: ['--model-id', 'intfloat/multilingual-e5-small', '--max-client-batch-size', '32']
+    # On the host's loopback only, for `make eval-retrieval` (Phase 75).
+    ports:
+      - '127.0.0.1:8088:80'
     volumes:
       - tei-models:/data
 

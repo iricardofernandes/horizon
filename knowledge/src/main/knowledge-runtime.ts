@@ -1,7 +1,10 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { Indexing } from '@/application/indexing'
+import { Lexemes } from '@/application/lexemes'
 import type { Clock, Embedder, FileSource } from '@/application/ports'
+import { Search } from '@/application/search'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
+import { HmacLexemeHasher } from '@/infrastructure/cryptography/lexeme-hasher'
 import { AesGcmSealer, masterKeyOf } from '@/infrastructure/cryptography/sealer'
 import { KnowledgeDatabase } from '@/infrastructure/database/knowledge-database'
 import { HashEmbedder, TeiEmbedder } from '@/infrastructure/embedding/embedders'
@@ -25,6 +28,7 @@ export class KnowledgeRuntime implements OnModuleInit, OnModuleDestroy {
   readonly sealer: AesGcmSealer
   readonly metrics: OtelIndexMetrics
   readonly indexing: Indexing
+  readonly search: Search
 
   constructor(config: KnowledgeEnvironment, adapters: KnowledgeAdapters = {}) {
     this.clock = { now: () => new Date() }
@@ -40,7 +44,9 @@ export class KnowledgeRuntime implements OnModuleInit, OnModuleDestroy {
     this.embedder =
       adapters.embedder ??
       (config.KNOWLEDGE_EMBEDDER === 'tei' ? new TeiEmbedder(config.TEI_URL) : new HashEmbedder())
-    this.sealer = new AesGcmSealer(masterKeyOf(config.KNOWLEDGE_MASTER_KEY))
+    const masterKey = masterKeyOf(config.KNOWLEDGE_MASTER_KEY)
+    this.sealer = new AesGcmSealer(masterKey)
+    const lexemes = new Lexemes(this.database, new HmacLexemeHasher(masterKey))
     this.metrics = new OtelIndexMetrics()
     this.indexing = new Indexing(
       this.database,
@@ -53,10 +59,12 @@ export class KnowledgeRuntime implements OnModuleInit, OnModuleDestroy {
       new FileTextExtractor(),
       this.embedder,
       this.sealer,
+      lexemes,
       this.clock,
       this.metrics,
       { leaseMs: config.KNOWLEDGE_LEASE_MS, batch: config.KNOWLEDGE_BATCH },
     )
+    this.search = new Search(this.database, this.embedder, lexemes, this.sealer, this.metrics)
   }
 
   onModuleInit(): Promise<void> {

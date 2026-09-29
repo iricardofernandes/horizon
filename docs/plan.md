@@ -2772,8 +2772,22 @@ Each one is idempotent per MCP request.
 
 ## Phase 75 — Search by meaning, with roles and citations
 
-**Planned.** Hybrid search filtered by the owning modules' roles inside the scan. Every result cites its attachment
-and record, in the palette, the attachments panel and the agent.
+**Delivered on 2026-09-29.** `GET /knowledge/search` answers a hybrid search in the
+caller's workspace.
+- **How it ranks:** the question's vector against the tenant's HNSW index, and its words
+  against a full-text index of keyed lexemes, merged by reciprocal rank. The words are
+  stemmed in Portuguese and English and stored only as HMAC hashes.
+- **Who sees what:** both lists are filtered by the modules whose attachments the caller
+  reads, inside their scans. What they cannot read answers exactly as what does not exist.
+- **Citations:** every result cites its attachment, record, screen, position and excerpt.
+- **Where:** the Ctrl+K palette, the attachments panel, and the agent's
+  `search_documents`.
+- **Evaluation:** a bilingual corpus gates CI at lexical recall@5 ≥ 0.9 with the hash
+  embedder (measured 1.0); `make eval-retrieval` measures 0.889 overall with
+  multilingual-e5-small, against a gate of 0.8.
+
+[Plan](ai-phase75-implementation-plan.md), [evidence](ai-phase75-evidence.md),
+[smoke](drills/2026-09-29-phase75-search-smoke.json).
 [Detailed work](ai-implementation-plan.md#75--search-by-meaning-with-roles-and-citations).
 
 ## Phase 76 — The in-app assistant, opt-in

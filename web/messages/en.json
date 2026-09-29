@@ -2668,21 +2668,32 @@
       "available": "available",
       "quarantined": "quarantined",
       "deleted": "removed"
+    },
+    "search": {
+      "label": "Search this record's attachments",
+      "placeholder": "Search this record's attachments",
+      "submit": "Search",
+      "empty": "No excerpt of the attachments answers this search.",
+      "failed": "The attachments could not be searched.",
+      "results": "Excerpts found",
+      "position": "excerpt {chunk} of {of}",
+      "unnamed": "Removed file"
     }
   },
   "palette": {
     "open": "Search",
     "shortcut": "Ctrl K",
     "title": "Command palette",
-    "input": "Search screens, actions and records",
-    "placeholder": "Type to search screens, actions or records…",
+    "input": "Search screens, actions, records and documents",
+    "placeholder": "Type to search screens, actions, records or documents…",
     "empty": "Nothing found.",
     "silent": "Did not answer in time: {modules}. The rest of the search still stands.",
     "hint": "↑ ↓ to choose, Enter to open, Esc to close.",
     "groups": {
       "screens": "Screen",
       "actions": "Action",
-      "results": "Record"
+      "results": "Record",
+      "documents": "Document"
     },
     "actions": {
       "registerParty": "Register a party",
@@ -2692,6 +2703,15 @@
       "newOpportunity": "New opportunity",
       "importFile": "Import a file",
       "billContracts": "Bill this month's contracts"
+    },
+    "documentDetail": "{record} · excerpt {chunk} of {of}",
+    "recordTypes": {
+      "party": "Party",
+      "purchase-order": "Purchase order",
+      "receivable": "Receivable",
+      "payable": "Payable",
+      "service-order": "Service order",
+      "opportunity": "Opportunity"
     }
   },
   "notifications": {

@@ -41,6 +41,8 @@ function normalized(vector: number[]): number[] {
 export class HashEmbedder extends Embedder {
   readonly version = 'hash-384-v1'
   readonly dimensions = DIMENSIONS
+  /** Beyond this, a chunk shares next to no word or pair with the question. */
+  readonly relevantDistance = 0.85
 
   embed(text: string): number[] {
     const vector = new Array<number>(DIMENSIONS).fill(0)
@@ -73,6 +75,8 @@ export class HashEmbedder extends Embedder {
 export class TeiEmbedder extends Embedder {
   readonly version = 'e5-small-v1'
   readonly dimensions = DIMENSIONS
+  /** E5 places unrelated passages close together: only the near ones answer (Phase 75). */
+  readonly relevantDistance = 0.25
 
   constructor(
     private readonly url: string,

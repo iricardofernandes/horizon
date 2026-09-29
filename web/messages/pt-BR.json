@@ -2668,21 +2668,32 @@
       "available": "disponível",
       "quarantined": "em quarentena",
       "deleted": "removido"
+    },
+    "search": {
+      "label": "Buscar nos anexos deste registro",
+      "placeholder": "Buscar nos anexos deste registro",
+      "submit": "Buscar",
+      "empty": "Nenhum trecho dos anexos responde a esta busca.",
+      "failed": "Não foi possível buscar nos anexos.",
+      "results": "Trechos encontrados",
+      "position": "trecho {chunk} de {of}",
+      "unnamed": "Arquivo removido"
     }
   },
   "palette": {
     "open": "Buscar",
     "shortcut": "Ctrl K",
     "title": "Paleta de comandos",
-    "input": "Buscar telas, ações e registros",
-    "placeholder": "Digite para buscar telas, ações ou registros…",
+    "input": "Buscar telas, ações, registros e documentos",
+    "placeholder": "Digite para buscar telas, ações, registros ou documentos…",
     "empty": "Nada encontrado.",
     "silent": "Não responderam a tempo: {modules}. O resto da busca continua valendo.",
     "hint": "↑ ↓ para escolher, Enter para abrir, Esc para fechar.",
     "groups": {
       "screens": "Tela",
       "actions": "Ação",
-      "results": "Registro"
+      "results": "Registro",
+      "documents": "Documento"
     },
     "actions": {
       "registerParty": "Cadastrar parceiro",
@@ -2692,6 +2703,15 @@
       "newOpportunity": "Nova oportunidade",
       "importFile": "Importar um arquivo",
       "billContracts": "Faturar contratos do mês"
+    },
+    "documentDetail": "{record} · trecho {chunk} de {of}",
+    "recordTypes": {
+      "party": "Parceiro",
+      "purchase-order": "Pedido de compra",
+      "receivable": "Conta a receber",
+      "payable": "Conta a pagar",
+      "service-order": "Ordem de serviço",
+      "opportunity": "Oportunidade"
     }
   },
   "notifications": {

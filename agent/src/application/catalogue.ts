@@ -20,6 +20,7 @@ export type CatalogueModule =
   | 'crm'
   | 'fiscal'
   | 'reporting'
+  | 'knowledge'
 
 export interface ToolEntry {
   readonly name: string
@@ -32,6 +33,8 @@ export interface ToolEntry {
   readonly input: z.ZodRawShape
   /** What a draft creates, as the agent's log and the lists name it. */
   readonly record?: string
+  /** Rows asked for when the agent names no limit, if fewer than the cap. */
+  readonly defaultLimit?: number
 }
 
 const id = z.uuid().describe('The record id')
@@ -407,6 +410,24 @@ export const CATALOGUE: readonly ToolEntry[] = [
   },
   // --- drafts (ADR 0066): each creates a record a person must still take further -----
   {
+    name: 'search_documents',
+    module: 'knowledge',
+    kind: 'list',
+    description:
+      'Search the workspace’s attached documents by meaning and by words. Each result cites its attachment, the record it belongs to, its position in the file and the excerpt; only the modules this key reaches are searched, and a record can be named to search its attachments alone.',
+    path: '/knowledge/search',
+    defaultLimit: 10,
+    input: {
+      q: z.string().trim().min(2).max(200).describe('What to look for, in any language'),
+      limit: z.number().int().min(1).max(20).optional().describe('Results wanted'),
+      module: z.enum(['parties', 'procurement', 'financial', 'sales', 'crm']).optional(),
+      recordType: z
+        .enum(['party', 'purchase-order', 'receivable', 'payable', 'service-order', 'opportunity'])
+        .optional(),
+      recordId: z.uuid().optional().describe('With module and recordType: that record alone'),
+    },
+  },
+  {
     name: 'draft_quote',
     module: 'sales',
     kind: 'draft',
@@ -592,7 +613,7 @@ export function requestFor(
     query[name] = String(name === 'limit' ? Math.min(Number(value), maxRows) : value)
   }
   if (tool.kind === 'list' && 'limit' in tool.input && query.limit === undefined)
-    query.limit = String(maxRows)
+    query.limit = String(Math.min(tool.defaultLimit ?? maxRows, maxRows))
   return { path, query }
 }
 

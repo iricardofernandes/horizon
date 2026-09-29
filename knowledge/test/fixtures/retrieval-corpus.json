@@ -1,0 +1,355 @@
+{
+  "description": "Phase 75 retrieval evaluation: short documents in Portuguese and English across the five attaching modules, and questions naming the document they expect. Lexical questions share their key words with it; semantic ones paraphrase it or ask in the other language.",
+  "documents": [
+    {
+      "id": "d01",
+      "module": "parties",
+      "recordType": "party",
+      "language": "pt",
+      "text": "Contrato de fornecimento de café torrado entre a Torrefação Aurora e a Horizon. Entregas mensais de 200 kg em Campinas, com pagamento em 30 dias."
+    },
+    {
+      "id": "d02",
+      "module": "parties",
+      "recordType": "party",
+      "language": "en",
+      "text": "Non-disclosure agreement signed with Blue Harbor Logistics. Both parties keep pricing and route data confidential for five years."
+    },
+    {
+      "id": "d03",
+      "module": "parties",
+      "recordType": "party",
+      "language": "pt",
+      "text": "Certidão negativa de débitos trabalhistas da Construtora Pedra Alta, válida até dezembro de 2026."
+    },
+    {
+      "id": "d04",
+      "module": "parties",
+      "recordType": "party",
+      "language": "en",
+      "text": "Certificate of insurance for Northwind Freight covering cargo damage up to USD 500,000 per shipment."
+    },
+    {
+      "id": "d05",
+      "module": "procurement",
+      "recordType": "purchase-order",
+      "language": "pt",
+      "text": "Pedido de compra de 50 cadeiras ergonômicas para o escritório de São Paulo, com entrega em até 20 dias úteis."
+    },
+    {
+      "id": "d06",
+      "module": "procurement",
+      "recordType": "purchase-order",
+      "language": "en",
+      "text": "Purchase order for 12 industrial refrigerators for the Recife warehouse, installation included."
+    },
+    {
+      "id": "d07",
+      "module": "procurement",
+      "recordType": "purchase-order",
+      "language": "pt",
+      "text": "Cotação de três fornecedores para papel sulfite A4; escolhido o menor preço por resma."
+    },
+    {
+      "id": "d08",
+      "module": "procurement",
+      "recordType": "purchase-order",
+      "language": "en",
+      "text": "Supplier quote for replacement conveyor belts, delivered by air freight within one week."
+    },
+    {
+      "id": "d09",
+      "module": "financial",
+      "recordType": "payable",
+      "language": "pt",
+      "text": "Fatura de energia elétrica da unidade de Sorocaba referente a agosto, com vencimento no dia 15."
+    },
+    {
+      "id": "d10",
+      "module": "financial",
+      "recordType": "payable",
+      "language": "en",
+      "text": "Invoice from CloudNine Hosting for monthly server rental and backup storage."
+    },
+    {
+      "id": "d11",
+      "module": "financial",
+      "recordType": "payable",
+      "language": "pt",
+      "text": "Boleto de aluguel do galpão de Jundiaí, com multa de 2% por atraso."
+    },
+    {
+      "id": "d12",
+      "module": "financial",
+      "recordType": "payable",
+      "language": "en",
+      "text": "Legal fees invoice from Moraes & Partners for the defence in the labour lawsuit."
+    },
+    {
+      "id": "d13",
+      "module": "financial",
+      "recordType": "receivable",
+      "language": "pt",
+      "text": "Nota de débito emitida para a Padaria Estrela por serviços de manutenção dos fornos."
+    },
+    {
+      "id": "d14",
+      "module": "financial",
+      "recordType": "receivable",
+      "language": "en",
+      "text": "Receipt for the annual software licence paid by Green Valley Farms."
+    },
+    {
+      "id": "d15",
+      "module": "financial",
+      "recordType": "receivable",
+      "language": "pt",
+      "text": "Acordo de parcelamento da dívida do Mercado Bom Preço em seis parcelas mensais."
+    },
+    {
+      "id": "d16",
+      "module": "sales",
+      "recordType": "service-order",
+      "language": "pt",
+      "text": "Relatório técnico da visita: troca do compressor do ar-condicionado e limpeza dos filtros."
+    },
+    {
+      "id": "d17",
+      "module": "sales",
+      "recordType": "service-order",
+      "language": "en",
+      "text": "Field service report: the elevator door sensor was recalibrated and tested."
+    },
+    {
+      "id": "d18",
+      "module": "sales",
+      "recordType": "service-order",
+      "language": "pt",
+      "text": "Checklist de instalação de câmeras de segurança no estacionamento do cliente."
+    },
+    {
+      "id": "d19",
+      "module": "sales",
+      "recordType": "service-order",
+      "language": "en",
+      "text": "Maintenance log for the backup generator: oil changed and battery replaced."
+    },
+    {
+      "id": "d20",
+      "module": "crm",
+      "recordType": "opportunity",
+      "language": "pt",
+      "text": "Proposta comercial para implantação do ERP em uma rede de farmácias com 40 lojas."
+    },
+    {
+      "id": "d21",
+      "module": "crm",
+      "recordType": "opportunity",
+      "language": "en",
+      "text": "Meeting notes: the hospital wants a pilot of the inventory module before signing."
+    },
+    {
+      "id": "d22",
+      "module": "crm",
+      "recordType": "opportunity",
+      "language": "pt",
+      "text": "Apresentação para a cooperativa de leite sobre rastreabilidade de lotes."
+    },
+    {
+      "id": "d23",
+      "module": "crm",
+      "recordType": "opportunity",
+      "language": "en",
+      "text": "Competitor analysis for the school chain deal: price is the main objection."
+    },
+    {
+      "id": "d24",
+      "module": "parties",
+      "recordType": "party",
+      "language": "pt",
+      "text": "Procuração que autoriza Joana Ribeiro a assinar contratos em nome da empresa."
+    }
+  ],
+  "questions": [
+    {
+      "text": "contrato de fornecimento de café",
+      "expected": "d01",
+      "kind": "lexical"
+    },
+    {
+      "text": "non-disclosure agreement Blue Harbor",
+      "expected": "d02",
+      "kind": "lexical"
+    },
+    {
+      "text": "certidão negativa de débitos trabalhistas",
+      "expected": "d03",
+      "kind": "lexical"
+    },
+    {
+      "text": "certificate of insurance for cargo",
+      "expected": "d04",
+      "kind": "lexical"
+    },
+    {
+      "text": "cadeiras ergonômicas para o escritório",
+      "expected": "d05",
+      "kind": "lexical"
+    },
+    {
+      "text": "industrial refrigerators warehouse",
+      "expected": "d06",
+      "kind": "lexical"
+    },
+    {
+      "text": "papel sulfite A4",
+      "expected": "d07",
+      "kind": "lexical"
+    },
+    {
+      "text": "supplier quote conveyor belts",
+      "expected": "d08",
+      "kind": "lexical"
+    },
+    {
+      "text": "fatura de energia elétrica Sorocaba",
+      "expected": "d09",
+      "kind": "lexical"
+    },
+    {
+      "text": "server rental invoice",
+      "expected": "d10",
+      "kind": "lexical"
+    },
+    {
+      "text": "aluguel do galpão de Jundiaí",
+      "expected": "d11",
+      "kind": "lexical"
+    },
+    {
+      "text": "legal fees for the lawsuit",
+      "expected": "d12",
+      "kind": "lexical"
+    },
+    {
+      "text": "manutenção dos fornos da padaria",
+      "expected": "d13",
+      "kind": "lexical"
+    },
+    {
+      "text": "annual software licence receipt",
+      "expected": "d14",
+      "kind": "lexical"
+    },
+    {
+      "text": "parcelamento da dívida",
+      "expected": "d15",
+      "kind": "lexical"
+    },
+    {
+      "text": "troca do compressor do ar-condicionado",
+      "expected": "d16",
+      "kind": "lexical"
+    },
+    {
+      "text": "elevator door sensor",
+      "expected": "d17",
+      "kind": "lexical"
+    },
+    {
+      "text": "câmeras de segurança no estacionamento",
+      "expected": "d18",
+      "kind": "lexical"
+    },
+    {
+      "text": "backup generator battery",
+      "expected": "d19",
+      "kind": "lexical"
+    },
+    {
+      "text": "proposta de ERP para farmácias",
+      "expected": "d20",
+      "kind": "lexical"
+    },
+    {
+      "text": "hospital pilot of the inventory module",
+      "expected": "d21",
+      "kind": "lexical"
+    },
+    {
+      "text": "rastreabilidade de lotes da cooperativa",
+      "expected": "d22",
+      "kind": "lexical"
+    },
+    {
+      "text": "competitor analysis school deal",
+      "expected": "d23",
+      "kind": "lexical"
+    },
+    {
+      "text": "procuração para assinar contratos",
+      "expected": "d24",
+      "kind": "lexical"
+    },
+    {
+      "text": "coffee supply agreement",
+      "expected": "d01",
+      "kind": "semantic"
+    },
+    {
+      "text": "acordo de confidencialidade",
+      "expected": "d02",
+      "kind": "semantic"
+    },
+    {
+      "text": "apólice de seguro de transporte",
+      "expected": "d04",
+      "kind": "semantic"
+    },
+    {
+      "text": "office chairs order",
+      "expected": "d05",
+      "kind": "semantic"
+    },
+    {
+      "text": "conta de luz",
+      "expected": "d09",
+      "kind": "semantic"
+    },
+    {
+      "text": "warehouse rent payment slip",
+      "expected": "d11",
+      "kind": "semantic"
+    },
+    {
+      "text": "honorários advocatícios",
+      "expected": "d12",
+      "kind": "semantic"
+    },
+    {
+      "text": "debt installment plan",
+      "expected": "d15",
+      "kind": "semantic"
+    },
+    {
+      "text": "air conditioner repair report",
+      "expected": "d16",
+      "kind": "semantic"
+    },
+    {
+      "text": "manutenção do gerador",
+      "expected": "d19",
+      "kind": "semantic"
+    },
+    {
+      "text": "objeção de preço do concorrente",
+      "expected": "d23",
+      "kind": "semantic"
+    },
+    {
+      "text": "power of attorney to sign",
+      "expected": "d24",
+      "kind": "semantic"
+    }
+  ]
+}

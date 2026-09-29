@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { fakeLexemes } from '../../test/support/lexicon'
 import { Indexing } from './indexing'
 import {
   type DueDocument,
@@ -70,6 +71,7 @@ class FakeExtractor extends TextExtractor {
 class FakeEmbedder extends Embedder {
   readonly version = 'test-v1'
   readonly dimensions = 3
+  readonly relevantDistance = 0.5
   async embedDocuments(texts: readonly string[]) {
     return texts.map(() => [1, 0, 0])
   }
@@ -106,6 +108,7 @@ beforeEach(() => {
     extractor,
     new FakeEmbedder(),
     new FakeSealer(),
+    fakeLexemes(),
     { now: () => now },
     { embedded: () => undefined, settled: () => undefined },
     { leaseMs: 60_000, batch: 5 },
@@ -118,13 +121,17 @@ describe('indexing a due document', () => {
     expect(await indexing.indexDue('t')).toBe(1)
     const [written] = store.completed
     expect(written).toMatchObject({
-      indexVersion: 'test-v1',
+      indexVersion: 'test-v1+lex-v1',
       wrappedKey: 'wrapped',
       truncated: false,
     })
     expect(written?.digest).toMatch(/^[0-9a-f]{64}$/)
     expect(written?.chunks).toHaveLength(1)
     expect(written?.chunks[0]?.sealedText.toString()).not.toContain('café')
+    // Its words are kept only as keyed hashes: folded, stemmed, hashed, with positions.
+    const lexemes = written?.chunks[0]?.lexemes ?? ''
+    expect(lexemes).toMatch(/^[0-9a-f]{16}:\d/)
+    expect(lexemes).not.toMatch(/cafe|campinas/i)
   })
 
   it('settles a file with no text as no-text, not as a failure', async () => {
@@ -187,6 +194,7 @@ describe('what the events record', () => {
       extractor,
       losing,
       new FakeSealer(),
+      fakeLexemes(),
       { now: () => now },
       { embedded: () => undefined, settled: () => undefined },
       { leaseMs: 60_000, batch: 5 },

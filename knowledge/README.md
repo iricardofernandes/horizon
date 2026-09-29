@@ -6,8 +6,9 @@ sealed, in one pgvector partition per tenant, and gone with the file it came fro
 An independently deployable NestJS service with its own database and container, reached
 through Kong at `/knowledge`, sharing no source with any other module (ADR 0001).
 
-**Status: Phase 74** (the index). Search arrives in Phase 75. See the
+**Status: Phase 75** (the index, and search with roles and citations). See the
 [Phase 74 plan](../docs/ai-phase74-implementation-plan.md),
+[Phase 75 plan](../docs/ai-phase75-implementation-plan.md),
 [ADR 0067](../docs/adr/0067-documents-are-indexed-in-one-partition-per-tenant.md),
 [ADR 0068](../docs/adr/0068-derived-ai-data-follows-its-source.md) and
 [ADR 0069](../docs/adr/0069-models-are-ports-and-generation-is-opt-in.md).
@@ -29,6 +30,10 @@ through Kong at `/knowledge`, sharing no source with any other module (ADR 0001)
 - **The document keys:** each document's chunk text is sealed with AES-256-GCM under a key
   of its own, wrapped by `KNOWLEDGE_MASTER_KEY` and bound to the tenant, the attachment and
   the chunk's position.
+- **Keyed lexemes** (Phase 75): each chunk's words, stemmed by PostgreSQL in Portuguese and
+  English, are stored only as HMAC-SHA-256 hashes under a key derived for the tenant, with
+  their positions, in `chunks.lexemes` (GIN-indexed). No word is stored in the clear, and
+  the same word hashes differently in every tenant.
 
 ## How a file gets in, and out
 
@@ -51,14 +56,49 @@ through Kong at `/knowledge`, sharing no source with any other module (ADR 0001)
    abandoned) and `files.attachment.quarantined` delete the chunks, destroy the key and
    leave the tombstone.
 
+## Search
+
+`GET /knowledge/search?q=…[&limit=…][&module=&recordType=&recordId=]` (Phase 75):
+
+- **Who is searched:** the modules whose attachments the caller can read, by the same read
+  roles as `files/`. A key's token is also narrowed to its scopes, and needs
+  `knowledge:read`. A caller who reads none gets an empty answer.
+- **How:** two candidate lists, each filtered by those modules **inside its scan**:
+  - the question's vector against the tenant's HNSW index, with pgvector's iterative scan;
+  - its keyed lexemes against the GIN index, ranked by `ts_rank_cd`.
+
+  They are merged by reciprocal rank (k = 60). A chunk found only by its vector must be
+  within the embedder's relevance distance. What the caller cannot read never takes a
+  place in a ranking, so it answers exactly as what does not exist.
+- **The answer:** `{ data: Citation[], searched: modules }`. Each citation has:
+  - the attachment and its record;
+  - the record's screen;
+  - its position (chunk *n* of *m*);
+  - the excerpt, opened with the document key;
+  - how it was found (`meaning`, `words`).
+
+  The question is never logged.
+
 ## Embedders
 
 | `KNOWLEDGE_EMBEDDER` | Version | What it is |
 |---|---|---|
-| `hash` (default, CI) | `hash-384-v1` | Tokens and token pairs hashed into 384 signed buckets: lexical, deterministic, in process |
-| `tei` (`make up-ai`) | `e5-small-v1` | `multilingual-e5-small` on Text Embeddings Inference, in the stack; nothing leaves it |
+| `hash` (default, CI) | `hash-384-v1` | Tokens and token pairs hashed into 384 signed buckets: lexical, deterministic, in process. Relevance distance 0.85 |
+| `tei` (`make up-ai`) | `e5-small-v1` | `multilingual-e5-small` on Text Embeddings Inference, in the stack; nothing leaves it. Relevance distance 0.25 |
 
-Switching the embedder makes every document indexed by the other version due again.
+The index version is `<embedder>+lex-v1`. Switching the embedder, or the lexical scheme,
+makes every document indexed by the other version due again.
+
+E5 places unrelated passages about 0.2 apart, so with it a search always answers its
+nearest passages, each cited. The hash embedder answers nothing to a question that shares
+no word with the tenant's files.
+
+**Retrieval evaluation.** `test/fixtures/retrieval-corpus.json` holds 24 documents in
+Portuguese and English and 36 labelled questions (24 lexical, 12 semantic).
+- `test/retrieval.e2e-spec.ts` runs it in CI with the hash embedder, and requires recall@5
+  ≥ 0.9 on the lexical questions.
+- `make eval-retrieval` runs it with e5 on TEI, requires recall@5 ≥ 0.8 overall, and
+  stores the record in `docs/drills/`.
 
 ## Running and testing
 
@@ -67,10 +107,13 @@ The database needs the `vector` extension, which a superuser creates
 
 ```bash
 npm install
-npm test          # extraction, chunking, embedders, sealing, the indexing states
-npm run test:e2e  # pgvector: one partition per plan, RLS, erasure, tombstones, a lost lease
+npm test          # extraction, chunking, embedders, sealing, indexing, ranking, readers, search
+npm run test:e2e  # pgvector: partitions, RLS, erasure, a lost lease, hybrid search, roles, canary, retrieval
 node ../scripts/phase74-smoke.mjs   # the real stack, through files and Kong
+node ../scripts/phase75-smoke.mjs   # search through Kong, a narrowed key, the agent, a canary
+make -C .. eval-retrieval           # recall@5 with e5, recorded
 ```
 
-Metrics: `knowledge_index_lag_seconds`, `knowledge_documents_settled{state}` and
-`knowledge_embedding_seconds`, with no tenant label.
+Metrics: `knowledge_index_lag_seconds`, `knowledge_documents_settled{state}`,
+`knowledge_embedding_seconds` and `knowledge_search_seconds{outcome}`, with no tenant
+label.

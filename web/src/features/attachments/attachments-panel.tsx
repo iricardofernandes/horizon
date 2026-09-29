@@ -21,6 +21,7 @@ import {
 } from '@/lib/attachments'
 import { jsonHeaders } from '@/lib/http'
 import { tracedFetch } from '@/lib/telemetry'
+import { AttachmentSearch } from './attachment-search'
 
 const BASE = '/api/horizon/files/attachments'
 const POLL_MS = 2000
@@ -198,6 +199,12 @@ export function AttachmentsPanel({ record }: { record: AttachmentRecord }) {
           ))}
         </ul>
       )}
+      {rows?.some((attachment) => attachment.status === 'available') ? (
+        <AttachmentSearch
+          names={new Map(rows.map((attachment) => [attachment.id, attachment.fileName]))}
+          record={record}
+        />
+      ) : null}
       <p className="muted">{t('hint')}</p>
     </section>
   )

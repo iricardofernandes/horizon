@@ -2,7 +2,9 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Indexing } from '@/application/indexing'
+import { indexVersionOf, Lexemes } from '@/application/lexemes'
 import { type FileContent, FileSource } from '@/application/ports'
+import { HmacLexemeHasher } from '@/infrastructure/cryptography/lexeme-hasher'
 import { AesGcmSealer } from '@/infrastructure/cryptography/sealer'
 import { KnowledgeDatabase, RelayDueScan } from '@/infrastructure/database/knowledge-database'
 import { HashEmbedder } from '@/infrastructure/embedding/embedders'
@@ -35,6 +37,7 @@ beforeAll(() => {
     new FileTextExtractor(),
     embedder,
     sealer,
+    new Lexemes(database, new HmacLexemeHasher(randomBytes(32))),
     { now: () => clock },
     { embedded: () => undefined, settled: () => undefined },
     { leaseMs: 60_000, batch: 10 },
@@ -221,10 +224,10 @@ describe('a worker that stops mid-document', () => {
     const [lost] = await database.claimDue(tenantId, clock, 60_000, 10)
     expect(lost?.attachmentId).toBe(attachmentId)
     expect(await indexing.indexDue(tenantId)).toBe(0)
-    expect(await scan.tenantsWithWork(clock, embedder.version)).not.toContain(tenantId)
+    expect(await scan.tenantsWithWork(clock, indexVersionOf(embedder))).not.toContain(tenantId)
     // Past its lease, another worker takes it over and writes every chunk.
     clock = new Date(clock.getTime() + 61_000)
-    expect(await scan.tenantsWithWork(clock, embedder.version)).toContain(tenantId)
+    expect(await scan.tenantsWithWork(clock, indexVersionOf(embedder))).toContain(tenantId)
     expect(await indexing.indexDue(tenantId)).toBe(1)
     // The first worker comes back: its completion is refused, nothing is written twice.
     if (!lost) throw new Error('no claim')
@@ -255,10 +258,10 @@ describe('a worker that stops mid-document', () => {
     const tenantId = randomUUID()
     const reference = await indexed(tenantId, 'Relatório de visita técnica')
     await administrator`update documents set index_version = 'old-v0' where attachment_id = ${reference.attachmentId}`
-    expect(await scan.tenantsWithWork(clock, embedder.version)).toContain(tenantId)
+    expect(await scan.tenantsWithWork(clock, indexVersionOf(embedder))).toContain(tenantId)
     expect(await indexing.indexDue(tenantId)).toBe(1)
     const [document] = await administrator<{ index_version: string }[]>`
       select index_version from documents where attachment_id = ${reference.attachmentId}`
-    expect(document?.index_version).toBe('hash-384-v1')
+    expect(document?.index_version).toBe('hash-384-v1+lex-v1')
   })
 })

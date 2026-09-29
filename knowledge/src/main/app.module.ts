@@ -1,7 +1,9 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
+import { indexVersionOf } from '@/application/lexemes'
 import { RelayDueScan } from '@/infrastructure/database/knowledge-database'
 import { KnowledgeAuthGuard } from '@/infrastructure/http/authorization'
+import { SearchController } from '@/infrastructure/http/search.controller'
 import { StatusController } from '@/infrastructure/http/status.controller'
 import { indexHandlers } from '@/infrastructure/messaging/handlers'
 import { RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-consumer'
@@ -48,14 +50,14 @@ export class AppModule {
           new IndexWorker({
             scan: new RelayDueScan(relayUrl),
             indexing: runtime.indexing,
-            indexVersion: runtime.embedder.version,
+            indexVersion: indexVersionOf(runtime.embedder),
             intervalMs: config.KNOWLEDGE_POLL_INTERVAL_MS,
             lag: (seconds) => runtime.metrics.lag(seconds),
           }),
       })
     return {
       module: AppModule,
-      controllers: [StatusController],
+      controllers: [StatusController, SearchController],
       providers,
       exports: [KnowledgeRuntime],
     }

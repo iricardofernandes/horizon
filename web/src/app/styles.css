@@ -1489,6 +1489,36 @@ tbody tr:last-child td {
   color: var(--color-text-muted);
   font-size: 12px;
 }
+.attachments-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.attachments-search .ui-input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.attachments-search-results {
+  display: grid;
+  flex-basis: 100%;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.attachments-search-results small {
+  margin-left: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.attachments-search-results blockquote {
+  margin: 4px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-border);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
 .badge-scanning,
 .badge-uploading {
   background: var(--amber-3);

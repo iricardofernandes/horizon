@@ -1,7 +1,9 @@
 # 67. Documents are indexed in one partition per tenant
 
 - Status: accepted; the index is implemented in Phase 74 ([plan](../ai-phase74-implementation-plan.md),
-  [evidence](../ai-phase74-evidence.md)), search in Phase 75. Revised in Phase 74: pgvector
+  [evidence](../ai-phase74-evidence.md)), and search with roles inside the scan in Phase 75
+  ([plan](../ai-phase75-implementation-plan.md), [evidence](../ai-phase75-evidence.md)).
+  Revised in Phase 74: pgvector
   is compiled into the platform's own `postgres:17-alpine` image, not the Debian
   `pgvector/pgvector` one, because glibc would collate the cluster's `en_US.utf8` text
   differently from musl under existing B-tree indexes.
