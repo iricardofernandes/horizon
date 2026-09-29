@@ -698,6 +698,34 @@ See the [Phase 70 evidence](readiness-phase70-evidence.md).
 - Imports are resumable/idempotent and never partially hide failed rows.
 - Security and recovery drills produce stored evidence, not only documentation.
 
+### Phase N — AI with isolation
+
+Split into phases 71–78: [AI with isolation implementation plan](ai-implementation-plan.md).
+It builds the roadmap's customer-facing MCP server and RAG over tenant documents.
+
+**Deliverables**
+
+- Let API keys reach every module through short tokens that carry their scopes. Each
+  module refuses a write that the key's scopes do not allow.
+- Add `agent/`, a stateless MCP server for the tenant's own agent. It has a declared
+  read catalogue, write tools for drafts only, and a hash-chained audit of every call.
+- Add `knowledge/`, a document index with one pgvector partition per tenant. It filters
+  by the owning module's roles inside the scan, cites every result, and follows its
+  source's erasure and retention.
+- Add an opt-in in-app assistant with cited answers and no write tools, and suggestions
+  (NCM, financial category) that a person confirms through the owning module.
+- Keep embedding and generation models behind ports. Horizon runs fully without them.
+
+**Exit criteria**
+
+- An agent reads and drafts only what its key's issuer could, every call audited naming
+  the key.
+- Retrieval is partitioned by tenant at the index, respects module roles and cites its
+  sources.
+- Erasing a data subject removes their content from the index and from every answer.
+  Nothing AI produces becomes a business fact without a person.
+- Horizon runs fully with every AI component off and no model key present.
+
 ## Priority and release slices
 
 | Release slice | Phases | Usable outcome |
@@ -707,6 +735,7 @@ See the [Phase 70 evidence](readiness-phase70-evidence.md).
 | P2 — integrated operations | F–H | Ledger/reports plus purchasing and a complete order-to-cash/procure-to-pay flow |
 | P3 — vertical breadth | I–L | Advanced inventory/production, fiscal, services/contracts and CRM |
 | P4 — production readiness | M | Cross-domain reporting, data operations, security and recovery hardening |
+| P5 — AI with isolation | N | A tenant's own agent over MCP, document search by meaning, and suggestions a person confirms |
 
 P0 and P1 are the next implementation target. Within P1, Accounts Receivable should be
 implemented before Accounts Payable only to connect the already-working sales path

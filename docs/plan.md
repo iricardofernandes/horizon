@@ -2689,6 +2689,54 @@ implemented by Parties, Catalog, Inventory and Financial.
 [Plan](readiness-phase70-implementation-plan.md), [evidence](readiness-phase70-evidence.md),
 [golden path](drills/2026-09-28-phase-m-golden-path.json).
 
+## Phase 71 — Phase N decisions, and API keys that reach modules
+
+**Planned.** ADRs 0064–0069 fix the Phase N decisions. A key is exchanged for a 60-second token that carries its scopes,
+and every module refuses a write the scopes do not allow. Per-key rate limits apply at the exchange.
+[Detailed work](ai-implementation-plan.md#71--phase-n-decisions-and-api-keys-that-reach-modules).
+
+## Phase 72 — The tenant's MCP server, read only
+
+**Planned.** `agent/` on port 3015 serves a declared read catalogue over MCP, calls modules through Kong with the
+key's own token, holds no privileged credential, and audits every call without its arguments.
+[Detailed work](ai-implementation-plan.md#72--the-tenants-mcp-server-read-only).
+
+## Phase 73 — Agent drafts, confirmed by a person
+
+**Planned.** Write tools create drafts only: quotes, requisitions, CRM tasks and notes, payable drafts. A record a key
+created counts as its issuer's, so the issuer cannot approve it.
+[Detailed work](ai-implementation-plan.md#73--agent-drafts-confirmed-by-a-person).
+
+## Phase 74 — The document index, one partition per tenant
+
+**Planned.** `knowledge/` on port 3016 extracts, embeds and seals the text of available attachments into one pgvector
+partition per tenant, and deletes it on erasure.
+[Detailed work](ai-implementation-plan.md#74--the-document-index-one-partition-per-tenant).
+
+## Phase 75 — Search by meaning, with roles and citations
+
+**Planned.** Hybrid search filtered by the owning modules' roles inside the scan. Every result cites its attachment
+and record, in the palette, the attachments panel and the agent.
+[Detailed work](ai-implementation-plan.md#75--search-by-meaning-with-roles-and-citations).
+
+## Phase 76 — The in-app assistant, opt-in
+
+**Planned.** An assistant with cited answers over the user's own read access and no write tool, off until a workspace
+owner turns it on, with a monthly budget.
+[Detailed work](ai-implementation-plan.md#76--the-in-app-assistant-opt-in).
+
+## Phase 77 — Suggestions confirmed by a person
+
+**Planned.** NCM and financial category suggestions from the tenant's own history. Accepting one calls the owning
+module's command; nothing is written by the suggestion.
+[Detailed work](ai-implementation-plan.md#77--suggestions-confirmed-by-a-person).
+
+## Phase 78 — Threat model, service levels, screens and closing Phase N
+
+**Planned.** The red-team drill, the SLIs, the screens in pt-BR and en, and the Phase N golden path, run once with
+every AI component off.
+[Detailed work](ai-implementation-plan.md#78--threat-model-service-levels-screens-and-closing-phase-n).
+
 ---
 
 ## Standing rules across all phases
