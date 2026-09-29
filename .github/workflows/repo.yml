@@ -22,6 +22,7 @@ jobs:
           node-version: 24
       - run: node scripts/check-boundaries.mjs
       - run: node scripts/check-contract-pins.mjs
+      - run: node scripts/check-attachment-readers.mjs
 
   commit-messages:
     name: conventional commits

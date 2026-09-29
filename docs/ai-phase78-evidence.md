@@ -85,6 +85,20 @@
   `403`, not an MCP error. The check now reads both, and records that Identity refuses the
   key whole rather than narrowing it.
 
+### Found by CI after the push
+
+- **`knowledge/`'s unit test read `files/`'s source** to compare the two read tables (Phase
+  75). Built alone, as the `isolation` workflow builds it, the file is absent. The
+  comparison is now `scripts/check-attachment-readers.mjs`, run by the `repo` workflow and
+  `ci-local` over the whole repository, and it fails on a drift. No module test reads
+  another module.
+- **The `agent/` and `knowledge/` lockfiles resolved every public package through the local
+  Verdaccio** (`localhost:4873`), because they were installed against it. The golden path
+  workflow's Verdaccio could not serve `vite-8.3.1.tgz`. The other modules resolve public
+  packages from `registry.npmjs.org` and only `@horizon/contracts` from Verdaccio; these two
+  now do the same. A fresh `npm ci` with an empty cache, each module built alone, and both
+  images built without cache pass.
+
 ## Not fixed, stated
 
 - **Catalog's items screen needs an Inventory role** (found in Phase 77). It is older than

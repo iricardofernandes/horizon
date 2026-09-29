@@ -41,6 +41,7 @@ if (full) {
 for (const [label, script] of [
   ['module boundaries', 'check-boundaries.mjs'],
   ['contract pins', 'check-contract-pins.mjs'],
+  ['attachment readers', 'check-attachment-readers.mjs'],
   ['contract compatibility', 'check-contract-compat.mjs'],
   ['documentation links', 'check-doc-links.mjs'],
   ['action references', 'check-action-refs.mjs'],

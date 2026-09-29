@@ -1,25 +1,9 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { ATTACHING_MODULES, READ_ROLES, readableModules, screenOf } from './readers'
+import { ATTACHING_MODULES, readableModules, screenOf } from './readers'
 
-/** `files/`'s own table, read from its source: the copy must not drift from it. */
-function filesReadRoles(): Record<string, string[]> {
-  const source = readFileSync(join(__dirname, '../../../files/src/domain/records.ts'), 'utf8')
-  const table = source.slice(source.indexOf('const ROLES'), source.indexOf('export interface'))
-  return Object.fromEntries(
-    [...table.matchAll(/(\w+): \{\s*read: \[([^\]]*)\]/g)].map(([, module, roles]) => [
-      module,
-      [...(roles ?? '').matchAll(/'([^']+)'/g)].map(([, role]) => role ?? ''),
-    ]),
-  )
-}
-
+// That these are files/'s own read roles is checked across the repository, not here: a
+// module's build has no other module's source (scripts/check-attachment-readers.mjs).
 describe('who may find a chunk (ADR 0067)', () => {
-  it('reads with exactly the roles files/ reads attachments with', () => {
-    expect(filesReadRoles()).toEqual(READ_ROLES)
-  })
-
   it('searches the modules a read role reaches, and nothing for a write-only or other role', () => {
     expect(
       readableModules([
