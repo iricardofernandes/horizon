@@ -9,12 +9,15 @@ const claimsSchema = z.object({
   iss: z.string().min(1),
   iat: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
+  // An API key's scopes (ADR 0064); absent on a signed-in person's token.
+  scp: z.array(z.string().min(1).max(64)).max(60).optional(),
 })
 
 export type AccessClaims = Readonly<{
   subject: string
   tenantId: string
   roles: readonly { module: string; role: string }[]
+  scopes?: readonly string[]
 }>
 
 export class AccessTokenVerifier {
@@ -39,6 +42,11 @@ export class AccessTokenVerifier {
       throw new Error('Invalid token issuer')
     if (claims.exp <= claims.iat || claims.exp - claims.iat > this.maxAgeSeconds)
       throw new Error('Invalid token lifetime')
-    return { subject: claims.sub, tenantId: claims.tenant_id, roles: claims.roles }
+    return {
+      subject: claims.sub,
+      tenantId: claims.tenant_id,
+      roles: claims.roles,
+      ...(claims.scp === undefined ? {} : { scopes: claims.scp }),
+    }
   }
 }

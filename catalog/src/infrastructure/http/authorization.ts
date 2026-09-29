@@ -1,5 +1,5 @@
 import { AbilityBuilder, createMongoAbility } from '@casl/ability'
-import { roleAssignmentSchema } from '@horizon/contracts'
+import { roleAssignmentSchema, SCOPE_REFUSAL_MESSAGE, scopeAllows } from '@horizon/contracts'
 import {
   applyDecorators,
   type CanActivate,
@@ -99,6 +99,11 @@ export class CatalogAuthGuard implements CanActivate {
     // A revoked token is refused as invalid before any role is weighed, so revoking a
     // session reads the same everywhere, whatever the token's roles (Phase 67).
     await this.assertNotRevoked(claims, request, targets)
+
+    // A key's scopes before any role (ADR 0064), so a read-only key reads the same everywhere.
+    const method = context.switchToHttp().getRequest<{ method?: string }>().method ?? 'POST'
+    if (!scopeAllows(claims.scopes, 'catalog', method))
+      throw new ForbiddenException(SCOPE_REFUSAL_MESSAGE)
 
     const permission = this.reflector.getAllAndOverride<{ action: string; subject: string }>(
       ROUTE_PERMISSION,

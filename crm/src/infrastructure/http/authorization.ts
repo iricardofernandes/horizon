@@ -1,3 +1,4 @@
+import { SCOPE_REFUSAL_MESSAGE, scopeAllows } from '@horizon/contracts'
 import {
   type CanActivate,
   type ExecutionContext,
@@ -76,6 +77,10 @@ export class CrmAuthGuard implements CanActivate {
       throw new UnauthorizedException()
     }
     request.principal = principal
+    // A key's scopes before any role (ADR 0064), so a read-only key reads the same everywhere.
+    const method = context.switchToHttp().getRequest<{ method?: string }>().method ?? 'POST'
+    if (!scopeAllows(principal.scopes, 'crm', method))
+      throw new ForbiddenException(SCOPE_REFUSAL_MESSAGE)
     const action = this.reflector.getAllAndOverride<CrmAction>(ACTION, targets)
     if (!action) return true
     if (!permits(principal.roles, action))

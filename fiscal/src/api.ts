@@ -7,6 +7,8 @@ import {
   fiscalDocumentCreateRequestV2Schema,
   fiscalDocumentV3Schema,
   fiscalManualOriginRequestSchema,
+  SCOPE_REFUSAL_MESSAGE,
+  scopeAllows,
 } from '@horizon/contracts'
 import { z } from 'zod'
 import type { FiscalArtifacts } from './artifacts'
@@ -85,6 +87,11 @@ async function handle(
     principal = await dependencies.verifier.verify(request.headers.authorization)
   } catch {
     problem(response, 401, 'Unauthorized', 'A valid Fiscal access token is required')
+    return
+  }
+  // A key's scopes before any role (ADR 0064), so a read-only key reads the same everywhere.
+  if (!scopeAllows(principal.scopes, 'fiscal', request.method ?? 'POST')) {
+    problem(response, 403, 'Forbidden', SCOPE_REFUSAL_MESSAGE)
     return
   }
   // Before the general read check: an auditor reads the audit log and nothing else (Phase 69).

@@ -2691,8 +2691,20 @@ implemented by Parties, Catalog, Inventory and Financial.
 
 ## Phase 71 — Phase N decisions, and API keys that reach modules
 
-**Planned.** ADRs 0064–0069 fix the Phase N decisions. A key is exchanged for a 60-second token that carries its scopes,
-and every module refuses a write the scopes do not allow. Per-key rate limits apply at the exchange.
+**Delivered on 2026-09-29.** ADRs 0064–0069 fix the Phase N decisions, and contracts 0.52.0
+publish the scope vocabulary and `scopeAllows`.
+- `POST /auth/api-key/token` exchanges a key for a 60-second token. The token carries:
+  - `scp`, the key's scopes;
+  - `key_issuer`, the person who issued the key;
+  - the issuer's current roles, only in the modules the key reaches.
+- **Every one of the fourteen modules refuses a write that the scopes do not allow**, with
+  the same 403.
+- **Exchanges are limited per key** (120 a minute) and have a Kong route of their own.
+- **The fiscal token** is one case of the same exchange.
+- **The key dialog** offers only what its issuer can grant.
+
+[Plan](ai-phase71-implementation-plan.md), [evidence](ai-phase71-evidence.md),
+[smoke](drills/2026-09-29-phase71-api-key-smoke.json).
 [Detailed work](ai-implementation-plan.md#71--phase-n-decisions-and-api-keys-that-reach-modules).
 
 ## Phase 72 — The tenant's MCP server, read only

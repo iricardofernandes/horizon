@@ -8,6 +8,7 @@ import { z } from 'zod'
 import {
   AccessTokenSigner,
   type JsonWebKey,
+  type KeyGrant,
   type MintedAccessToken,
   type TokenContext,
   type VerifiedAccessToken,
@@ -45,6 +46,8 @@ const CLAIMS = z.object({
   sid: z.string().min(1).optional(),
   amr: z.array(z.string().min(1)).max(8).optional(),
   auth_time: z.number().int().nonnegative().optional(),
+  scp: z.array(z.string().min(1).max(64)).max(60).optional(),
+  key_issuer: z.string().min(1).optional(),
 })
 
 /**
@@ -98,9 +101,14 @@ export class EdDsaAccessTokenSigner extends AccessTokenSigner {
     claims: UserClaims,
     now: Date,
     context?: TokenContext,
+    grant?: KeyGrant,
   ): Promise<MintedAccessToken> {
+    // A key token may live shorter than an access token, never longer.
+    const ttlSeconds = Math.min(grant?.ttlSeconds ?? this.ttlSeconds, this.ttlSeconds)
+    if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0)
+      throw new Error('Access token TTL must be a positive safe integer')
     const issuedAtSeconds = Math.floor(now.getTime() / 1000)
-    const expiresAtSeconds = issuedAtSeconds + this.ttlSeconds
+    const expiresAtSeconds = issuedAtSeconds + ttlSeconds
     const jti = randomUUID()
     const session = context
       ? {
@@ -109,7 +117,13 @@ export class EdDsaAccessTokenSigner extends AccessTokenSigner {
           auth_time: Math.floor(context.authTime.getTime() / 1000),
         }
       : {}
-    const token = await new SignJWT({ tenant_id: claims.tenantId, roles: claims.roles, ...session })
+    const key = grant ? { scp: [...grant.scopes], key_issuer: grant.issuer } : {}
+    const token = await new SignJWT({
+      tenant_id: claims.tenantId,
+      roles: claims.roles,
+      ...session,
+      ...key,
+    })
       .setProtectedHeader({ alg: 'EdDSA', typ: 'JWT', kid: this.kid })
       // Kong OSS selects a configured credential by iss, not by JWKS (ADR 0036).
       .setIssuer(this.issuer(this.kid))
@@ -162,6 +176,8 @@ export class EdDsaAccessTokenSigner extends AccessTokenSigner {
         amr: claims.amr ?? [],
         ...(claims.sid === undefined ? {} : { sid: claims.sid }),
         ...(claims.auth_time === undefined ? {} : { authTime: new Date(claims.auth_time * 1000) }),
+        ...(claims.scp === undefined ? {} : { scopes: claims.scp }),
+        ...(claims.key_issuer === undefined ? {} : { keyIssuer: claims.key_issuer }),
       })
     } catch {
       return left(new InvalidAccessTokenError())

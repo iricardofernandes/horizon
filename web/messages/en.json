@@ -143,6 +143,7 @@
     "rotateTitle": "Rotate {name}",
     "rotating": "Rotating…",
     "scopes": "Scopes",
+    "scopesHelp": "Only the modules you hold a role in are offered. A key never reaches further than you, and a read scope never writes.",
     "selectScope": "Select at least one scope.",
     "title": "API keys",
     "usedOn": "Used {date}"

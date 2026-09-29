@@ -1,3 +1,4 @@
+import type { ExchangedApiKey } from '@/application/use-cases/exchange-api-key'
 import type { Either } from '@/core/either'
 import type { UseCaseError } from '@/core/errors/use-case-error'
 import type { Account } from '@/domain/entities/account'
@@ -61,5 +62,16 @@ export function presentWorkspace(tenant: Tenant) {
     fiscalProfileEffectiveFrom: snapshot.fiscalProfileEffectiveFrom,
     createdAt: snapshot.createdAt,
     updatedAt: snapshot.updatedAt,
+  }
+}
+
+/** The published shape of an exchange (`apiKeyTokenResponseSchema`): no roles, they are the issuer's. */
+export function presentExchange(exchanged: ExchangedApiKey) {
+  return {
+    tenantId: exchanged.tenantId,
+    apiKeyId: exchanged.apiKeyId,
+    accessToken: exchanged.accessToken,
+    expiresAt: exchanged.expiresAt.toISOString(),
+    scopes: [...exchanged.scopes],
   }
 }

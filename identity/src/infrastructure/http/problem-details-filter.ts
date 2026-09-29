@@ -9,6 +9,7 @@ import { ZodError } from 'zod'
 
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 import { UseCaseError } from '@/core/errors/use-case-error'
+import { ApiKeyRateLimitedError } from '@/domain/errors/api-key-rate-limited-error'
 import type { IdentityHttpRequest } from './http-context'
 
 const DOMAIN_STATUS: Readonly<Record<string, number>> = {
@@ -26,6 +27,8 @@ const DOMAIN_STATUS: Readonly<Record<string, number>> = {
   SubjectErasedError: 410,
   WorkspaceSelectionExpiredError: 401,
   MfaLockedError: 429,
+  ApiKeyRateLimitedError: 429,
+  RateLimitUnavailableError: 503,
   StepUpRequiredError: 403,
   MfaEnrollmentRequiredError: 403,
   InvitationUnusableError: 410,
@@ -55,6 +58,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       })
 
     if (problem.status === 401) response.header('WWW-Authenticate', 'Bearer')
+    if (exception instanceof ApiKeyRateLimitedError)
+      response.header('Retry-After', String(exception.retryAfterSeconds))
     response
       .status(problem.status)
       .type('application/problem+json')

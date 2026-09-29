@@ -1,3 +1,4 @@
+import { SCOPE_REFUSAL_MESSAGE, scopeAllows } from '@horizon/contracts'
 import {
   type CanActivate,
   type ExecutionContext,
@@ -48,6 +49,10 @@ export class SalesAuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException()
     }
+    // A key's scopes before any role (ADR 0064), so a read-only key reads the same everywhere.
+    const method = context.switchToHttp().getRequest<{ method?: string }>().method ?? 'POST'
+    if (!scopeAllows(request.principal.scopes, 'sales', method))
+      throw new ForbiddenException(SCOPE_REFUSAL_MESSAGE)
     const action = this.reflector.getAllAndOverride<'read' | 'manage'>(ACTION, targets)
     if (!action) return true
     const allowed = request.principal.roles.some(

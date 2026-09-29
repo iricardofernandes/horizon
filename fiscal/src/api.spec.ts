@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { SCOPE_REFUSAL_MESSAGE } from '@horizon/contracts'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { createFiscalServer } from './api'
 import type { FiscalPrincipal } from './auth'
@@ -20,6 +21,7 @@ let cancellationQueryInput: unknown
 let certificateUploadInput: unknown
 let auditInput: unknown
 let role: FiscalPrincipal['role'] = 'viewer'
+let scopes: readonly string[] | undefined
 let activeCapability = false
 let activeHomologationCapability = false
 let activeConsumerCapability = false
@@ -30,7 +32,7 @@ const server = createFiscalServer({
   verifier: {
     async verify(authorization) {
       if (authorization !== 'Bearer test') throw new Error('Invalid token')
-      return { tenantId, subject: randomUUID(), role }
+      return { tenantId, subject: randomUUID(), role, ...(scopes ? { scopes } : {}) }
     },
   },
   documents: {
@@ -584,6 +586,27 @@ it('requires a token and reports every capability unsupported', async () => {
   })
   expect(response.status).toBe(200)
   expect(await response.json()).toMatchObject({ defaultStatus: 'unsupported', supported: [] })
+})
+
+it('lets a read-only key read and refuses its writes before any role (ADR 0064)', async () => {
+  role = 'issuer'
+  scopes = ['fiscal:read']
+  try {
+    const headers = { authorization: 'Bearer test', 'content-type': 'application/json' }
+    expect((await fetch(`${base}/capabilities?model=55`, { headers })).status).toBe(200)
+    const refused = await fetch(`${base}/documents`, {
+      method: 'POST',
+      headers: { ...headers, 'idempotency-key': randomUUID() },
+      body: '{}',
+    })
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toMatchObject({ detail: SCOPE_REFUSAL_MESSAGE })
+    scopes = ['sales:write']
+    expect((await fetch(`${base}/capabilities?model=55`, { headers })).status).toBe(403)
+  } finally {
+    role = 'viewer'
+    scopes = undefined
+  }
 })
 
 it('exposes reviewed homologation only through the version 2 read route', async () => {

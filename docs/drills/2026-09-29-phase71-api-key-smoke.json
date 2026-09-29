@@ -1,0 +1,870 @@
+{
+  "phase": 71,
+  "kind": "api-key-scopes-smoke",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T15:02:08.362Z",
+  "finishedAt": "2026-09-29T15:02:11.918Z",
+  "passed": true,
+  "tenantId": "01a0edaf-fb08-7476-b1b3-4a4ac0f74f6c",
+  "perModule": [
+    {
+      "module": "identity",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 403
+    },
+    {
+      "module": "catalog",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 422
+    },
+    {
+      "module": "inventory",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "sales",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "webhooks",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 500
+    },
+    {
+      "module": "parties",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "financial",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "treasury",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "ledger",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "procurement",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "fiscal",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "crm",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "reporting",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    },
+    {
+      "module": "files",
+      "read": 200,
+      "writeWithReadScope": 403,
+      "writeWithWriteScope": 400
+    }
+  ],
+  "exchangesUntilLimited": 121,
+  "checks": [
+    {
+      "name": "identity: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [
+            {
+              "id": "01a0edaf-fb0c-7799-b09d-e3ea8ee77c49",
+              "tenantId": "01a0edaf-fb08-7476-b1b3-4a4ac0f74f6c",
+              "email": "owner.phase71-2a459fb3@horizon.local",
+              "name": "Smoke Owner",
+              "roles": [
+                {
+                  "role": "admin",
+                  "module": "catalog"
+                },
+                {
+                  "role": "admin",
+                  "module": "crm"
+                },
+                {
+                  "role": "admin",
+                  "module": "financial"
+                },
+                {
+                  "role": "admin",
+                  "module": "fiscal"
+                },
+                {
+                  "role": "owner",
+                  "module": "identity"
+                },
+                {
+                  "role": "admin",
+                  "module": "inventory"
+                },
+                {
+                  "role": "admin",
+                  "module": "ledger"
+                },
+                {
+                  "role": "admin",
+                  "module": "parties"
+                },
+                {
+                  "role": "admin",
+                  "module": "procurement"
+                },
+                {
+                  "role": "admin",
+                  "module": "reporting"
+                },
+                {
+                  "role": "admin",
+                  "module": "sales"
+                },
+                {
+                  "role": "admin",
+                  "module": "treasury"
+                },
+                {
+                  "role": "admin",
+                  "module": "webhooks"
+                }
+              ],
+              "status": "active",
+              "lastLoginAt": "2026-09-29T15:02:08.447Z",
+              "createdAt": "2026-09-29T15:02:08.392Z",
+              "updatedAt": "2026-09-29T15:02:09.915Z"
+            }
+          ],
+          "page": {
+            "hasMore": false
+          }
+        }
+      }
+    },
+    {
+      "name": "identity: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "status": 403,
+          "type": "about:blank",
+          "title": "Forbidden",
+          "detail": "The API key's scopes do not permit this operation",
+          "instance": "/users",
+          "requestId": "a4b6c5db-3dd7-4523-8854-889b04c548bb"
+        }
+      }
+    },
+    {
+      "name": "identity: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "status": 403,
+          "type": "https://horizon.dev/problems/step-up-required",
+          "title": "Step-up required",
+          "detail": "confirm your password and second factor to do this",
+          "instance": "/users",
+          "requestId": "ceda6b2b-466a-4081-ac45-4cd9a9dfc508"
+        }
+      }
+    },
+    {
+      "name": "catalog: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [
+            {
+              "id": "01a0edb0-00f8-7de7-8bb4-c76b7d7b7146",
+              "code": "UN",
+              "name": "Unit",
+              "decimalPlaces": 0,
+              "active": true,
+              "createdAt": "2026-09-29T15:02:09.912Z",
+              "updatedAt": "2026-09-29T15:02:09.912Z"
+            },
+            {
+              "id": "01a0edb0-00f9-7c48-b143-01f95c0ea436",
+              "code": "KG",
+              "name": "Kilogram",
+              "decimalPlaces": 3,
+              "active": true,
+              "createdAt": "2026-09-29T15:02:09.913Z",
+              "updatedAt": "2026-09-29T15:02:09.913Z"
+            },
+            {
+              "id": "01a0edb0-00fb-776e-9068-dd1e0a93536b",
+              "code": "L",
+              "name": "Litre",
+              "decimalPlaces": 3,
+              "active": true,
+              "createdAt": "2026-09-29T15:02:09.915Z",
+              "updatedAt": "2026-09-29T15:02:09.915Z"
+            },
+            {
+              "id": "01a0edb0-00fc-7a50-95da-c0d7d6342abb",
+              "code": "H",
+              "name": "Hour",
+              "decimalPlaces": 2,
+              "active": true,
+              "createdAt": "2026-09-29T15:02:09.916Z",
+              "updatedAt": "2026-09-29T15:02:09.916Z"
+            }
+          ],
+          "page": {
+            "hasMore": false
+          }
+        }
+      }
+    },
+    {
+      "name": "catalog: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "status": 403,
+          "type": "about:blank",
+          "title": "Forbidden",
+          "detail": "The API key's scopes do not permit this operation",
+          "instance": "/units",
+          "requestId": "1a5b7aa1-a274-4125-bda2-b21d76beb3e7"
+        }
+      }
+    },
+    {
+      "name": "catalog: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 422,
+        "headers": {},
+        "body": {
+          "status": 422,
+          "type": "https://horizon.dev/problems/invalid-input",
+          "title": "Invalid input",
+          "detail": "The request does not match its schema",
+          "violations": [
+            {
+              "pointer": "/code",
+              "detail": "Invalid input: expected string, received undefined",
+              "code": "invalid_type"
+            },
+            {
+              "pointer": "/name",
+              "detail": "Invalid input: expected string, received undefined",
+              "code": "invalid_type"
+            },
+            {
+              "pointer": "/decimalPlaces",
+              "detail": "Invalid input: expected number, received undefined",
+              "code": "invalid_type"
+            }
+          ],
+          "instance": "/units",
+          "requestId": "0729e2c1-669b-4879-9007-33eefa77a498"
+        }
+      }
+    },
+    {
+      "name": "inventory: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "inventory: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "inventory: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "permission: Invalid input: expected string, received undefined",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "sales: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": []
+      }
+    },
+    {
+      "name": "sales: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "sales: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "Invalid billing run",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "webhooks: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": []
+      }
+    },
+    {
+      "name": "webhooks: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "webhooks: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 500,
+        "headers": {},
+        "body": {
+          "statusCode": 500,
+          "message": "Internal server error"
+        }
+      }
+    },
+    {
+      "name": "parties: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "parties: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "parties: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "Invalid input: expected string, received undefined",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "financial: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "financial: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "financial: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "code: Invalid input: expected string, received undefined",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "treasury: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [],
+          "page": {
+            "hasMore": false
+          },
+          "chain": {
+            "status": "intact",
+            "checked": 0,
+            "broken": []
+          }
+        }
+      }
+    },
+    {
+      "name": "treasury: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "treasury: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "kind: Invalid option: expected one of \"bank\"|\"cash\"|\"card-clearing\"|\"virtual\"",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "ledger: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [],
+          "page": {
+            "hasMore": false
+          },
+          "chain": {
+            "status": "intact",
+            "checked": 0,
+            "broken": []
+          }
+        }
+      }
+    },
+    {
+      "name": "ledger: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "ledger: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "code: Invalid input: expected string, received undefined",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "procurement: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [],
+          "page": {
+            "hasMore": false
+          },
+          "chain": {
+            "status": "intact",
+            "checked": 0,
+            "broken": []
+          }
+        }
+      }
+    },
+    {
+      "name": "procurement: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "procurement: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "warehouseId: Invalid input: expected string, received undefined",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "fiscal: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "defaultStatus": "unsupported",
+          "supported": []
+        }
+      }
+    },
+    {
+      "name": "fiscal: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "type": "about:blank",
+          "title": "Forbidden",
+          "status": 403,
+          "detail": "The API key's scopes do not permit this operation"
+        }
+      }
+    },
+    {
+      "name": "fiscal: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "type": "about:blank",
+          "title": "Bad Request",
+          "status": 400,
+          "detail": "Invalid fiscal draft request"
+        }
+      }
+    },
+    {
+      "name": "crm: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [],
+          "page": {
+            "hasMore": false
+          },
+          "chain": {
+            "status": "intact",
+            "checked": 0,
+            "broken": []
+          }
+        }
+      }
+    },
+    {
+      "name": "crm: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "crm: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "name: Invalid input: expected string, received undefined",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "reporting: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "reporting: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "reporting: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "screen: Invalid input: expected string, received undefined",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "files: a read scope reads",
+      "passed": true,
+      "detail": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [],
+          "page": {
+            "hasMore": false
+          },
+          "chain": {
+            "status": "intact",
+            "checked": 0,
+            "broken": []
+          }
+        }
+      }
+    },
+    {
+      "name": "files: a read scope cannot write",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "files: a write scope passes the scope check",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "message": "module: Invalid option: expected one of \"parties\"|\"procurement\"|\"financial\"|\"sales\"|\"crm\"",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    },
+    {
+      "name": "a catalog:read key reads Catalog",
+      "passed": true
+    },
+    {
+      "name": "a key without a sales scope cannot read Sales",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "message": "The API key's scopes do not permit this operation",
+          "error": "Forbidden",
+          "statusCode": 403
+        }
+      }
+    },
+    {
+      "name": "the exchange answers the scopes and no roles",
+      "passed": true,
+      "detail": {
+        "fields": [
+          "accessToken",
+          "apiKeyId",
+          "expiresAt",
+          "scopes",
+          "tenantId"
+        ],
+        "scopes": [
+          "catalog:read"
+        ]
+      }
+    },
+    {
+      "name": "a revoked key fails its next exchange",
+      "passed": true,
+      "detail": {
+        "status": 401,
+        "headers": {},
+        "body": {
+          "status": 401,
+          "type": "https://horizon.dev/problems/invalid-credentials",
+          "title": "Invalid credentials",
+          "detail": "email or password is incorrect",
+          "instance": "/auth/api-key/token",
+          "requestId": "cc2d1b1b-ddbb-43d6-bbb4-4572d6329032"
+        }
+      }
+    },
+    {
+      "name": "a sales:read key exchanges while its issuer holds Sales",
+      "passed": true
+    },
+    {
+      "name": "an issuer who loses a role takes it away from the key",
+      "passed": true,
+      "detail": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "status": 403,
+          "type": "https://horizon.dev/problems/scope-beyond-issuer",
+          "title": "Scope exceeds what you can grant",
+          "detail": "you hold no role in sales, so a key cannot be granted access to it — a key is never more powerful than the user who issued it",
+          "instance": "/auth/api-key/token",
+          "requestId": "dde80fe5-a8ab-4319-8b5f-47f081426758"
+        }
+      }
+    },
+    {
+      "name": "a key over its limit gets 429 with Retry-After",
+      "passed": true,
+      "detail": {
+        "exchanges": 121,
+        "status": 429,
+        "retryAfter": 49,
+        "type": "https://horizon.dev/problems/api-key-rate-limited"
+      }
+    }
+  ]
+}

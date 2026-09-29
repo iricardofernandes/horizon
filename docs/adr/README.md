@@ -102,6 +102,17 @@ one means writing a new ADR that supersedes it.
 | [0062](0062-segregation-of-duties-is-a-declared-matrix.md) | Segregation of duties is a declared matrix, enforced by each module, with delegation |
 | [0063](0063-recovery-is-measured-by-drills.md) | Recovery is measured by drills, and retention is declared per table class |
 
+## AI with isolation
+
+| # | Decision |
+|---|---|
+| [0064](0064-api-keys-reach-modules-through-scoped-tokens.md) | API keys reach modules through short tokens that carry their scopes |
+| [0065](0065-the-tenant-agent-is-a-stateless-mcp-adapter.md) | The tenant's agent server is a stateless MCP adapter with no privileged path |
+| [0066](0066-agent-writes-are-drafts.md) | An agent's writes are drafts, and a draft by a key is its issuer's |
+| [0067](0067-documents-are-indexed-in-one-partition-per-tenant.md) | Documents are indexed in one partition per tenant |
+| [0068](0068-derived-ai-data-follows-its-source.md) | Derived AI data follows its source's erasure and retention |
+| [0069](0069-models-are-ports-and-generation-is-opt-in.md) | Models are ports, generation is opt-in, and nothing depends on them |
+
 ## Frontend
 
 | # | Decision |

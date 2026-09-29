@@ -49,6 +49,21 @@ services:
               policy: local
               limit_by: ip
               fault_tolerant: true
+      # Key exchanges have a route of their own (ADR 0064): the agent server exchanges for
+      # every tenant from one address, so the ceiling per IP is wide and the real limit is
+      # counted per key by Identity.
+      - name: identity-key-exchange
+        paths:
+          - /auth/api-key/token
+        methods: [POST]
+        strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 1200
+              policy: local
+              limit_by: ip
+              fault_tolerant: true
       - name: identity-api
         paths:
           - /identity

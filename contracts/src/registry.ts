@@ -4,6 +4,9 @@ import { instantSchema, moneySchema, quantitySchema, uuidSchema } from './common
 import { eventEnvelopeSchema } from './envelope'
 import { EVENTS } from './events'
 import {
+  accessTokenScopesSchema,
+  apiKeyScopeSchema,
+  apiKeyTokenResponseSchema,
   attachmentLinkSchema,
   attachmentRequestSchema,
   attachmentSchema,
@@ -773,6 +776,24 @@ const staticEntries: readonly RegistryEntry[] = [
     description:
       'A consistency run: owner figures against their ledger accounts, and every audit chain (ADR 0063).',
     schema: consistencyRunSchema,
+  },
+  {
+    id: 'authorization:api-key-scope',
+    kind: 'authorization',
+    description: 'An API key scope: <module>:read|write, or a scope-only name (ADR 0064).',
+    schema: apiKeyScopeSchema,
+  },
+  {
+    id: 'authorization:access-token-scopes',
+    kind: 'authorization',
+    description: 'The scp claim of a token minted from an API key (ADR 0064).',
+    schema: accessTokenScopesSchema,
+  },
+  {
+    id: 'http:api-key-token',
+    kind: 'http',
+    description: 'A key exchanged for a 60-second access token that carries its scopes (ADR 0064).',
+    schema: apiKeyTokenResponseSchema,
   },
   {
     id: 'authorization:role-assignment',

@@ -1,4 +1,4 @@
-import { auditQuerySchema, moduleNameSchema } from '@horizon/contracts'
+import { apiKeyScopeSchema, auditQuerySchema } from '@horizon/contracts'
 import {
   BadRequestException,
   Body,
@@ -22,10 +22,9 @@ import { RequirePermission, RequireRecentAuth } from './authorization'
 import { actor, type IdentityHttpRequest, principal, requestMetadata } from './http-context'
 import { presentApiKey, presentUser, unwrap } from './presenters'
 
-const scope = z.templateLiteral([moduleNameSchema, ':', z.enum(['read', 'write'])])
 const createApiKey = z.strictObject({
   name: z.string().min(1).max(200),
-  scopes: scope.array().min(1).max(50),
+  scopes: apiKeyScopeSchema.array().min(1).max(50),
   expiresAt: z.iso.datetime().optional(),
 })
 const rotateApiKey = z.strictObject({ overlapSeconds: z.number().int().min(0).max(604_800) })

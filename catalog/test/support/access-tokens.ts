@@ -16,6 +16,8 @@ export interface TokenOptions {
   readonly issuer?: string
   readonly ttlSeconds?: number
   readonly issuedAtOffsetSeconds?: number
+  /** An API key's scopes, as Identity's exchange mints them (ADR 0064). */
+  readonly scopes?: readonly string[]
 }
 
 /**
@@ -57,7 +59,11 @@ export class FakeIdentity {
     const subject = options.subject ?? randomUUID()
     const kid = options.kid ?? this.kid
     const issuedAt = Math.floor(Date.now() / 1000) + (options.issuedAtOffsetSeconds ?? 0)
-    const token = await new SignJWT({ tenant_id: options.tenantId, roles: options.roles })
+    const token = await new SignJWT({
+      tenant_id: options.tenantId,
+      roles: options.roles,
+      ...(options.scopes ? { scp: [...options.scopes] } : {}),
+    })
       .setProtectedHeader({ alg: 'EdDSA', typ: 'JWT', kid })
       .setIssuer(options.issuer ?? `horizon-identity-${kid}`)
       .setSubject(subject)

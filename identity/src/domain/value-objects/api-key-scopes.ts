@@ -17,10 +17,18 @@ import type { RoleAssignments } from './role-assignments'
  * issuer's *current* pairs on every use — revoking someone's access narrows the keys they
  * already minted, which is the property the subset rule exists to guarantee.
  */
-export const SCOPE_ACTIONS = ['read', 'write'] as const
+export const SCOPE_ACTIONS = ['read', 'write', 'connect'] as const
 export type ScopeAction = (typeof SCOPE_ACTIONS)[number]
 
-const SCOPE_PATTERN = /^(?<module>[a-z][a-z0-9-]*):(?<action>read|write)$/
+/**
+ * Services reached by scope only (ADR 0064): they hold no roles, so a key may name them
+ * whatever its issuer holds, and they carry no role into a token. What they reach is still
+ * decided by the owning modules' roles. Which scope names are legal is the HTTP boundary's
+ * question, answered by `@horizon/contracts`; an equality test keeps this list the same.
+ */
+export const SCOPE_ONLY_MODULES = ['agent', 'files', 'knowledge'] as const
+
+const SCOPE_PATTERN = /^(?<module>[a-z][a-z0-9-]*):(?<action>read|write|connect)$/
 
 export class ApiKeyScopes extends ValueObject<{ readonly values: readonly string[] }> {
   static create(raw: readonly string[]): Either<InvalidInputError, ApiKeyScopes> {
@@ -33,7 +41,7 @@ export class ApiKeyScopes extends ValueObject<{ readonly values: readonly string
       return left(
         new InvalidInputError(
           '/scopes',
-          `"${invalid}" is not a <module>:read or <module>:write scope`,
+          `"${invalid}" is not a <module>:read, <module>:write or <module>:connect scope`,
         ),
       )
 
@@ -48,9 +56,12 @@ export class ApiKeyScopes extends ValueObject<{ readonly values: readonly string
     return this.props.values.includes(scope)
   }
 
-  /** The distinct modules these scopes reach into. */
+  /** The distinct modules with roles these scopes reach into; scope-only services excluded. */
   get modules(): readonly string[] {
-    return [...new Set(this.props.values.map((scope) => ApiKeyScopes.moduleOf(scope)))]
+    const scopeOnly: readonly string[] = SCOPE_ONLY_MODULES
+    return [...new Set(this.props.values.map((scope) => ApiKeyScopes.moduleOf(scope)))].filter(
+      (module) => !scopeOnly.includes(module),
+    )
   }
 
   /**

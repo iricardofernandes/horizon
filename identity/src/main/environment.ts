@@ -26,6 +26,7 @@ const environmentSchema = z
     JWT_ACTIVE_KID: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
     BLIND_INDEX_KEY_PATH: z.string().min(1),
     ACCESS_TOKEN_TTL_SECONDS: positive.max(900).default(900),
+    API_KEY_EXCHANGES_PER_MINUTE: positive.max(100_000).default(120),
     REFRESH_TOKEN_ABSOLUTE_TTL_SECONDS: positive.max(31_536_000).default(2_592_000),
     REFRESH_TOKEN_IDLE_TTL_SECONDS: positive.max(31_536_000).default(604_800),
     REFRESH_TOKEN_REUSE_GRACE_MS: z.coerce.number().int().min(0).max(10_000).default(2000),

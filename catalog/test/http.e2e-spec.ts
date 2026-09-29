@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto'
+import { SCOPE_REFUSAL_MESSAGE } from '@horizon/contracts'
 import type { INestApplication } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { Test } from '@nestjs/testing'
@@ -173,6 +174,43 @@ it('expands only Catalog roles, and only as far as the role allows', async () =>
     ],
   })
   await request(app.getHttpServer()).get('/items').set(authorized(outsider.token)).expect(403)
+})
+
+it('lets a key token read with catalog:read and refuses its writes whatever its role (ADR 0064)', async () => {
+  const admin = await tenant()
+  const unitId = await unit(admin.token)
+  const readOnly = await identity.mint({
+    tenantId: admin.tenantId,
+    subject: `api-key:${randomUUID()}`,
+    roles: [{ module: 'catalog', role: 'admin' }],
+    scopes: ['catalog:read'],
+    ttlSeconds: 60,
+  })
+  await request(app.getHttpServer()).get('/items').set(authorized(readOnly.token)).expect(200)
+  const refused = await request(app.getHttpServer())
+    .post('/items')
+    .set(authorized(readOnly.token))
+    .send({ kind: 'product', sku: 'KEY-1', name: 'Coffee', unitId })
+    .expect(403)
+  expect(refused.body).toMatchObject({ detail: SCOPE_REFUSAL_MESSAGE })
+
+  const otherModule = await identity.mint({
+    tenantId: admin.tenantId,
+    roles: [{ module: 'catalog', role: 'admin' }],
+    scopes: ['sales:write'],
+  })
+  await request(app.getHttpServer()).get('/items').set(authorized(otherModule.token)).expect(403)
+
+  const writer = await identity.mint({
+    tenantId: admin.tenantId,
+    roles: [{ module: 'catalog', role: 'editor' }],
+    scopes: ['catalog:write'],
+  })
+  await request(app.getHttpServer())
+    .post('/items')
+    .set(authorized(writer.token))
+    .send({ kind: 'product', sku: `KEY-${randomBytes(3).toString('hex')}`, name: 'Tea', unitId })
+    .expect(201)
 })
 
 it('takes the tenant from the verified claim and ignores any header that claims otherwise', async () => {

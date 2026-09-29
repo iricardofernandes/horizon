@@ -65,3 +65,23 @@ it('rejects foreign roles and revoked tokens', async () => {
     denied = false
   }
 })
+
+it('carries a key token scopes and leaves a person token without them (ADR 0064)', async () => {
+  const keyToken = await new SignJWT({
+    tenant_id: randomUUID(),
+    roles: [{ module: 'fiscal', role: 'viewer' }],
+    scp: ['fiscal:read'],
+  })
+    .setProtectedHeader({ alg: 'EdDSA', typ: 'JWT', kid: 'test-1' })
+    .setIssuer('horizon-identity-test-1')
+    .setSubject(`api-key:${randomUUID()}`)
+    .setJti(randomUUID())
+    .setIssuedAt()
+    .setExpirationTime('1m')
+    .sign(privateKey)
+  expect((await verifier.verify(`Bearer ${keyToken}`)).scopes).toEqual(['fiscal:read'])
+  const person = await verifier.verify(
+    `Bearer ${await token([{ module: 'fiscal', role: 'viewer' }])}`,
+  )
+  expect(person.scopes).toBeUndefined()
+})

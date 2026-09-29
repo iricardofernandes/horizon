@@ -1,6 +1,6 @@
 # AI with isolation implementation plan — Phase N
 
-Status: **planned on 2026-09-29.** This is the execution plan for Phase N of the
+Status: **in progress** — Phase 71 delivered on 2026-09-29 ([plan](ai-phase71-implementation-plan.md), [evidence](ai-phase71-evidence.md)). This is the execution plan for Phase N of the
 [ERP expansion plan](erp-expansion-plan.md#phase-n--ai-with-isolation), split into phases
 71–78 of [plan.md](plan.md). Each numbered phase gets its own detailed plan before
 implementation, one local commit and an evidence record, as in Phases J to M.
@@ -96,10 +96,11 @@ that assumes it, and can be revised then.
      that the copies are equal.
    - A token without `scp` (a person signed in) is unchanged.
    - The fiscal token becomes one case of the same exchange and keeps its route.
-   - Revoking a key takes effect on the next exchange. The verified-key cache is
-     invalidated on revocation (ADR 0022), and a caller exchanges for each request.
-   - Per-key rate limits are enforced where the key is exchanged, in Redis, with a tier
-     per key.
+   - Revoking a key takes effect on the next exchange, since a caller exchanges for each
+     request. There is no verified-key cache yet; one added later must be invalidated on
+     revocation (ADR 0022).
+   - Per-key rate limits are enforced where the key is exchanged, in Redis: one limit per
+     key for the deployment (Phase 71 left a tier per key until a customer needs one).
 2. **The tenant's MCP server is a stateless adapter with no privileged path** (ADR 0065).
    - A new service, `agent/`, on port 3015 behind `/agent/mcp`, database `horizon_agent`.
      This revises the roadmap's `tooling/mcp-agent/`. It is a service because it keeps a
@@ -184,7 +185,8 @@ that assumes it, and can be revised then.
    (3016).
 2. Contracts 0.52.0:
    - the `scp` claim;
-   - the scope names `agent:connect`, `files:read` and `knowledge:read`;
+   - the scope names `agent:connect`, `files:read`, `files:write` and `knowledge:read`
+     (`files:write` added in Phase 71, so a key can attach a file);
    - the shape of the key-token response.
 
    Every service is pinned.
@@ -202,7 +204,7 @@ that assumes it, and can be revised then.
 - A revoked key fails its next exchange.
 - An issuer who loses a role takes it away from the key on the next call (ADR 0022's
   re-evaluation, now end to end).
-- A key over its tier gets 429.
+- A key over its limit gets 429.
 
 ### 72 — The tenant's MCP server, read only
 

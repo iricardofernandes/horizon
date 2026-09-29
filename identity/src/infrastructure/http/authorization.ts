@@ -1,5 +1,5 @@
 import { AbilityBuilder, createMongoAbility } from '@casl/ability'
-import { roleAssignmentSchema } from '@horizon/contracts'
+import { roleAssignmentSchema, SCOPE_REFUSAL_MESSAGE, scopeAllows } from '@horizon/contracts'
 import {
   applyDecorators,
   type CanActivate,
@@ -117,7 +117,10 @@ export class IdentityAuthGuard implements CanActivate {
         requestId: request.id,
       })
     }
-    // Revocation is weighed before any role, so a revoked token reads the same everywhere.
+    // Revocation is weighed before any role, so a revoked token reads the same everywhere;
+    // then a key's scopes, so a read-only key is refused the same way in every module.
+    if (!scopeAllows(claims.scopes, 'identity', request.method))
+      throw new ForbiddenException(SCOPE_REFUSAL_MESSAGE)
     const permission = this.reflector.getAllAndOverride<{ action: string; subject: string }>(
       ROUTE_PERMISSION,
       targets,

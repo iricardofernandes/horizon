@@ -9,6 +9,8 @@ export interface VerifiedAccessToken {
   readonly roles: readonly { module: string; role: string }[]
   readonly jti: string
   readonly expiresAt: Date
+  /** An API key's scopes (ADR 0064); absent on a signed-in person's token. */
+  readonly scopes?: readonly string[]
 }
 
 /** The key set could not be consulted at all — an outage, not a rejected token. */
@@ -34,6 +36,7 @@ const CLAIMS = z.object({
   iss: z.string().min(1),
   iat: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
+  scp: z.array(z.string().min(1).max(64)).max(60).optional(),
 })
 
 /**
@@ -85,6 +88,7 @@ export class JwksAccessTokenVerifier {
         roles: claims.roles,
         jti: claims.jti,
         expiresAt: new Date(claims.exp * 1000),
+        ...(claims.scp === undefined ? {} : { scopes: claims.scp }),
       })
     } catch (error) {
       if (unreachable(error)) throw new AccessTokenVerificationUnavailableError()

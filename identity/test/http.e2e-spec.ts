@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { apiKeyTokenResponseSchema, SCOPE_REFUSAL_MESSAGE } from '@horizon/contracts'
 import type { INestApplication } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { Test } from '@nestjs/testing'
@@ -56,6 +57,7 @@ beforeAll(async () => {
     JWT_PUBLIC_KEYS_DIR: join(directory, 'public'),
     JWT_ACTIVE_KID: 'http-test',
     BLIND_INDEX_KEY_PATH: keyPath,
+    API_KEY_EXCHANGES_PER_MINUTE: '5',
   })
   const module = await Test.createTestingModule({ imports: [AppModule.register(config)] }).compile()
   app = module.createNestApplication({ logger: false })
@@ -338,6 +340,85 @@ it('exchanges a tenant-scoped service key for a restricted fiscal reader token',
   await request(app.getHttpServer())
     .post('/auth/fiscal-token')
     .send({ tenantId: randomUUID(), presented: key.body.token })
+    .expect(401)
+})
+
+it('exchanges a key for a one-minute token that carries its scopes, and enforces them', async () => {
+  const owner = await tenant()
+  const key = await request(app.getHttpServer())
+    .post('/api-keys')
+    .set('Authorization', `Bearer ${owner.accessToken}`)
+    .send({ name: 'Agent', scopes: ['identity:read', 'agent:connect'] })
+    .expect(201)
+  const exchanged = await request(app.getHttpServer())
+    .post('/auth/api-key/token')
+    .send({ tenantId: owner.tenantId, presented: key.body.token })
+    .expect(200)
+  expect(exchanged.headers['cache-control']).toContain('no-store')
+  const body = apiKeyTokenResponseSchema.parse(exchanged.body)
+  expect(body).toMatchObject({
+    apiKeyId: key.body.apiKeyId,
+    scopes: ['agent:connect', 'identity:read'],
+  })
+
+  const verified = await runtime.signer.verify(body.accessToken)
+  if (verified.isLeft()) throw verified.value
+  expect(verified.value).toMatchObject({
+    subject: `api-key:${key.body.apiKeyId}`,
+    keyIssuer: owner.ownerId,
+    scopes: ['agent:connect', 'identity:read'],
+    amr: [],
+  })
+  expect(verified.value.roles.every((role) => role.module === 'identity')).toBe(true)
+  expect(verified.value.sid).toBeUndefined()
+  expect(new Date(body.expiresAt).getTime() - Date.now()).toBeLessThanOrEqual(60_000)
+
+  await request(app.getHttpServer())
+    .get('/users')
+    .set('Authorization', `Bearer ${body.accessToken}`)
+    .expect(200)
+  const refused = await request(app.getHttpServer())
+    .post('/users')
+    .set('Authorization', `Bearer ${body.accessToken}`)
+    .send({ tenantId: owner.tenantId, email: 'agent@example.test', name: 'Agent', password })
+    .expect(403)
+  expect(refused.body.detail).toBe(SCOPE_REFUSAL_MESSAGE)
+
+  await request(app.getHttpServer())
+    .delete(`/api-keys/${key.body.apiKeyId}`)
+    .set('Authorization', `Bearer ${owner.accessToken}`)
+    .expect(204)
+  await request(app.getHttpServer())
+    .post('/auth/api-key/token')
+    .send({ tenantId: owner.tenantId, presented: key.body.token })
+    .expect(401)
+})
+
+it('limits exchanges per key and says when to retry', async () => {
+  const owner = await tenant()
+  const key = await request(app.getHttpServer())
+    .post('/api-keys')
+    .set('Authorization', `Bearer ${owner.accessToken}`)
+    .send({ name: 'Busy', scopes: ['identity:read'] })
+    .expect(201)
+  // Five a minute here; a window boundary may reset the count once, so up to twelve tries.
+  let limited: request.Response | undefined
+  for (let attempt = 0; attempt < 12 && !limited; attempt++) {
+    const response = await request(app.getHttpServer())
+      .post('/auth/api-key/token')
+      .send({ tenantId: owner.tenantId, presented: key.body.token })
+    if (response.status === 429) limited = response
+    else expect(response.status).toBe(200)
+  }
+  if (!limited) throw new Error('the key was never limited')
+  expect(limited.body.type).toBe('https://horizon.dev/problems/api-key-rate-limited')
+  const retryAfter = Number(limited.headers['retry-after'])
+  expect(retryAfter).toBeGreaterThan(0)
+  expect(retryAfter).toBeLessThanOrEqual(60)
+  // A wrong secret is refused as invalid and spends nothing of the key's allowance.
+  await request(app.getHttpServer())
+    .post('/auth/api-key/token')
+    .send({ tenantId: owner.tenantId, presented: `${key.body.token.slice(0, -4)}XXXX` })
     .expect(401)
 })
 

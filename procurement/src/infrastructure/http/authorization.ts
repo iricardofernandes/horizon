@@ -1,3 +1,4 @@
+import { SCOPE_REFUSAL_MESSAGE, scopeAllows } from '@horizon/contracts'
 import {
   type CanActivate,
   type ExecutionContext,
@@ -85,6 +86,10 @@ export class ProcurementAuthGuard implements CanActivate {
       throw new UnauthorizedException()
     }
     request.principal = principal
+    // A key's scopes before any role (ADR 0064), so a read-only key reads the same everywhere.
+    const method = context.switchToHttp().getRequest<{ method?: string }>().method ?? 'POST'
+    if (!scopeAllows(principal.scopes, 'procurement', method))
+      throw new ForbiddenException(SCOPE_REFUSAL_MESSAGE)
     const action = this.reflector.getAllAndOverride<ProcurementAction>(ACTION, targets)
     if (!action) return true
     if (!permits(principal, action))

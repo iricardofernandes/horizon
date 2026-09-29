@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  ForbiddenException,
-  Header,
-  HttpCode,
-  Inject,
-  Post,
-  Req,
-} from '@nestjs/common'
+import { Body, Controller, Header, HttpCode, Inject, Post, Req } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { z } from 'zod'
 
@@ -16,7 +7,7 @@ import { RequestSchema } from './api-schema'
 import { PublicRoute } from './authorization'
 import { type IdentityHttpRequest, principal, requestMetadata } from './http-context'
 import { IdempotencySignup, SkipIdempotency } from './idempotency-interceptor'
-import { unwrap } from './presenters'
+import { presentExchange, unwrap } from './presenters'
 
 const password = z.string().min(12).max(1024)
 const signup = z.strictObject({
@@ -180,6 +171,18 @@ export class AuthController {
     return { ...issued, accessTokenExpiresAt: issued.accessTokenExpiresAt.toISOString() }
   }
 
+  /** A key exchanged for a 60-second token that carries its scopes (ADR 0064). */
+  @Post('api-key/token')
+  @RequestSchema(apiKey)
+  @PublicRoute()
+  @SkipIdempotency()
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  async apiKeyToken(@Body() body: unknown) {
+    return presentExchange(unwrap(await this.runtime.exchangeApiKey.forKey(apiKey.parse(body))))
+  }
+
+  /** The fiscal worker's reader token, one case of the same exchange. */
   @Post('fiscal-token')
   @RequestSchema(apiKey)
   @PublicRoute()
@@ -187,37 +190,11 @@ export class AuthController {
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   async fiscalToken(@Body() body: unknown) {
-    const input = apiKey.parse(body)
-    const key = unwrap(await this.runtime.authenticateApiKey.execute(input))
-    const required = ['parties:read', 'identity:read', 'catalog:read']
-    const hasScopes = required.every((scope) => key.scopes.includes(scope))
-    const hasPartyReader = key.roles.some(
-      (role) => role.module === 'parties' && role.role === 'fiscal-reader',
-    )
-    const hasIssuerReader = key.roles.some(
-      (role) => role.module === 'identity' && role.role === 'fiscal-reader',
-    )
-    const hasCatalogReader = key.roles.some(
-      (role) => role.module === 'catalog' && role.role === 'viewer',
-    )
-    if (!hasScopes || !hasPartyReader || !hasIssuerReader || !hasCatalogReader)
-      throw new ForbiddenException('Fiscal service key lacks required access')
-    const minted = await this.runtime.signer.mint(
-      {
-        subject: `api-key:${key.apiKeyId}`,
-        tenantId: input.tenantId,
-        roles: [
-          { module: 'parties', role: 'fiscal-reader' },
-          { module: 'identity', role: 'fiscal-reader' },
-          { module: 'catalog', role: 'viewer' },
-        ],
-      },
-      new Date(),
-    )
+    const exchanged = unwrap(await this.runtime.exchangeApiKey.forFiscalReader(apiKey.parse(body)))
     return {
-      tenantId: input.tenantId,
-      accessToken: minted.token,
-      expiresAt: minted.expiresAt.toISOString(),
+      tenantId: exchanged.tenantId,
+      accessToken: exchanged.accessToken,
+      expiresAt: exchanged.expiresAt.toISOString(),
     }
   }
 }

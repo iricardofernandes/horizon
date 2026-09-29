@@ -270,6 +270,8 @@ never disagree:
 | `crm` | 3012 | Phase L |
 | `reporting` | 3013 | Phase M |
 | `files` | 3014 | Phase M (phase 65, ADR 0060) |
+| `agent` | 3015 | Phase N (phase 72, ADR 0065) |
+| `knowledge` | 3016 | Phase N (phase 74, ADR 0067) |
 
 **Rollout order for a new module name.** Identity and Catalog reject an access token whose
 role assignments name a module their pinned `@horizon/contracts` does not know. Every

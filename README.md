@@ -250,7 +250,7 @@ but absent from that project's own `package.json`.
 
 ## Decisions
 
-Fifty-six records in [`docs/adr/`](docs/adr/), MADR format, each with the alternatives
+Sixty-nine records in [`docs/adr/`](docs/adr/), MADR format, each with the alternatives
 that were rejected. The ones a reviewer is most likely to question:
 
 | Decision | Why | ADR |
@@ -296,7 +296,7 @@ Jaeger / Prometheus / Loki / Grafana · Docker · Terraform (never applied) · G
 | [`docs/fiscal-implementation-plan.md`](docs/fiscal-implementation-plan.md) | Detailed Phase J sequence, fiscal source register, integration gates and exit evidence |
 | [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece is deferred |
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
-| [`docs/adr/`](docs/adr/) | 63 decision records |
+| [`docs/adr/`](docs/adr/) | 69 decision records |
 | [`docs/patterns/`](docs/patterns/) | How to reimplement each cross-cutting pattern (phase 5) |
 | [`docs/events.md`](docs/events.md) | The event catalogue, generated from the schemas |
 | [`docs/privacy.md`](docs/privacy.md) | Lawful basis, retention, erasure |

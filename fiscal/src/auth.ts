@@ -11,6 +11,8 @@ const claimsSchema = z.object({
   iat: z.number().int(),
   exp: z.number().int(),
   iss: z.string().min(1),
+  // An API key's scopes (ADR 0064); absent on a signed-in person's token.
+  scp: z.array(z.string().min(1).max(64)).max(60).optional(),
 })
 
 export type FiscalPermission =
@@ -28,6 +30,7 @@ export type FiscalPrincipal = {
   tenantId: string
   subject: string
   role: 'admin' | 'issuer' | 'reviewer' | 'viewer' | 'auditor'
+  scopes?: readonly string[]
 }
 
 const permissions: Record<FiscalPrincipal['role'], readonly FiscalPermission[]> = {
@@ -114,7 +117,12 @@ export class FiscalTokenVerifier {
         throw new Error('Fiscal access token was revoked')
       const assigned = claims.roles.find((role) => role.module === 'fiscal')
       if (!assigned) throw new Error('Fiscal role is required')
-      return { tenantId: claims.tenant_id, subject: claims.sub, role: assigned.role }
+      return {
+        tenantId: claims.tenant_id,
+        subject: claims.sub,
+        role: assigned.role,
+        ...(claims.scp === undefined ? {} : { scopes: claims.scp }),
+      }
     } catch {
       throw new Error('Invalid fiscal access token')
     }

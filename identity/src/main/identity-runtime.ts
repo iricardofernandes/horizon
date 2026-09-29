@@ -17,6 +17,7 @@ import {
 } from '@/application/use-cases/describe-company'
 import { DisableUserUseCase } from '@/application/use-cases/disable-user'
 import { EraseDataSubjectUseCase } from '@/application/use-cases/erase-data-subject'
+import { ExchangeApiKeyUseCase } from '@/application/use-cases/exchange-api-key'
 import { ExportDataSubjectUseCase } from '@/application/use-cases/export-data-subject'
 import {
   IssueServiceTokenUseCase,
@@ -46,6 +47,7 @@ import {
   RedisMfaLockout,
   RedisSessionRegistry,
 } from '@/infrastructure/cache/redis-access'
+import { RedisApiKeyRateLimiter } from '@/infrastructure/cache/redis-api-key-rate-limiter'
 import { RedisRefreshTokenFamiliesRepository } from '@/infrastructure/cache/redis-refresh-token-families-repository'
 import { RedisTokenDenylist } from '@/infrastructure/cache/redis-token-denylist'
 import { RedisWorkspaceSelections } from '@/infrastructure/cache/redis-workspace-selections'
@@ -105,6 +107,7 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
   readonly beginWorkspaceSwitch: BeginWorkspaceSwitchUseCase
   readonly selectWorkspace: SelectWorkspaceUseCase
   readonly authenticateApiKey: AuthenticateApiKeyUseCase
+  readonly exchangeApiKey: ExchangeApiKeyUseCase
   readonly refreshSession: RefreshSessionUseCase
   readonly revokeSession: RevokeSessionUseCase
   readonly registerUser: RegisterUserUseCase
@@ -232,6 +235,12 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
       { policies, challenges: this.challenges },
     )
     this.authenticateApiKey = new AuthenticateApiKeyUseCase(db, hasher, clock)
+    this.exchangeApiKey = new ExchangeApiKeyUseCase(
+      this.authenticateApiKey,
+      new RedisApiKeyRateLimiter(this.redis, config.API_KEY_EXCHANGES_PER_MINUTE),
+      this.signer,
+      clock,
+    )
     this.issueServiceToken = new IssueServiceTokenUseCase(
       db,
       this.signer,

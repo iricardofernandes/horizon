@@ -143,6 +143,7 @@
     "rotateTitle": "Rotacionar {name}",
     "rotating": "Rotacionando…",
     "scopes": "Escopos",
+    "scopesHelp": "Só aparecem os módulos em que você tem um papel. Uma chave nunca vai além de você, e um escopo de leitura nunca escreve.",
     "selectScope": "Selecione ao menos um escopo.",
     "title": "Chaves de API",
     "usedOn": "Usada em {date}"

@@ -6,11 +6,13 @@ import { Dialog } from '@base-ui/react/dialog'
 import { ArrowClockwise, Check, Copy, Key, Plus, Trash, X } from '@phosphor-icons/react'
 import { useTranslations } from 'next-intl'
 import { type FormEvent, useState } from 'react'
+import { useSession } from '@/components/shell/workspace-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeading } from '@/components/ui/headings'
 import { TextField } from '@/components/ui/text-field'
 import { apiError } from '@/lib/api'
+import { grantableScopes } from '@/lib/api-key-scopes'
 import { jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
@@ -28,18 +30,6 @@ export type ApiKeyRecord = {
 }
 
 type MutationProps = { onChanged: () => Promise<void>; setNotice: (value: string) => void }
-
-const scopeOptions = [
-  'identity:read',
-  'catalog:read',
-  'catalog:write',
-  'inventory:read',
-  'inventory:write',
-  'sales:read',
-  'sales:write',
-  'webhooks:read',
-  'webhooks:write',
-]
 
 export function ApiKeysView({
   apiKeys,
@@ -106,6 +96,7 @@ function CreateApiKeyDialog({ onChanged }: Pick<MutationProps, 'onChanged'>) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [token, setToken] = useState('')
+  const scopeOptions = grantableScopes(useSession()?.roles ?? [])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -186,6 +177,7 @@ function CreateApiKeyDialog({ onChanged }: Pick<MutationProps, 'onChanged'>) {
               />
               <fieldset className="scope-fieldset">
                 <legend>{t('scopes')}</legend>
+                <p className="settings-card-caption">{t('scopesHelp')}</p>
                 <div className="scope-grid">
                   {scopeOptions.map((scope) => (
                     <label htmlFor={`scope-${scope}`} key={scope}>
