@@ -37,6 +37,10 @@ export const SERVICE_GRANTS: Readonly<Record<string, readonly RoleAssignment[]>>
       ] as const
     ).map(auditor),
   ],
+  // The document index reads attachments as a viewer of each module that has them, to index
+  // them, and does nothing else with the grant; search answers with the caller's roles
+  // (ADR 0067, Phase 74).
+  knowledge: (['parties', 'procurement', 'financial', 'sales', 'crm'] as const).map(viewer),
 }
 
 export interface IssueServiceTokenRequest {

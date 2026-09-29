@@ -222,6 +222,19 @@ services:
           - /agent
         strip_path: true
 
+  # The document index (ADR 0067): its status now, search from Phase 75.
+  - name: knowledge
+    url: http://knowledge:3016
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 30000
+    read_timeout: 30000
+    routes:
+      - name: knowledge-api
+        paths:
+          - /knowledge
+        strip_path: true
+
   - name: fiscal
     url: http://fiscal:3011
     retries: 3

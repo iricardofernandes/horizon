@@ -1,0 +1,55 @@
+{
+  "phase": 74,
+  "kind": "document-index-smoke",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T17:28:08.523Z",
+  "finishedAt": "2026-09-29T17:28:17.503Z",
+  "passed": true,
+  "tenantId": "01a0ee35-a660-7a77-855f-18b2337f9c6d",
+  "indexVersion": "hash-384-v1",
+  "checks": [
+    {
+      "name": "a text file is indexed into its tenant’s partition",
+      "passed": true,
+      "detail": "indexed||1|false"
+    },
+    {
+      "name": "its text is stored sealed",
+      "passed": true
+    },
+    {
+      "name": "a search in the tenant is planned onto its partition alone",
+      "passed": true,
+      "detail": "Limit\n  InitPlan 1\n    ->  Limit\n          ->  Seq Scan on chunks_01a0ee35a6607a77855f18b2337f9c6d\n  ->  Sort\n        Sort Key: ((chunks.embedding <=> (InitPlan 1).col1))\n        ->  Bitmap Heap Scan on chunks_01a0ee35a6607a77855f18b2337f9c6d chunks\n              Recheck Cond: (tenant_id = '01a0ee35-a660-7a77-855f-18b2337f9c6d'::uuid)\n              ->  Bitmap Index Scan on chunks_01a0ee35a6607a77855f18b2337f9c6d_pkey\n                    Index Cond: (tenant_id = '01a0ee35-a660-7a77-855f-18b2337f9c6d'::uuid)"
+    },
+    {
+      "name": "an image is recorded as having no text",
+      "passed": true,
+      "detail": "no-text||0|true"
+    },
+    {
+      "name": "the EICAR file never enters the index",
+      "passed": true,
+      "detail": {
+        "files": "quarantined",
+        "index": "deleted|quarantined|0|true"
+      }
+    },
+    {
+      "name": "erasing the party takes its file’s vectors and key out, and leaves a tombstone",
+      "passed": true,
+      "detail": "deleted|erased|0|true"
+    },
+    {
+      "name": "the workspace status shows every file of the party ended",
+      "passed": true,
+      "detail": {
+        "documents": {
+          "deleted": 3
+        },
+        "chunks": 0,
+        "indexVersion": "hash-384-v1"
+      }
+    }
+  ]
+}

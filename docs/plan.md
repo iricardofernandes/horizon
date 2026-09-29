@@ -2752,8 +2752,22 @@ Each one is idempotent per MCP request.
 
 ## Phase 74 — The document index, one partition per tenant
 
-**Planned.** `knowledge/` on port 3016 extracts, embeds and seals the text of available attachments into one pgvector
-partition per tenant, and deletes it on erasure.
+**Delivered on 2026-09-29.** `knowledge/` on port 3016 indexes available attachments.
+- **Reading and indexing:**
+  - it reads each file through `files/` as the `knowledge` service client, a viewer of the
+    five attaching modules;
+  - it extracts the text of plain text, CSV, PDF, DOCX and XLSX;
+  - it chunks, embeds and seals it, and writes every chunk of a document in one
+    transaction into its tenant's own pgvector partition, which has its own HNSW index.
+- **Leaving the index:** `files.attachment.deleted` or `quarantined` deletes the vectors,
+  destroys the document's key and leaves a tombstone that refuses a late `available`.
+- **Models:** the embedder is a deterministic hash by default and in CI, or
+  `multilingual-e5-small` on Text Embeddings Inference with `make up-ai`. Documents embedded
+  by another version re-index in the background.
+- **The cluster:** PostgreSQL gains pgvector 0.8.1, compiled into the same Alpine image.
+
+[Plan](ai-phase74-implementation-plan.md), [evidence](ai-phase74-evidence.md),
+[smoke](drills/2026-09-29-phase74-index-smoke.json).
 [Detailed work](ai-implementation-plan.md#74--the-document-index-one-partition-per-tenant).
 
 ## Phase 75 — Search by meaning, with roles and citations

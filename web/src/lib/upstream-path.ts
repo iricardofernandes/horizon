@@ -3,6 +3,7 @@ const roots = new Set([
   'crm',
   'files',
   'agent',
+  'knowledge',
   'financial',
   'fiscal',
   'identity',

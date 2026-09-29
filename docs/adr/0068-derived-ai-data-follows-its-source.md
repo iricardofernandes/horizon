@@ -1,6 +1,8 @@
 # 68. Derived AI data follows its source's erasure and retention
 
-- Status: accepted; planned for Phases 74–76 ([Phase N plan](../ai-implementation-plan.md)).
+- Status: accepted; the index side is implemented in Phase 74
+  ([plan](../ai-phase74-implementation-plan.md)), with the revision below. Conversations
+  arrive in Phase 76.
 - Date: 2026-09-29
 
 ## Context
@@ -40,3 +42,17 @@ meaningful text from vectors alone.
 
 **Rebuild the whole index after each erasure.** Rejected: its cost grows with the tenant,
 and deleting rows achieves the same thing.
+
+## Revision (Phase 74)
+
+**A key per attachment, not per owner.** `files/` already ends every attachment of an erased
+party or user with its own `files.attachment.deleted (erased)`. So the index learns every
+erasure, retention expiry, removal and quarantine from that one event. Each document's chunk
+text is sealed under a data key of the document, wrapped by `KNOWLEDGE_MASTER_KEY`. The
+event:
+- destroys that key;
+- deletes the vectors;
+- leaves the document row as the tombstone.
+
+The index needs no owner mapping, and does not listen to the parties or identity erasure
+events itself.

@@ -44,6 +44,7 @@ jobs:
           - { name: reporting, context: reporting }
           - { name: files, context: files }
           - { name: agent, context: agent }
+          - { name: knowledge, context: knowledge }
           - { name: web, context: web }
           - { name: gateway, context: gateway }
     steps:

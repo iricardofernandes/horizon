@@ -111,7 +111,10 @@ services:
   # ---------------------------------------------------------------- data
   postgres:
     <<: *restart
-    image: postgres:17-alpine
+    # postgres:17-alpine plus pgvector (ADR 0067, Phase 74); see infra/postgres/image.
+    image: horizon/postgres:17-pgvector-0.8.1
+    build:
+      context: ./postgres/image
     container_name: horizon-postgres
     networks: [horizon]
     ports: ['${HORIZON_POSTGRES_PORT:-5432}:5432']
@@ -177,7 +180,7 @@ services:
   # Scheduled base backups through the cluster's local socket (ADR 0063, Phase 69).
   postgres-backup:
     <<: *restart
-    image: postgres:17-alpine
+    image: horizon/postgres:17-pgvector-0.8.1
     container_name: horizon-postgres-backup
     networks: [horizon]
     user: '70:70'

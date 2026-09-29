@@ -53,6 +53,14 @@ describe('service tokens (Phase 69)', () => {
     expect(audit).toMatchObject([
       { action: 'service-token.issued', subjectId: 'reporting', actor: { type: 'system' } },
     ])
+    // The index reads attachments as a viewer of exactly the modules that have them.
+    expect(SERVICE_GRANTS.knowledge?.map((role) => `${role.module}:${role.role}`)).toEqual([
+      'parties:viewer',
+      'procurement:viewer',
+      'financial:viewer',
+      'sales:viewer',
+      'crm:viewer',
+    ])
     const roles = SERVICE_GRANTS.reporting ?? []
     expect(roles.every((role) => ['viewer', 'auditor'].includes(role.role))).toBe(true)
   })

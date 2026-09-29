@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-MODULES=(identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting files agent)
+MODULES=(identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting files agent knowledge)
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<-SQL
   CREATE ROLE horizon_owner LOGIN PASSWORD '${HORIZON_OWNER_PASSWORD:-horizon}'
@@ -63,5 +63,11 @@ SQL
       GRANT USAGE, SELECT ON SEQUENCES TO horizon_app;
 SQL
 done
+
+# pgvector is not a trusted extension: the superuser creates it where the index lives
+# (ADR 0067, Phase 74), and the knowledge migration only checks that it is there.
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname horizon_knowledge <<-SQL
+  CREATE EXTENSION IF NOT EXISTS vector;
+SQL
 
 echo "postgres init complete: ${#MODULES[@]} databases, 5 roles"
