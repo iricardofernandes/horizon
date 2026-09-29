@@ -1,0 +1,25 @@
+{
+  "phase": 76,
+  "kind": "assistant-without-provider",
+  "generator": "anthropic, no key",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T18:24:51.666Z",
+  "finishedAt": "2026-09-29T18:24:51.847Z",
+  "passed": true,
+  "tenantId": "01a0ee69-93f1-77b0-b1f7-62633cf62ea9",
+  "provider": "Anthropic",
+  "model": "claude-opus-5-5",
+  "checks": [
+    {
+      "name": "without a provider key the status says so, and a question sends nothing, even when on",
+      "passed": true,
+      "detail": {
+        "enabled": true,
+        "available": false,
+        "provider": "Anthropic",
+        "asked": 409,
+        "spent": 0
+      }
+    }
+  ]
+}

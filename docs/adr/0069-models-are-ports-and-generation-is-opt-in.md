@@ -1,6 +1,13 @@
 # 69. Models are ports, generation is opt-in, and nothing depends on them
 
-- Status: accepted; planned for Phases 74–77 ([Phase N plan](../ai-implementation-plan.md)).
+- Status: accepted. Embeddings are implemented in Phase 74 and search in Phase 75.
+  Generation is implemented in Phase 76 ([plan](../ai-phase76-implementation-plan.md),
+  [evidence](../ai-phase76-evidence.md)), with these revisions:
+  - the assistant lives in `agent/`, beside the catalogue it uses;
+  - the stack's default generator is the extractive one;
+  - once document text has been read, the model may only answer.
+
+  Suggestions arrive in Phase 77.
 - Date: 2026-09-29
 
 ## Context

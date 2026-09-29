@@ -44,6 +44,7 @@ beforeAll(async () => {
     GATEWAY_URL: gateway.url,
     JWKS_URL: gateway.jwksUrl,
     AGENT_MAX_ROWS: '50',
+    ASSISTANT_MASTER_KEY: 'ab'.repeat(32),
   })
   const module = await Test.createTestingModule({ imports: [AppModule.register(config)] }).compile()
   app = module.createNestApplication({ logger: false })

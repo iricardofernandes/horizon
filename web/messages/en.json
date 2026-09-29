@@ -598,7 +598,9 @@
       "audit": "Audit",
       "crossReports": "Reports",
       "controls": "Controls",
-      "agent": "Agent"
+      "agent": "Agent",
+      "assistant": "Assistant",
+      "assistantSettings": "Assistant"
     }
   },
   "orders": {
@@ -1318,7 +1320,8 @@
     "switchWorkspace": "Switch workspace",
     "unavailableNotice": "The workspace could not be loaded. Check that the application services are running.",
     "workspace": "Workspace",
-    "workspaceLabel": "{name} workspace"
+    "workspaceLabel": "{name} workspace",
+    "assistant": "Assistant"
   },
   "status": {
     "abandoned": "abandoned",
@@ -3115,5 +3118,69 @@
     "badge": "Agent draft",
     "badgeHint": "Drafted by an agent through an API key; open the call log",
     "filter": "Agent drafts ({count})"
+  },
+  "assistant": {
+    "eyebrow": "Assistant",
+    "title": "Ask Horizon",
+    "copy": "Answers from what you may read: records and attachments, each statement with its sources beside it. The assistant changes nothing.",
+    "conversations": "Conversations",
+    "newConversation": "New conversation",
+    "noConversations": "No conversations yet.",
+    "kept": "Each conversation is yours, kept 30 days after its last question, and gone if your account is erased.",
+    "empty": "Ask about parties, orders, bills, opportunities, or what an attachment says.",
+    "question": "Your question",
+    "placeholder": "E.g. what does the coffee supply contract say?",
+    "ask": "Ask",
+    "asking": "Looking…",
+    "budget": "{percent}% of this month's budget used · {provider}, {model}",
+    "sources": "Sources",
+    "noSources": "The sources of the last answer appear here.",
+    "excerpt": "excerpt {chunk} of {of}",
+    "rows": "{rows} row(s)",
+    "notCited": "read, not cited",
+    "openRecord": "Open record",
+    "notFound": "Not found in what you can read",
+    "stopped": {
+      "stopped-budget": "This month's budget ran out during this question.",
+      "stopped-off": "The assistant was turned off during this question."
+    },
+    "readiness": {
+      "off": "The assistant is off for this workspace. Nothing is sent.",
+      "unavailable": "No model provider is configured ({provider}). Nothing is sent.",
+      "budget-spent": "This month's assistant budget is spent."
+    },
+    "toSettings": "Open the assistant settings",
+    "refused": {
+      "off": "The assistant is off for this workspace.",
+      "unavailable": "No model provider is configured.",
+      "budget-spent": "This month's assistant budget is spent.",
+      "failed": "The assistant could not answer now."
+    }
+  },
+  "assistantSettings": {
+    "eyebrow": "Administration",
+    "title": "Assistant",
+    "copy": "Turn the assistant on for the workspace, see what is sent, and cap the month's spending.",
+    "notice": "Notice before turning on",
+    "noticeVersion": "Notice version: {version}",
+    "on": "on",
+    "off": "off",
+    "noticeProvider": "Questions are answered by {provider}, with the model {model}. Turning it on accepts that, as a subprocessor, it handles:",
+    "sends": {
+      "question": "the question of the person asking;",
+      "conversation": "the earlier questions and answers of the same conversation;",
+      "tools": "what the tools answered for that person: record data and attachment excerpts they may already read."
+    },
+    "noticeNever": "Nothing is sent while the assistant is off, and nothing the person may not read. The assistant changes no record.",
+    "unavailable": "No provider key is configured: even when on, the assistant sends nothing.",
+    "accept": "I read the notice and accept the sending described above",
+    "turnOn": "Turn the assistant on",
+    "turnOff": "Turn the assistant off",
+    "ownerOnly": "Only a workspace owner turns the assistant on.",
+    "budget": "Monthly budget",
+    "spent": "{spent} of {budget} tokens used ({percent}%) over {questions} question(s) this month.",
+    "budgetLabel": "Tokens per month",
+    "saveBudget": "Save budget",
+    "failed": "The assistant settings could not be saved."
   }
 }

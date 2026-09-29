@@ -1,4 +1,6 @@
 import { metrics } from '@opentelemetry/api'
+import type { AssistantMetrics } from '@/application/assistant-ports'
+import type { GenerationUsage } from '@/application/generation'
 import type { CallMetrics, CallRecord } from '@/application/ports'
 
 const meter = metrics.getMeter('agent')
@@ -19,5 +21,29 @@ export class OtelCallMetrics implements CallMetrics {
 
   exchanged(seconds: number): void {
     this.#exchange.record(seconds)
+  }
+}
+
+/** The assistant's questions, tokens and answer time (Phase 76). No tenant label. */
+export class OtelAssistantMetrics implements AssistantMetrics {
+  readonly #questions = meter.createCounter('assistant_questions', {
+    description: 'Questions the assistant finished, by outcome',
+  })
+  readonly #tokens = meter.createCounter('assistant_tokens', {
+    description: 'Tokens sent to and received from the model provider',
+  })
+  readonly #seconds = meter.createHistogram('assistant_answer_seconds', {
+    description: 'Time to answer one question',
+    unit: 's',
+  })
+
+  answered(outcome: string, seconds: number): void {
+    this.#questions.add(1, { outcome })
+    this.#seconds.record(seconds)
+  }
+
+  tokens(usage: GenerationUsage): void {
+    this.#tokens.add(usage.inputTokens, { kind: 'input' })
+    this.#tokens.add(usage.outputTokens, { kind: 'output' })
   }
 }

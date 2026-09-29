@@ -598,7 +598,9 @@
       "audit": "Auditoria",
       "crossReports": "Relatórios",
       "controls": "Controles",
-      "agent": "Agente"
+      "agent": "Agente",
+      "assistant": "Assistente",
+      "assistantSettings": "Assistente"
     }
   },
   "orders": {
@@ -1318,7 +1320,8 @@
     "switchWorkspace": "Trocar de área de trabalho",
     "unavailableNotice": "A área de trabalho não pôde ser carregada. Verifique se os serviços da aplicação estão no ar.",
     "workspace": "Área de trabalho",
-    "workspaceLabel": "Área de trabalho {name}"
+    "workspaceLabel": "Área de trabalho {name}",
+    "assistant": "Assistente"
   },
   "status": {
     "abandoned": "abandonada",
@@ -3115,5 +3118,69 @@
     "badge": "Rascunho do agente",
     "badgeHint": "Criado por um agente com uma chave de API; abrir o log de chamadas",
     "filter": "Rascunhos do agente ({count})"
+  },
+  "assistant": {
+    "eyebrow": "Assistente",
+    "title": "Pergunte ao Horizon",
+    "copy": "Respostas a partir do que você pode ler: registros e anexos, cada afirmação com as fontes ao lado. O assistente não altera nada.",
+    "conversations": "Conversas",
+    "newConversation": "Nova conversa",
+    "noConversations": "Nenhuma conversa ainda.",
+    "kept": "Cada conversa é sua, fica guardada 30 dias depois da última pergunta e some se sua conta for apagada.",
+    "empty": "Faça uma pergunta sobre parceiros, pedidos, contas, oportunidades ou o que diz um anexo.",
+    "question": "Sua pergunta",
+    "placeholder": "Ex.: o que diz o contrato de fornecimento de café?",
+    "ask": "Perguntar",
+    "asking": "Buscando…",
+    "budget": "{percent}% do orçamento do mês usado · {provider}, {model}",
+    "sources": "Fontes",
+    "noSources": "As fontes da última resposta aparecem aqui.",
+    "excerpt": "trecho {chunk} de {of}",
+    "rows": "{rows} linha(s)",
+    "notCited": "lida, não citada",
+    "openRecord": "Abrir registro",
+    "notFound": "Não encontrado no que você pode ler",
+    "stopped": {
+      "stopped-budget": "O orçamento do mês acabou durante esta pergunta.",
+      "stopped-off": "O assistente foi desligado durante esta pergunta."
+    },
+    "readiness": {
+      "off": "O assistente está desligado neste workspace. Nada é enviado.",
+      "unavailable": "Nenhum provedor de modelo está configurado ({provider}). Nada é enviado.",
+      "budget-spent": "O orçamento do mês do assistente acabou."
+    },
+    "toSettings": "Abrir configurações do assistente",
+    "refused": {
+      "off": "O assistente está desligado neste workspace.",
+      "unavailable": "Nenhum provedor de modelo está configurado.",
+      "budget-spent": "O orçamento do mês do assistente acabou.",
+      "failed": "Não foi possível responder agora."
+    }
+  },
+  "assistantSettings": {
+    "eyebrow": "Administração",
+    "title": "Assistente",
+    "copy": "Ligue o assistente para o workspace, veja o que é enviado e limite o gasto do mês.",
+    "notice": "Aviso antes de ligar",
+    "noticeVersion": "Versão do aviso: {version}",
+    "on": "ligado",
+    "off": "desligado",
+    "noticeProvider": "As perguntas são respondidas por {provider}, com o modelo {model}. Ao ligar, você aceita que ele trate, como subprocessador:",
+    "sends": {
+      "question": "a pergunta de quem pergunta;",
+      "conversation": "as perguntas e respostas anteriores da mesma conversa;",
+      "tools": "o que as ferramentas responderam para essa pessoa: dados de registros e trechos de anexos que ela já pode ler."
+    },
+    "noticeNever": "Nada é enviado com o assistente desligado, e nada que a pessoa não possa ler. O assistente não altera registros.",
+    "unavailable": "Nenhuma chave de provedor está configurada: mesmo ligado, o assistente não envia nada.",
+    "accept": "Li o aviso e aceito o envio descrito acima",
+    "turnOn": "Ligar o assistente",
+    "turnOff": "Desligar o assistente",
+    "ownerOnly": "Só um dono do workspace liga o assistente.",
+    "budget": "Orçamento do mês",
+    "spent": "{spent} de {budget} tokens usados ({percent}%) em {questions} pergunta(s) neste mês.",
+    "budgetLabel": "Tokens por mês",
+    "saveBudget": "Salvar orçamento",
+    "failed": "Não foi possível salvar as configurações do assistente."
   }
 }

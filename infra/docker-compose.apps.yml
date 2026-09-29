@@ -507,6 +507,11 @@ services:
       GATEWAY_URL: http://kong:8000
       AGENT_MAX_ROWS: '50'
       AGENT_MAX_RESULT_BYTES: '65536'
+      # The in-app assistant (Phase 76): deterministic unless a provider and its key are set.
+      ASSISTANT_MASTER_KEY: ${HORIZON_ASSISTANT_MASTER_KEY:-6c6f63616c2d617373697374616e742d6d61737465722d6b65792d6368616e67}
+      ASSISTANT_GENERATOR: ${HORIZON_ASSISTANT_GENERATOR:-extractive}
+      ASSISTANT_MODEL: ${HORIZON_ASSISTANT_MODEL:-claude-opus-5-5}
+      ANTHROPIC_API_KEY: ${HORIZON_ANTHROPIC_API_KEY:-}
 
   knowledge-migrate:
     <<: *service

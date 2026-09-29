@@ -1,6 +1,7 @@
 'use client'
 
-import { SidebarSimple, SignOut } from '@phosphor-icons/react'
+import { SidebarSimple, SignOut, Sparkle } from '@phosphor-icons/react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { CommandPalette } from '@/components/shell/command-palette'
@@ -54,6 +55,14 @@ export function WorkspaceTopbar({
       </div>
       <div className="user-menu">
         <CommandPalette />
+        <Link
+          aria-label={t('assistant')}
+          className="ui-button ui-button-ghost"
+          href="/app/assistant"
+        >
+          <Sparkle aria-hidden="true" size={16} />
+          <span className="topbar-assistant-label">{t('assistant')}</span>
+        </Link>
         <NotificationBell />
         <LanguageSwitcher />
         <span className="avatar">{session?.name?.slice(0, 1) ?? 'H'}</span>

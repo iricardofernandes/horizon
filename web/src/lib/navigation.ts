@@ -31,6 +31,7 @@ import {
   SealCheck,
   ShieldCheck,
   ShoppingCart,
+  Sparkle,
   TrendUp,
   Truck,
   UploadSimple,
@@ -65,6 +66,15 @@ export const navigation: readonly NavigationGroup[] = [
     labelKey: 'overview',
     entries: [
       { href: '/app', labelKey: 'overview', icon: ChartBar, module: null, demo: true },
+      {
+        href: '/app/assistant',
+        labelKey: 'assistant',
+        icon: Sparkle,
+        // Everyone's: it reads only what the person may read, when the workspace turned it
+        // on (Phase 76).
+        module: null,
+        demo: false,
+      },
       {
         href: '/app/reports',
         labelKey: 'crossReports',
@@ -422,6 +432,14 @@ export const navigation: readonly NavigationGroup[] = [
         // Delegations, thresholds and consistency runs: each panel asks only the modules the
         // user holds a role in (Phase 70).
         module: null,
+        demo: false,
+      },
+      {
+        href: '/app/administration/assistant',
+        labelKey: 'assistantSettings',
+        icon: Sparkle,
+        // The notice, the switch and the budget: an Identity owner or admin's (Phase 76).
+        module: 'identity',
         demo: false,
       },
       {

@@ -3695,3 +3695,119 @@ tbody tr.audit-broken td {
 .agent-draft-filter.is-active {
   border-color: var(--color-accent, currentColor);
 }
+/* The in-app assistant (Phase 76): conversations, the thread, and the sources beside it. */
+.assistant-view,
+.assistant-settings {
+  display: grid;
+  gap: 16px;
+}
+.assistant-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(240px, 320px);
+  align-items: start;
+  gap: 16px;
+}
+.assistant-conversations ul,
+.assistant-sources ol,
+.assistant-statements,
+.assistant-notice-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.assistant-conversations button[aria-current="true"] {
+  font-weight: 600;
+}
+.assistant-thread {
+  display: grid;
+  gap: 16px;
+}
+.assistant-turn {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.assistant-question {
+  margin: 0;
+  font-weight: 600;
+}
+.assistant-statements li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+.assistant-unsupported {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+.assistant-cite {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--jade-3);
+  color: var(--jade-11);
+  font-size: 12px;
+  text-decoration: none;
+}
+.assistant-stopped,
+.assistant-readiness {
+  margin: 0;
+  color: var(--amber-11);
+}
+.assistant-form {
+  display: grid;
+  gap: 8px;
+}
+.assistant-accept {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.assistant-form-footer,
+.assistant-budget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.assistant-sources li {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+}
+.assistant-sources li.cited {
+  background: var(--jade-2);
+}
+.assistant-sources header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.assistant-sources small {
+  color: var(--color-text-muted);
+}
+.assistant-sources blockquote {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-border);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+@media (max-width: 1100px) {
+  .assistant-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Room in the top bar for the assistant: its label, the palette's hint and the email go. */
+  .topbar-assistant-label,
+  .palette-trigger kbd,
+  .user-identity small {
+    display: none;
+  }
+}

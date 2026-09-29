@@ -14,6 +14,24 @@ const environmentSchema = z.object({
   GATEWAY_TIMEOUT_MS: positive.max(60_000).default(10_000),
   AGENT_MAX_ROWS: positive.max(500).default(50),
   AGENT_MAX_RESULT_BYTES: positive.min(1024).max(1_048_576).default(65_536),
+  /** Erasures reach the assistant through the broker; without it, nothing is consumed. */
+  RABBITMQ_URL: z
+    .url()
+    .regex(/^amqps?:\/\//)
+    .optional(),
+  /** Wraps every person's conversation key: 64 hex characters or 32 bytes of base64. */
+  ASSISTANT_MASTER_KEY: z.string().min(44).max(64),
+  /** `extractive` (deterministic, in the stack) or `anthropic` (needs ANTHROPIC_API_KEY). */
+  ASSISTANT_GENERATOR: z.enum(['extractive', 'anthropic']).default('extractive'),
+  ASSISTANT_MODEL: z.string().min(1).max(100).default('claude-opus-5-5'),
+  // Compose passes an unset key as an empty string: that is no key.
+  ANTHROPIC_API_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  ANTHROPIC_BASE_URL: z.url().default('https://api.anthropic.com'),
+  ASSISTANT_TIMEOUT_MS: positive.max(300_000).default(60_000),
+  ASSISTANT_PURGE_INTERVAL_MS: positive.min(60_000).default(3_600_000),
 })
 
 export type AgentEnvironment = z.infer<typeof environmentSchema>

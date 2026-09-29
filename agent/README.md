@@ -7,8 +7,13 @@ token could not read by itself.
 An independently deployable NestJS service with its own database and container, reached
 through Kong at `/agent`, sharing no source with any other module (ADR 0001).
 
-**Status: Phase 73.** See the [Phase 72](../docs/ai-phase72-implementation-plan.md) and
-[Phase 73](../docs/ai-phase73-implementation-plan.md) plans,
+It also runs the **in-app assistant** (Phase 76): a signed-in person's questions answered
+from the same read catalogue, with that person's own token, every statement citing what it
+read.
+
+**Status: Phase 76.** See the [Phase 72](../docs/ai-phase72-implementation-plan.md),
+[Phase 73](../docs/ai-phase73-implementation-plan.md) and
+[Phase 76](../docs/ai-phase76-implementation-plan.md) plans,
 [ADR 0064](../docs/adr/0064-api-keys-reach-modules-through-scoped-tokens.md) and
 [ADR 0065](../docs/adr/0065-the-tenant-agent-is-a-stateless-mcp-adapter.md).
 
@@ -38,6 +43,28 @@ through Kong at `/agent`, sharing no source with any other module (ADR 0001).
   default, changed by an Identity owner or admin.
 - **The audit log,** `GET /agent/audit`: every tool call and every switch, hash-chained per
   tenant, with the chain's verdict per page. Identity owners, admins and auditors read it.
+- **The assistant** (Phase 76, ADR 0069), under `/agent/assistant`:
+  - **`POST questions`:**
+    - the tools are the catalogue's reads of the modules where the person holds a role,
+      plus `search_documents`, run through Kong with the person's own token; there are no
+      drafts;
+    - the model ends with an `answer` tool whose statements cite source ids, and a
+      statement with no source it read is returned `found: false`;
+    - once document text has been read, the tools close and the model may only answer;
+    - at most four model calls.
+  - **`GET status`** and **`PUT settings`:**
+    - off by default;
+    - only an Identity owner turns it on, by accepting the current notice;
+    - an owner or admin turns it off or sets the monthly token budget;
+    - the switch and the budget are read before every model call.
+  - **`GET conversations[/{id}]`, `DELETE conversations/{id}`:**
+    - each turn is sealed under the person's own key;
+    - kept 30 days after the last turn, then purged hourly across tenants;
+    - erased with the person on `identity.data-subject.erased`.
+  - **Generators:**
+    - `extractive`: deterministic, the stack's default and CI's;
+    - `anthropic`: the Messages API; the model is `ASSISTANT_MODEL`, default
+      `claude-opus-5-5`. Without `ANTHROPIC_API_KEY` it is unavailable, and nothing is sent.
 
 ## What it explicitly does not own
 
@@ -45,8 +72,10 @@ through Kong at `/agent`, sharing no source with any other module (ADR 0001).
   (`POST /auth/api-key/token`) and reads through Kong with the 60-second token that comes
   back. The agent has no service token, and its database role has no grant on any business
   table: there is no privileged path (ADR 0065).
-- **Business data.** Answers pass through and are never stored. The audit keeps a SHA-256
-  of the arguments, the result size and the outcome — never the arguments or the answer.
+- **Business data.** MCP answers pass through and are never stored. The audit keeps a
+  SHA-256 of the arguments, the result size and the outcome — never the arguments or the
+  answer. The assistant keeps a person's own conversations, sealed, for 30 days; its audit
+  entry names the tools, the sources and the tokens, never the question or the answer.
 - **Any decision.** No tool submits, approves, posts, settles, cancels, reverses, issues or
   converts, or touches access, keys or settings; `DENIED_ROUTE` and its test say so.
 
@@ -89,10 +118,14 @@ client at the endpoint that screen shows, for example:
 
 ```bash
 npm install
-npm test          # units: catalogue, caps, digest, the call use case
-npm run test:e2e  # PostgreSQL and a fake gateway: the order of checks, scopes, audit, RLS
+npm test          # units: catalogue, caps, digest, the call use case, the assistant, generators
+npm run test:e2e  # PostgreSQL and a fake gateway: checks, scopes, audit, RLS, the assistant
 node ../scripts/phase72-smoke.mjs   # the real stack, through Kong
+node ../scripts/phase76-smoke.mjs   # the assistant through Kong (--no-provider: without a key)
 ```
 
-Metrics: `agent_tool_calls{tool,outcome}` and `agent_exchange_seconds`, with no tenant
-label.
+Metrics:
+- `agent_tool_calls{tool,outcome}` and `agent_exchange_seconds`;
+- `assistant_questions{outcome}`, `assistant_tokens{kind}` and `assistant_answer_seconds`.
+
+None has a tenant label.

@@ -2792,8 +2792,25 @@ caller's workspace.
 
 ## Phase 76 — The in-app assistant, opt-in
 
-**Planned.** An assistant with cited answers over the user's own read access and no write tool, off until a workspace
-owner turns it on, with a monthly budget.
+**Delivered on 2026-09-29.** `agent/` answers a signed-in person's questions.
+- **What it reads:** the agent's read catalogue and the document search, called through
+  Kong with the person's own token. It has no write tool.
+- **What it answers:**
+  - every statement cites the sources it read, or is shown as not found;
+  - once document text has been read, the model may only answer, so an instruction inside
+    a document cannot fetch anything.
+- **Opting in:**
+  - it is off until a workspace owner accepts a notice naming the provider and what is
+    sent;
+  - a monthly token budget stops it;
+  - the switch and the budget are read before every model call.
+- **Generators:** a deterministic extractive generator by default, and Anthropic
+  (`claude-opus-5-5`) when a key is configured; without one, nothing is sent.
+- **Conversations:** sealed per person for 30 days, and erased with them.
+- **Screens:** the Assistant screen and its settings.
+
+[Plan](ai-phase76-implementation-plan.md), [evidence](ai-phase76-evidence.md),
+[smoke](drills/2026-09-29-phase76-assistant-smoke.json).
 [Detailed work](ai-implementation-plan.md#76--the-in-app-assistant-opt-in).
 
 ## Phase 77 — Suggestions confirmed by a person

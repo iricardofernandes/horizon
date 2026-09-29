@@ -1,6 +1,6 @@
 # AI with isolation implementation plan — Phase N
 
-Status: **in progress** — Phases 71 to 75 delivered on 2026-09-29 ([71](ai-phase71-evidence.md), [72](ai-phase72-evidence.md), [73](ai-phase73-evidence.md), [74](ai-phase74-evidence.md), [75](ai-phase75-evidence.md)). This is the execution plan for Phase N of the
+Status: **in progress** — Phases 71 to 76 delivered on 2026-09-29 ([71](ai-phase71-evidence.md), [72](ai-phase72-evidence.md), [73](ai-phase73-evidence.md), [74](ai-phase74-evidence.md), [75](ai-phase75-evidence.md), [76](ai-phase76-evidence.md)). This is the execution plan for Phase N of the
 [ERP expansion plan](erp-expansion-plan.md#phase-n--ai-with-isolation), split into phases
 71–78 of [plan.md](plan.md). Each numbered phase gets its own detailed plan before
 implementation, one local commit and an evidence record, as in Phases J to M.
@@ -315,6 +315,10 @@ in the clear.
 - Recall@5 on the corpus meets the gate the detailed plan sets, and its record is stored.
 
 ### 76 — The in-app assistant, opt-in
+
+Delivered: [plan](ai-phase76-implementation-plan.md), [evidence](ai-phase76-evidence.md).
+The assistant lives in `agent/`, not `knowledge/`. Once it has read document text, it may
+only answer.
 
 **Work**
 1. **The generation port:** the Anthropic adapter and the deterministic adapter.
