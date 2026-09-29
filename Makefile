@@ -4,7 +4,7 @@
 # Makefile shells out per project rather than sharing state between them.
 
 PROJECTS_JSON := scripts/modules.json
-SERVICES := identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting files
+SERVICES := identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting files agent
 
 .DEFAULT_GOAL := help
 

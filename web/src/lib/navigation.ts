@@ -26,6 +26,7 @@ import {
   PresentationChart,
   Receipt,
   Repeat,
+  Robot,
   Scales,
   SealCheck,
   ShieldCheck,
@@ -368,6 +369,14 @@ export const navigation: readonly NavigationGroup[] = [
         labelKey: 'deliveries',
         icon: PaperPlaneTilt,
         module: 'webhooks',
+        demo: false,
+      },
+      {
+        href: '/app/developers/agent',
+        labelKey: 'agent',
+        icon: Robot,
+        // The tenant's MCP server (ADR 0065); its switch and log are Identity admins'.
+        module: 'identity',
         demo: false,
       },
     ],

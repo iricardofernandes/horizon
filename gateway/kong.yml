@@ -208,6 +208,20 @@ services:
               allowed_payload_size: 11
               size_unit: megabytes
 
+  # The tenant's MCP endpoint (ADR 0065): /agent/tenants/{tenantId}/mcp. The API key is
+  # authenticated by the agent itself, through the exchange; Kong verifies no JWT here.
+  - name: agent
+    url: http://agent:3015
+    retries: 3
+    connect_timeout: 5000
+    write_timeout: 30000
+    read_timeout: 30000
+    routes:
+      - name: agent-api
+        paths:
+          - /agent
+        strip_path: true
+
   - name: fiscal
     url: http://fiscal:3011
     retries: 3

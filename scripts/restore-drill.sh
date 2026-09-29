@@ -23,7 +23,7 @@ KEEP=false
 [ "${1:-}" = --keep ] && KEEP=true
 RUN="$(date -u +%Y%m%dT%H%M%SZ)"
 WORK="$(mktemp -d)"
-SERVICES=(identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting files)
+SERVICES=(identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting files agent)
 MINIO_IMAGE="$(docker inspect horizon-minio --format '{{.Config.Image}}')"
 MC_IMAGE="$(docker inspect horizon-minio-init-1 --format '{{.Config.Image}}' 2>/dev/null || echo pgsty/mc)"
 MINIO_USER="$(docker exec horizon-minio printenv MINIO_ROOT_USER)"
@@ -210,7 +210,7 @@ kong_env="$WORK/kong.env"
 docker inspect horizon-kong --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^KONG_' >"$kong_env"
 docker run -d --name "$P-kong" --network "$NETWORK" --env-file "$kong_env" \
   -v "$WORK/kong.yml":/kong/kong.yml:ro -p 18000:8000 kong:3.9 >/dev/null
-for service in identity catalog inventory sales parties financial treasury ledger procurement crm reporting files; do
+for service in identity catalog inventory sales parties financial treasury ledger procurement crm reporting files agent; do
   wait_for "$service in the drill stack" 600 http_ok "http://localhost:18000/$service/health/ready"
 done
 wait_for "the drill gateway's JWKS" 300 http_ok http://localhost:18000/.well-known/jwks.json

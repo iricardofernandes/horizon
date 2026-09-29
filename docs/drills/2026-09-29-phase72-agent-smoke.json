@@ -1,0 +1,176 @@
+{
+  "phase": 72,
+  "kind": "agent-mcp-smoke",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T15:03:21.019Z",
+  "finishedAt": "2026-09-29T15:03:21.404Z",
+  "passed": true,
+  "tenantId": "01a0edb1-16d3-7341-9b5c-1db27fcd40be",
+  "tools": [
+    "get_party",
+    "list_parties"
+  ],
+  "mcpRequestMs": {
+    "count": 10,
+    "median": 11,
+    "max": 16
+  },
+  "checks": [
+    {
+      "name": "with access off, the endpoint refuses",
+      "passed": true,
+      "detail": {
+        "type": "https://horizon.dev/problems/agent-access-off",
+        "title": "Agent request refused",
+        "status": 403,
+        "detail": "Agent access is off for this workspace"
+      }
+    },
+    {
+      "name": "an admitted key initializes",
+      "passed": true,
+      "detail": {
+        "result": {
+          "protocolVersion": "2025-06-18",
+          "capabilities": {
+            "tools": {}
+          },
+          "serverInfo": {
+            "name": "horizon-agent",
+            "version": "1.0.0"
+          },
+          "instructions": "Horizon ERP, read only. Every tool reads through your API key, with exactly what the person who issued it may read. Lists are capped; a cut answer says truncated: true."
+        },
+        "jsonrpc": "2.0",
+        "id": 2
+      }
+    },
+    {
+      "name": "it lists only the tools its scopes reach",
+      "passed": true,
+      "detail": [
+        "get_party",
+        "list_parties"
+      ]
+    },
+    {
+      "name": "it reads a real record through its key",
+      "passed": true,
+      "detail": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"truncated\":false,\"result\":{\"data\":[{\"id\":\"01a0edb1-1782-72cd-b6e6-8933eddbcdc7\",\"kind\":\"organization\",\"legalName\":\"Agente f52284 LTDA\",\"tradeName\":null,\"document\":{\"type\":\"cnpj\",\"country\":null,\"suffix\":\"0194\"},\"taxIdSuffix\":\"0194\",\"email\":\"compras@agente.example\",\"phone\":\"1130000072\",\"address\":\"Rua do Agente, 72, São Paulo\",\"roles\":[\"customer\"],\"status\":\"active\",\"createdAt\":\"2026-09-29T15:03:21.218Z\",\"updatedAt\":\"2026-09-29T15:03:21.218Z\"}]}}"
+            }
+          ]
+        },
+        "jsonrpc": "2.0",
+        "id": 4
+      }
+    },
+    {
+      "name": "it reads one record by id",
+      "passed": true,
+      "detail": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"truncated\":false,\"result\":{\"id\":\"01a0edb1-1782-72cd-b6e6-8933eddbcdc7\",\"kind\":\"organization\",\"legalName\":\"Agente f52284 LTDA\",\"tradeName\":null,\"document\":{\"type\":\"cnpj\",\"country\":null,\"suffix\":\"0194\"},\"taxIdSuffix\":\"0194\",\"email\":\"compras@agente.example\",\"phone\":\"1130000072\",\"address\":\"Rua do Agente, 72, São Paulo\",\"roles\":[\"customer\"],\"status\":\"active\",\"createdAt\":\"2026-09-29T15:03:21.218Z\",\"updatedAt\":\"2026-09-29T15:03:21.218Z\"}}"
+            }
+          ]
+        },
+        "jsonrpc": "2.0",
+        "id": 5
+      }
+    },
+    {
+      "name": "a tool outside its scopes is refused by name",
+      "passed": true,
+      "detail": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "No tool named list_sales_orders is available to this key"
+            }
+          ],
+          "isError": true
+        },
+        "jsonrpc": "2.0",
+        "id": 6
+      }
+    },
+    {
+      "name": "a key without agent:connect is refused",
+      "passed": true,
+      "detail": {
+        "type": "https://horizon.dev/problems/agent-connect-missing",
+        "title": "Agent request refused",
+        "status": 403,
+        "detail": "The key needs the agent:connect scope"
+      }
+    },
+    {
+      "name": "a key sent to another workspace URL gets 401 and no data",
+      "passed": true,
+      "detail": {
+        "type": "https://horizon.dev/problems/key-refused",
+        "title": "Agent request refused",
+        "status": 401,
+        "detail": "email or password is incorrect"
+      }
+    },
+    {
+      "name": "every call is audited under its key, with the chain intact",
+      "passed": true,
+      "detail": {
+        "calls": 3,
+        "chain": {
+          "status": "intact",
+          "checked": 3,
+          "broken": []
+        }
+      }
+    },
+    {
+      "name": "the audit keeps no argument and no answer",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "a key token cannot read the switch or the log",
+      "passed": true,
+      "detail": {
+        "settings": 403,
+        "audit": 403
+      }
+    },
+    {
+      "name": "another workspace sees none of these calls",
+      "passed": true,
+      "detail": 1
+    },
+    {
+      "name": "turning access off stops the agent at once",
+      "passed": true,
+      "detail": {
+        "type": "https://horizon.dev/problems/agent-access-off",
+        "title": "Agent request refused",
+        "status": 403,
+        "detail": "Agent access is off for this workspace"
+      }
+    },
+    {
+      "name": "a revoked key is refused at once",
+      "passed": true,
+      "detail": {
+        "type": "https://horizon.dev/problems/key-refused",
+        "title": "Agent request refused",
+        "status": 401,
+        "detail": "email or password is incorrect"
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"],
+    "rootDir": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "test/*": ["./test/*"]
+    }
+  },
+  "include": ["src", "test", "vitest.config.mts", "vitest.config.e2e.mts", "drizzle.config.ts"]
+}

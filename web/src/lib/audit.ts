@@ -46,6 +46,12 @@ export const AUDIT_SOURCES: readonly AuditSource[] = [
     path: '/files/audit',
     readers: ['identity:owner', 'identity:admin', 'identity:auditor'],
   },
+  // Agent holds no roles either (ADR 0065): every call a tenant's agent made, by key.
+  {
+    module: 'agent',
+    path: '/agent/audit',
+    readers: ['identity:owner', 'identity:admin', 'identity:auditor'],
+  },
 ]
 
 export function auditSourcesFor(roles: readonly RoleAssignment[]): AuditSource[] {

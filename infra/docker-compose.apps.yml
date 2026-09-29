@@ -477,6 +477,37 @@ services:
       CLAMD_HOST: clamav
       CLAMD_PORT: '3310'
 
+  agent-migrate:
+    <<: *service
+    build:
+      context: ../agent
+      network: host
+    restart: "no"
+    environment:
+      <<: *env
+      DATABASE_MIGRATION_URL: postgres://horizon_owner:horizon@postgres:5432/horizon_agent
+    command: ["npm", "run", "db:migrate"]
+
+  # The tenant's MCP server (ADR 0065): it reads through Kong with the caller's own key
+  # token and holds no credential of its own.
+  agent:
+    <<: *service
+    build:
+      context: ../agent
+      network: host
+    container_name: horizon-agent
+    depends_on:
+      agent-migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *env
+      PORT: '3015'
+      OTEL_SERVICE_NAME: agent
+      DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_agent
+      GATEWAY_URL: http://kong:8000
+      AGENT_MAX_ROWS: '50'
+      AGENT_MAX_RESULT_BYTES: '65536'
+
   fiscal-migrate:
     <<: *service
     profiles: [fiscal]

@@ -1,6 +1,6 @@
 # AI with isolation implementation plan — Phase N
 
-Status: **in progress** — Phase 71 delivered on 2026-09-29 ([plan](ai-phase71-implementation-plan.md), [evidence](ai-phase71-evidence.md)). This is the execution plan for Phase N of the
+Status: **in progress** — Phases 71 and 72 delivered on 2026-09-29 ([71](ai-phase71-evidence.md), [72](ai-phase72-evidence.md)). This is the execution plan for Phase N of the
 [ERP expansion plan](erp-expansion-plan.md#phase-n--ai-with-isolation), split into phases
 71–78 of [plan.md](plan.md). Each numbered phase gets its own detailed plan before
 implementation, one local commit and an evidence record, as in Phases J to M.

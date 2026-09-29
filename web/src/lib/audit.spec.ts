@@ -38,7 +38,7 @@ const respond = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status }))
 
 describe('who reads which audit log', () => {
-  it('asks each module only of its admins, and Identity and Files of workspace owners', () => {
+  it('asks each module only of its admins, and Identity, Files and Agent of workspace owners', () => {
     expect(auditSourcesFor([{ module: 'financial', role: 'admin' }]).map((s) => s.module)).toEqual([
       'financial',
     ])
@@ -46,6 +46,7 @@ describe('who reads which audit log', () => {
     expect(auditSourcesFor([{ module: 'identity', role: 'owner' }]).map((s) => s.module)).toEqual([
       'identity',
       'files',
+      'agent',
     ])
     expect(AUDIT_SOURCES.map((source) => source.module)).not.toContain('parties')
     // An auditor reads the logs and nothing else (Phase 69).
@@ -54,7 +55,7 @@ describe('who reads which audit log', () => {
         { module: 'ledger', role: 'auditor' },
         { module: 'identity', role: 'auditor' },
       ]).map((source) => source.module),
-    ).toEqual(['identity', 'ledger', 'files'])
+    ).toEqual(['identity', 'ledger', 'files', 'agent'])
   })
 
   it('narrows to the modules asked for', () => {
@@ -63,7 +64,7 @@ describe('who reads which audit log', () => {
       'treasury',
       'ledger',
     ])
-    expect(chosenSources(AUDIT_SOURCES, new URLSearchParams())).toHaveLength(12)
+    expect(chosenSources(AUDIT_SOURCES, new URLSearchParams())).toHaveLength(13)
   })
 })
 

@@ -597,7 +597,8 @@
       "security": "Security",
       "audit": "Audit",
       "crossReports": "Reports",
-      "controls": "Controls"
+      "controls": "Controls",
+      "agent": "Agent"
     }
   },
   "orders": {
@@ -3059,5 +3060,35 @@
         "rule": "Kept for as long as their record type requires."
       }
     }
+  },
+  "agent": {
+    "eyebrow": "Developers",
+    "title": "Agent access",
+    "copy": "Let your own AI agent read this workspace over MCP, with an API key and exactly what the person who issued it may read.",
+    "endpoint": "Endpoint",
+    "endpointCopy": "Point an MCP client here, with an API key as the Bearer token. The key needs agent:connect and a read scope for each module the agent reads.",
+    "copyEndpoint": "Copy endpoint",
+    "copied": "Copied",
+    "access": "Access",
+    "accessCopy": "Off until an owner or admin turns it on. Turning it off refuses every agent at once.",
+    "accessOn": "On",
+    "accessOff": "Off",
+    "turnOn": "Turn on",
+    "turnOff": "Turn off",
+    "switchFailed": "The switch could not be changed.",
+    "accessAdminsOnly": "Only a workspace owner or admin can see and change agent access.",
+    "calls": "Recent calls",
+    "callsCopy": "Every tool call, by key, from the agent audit log. Arguments and answers are never kept.",
+    "callsAdminsOnly": "Only a workspace owner, admin or auditor can read the call log.",
+    "chainIntact": "Chain intact",
+    "chainBroken": "Chain broken",
+    "emptyTitle": "No calls yet",
+    "emptyCopy": "Calls appear here as soon as an agent uses a key.",
+    "when": "When",
+    "key": "Key",
+    "tool": "Tool",
+    "outcome": "Outcome",
+    "rows": "Rows",
+    "truncated": "cut"
   }
 }

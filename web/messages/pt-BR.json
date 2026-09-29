@@ -597,7 +597,8 @@
       "security": "Segurança",
       "audit": "Auditoria",
       "crossReports": "Relatórios",
-      "controls": "Controles"
+      "controls": "Controles",
+      "agent": "Agente"
     }
   },
   "orders": {
@@ -3059,5 +3060,35 @@
         "rule": "Guardados pelo tempo que o tipo de registro exige."
       }
     }
+  },
+  "agent": {
+    "eyebrow": "Desenvolvedores",
+    "title": "Acesso de agentes",
+    "copy": "Deixe o seu próprio agente de IA ler este workspace por MCP, com uma chave de API e exatamente o que a pessoa que a emitiu pode ler.",
+    "endpoint": "Endpoint",
+    "endpointCopy": "Aponte um cliente MCP para cá, com uma chave de API como token Bearer. A chave precisa de agent:connect e de um escopo de leitura para cada módulo que o agente lê.",
+    "copyEndpoint": "Copiar endpoint",
+    "copied": "Copiado",
+    "access": "Acesso",
+    "accessCopy": "Desligado até um dono ou administrador ligar. Desligar recusa todos os agentes na hora.",
+    "accessOn": "Ligado",
+    "accessOff": "Desligado",
+    "turnOn": "Ligar",
+    "turnOff": "Desligar",
+    "switchFailed": "Não foi possível mudar o acesso.",
+    "accessAdminsOnly": "Só um dono ou administrador do workspace vê e muda o acesso de agentes.",
+    "calls": "Chamadas recentes",
+    "callsCopy": "Cada chamada de ferramenta, por chave, do log de auditoria do agente. Argumentos e respostas nunca são guardados.",
+    "callsAdminsOnly": "Só um dono, administrador ou auditor do workspace lê o log de chamadas.",
+    "chainIntact": "Cadeia íntegra",
+    "chainBroken": "Cadeia quebrada",
+    "emptyTitle": "Nenhuma chamada ainda",
+    "emptyCopy": "As chamadas aparecem aqui assim que um agente usa uma chave.",
+    "when": "Quando",
+    "key": "Chave",
+    "tool": "Ferramenta",
+    "outcome": "Resultado",
+    "rows": "Linhas",
+    "truncated": "cortado"
   }
 }

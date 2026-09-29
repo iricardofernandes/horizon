@@ -28,11 +28,12 @@ const DRILL = 'http://localhost:18000'
 const LIVE = 'http://localhost:8000'
 const RPO_SECONDS = 900
 const RTO_SECONDS = 3600
-const AUDITED = ['identity', 'catalog', 'sales', 'financial', 'treasury', 'ledger', 'procurement', 'inventory', 'fiscal', 'crm', 'reporting', 'files']
+const AUDITED = ['identity', 'catalog', 'sales', 'financial', 'treasury', 'ledger', 'procurement', 'inventory', 'fiscal', 'crm', 'reporting', 'files', 'agent']
 const AUDIT_DATABASES = {
   identity: 'audit_log', catalog: 'audit_log', sales: 'audit_log', financial: 'audit_log',
   treasury: 'audit_log', ledger: 'audit_log', procurement: 'audit_log', inventory: 'audit_log',
   fiscal: 'fiscal_audit_entries', crm: 'audit_log', reporting: 'audit_log', files: 'audit_log',
+  agent: 'audit_log',
 }
 const checks = []
 const check = (name, passed, evidence) => {
@@ -59,7 +60,7 @@ function token(tenant, roles) {
     { encoding: 'utf8' },
   ).trim()
 }
-const AUDITORS = [...AUDITED.filter((module) => module !== 'files').map((module) => `${module}:auditor`)]
+const AUDITORS = [...AUDITED.filter((module) => !['files', 'agent'].includes(module)).map((module) => `${module}:auditor`)]
 
 async function call(base, path, bearer, { method = 'GET', body, key } = {}) {
   const response = await fetch(`${base}${path}`, {

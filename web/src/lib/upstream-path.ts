@@ -2,6 +2,7 @@ const roots = new Set([
   'catalog',
   'crm',
   'files',
+  'agent',
   'financial',
   'fiscal',
   'identity',

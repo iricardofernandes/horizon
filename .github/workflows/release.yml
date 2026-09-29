@@ -43,6 +43,7 @@ jobs:
           - { name: crm, context: crm }
           - { name: reporting, context: reporting }
           - { name: files, context: files }
+          - { name: agent, context: agent }
           - { name: web, context: web }
           - { name: gateway, context: gateway }
     steps:

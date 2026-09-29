@@ -960,6 +960,7 @@ async function migrateModules() {
     'crm',
     'reporting',
     'files',
+    'agent',
   ]) {
     const client = postgres(moduleUrls(name).owner, { max: 1, connect_timeout: 5 })
     try {

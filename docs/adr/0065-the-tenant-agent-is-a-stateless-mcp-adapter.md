@@ -1,6 +1,7 @@
 # 65. The tenant's agent server is a stateless MCP adapter with no privileged path
 
-- Status: accepted; planned for Phase 72 ([Phase N plan](../ai-implementation-plan.md)).
+- Status: accepted; implemented in Phase 72 ([plan](../ai-phase72-implementation-plan.md),
+  [evidence](../ai-phase72-evidence.md)).
   Revises the `tooling/mcp-agent/` entry of the roadmap.
 - Date: 2026-09-29
 

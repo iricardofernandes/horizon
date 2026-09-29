@@ -36,6 +36,7 @@ jobs:
           - { name: crm, path: crm }
           - { name: reporting, path: reporting }
           - { name: files, path: files }
+          - { name: agent, path: agent }
           - { name: contracts, path: contracts }
           - { name: web, path: web }
           - { name: mcp-debugger, path: tooling/mcp-debugger }
@@ -66,7 +67,7 @@ jobs:
         run: |
           echo "repository contents:"
           ls -A
-          for sibling in identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting files web contracts; do
+          for sibling in identity catalog inventory sales webhooks parties financial treasury ledger procurement fiscal crm reporting files agent web contracts; do
             if [ "$sibling" != "${{ matrix.path }}" ] && [ -d "$sibling" ]; then
               echo "::error::$sibling is present — the module is not isolated"
               exit 1

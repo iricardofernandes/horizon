@@ -2709,8 +2709,21 @@ publish the scope vocabulary and `scopeAllows`.
 
 ## Phase 72 — The tenant's MCP server, read only
 
-**Planned.** `agent/` on port 3015 serves a declared read catalogue over MCP, calls modules through Kong with the
-key's own token, holds no privileged credential, and audits every call without its arguments.
+**Delivered on 2026-09-29.** `agent/` on port 3015 is the tenant's own MCP server at
+`/agent/tenants/{tenantId}/mcp`.
+- **Reads:** thirty-five read tools over ten modules, each one a declared `GET` route with
+  its scope and a row cap.
+- **No privileged path:** every call exchanges the caller's API key and reads through
+  Kong with that key's own token. The agent holds no credential and no business grant.
+- **Order of checks:** access is off until an Identity owner or admin turns it on, and is
+  checked before any exchange. A key also needs `agent:connect`.
+- **Audit:** every call, refusals included, goes into a hash-chained log without its
+  arguments or its answer, before the answer leaves. The federated audit screen reads the
+  log too.
+- **Developers → Agent** shows the endpoint, the switch and the call log.
+
+[Plan](ai-phase72-implementation-plan.md), [evidence](ai-phase72-evidence.md),
+[smoke](drills/2026-09-29-phase72-agent-smoke.json).
 [Detailed work](ai-implementation-plan.md#72--the-tenants-mcp-server-read-only).
 
 ## Phase 73 — Agent drafts, confirmed by a person
