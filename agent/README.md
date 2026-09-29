@@ -7,7 +7,8 @@ token could not read by itself.
 An independently deployable NestJS service with its own database and container, reached
 through Kong at `/agent`, sharing no source with any other module (ADR 0001).
 
-**Status: Phase 72.** See the [Phase 72 plan](../docs/ai-phase72-implementation-plan.md),
+**Status: Phase 73.** See the [Phase 72](../docs/ai-phase72-implementation-plan.md) and
+[Phase 73](../docs/ai-phase73-implementation-plan.md) plans,
 [ADR 0064](../docs/adr/0064-api-keys-reach-modules-through-scoped-tokens.md) and
 [ADR 0065](../docs/adr/0065-the-tenant-agent-is-a-stateless-mcp-adapter.md).
 
@@ -20,8 +21,16 @@ through Kong at `/agent`, sharing no source with any other module (ADR 0001).
 - **The declared catalogue** (`src/application/catalogue.ts`): read tools over Parties,
   Catalog, Sales, Inventory, Procurement, Financial, Treasury, CRM, Fiscal documents and
   Reporting. Each tool is one `GET` route, with the scope it needs, an input schema that
-  mirrors the route's own, and a row cap. There is no tool that takes a path and no tool
-  that writes.
+  mirrors the route's own, and a row cap. There is no tool that takes a path.
+- **Six draft tools** (Phase 73, ADR 0066): `draft_quote`, `draft_purchase_requisition`,
+  `draft_payable`, `create_crm_task`, `record_crm_activity`, `write_crm_note`. They need
+  `<module>:write`, write only to the six creation routes in `DRAFT_ROUTES`, and are
+  idempotent per JSON-RPC request (key and line ids derived from key, tool, request id and
+  arguments). The module counts the draft as the key issuer's, so the issuer cannot approve
+  it; the agent's log records the created record's id.
+- **The drafts list,** `GET /agent/drafts?module=&type=`: the ids of records agents drafted
+  in one module, for anyone holding a role in it. The quotes, requisitions, payables and
+  agenda screens mark and filter them.
 - **The switch,** `GET` and `PUT /agent/settings`: agent access per workspace, off by
   default, changed by an Identity owner or admin.
 - **The audit log,** `GET /agent/audit`: every tool call and every switch, hash-chained per
@@ -35,7 +44,8 @@ through Kong at `/agent`, sharing no source with any other module (ADR 0001).
   table: there is no privileged path (ADR 0065).
 - **Business data.** Answers pass through and are never stored. The audit keeps a SHA-256
   of the arguments, the result size and the outcome — never the arguments or the answer.
-- **Writes.** Drafts arrive in Phase 73, as tools that only create drafts (ADR 0066).
+- **Any decision.** No tool submits, approves, posts, settles, cancels, reverses, issues or
+  converts, or touches access, keys or settings; `DENIED_ROUTE` and its test say so.
 
 ## One request, in order
 

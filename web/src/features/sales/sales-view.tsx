@@ -2,9 +2,11 @@
 
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
+import { AgentDraftBadge, AgentDraftFilter } from '@/components/ui/agent-draft'
 import { Badge } from '@/components/ui/badge'
 import { Board, BoardCard } from '@/components/ui/board'
 import { Button } from '@/components/ui/button'
+import { useAgentDrafts, withDrafts } from '@/lib/agent-drafts'
 import { short } from '@/lib/format'
 import { useStatusLabel } from '@/lib/status'
 import { useUrlParam } from '@/lib/url-param'
@@ -58,6 +60,9 @@ export function SalesView({
     if (named) setQuote(named)
   }, [data.quotes, openParam, screen])
   const waiting = awaitingApproval(data.quotes, abilities.userId)
+  // Quotes an agent drafted (ADR 0066), marked from the agent's own log.
+  const drafts = useAgentDrafts(screen === 'quotes' ? 'sales' : null, 'quote')
+  const draftIdsOf = (row: Quote) => [row.id, row.rootId]
 
   return (
     <section>
@@ -68,6 +73,13 @@ export function SalesView({
           <p className="catalog-page-copy">{t(`${screen}.copy`)}</p>
         </div>
         <div className="page-actions">
+          {screen === 'quotes' ? (
+            <AgentDraftFilter
+              count={drafts.ids.size}
+              onChange={drafts.setOnly}
+              only={drafts.only}
+            />
+          ) : null}
           {screen === 'quotes' && abilities.canWrite ? (
             <NewQuoteDialog customers={data.customers} items={data.items} onChanged={onChanged} />
           ) : null}
@@ -78,7 +90,12 @@ export function SalesView({
       </header>
 
       {screen === 'quotes' ? (
-        <QuotesBoard data={data} onOpen={setQuote} rows={currentVersions(data.quotes)} />
+        <QuotesBoard
+          data={data}
+          drafted={(row) => draftIdsOf(row).some((id) => drafts.ids.has(id))}
+          onOpen={setQuote}
+          rows={withDrafts(currentVersions(data.quotes), drafts.ids, draftIdsOf, drafts.only)}
+        />
       ) : null}
       {screen === 'approvals' ? <Inbox data={data} onOpen={setQuote} rows={waiting} /> : null}
       {screen === 'deliveries' ? (
@@ -117,10 +134,12 @@ function QuotesBoard({
   rows,
   data,
   onOpen,
+  drafted,
 }: {
   rows: readonly Quote[]
   data: SalesScreenData
   onOpen: (row: Quote) => void
+  drafted: (row: Quote) => boolean
 }) {
   const t = useTranslations('sales')
   const money = useMoney()
@@ -145,6 +164,7 @@ function QuotesBoard({
             {t('versionNumber', { version: row.version })} ·{' '}
             {t('expiresOn', { date: date(row.expiresAt) })}
           </span>
+          {drafted(row) ? <AgentDraftBadge /> : null}
         </BoardCard>
       )}
       rows={rows}

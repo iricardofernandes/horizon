@@ -17,6 +17,8 @@ export interface CommandContext {
   readonly tenantId: string
   readonly actor: string
   readonly requestId: string | null
+  /** The key the act went through, when it did (ADR 0066); recorded in the audit entry. */
+  readonly via?: string | null
   /**
    * The approvals the person holds through their own role (ADR 0062). Anything else they
    * decide takes an active delegation.

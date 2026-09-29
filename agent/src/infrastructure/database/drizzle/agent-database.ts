@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { context, trace } from '@opentelemetry/api'
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { uuidv7 } from 'uuidv7'
@@ -129,6 +129,47 @@ export class AgentDatabase extends AgentStore {
         updatedBy: row?.updatedBy ?? null,
         updatedAt: row?.updatedAt.toISOString() ?? null,
       }
+    })
+  }
+
+  /**
+   * The records the tenant's agents drafted in one module, newest first (ADR 0066): read
+   * from the calls' own audit entries, so there is one place that says an agent made them.
+   */
+  drafts(
+    tenantId: string,
+    module: string,
+    type: string | undefined,
+    limit: number,
+  ): Promise<
+    { recordId: string; type: string; keyId: string; sequence: number; occurredAt: string }[]
+  > {
+    return this.inTenant(tenantId, async (tx) => {
+      const log = schema.auditLog
+      const rows = await tx
+        .select({
+          sequence: log.sequence,
+          occurredAt: log.occurredAt,
+          actor: log.actor,
+          record: sql<{ module: string; type: string; id: string }>`${log.details} -> 'record'`,
+        })
+        .from(log)
+        .where(
+          and(
+            eq(log.action, 'agent.tool.called'),
+            sql`${log.details} -> 'record' ->> 'module' = ${module}`,
+            ...(type ? [sql`${log.details} -> 'record' ->> 'type' = ${type}`] : []),
+          ),
+        )
+        .orderBy(desc(log.sequence))
+        .limit(limit)
+      return rows.map((row) => ({
+        recordId: row.record.id,
+        type: row.record.type,
+        keyId: row.actor.replace(/^api-key:/, ''),
+        sequence: row.sequence,
+        occurredAt: row.occurredAt.toISOString(),
+      }))
     })
   }
 

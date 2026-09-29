@@ -2728,8 +2728,26 @@ publish the scope vocabulary and `scopeAllows`.
 
 ## Phase 73 — Agent drafts, confirmed by a person
 
-**Planned.** Write tools create drafts only: quotes, requisitions, CRM tasks and notes, payable drafts. A record a key
-created counts as its issuer's, so the issuer cannot approve it.
+**Delivered on 2026-09-29.** The tenant's agent gains six write tools, each of which only
+creates a draft:
+- a quote, a purchase requisition or a payable;
+- a CRM task, activity or note.
+
+Each one is idempotent per MCP request.
+- **Allowlist:** a test holds the writes to the six creation routes, and no tool path may
+  look like a decision, a posting or access.
+- **A key's record is its issuer's.** In Sales, CRM, Financial, Procurement, Inventory,
+  Ledger and Treasury:
+  - a key token's act counts as its issuer's, so the issuer cannot approve what their agent
+    drafted;
+  - each audit entry names the key as `via`.
+
+  This also closes a gap Phase 71 had opened for any write key.
+- **Lists:** quotes, requisitions, payables and the CRM agenda mark agent drafts from the
+  agent's own log, and filter to them.
+
+[Plan](ai-phase73-implementation-plan.md), [evidence](ai-phase73-evidence.md),
+[smoke](drills/2026-09-29-phase73-agent-drafts-smoke.json).
 [Detailed work](ai-implementation-plan.md#73--agent-drafts-confirmed-by-a-person).
 
 ## Phase 74 — The document index, one partition per tenant

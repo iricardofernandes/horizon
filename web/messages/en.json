@@ -3090,5 +3090,10 @@
     "outcome": "Outcome",
     "rows": "Rows",
     "truncated": "cut"
+  },
+  "agentDrafts": {
+    "badge": "Agent draft",
+    "badgeHint": "Drafted by an agent through an API key; open the call log",
+    "filter": "Agent drafts ({count})"
   }
 }

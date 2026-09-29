@@ -4,11 +4,13 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useCallback, useState } from 'react'
 import { useNotice } from '@/components/shell/workspace-context'
+import { AgentDraftBadge, AgentDraftFilter } from '@/components/ui/agent-draft'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Resource } from '@/components/ui/resource'
 import { SelectField } from '@/components/ui/select-field'
 import { Empty } from '@/components/ui/state'
+import { useAgentDrafts, withDrafts } from '@/lib/agent-drafts'
 import { useDateTime } from '@/lib/use-format'
 import { useLoader } from '@/lib/use-loader'
 import { type CrmDirectory, loadDirectory, readCrm, send, useCrmAbilities } from './crm-data'
@@ -81,6 +83,9 @@ function AgendaList({
   const abilities = useCrmAbilities()
   const [error, setError] = useState('')
   const accounts = new Map(directory.accounts.map((row) => [row.id, row]))
+  // Tasks an agent created (ADR 0066), marked from the agent's own log.
+  const drafts = useAgentDrafts('crm', 'task')
+  const shownTasks = withDrafts(tasks, drafts.ids, (task) => [task.id], drafts.only)
 
   async function close(task: Task, action: 'complete' | 'cancel') {
     setError('')
@@ -103,6 +108,7 @@ function AgendaList({
           {error}
         </p>
       ) : null}
+      <AgentDraftFilter count={drafts.ids.size} onChange={drafts.setOnly} only={drafts.only} />
       <div className="panel table-panel table-scroll">
         <table>
           <thead>
@@ -115,10 +121,11 @@ function AgendaList({
             </tr>
           </thead>
           <tbody>
-            {tasks.map((task) => (
+            {shownTasks.map((task) => (
               <tr key={task.id}>
                 <td>
                   <Link href={subjectLink(task)}>{task.title ?? t('timeline.erasedText')}</Link>
+                  {drafts.ids.has(task.id) ? <AgentDraftBadge /> : null}
                 </td>
                 <td>{accountName(accounts.get(task.accountId), t('unknownAccount'))}</td>
                 <td>

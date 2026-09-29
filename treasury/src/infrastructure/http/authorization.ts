@@ -22,9 +22,19 @@ export interface TreasuryRequest {
   principal?: AccessClaims
 }
 
+/**
+ * Who performed the act, for every performer field and duty check: a key's token counts
+ * as its issuer (ADR 0066), so nobody approves what their own agent or integration drafted.
+ */
 export function actorOf(request: TreasuryRequest): string {
   if (!request.principal) throw new UnauthorizedException()
-  return request.principal.subject
+  return request.principal.keyIssuer ?? request.principal.subject
+}
+
+/** The key an act went through, kept beside the person in the audit entry; null for a person. */
+export function viaOf(request: TreasuryRequest): string | null {
+  if (!request.principal) throw new UnauthorizedException()
+  return request.principal.keyIssuer ? request.principal.subject : null
 }
 
 export function tenantOf(request: TreasuryRequest): string {

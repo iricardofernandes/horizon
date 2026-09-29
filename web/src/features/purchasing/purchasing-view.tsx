@@ -2,10 +2,12 @@
 
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
+import { AgentDraftBadge, AgentDraftFilter } from '@/components/ui/agent-draft'
 import { Badge } from '@/components/ui/badge'
 import { Board, BoardCard } from '@/components/ui/board'
 import { Button } from '@/components/ui/button'
 import { ExportButton } from '@/components/ui/export-button'
+import { useAgentDrafts, withDrafts } from '@/lib/agent-drafts'
 import { useStatusLabel } from '@/lib/status'
 import { useDate, useMoney } from '@/lib/use-format'
 import { OrderDialog } from './order-dialog'
@@ -45,6 +47,8 @@ export function PurchasingView({
   const [requisition, setRequisition] = useState<RequisitionRow | null>(null)
   const [order, setOrder] = useState<OrderRow | null>(null)
   const waiting = awaitingDecision(data, abilities.userId)
+  // Requisitions an agent drafted (ADR 0066), marked from the agent's own log.
+  const drafts = useAgentDrafts(screen === 'requisitions' ? 'procurement' : null, 'requisition')
 
   return (
     <section>
@@ -59,10 +63,23 @@ export function PurchasingView({
             <ExportButton path="procurement/orders" />
           </div>
         ) : null}
+        {screen === 'requisitions' ? (
+          <div className="page-actions">
+            <AgentDraftFilter
+              count={drafts.ids.size}
+              onChange={drafts.setOnly}
+              only={drafts.only}
+            />
+          </div>
+        ) : null}
       </header>
 
       {screen === 'requisitions' ? (
-        <RequisitionsBoard onOpen={setRequisition} rows={data.requisitions} />
+        <RequisitionsBoard
+          drafted={(row) => drafts.ids.has(row.id)}
+          onOpen={setRequisition}
+          rows={withDrafts(data.requisitions, drafts.ids, (row) => [row.id], drafts.only)}
+        />
       ) : null}
       {screen === 'orders' ? <OrdersBoard onOpen={setOrder} rows={data.orders} /> : null}
       {screen === 'approvals' ? (
@@ -97,9 +114,11 @@ export function PurchasingView({
 function RequisitionsBoard({
   rows,
   onOpen,
+  drafted,
 }: {
   rows: readonly RequisitionRow[]
   onOpen: (row: RequisitionRow) => void
+  drafted: (row: RequisitionRow) => boolean
 }) {
   const t = useTranslations('purchasing')
   const date = useDate()
@@ -121,6 +140,7 @@ function RequisitionsBoard({
             {t('linesCount', { count: row.lines })} · {t('offersCount', { count: row.quotations })}
           </span>
           <span className="board-card-line">{row.requestedBy}</span>
+          {drafted(row) ? <AgentDraftBadge /> : null}
         </BoardCard>
       )}
       rows={rows}

@@ -1,6 +1,8 @@
 # 66. An agent's writes are drafts, and a draft by a key is its issuer's
 
-- Status: accepted; planned for Phase 73 ([Phase N plan](../ai-implementation-plan.md)).
+- Status: accepted; implemented in Phase 73 ([plan](../ai-phase73-implementation-plan.md),
+  [evidence](../ai-phase73-evidence.md)). The key counts as its issuer in all seven modules
+  that record performers, not only where agents draft.
 - Date: 2026-09-29
 
 ## Context

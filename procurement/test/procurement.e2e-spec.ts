@@ -161,6 +161,7 @@ async function workspace() {
     toner,
     context,
     idempotent,
+    opening,
     openRequisition,
     approveRequisition,
     quote,
@@ -800,6 +801,32 @@ describe('segregation of duties and delegation (Phase 68)', () => {
     value(await lend(shop.tenantId, MANAGER, 'procurement:requisition:approve'))
     value(await shop.deciding.approve(member(shop.tenantId, STAND_IN), id))
     expect(await decidedFor('requisitions', id)).toBe(MANAGER)
+  })
+
+  it('counts a requisition a key opened as its issuer, and names the key in the audit (ADR 0066)', async () => {
+    const shop = await workspace()
+    const opened = value<{ id: string }>(
+      await shop.opening.execute({
+        context: {
+          ...shop.context(BUYER),
+          via: 'api-key:agent-key',
+          idempotencyKey: randomUUID(),
+        },
+        requisition: {
+          warehouseId: shop.warehouseId,
+          neededBy: '2026-12-31',
+          lines: [{ lineId: randomUUID(), itemId: shop.paper, quantity: '3' }],
+        },
+      }),
+    )
+    const [entry] = await administrator`select actor, details from audit_log
+      where tenant_id = ${shop.tenantId} and subject_id = ${opened.id} and action = 'requisition.opened'`
+    expect(entry).toMatchObject({ actor: BUYER, details: { via: 'api-key:agent-key' } })
+    value(await shop.deciding.submit(shop.context(BUYER), opened.id))
+    expect(refusedPair(await shop.deciding.approve(shop.context(BUYER), opened.id))).toBe(
+      'procurement.requisition',
+    )
+    value(await shop.deciding.approve(shop.context(MANAGER), opened.id))
   })
 
   it('refuses procurement.order, and allows it through a delegation', async () => {

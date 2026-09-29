@@ -41,7 +41,8 @@ function audit(
     subjectId: title.id.toString(),
     occurredAt,
     requestId: context.requestId,
-    details,
+    // A key's act names the person and the key (ADR 0066).
+    details: context.via ? { ...details, via: context.via } : details,
   })
 }
 

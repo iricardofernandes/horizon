@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CATALOGUE, requestFor, toolsFor } from './catalogue'
+import { CATALOGUE, DENIED_ROUTE, DRAFT_ROUTES, requestFor, toolsFor } from './catalogue'
 
 describe('the declared catalogue (ADR 0065)', () => {
   it('names each tool once, and each path belongs to its own module', () => {
@@ -16,11 +16,31 @@ describe('the declared catalogue (ADR 0065)', () => {
       }
   })
 
-  it('has no tool that could reach a write, an approval or access', () => {
-    for (const tool of CATALOGUE)
-      expect(tool.path).not.toMatch(
-        /approve|reject|cancel|reverse|settle|post|confirm|issue|api-keys|roles|settings|imports|exports|erase/,
-      )
+  it('writes only to the six creation routes, and no tool reaches a decision or access', () => {
+    const writes = CATALOGUE.filter((tool) => tool.kind === 'draft')
+    expect(writes.map((tool) => tool.path).sort()).toEqual([...DRAFT_ROUTES].sort())
+    for (const tool of writes) expect(tool.record).toBeDefined()
+    for (const tool of CATALOGUE) expect(tool.path).not.toMatch(DENIED_ROUTE)
+  })
+
+  it('names in the deny pattern every kind of decision a module exposes', () => {
+    for (const path of [
+      '/procurement/requisitions/x/approve',
+      '/procurement/requisitions/x/submit',
+      '/financial/payables/x/post',
+      '/financial/payables/x/settlements',
+      '/financial/payables/x/reverse',
+      '/treasury/transfers/x/cancel',
+      '/sales/quotes/x/convert',
+      '/sales/orders/x/confirm',
+      '/fiscal/documents/x/transmission',
+      '/identity/api-keys',
+      '/identity/users/x/roles',
+      '/agent/settings',
+      '/ledger/manual-entries/x/approve',
+      '/inventory/adjustment-policies',
+    ])
+      expect(path).toMatch(DENIED_ROUTE)
   })
 })
 
@@ -30,6 +50,8 @@ describe('toolsFor', () => {
     expect(new Set(read)).toEqual(new Set(['parties']))
     const write = toolsFor(['crm:write']).map((tool) => tool.module)
     expect(new Set(write)).toEqual(new Set(['crm']))
+    expect(toolsFor(['crm:read']).some((tool) => tool.kind === 'draft')).toBe(false)
+    expect(toolsFor(['crm:write']).filter((tool) => tool.kind === 'draft')).toHaveLength(3)
     expect(toolsFor(['agent:connect'])).toEqual([])
   })
 })

@@ -7,12 +7,15 @@ import {
 import { z } from 'zod'
 import type { AgentCalls, AgentSession } from '@/application/agent-calls'
 
-const annotations = {
+const readAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
   openWorldHint: false,
 } as const
+
+/** A draft writes, destroys nothing, and is written once however often it is retried. */
+const draftAnnotations = { ...readAnnotations, readOnlyHint: false } as const
 
 /**
  * One MCP server per request (stateless). It lists only the tools this key's scopes reach,
@@ -25,8 +28,9 @@ export function createAgentServer(calls: AgentCalls, session: AgentSession): Ser
     {
       capabilities: { tools: {} },
       instructions:
-        'Horizon ERP, read only. Every tool reads through your API key, with exactly what the ' +
-        'person who issued it may read. Lists are capped; a cut answer says truncated: true.',
+        'Horizon ERP. Every tool acts through your API key, with exactly what the person who ' +
+        'issued it may do. Writes are drafts that a person must still approve or post. Lists ' +
+        'are capped; a cut answer says truncated: true.',
     },
   )
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -37,15 +41,23 @@ export function createAgentServer(calls: AgentCalls, session: AgentSession): Ser
         type: 'object'
         [key: string]: unknown
       },
-      annotations,
+      annotations: tool.kind === 'draft' ? draftAnnotations : readAnnotations,
     })),
   }))
-  server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
-    const answer = await calls.call(session, request.params.name, request.params.arguments ?? {})
-    return {
-      content: [{ type: 'text', text: answer.text }],
-      ...(answer.isError ? { isError: true } : {}),
-    }
-  })
+  server.setRequestHandler(
+    CallToolRequestSchema,
+    async (request, extra): Promise<CallToolResult> => {
+      const answer = await calls.call(
+        session,
+        request.params.name,
+        request.params.arguments ?? {},
+        extra.requestId,
+      )
+      return {
+        content: [{ type: 'text', text: answer.text }],
+        ...(answer.isError ? { isError: true } : {}),
+      }
+    },
+  )
   return server
 }

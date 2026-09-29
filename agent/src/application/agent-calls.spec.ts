@@ -47,6 +47,11 @@ class FakeTokens extends KeyTokens {
 }
 
 class FakeGateway extends Gateway {
+  readonly written: { path: string; body: Record<string, unknown>; key: string }[] = []
+  async write(path: string, body: Readonly<Record<string, unknown>>, _token: string, key: string) {
+    this.written.push({ path, body: { ...body }, key })
+    return { status: 201, body: { id: `created-${this.written.length}` } }
+  }
   readonly asked: { path: string; query: Record<string, string>; token: string }[] = []
   answer: GatewayAnswer | Error = { status: 200, body: { data: [{ id: 1 }, { id: 2 }, { id: 3 }] } }
   async read(path: string, query: Readonly<Record<string, string>>, token: string) {
@@ -179,5 +184,66 @@ describe('arguments', () => {
     expect(answer.text).toContain('Invalid arguments')
     expect(gateway.asked).toEqual([])
     expect(store.records[0]).toMatchObject({ details: { outcome: 'refused', status: 400 } })
+  })
+})
+
+describe('drafts (ADR 0066)', () => {
+  const requisition = {
+    warehouseId: '00000000-0000-4000-8000-0000000000aa',
+    neededBy: '2026-12-31',
+    lines: [{ itemId: '00000000-0000-4000-8000-0000000000bb', quantity: '3' }],
+  }
+
+  beforeEach(() => {
+    tokens.claims = { ...tokens.claims, scopes: ['agent:connect', 'procurement:write'] }
+  })
+
+  it('writes a draft with a key that is the same for the same request, and new for another', async () => {
+    const admitted = await session()
+    await calls.call(admitted, 'draft_purchase_requisition', requisition, 7)
+    await calls.call(admitted, 'draft_purchase_requisition', requisition, 7)
+    await calls.call(admitted, 'draft_purchase_requisition', requisition, 8)
+    const [first, retried, other] = gateway.written
+    expect(first?.path).toBe('/procurement/requisitions')
+    expect(first?.key).toMatch(/^agent-[0-9a-f]{48}$/)
+    expect(retried?.key).toBe(first?.key)
+    expect(retried?.body).toEqual(first?.body)
+    expect(other?.key).not.toBe(first?.key)
+    const lines = (first?.body.lines ?? []) as { lineId: string }[]
+    const lineId = lines[0]?.lineId
+    expect(lineId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  })
+
+  it('records what the draft created in the audit', async () => {
+    await calls.call(await session(), 'draft_purchase_requisition', requisition, 1)
+    expect(store.records.at(-1)).toMatchObject({
+      subjectId: 'draft_purchase_requisition',
+      details: {
+        outcome: 'ok',
+        record: { module: 'procurement', type: 'requisition', id: 'created-1' },
+      },
+    })
+  })
+
+  it('offers no draft tool to a key that only reads the module', async () => {
+    tokens.claims = { ...tokens.claims, scopes: ['agent:connect', 'procurement:read'] }
+    const answer = await calls.call(await session(), 'draft_purchase_requisition', requisition, 1)
+    expect(answer).toMatchObject({ isError: true, outcome: 'refused' })
+    expect(gateway.written).toEqual([])
+  })
+
+  it('assigns a task to the key issuer unless another person is named', async () => {
+    tokens.claims = {
+      ...tokens.claims,
+      scopes: ['agent:connect', 'crm:write'],
+      keyIssuer: 'ana-uuid',
+    }
+    const task = {
+      subject: { type: 'account', id: '00000000-0000-4000-8000-0000000000cc' },
+      title: 'Call back',
+      dueAt: '2026-10-01T12:00:00Z',
+    }
+    await calls.call(await session(), 'create_crm_task', task, 1)
+    expect(gateway.written.at(-1)?.body.assigneeId).toBe('ana-uuid')
   })
 })

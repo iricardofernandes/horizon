@@ -23,6 +23,7 @@ import {
   type FinancialRequest,
   RequireFinancialAction,
   tenantOf,
+  viaOf,
 } from './authorization'
 import { id, parse, unwrap } from './request-parsing'
 
@@ -85,6 +86,7 @@ function context(request: FinancialRequest): CommandContext {
   return {
     tenantId: tenantOf(request),
     actor: actorOf(request),
+    via: viaOf(request),
     requestId: typeof requestId === 'string' ? requestId.slice(0, 128) : null,
     approvals: approvalsOf(request),
   }

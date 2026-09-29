@@ -250,3 +250,63 @@ describe('settings and the log', () => {
     }
   })
 })
+
+describe('drafts (ADR 0066)', () => {
+  it('drafts once per request, audits what it created, and lists it for the module', async () => {
+    const tenantId = randomUUID()
+    await enable(tenantId)
+    const writer = key(tenantId, ['agent:connect', 'procurement:write'])
+    gateway.addKey(writer)
+    const requisition = {
+      name: 'draft_purchase_requisition',
+      arguments: {
+        warehouseId: randomUUID(),
+        neededBy: '2026-12-31',
+        lines: [{ itemId: randomUUID(), quantity: '4' }],
+      },
+    }
+    const call = (id: number) =>
+      request(app.getHttpServer())
+        .post(`/tenants/${tenantId}/mcp`)
+        .set('authorization', `Bearer ${writer.secret}`)
+        .set('accept', 'application/json, text/event-stream')
+        .send({ jsonrpc: '2.0', id, method: 'tools/call', params: requisition })
+        .expect(200)
+    const first = await call(9001)
+    const retried = await call(9001)
+    const created = JSON.parse(first.body.result.content[0].text).result.id
+    expect(JSON.parse(retried.body.result.content[0].text).result.id).toBe(created)
+    const posted = gateway.writes.filter((write) => write.path === '/procurement/requisitions')
+    expect(posted.at(-1)?.key).toBe(posted.at(-2)?.key)
+
+    const buyer = await gateway.person(tenantId, [{ module: 'procurement', role: 'buyer' }])
+    const drafts = await request(app.getHttpServer())
+      .get('/drafts')
+      .query({ module: 'procurement', type: 'requisition' })
+      .set('authorization', `Bearer ${buyer}`)
+      .expect(200)
+    expect(drafts.body.data.map((draft: { recordId: string }) => draft.recordId)).toContain(created)
+    expect(drafts.body.data[0]).toMatchObject({ keyId: writer.apiKeyId, type: 'requisition' })
+
+    const outsider = await gateway.person(tenantId, [{ module: 'sales', role: 'admin' }])
+    await request(app.getHttpServer())
+      .get('/drafts')
+      .query({ module: 'procurement' })
+      .set('authorization', `Bearer ${outsider}`)
+      .expect(403)
+  })
+
+  it('lists no draft tool to a key that only reads', async () => {
+    const tenantId = randomUUID()
+    await enable(tenantId)
+    const reader = key(tenantId, ['agent:connect', 'procurement:read'])
+    gateway.addKey(reader)
+    const listed = await mcp(tenantId, reader.secret, 'tools/list').expect(200)
+    const names: string[] = listed.body.result.tools.map((tool: { name: string }) => tool.name)
+    expect(names).not.toContain('draft_purchase_requisition')
+    const draft = listed.body.result.tools.find(
+      (tool: { name: string }) => tool.name === 'list_requisitions',
+    )
+    expect(draft.annotations.readOnlyHint).toBe(true)
+  })
+})

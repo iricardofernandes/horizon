@@ -23,6 +23,9 @@ export type Route = (query: URLSearchParams) => { status: number; body: unknown 
 export class FakeGateway {
   exchanges = 0
   readonly reads: { path: string; query: string; token: string }[] = []
+  /** Writes by path, each answered once per idempotency key, as the modules do. */
+  readonly writes: { path: string; key: string; body: unknown }[] = []
+  readonly #answered = new Map<string, { status: number; body: unknown }>()
   readonly #tokens = new Set<string>()
 
   private constructor(
@@ -119,6 +122,18 @@ export class FakeGateway {
     }
     const token = request.headers.authorization?.replace(/^Bearer /, '') ?? ''
     if (!this.#tokens.has(token)) return reply(401, { detail: 'unknown token' })
+    if (request.method === 'POST') {
+      const chunks: Buffer[] = []
+      for await (const chunk of request) chunks.push(chunk as Buffer)
+      const key = String(request.headers['idempotency-key'] ?? '')
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
+      this.writes.push({ path: url.pathname, key, body })
+      const known = this.#answered.get(`${url.pathname}:${key}`)
+      if (known) return reply(known.status, known.body)
+      const answer = { status: 201, body: { id: randomUUID() } }
+      this.#answered.set(`${url.pathname}:${key}`, answer)
+      return reply(answer.status, answer.body)
+    }
     const route = this.routes.get(url.pathname)
     if (!route) return reply(404, { detail: 'not found' })
     this.reads.push({ path: url.pathname, query: url.search, token })

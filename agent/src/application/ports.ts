@@ -34,6 +34,17 @@ export abstract class Gateway {
     query: Readonly<Record<string, string>>,
     accessToken: string,
   ): Promise<GatewayAnswer>
+
+  /**
+   * `POST path` through the gateway with the caller's own token and an idempotency key, so
+   * a retried call is answered with the first result (ADR 0066). Only draft routes.
+   */
+  abstract write(
+    path: string,
+    body: Readonly<Record<string, unknown>>,
+    accessToken: string,
+    idempotencyKey: string,
+  ): Promise<GatewayAnswer>
 }
 
 export interface AuditRecord {

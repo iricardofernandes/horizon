@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common'
 import type { CommandContext, IdempotentContext } from '@/application/use-cases/commands'
-import { actorOf, type SalesRequest, tenantOf } from './authorization'
+import { actorOf, type SalesRequest, tenantOf, viaOf } from './authorization'
 
 const IDEMPOTENCY_KEY = /^[\x21-\x7e]{8,255}$/
 
@@ -9,6 +9,7 @@ export function context(request: SalesRequest): CommandContext {
   return {
     tenantId: tenantOf(request),
     actor: actorOf(request),
+    via: viaOf(request),
     requestId: typeof requestId === 'string' ? requestId.slice(0, 128) : null,
   }
 }

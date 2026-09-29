@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { argumentsDigest, type CallOutcome, capResult, outcomeOf } from '@/domain/results'
-import { requestFor, type ToolEntry, toolsFor } from './catalogue'
+import { DRAFT_ROUTES, draftBody, requestFor, type ToolEntry, toolsFor } from './catalogue'
 import type { AgentStore, CallMetrics, Clock, Gateway, KeyExchange } from './ports'
 
 /** The one scope every agent key needs, besides the modules it reads (ADR 0065). */
@@ -51,6 +52,15 @@ const refuse = (status: number, code: string, detail: string, retryAfterSeconds?
     ok: false,
     refusal: { status, code, detail, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) },
   }) as const
+
+/** The id a module answered a creation with, whatever it named it. */
+function createdIdOf(body: unknown): string | null {
+  if (body === null || typeof body !== 'object') return null
+  const answer = body as Record<string, unknown>
+  for (const name of ['id', 'quoteId', 'taskId', 'activityId', 'noteId'])
+    if (typeof answer[name] === 'string') return answer[name] as string
+  return null
+}
 
 /** The module's own words about a refusal, bounded: never a stack or an internal name. */
 function detailOf(body: unknown): string {
@@ -120,6 +130,7 @@ export class AgentCalls {
     session: AgentSession,
     name: string,
     args: Readonly<Record<string, unknown>>,
+    requestId: string | number | null = null,
   ): Promise<ToolAnswer> {
     const tool = this.tools(session).find((entry) => entry.name === name)
     if (!tool)
@@ -151,8 +162,10 @@ export class AgentCalls {
 
     let answer: { status: number; body: unknown }
     try {
-      const { path, query } = requestFor(tool, parsed.data, this.limits.maxRows)
-      answer = await this.gateway.read(path, query, session.accessToken)
+      answer =
+        tool.kind === 'draft'
+          ? await this.draft(session, tool, parsed.data, requestId)
+          : await this.read(session, tool, parsed.data)
     } catch {
       return this.finish(session, name, args, {
         text: 'Horizon could not be reached; try again later',
@@ -179,6 +192,7 @@ export class AgentCalls {
       })
     }
     const capped = capResult(answer.body, this.limits.maxRows, this.limits.maxBytes)
+    const created = tool.kind === 'draft' ? createdIdOf(answer.body) : null
     return this.finish(session, name, args, {
       text: capped.text,
       isError: false,
@@ -187,7 +201,37 @@ export class AgentCalls {
       rows: capped.rows,
       bytes: capped.bytes,
       truncated: capped.truncated,
+      ...(created
+        ? { record: { module: tool.module, type: tool.record ?? tool.name, id: created } }
+        : {}),
     })
+  }
+
+  private read(session: AgentSession, tool: ToolEntry, args: Readonly<Record<string, unknown>>) {
+    const { path, query } = requestFor(tool, args, this.limits.maxRows)
+    return this.gateway.read(path, query, session.accessToken)
+  }
+
+  /**
+   * A draft is written once however often the call is retried: the idempotency key and any
+   * derived line ids come from the key, the tool, the JSON-RPC request id and the arguments.
+   */
+  private draft(
+    session: AgentSession,
+    tool: ToolEntry,
+    args: Readonly<Record<string, unknown>>,
+    requestId: string | number | null,
+  ) {
+    if (!DRAFT_ROUTES.includes(tool.path)) throw new Error('not a draft route')
+    const seed = createHash('sha256')
+      .update(
+        [session.apiKeyId, tool.name, String(requestId ?? ''), argumentsDigest({ ...args })].join(
+          '|',
+        ),
+      )
+      .digest('hex')
+    const body = draftBody(tool, args, { seed, issuer: session.issuer })
+    return this.gateway.write(tool.path, body, session.accessToken, `agent-${seed.slice(0, 48)}`)
   }
 
   /**
@@ -203,6 +247,7 @@ export class AgentCalls {
       rows: number | null
       bytes: number
       truncated: boolean
+      record?: { module: string; type: string; id: string }
     },
   ): Promise<ToolAnswer> {
     try {
@@ -220,6 +265,7 @@ export class AgentCalls {
           resultBytes: result.bytes,
           rows: result.rows,
           truncated: result.truncated,
+          ...(result.record ? { record: result.record } : {}),
         },
       })
     } catch {

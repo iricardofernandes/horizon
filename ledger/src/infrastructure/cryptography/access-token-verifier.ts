@@ -10,6 +10,8 @@ const claimsSchema = z.object({
   exp: z.number().int().positive(),
   // An API key's scopes (ADR 0064); absent on a signed-in person's token.
   scp: z.array(z.string().min(1).max(64)).max(60).optional(),
+  // The person who issued the key a token was minted from (ADR 0066).
+  key_issuer: z.string().min(1).max(128).optional(),
 })
 
 export type AccessClaims = Readonly<{
@@ -17,6 +19,7 @@ export type AccessClaims = Readonly<{
   tenantId: string
   roles: readonly { module: string; role: string }[]
   scopes?: readonly string[]
+  keyIssuer?: string
 }>
 
 export class AccessTokenVerifier {
@@ -46,6 +49,7 @@ export class AccessTokenVerifier {
       tenantId: claims.tenant_id,
       roles: claims.roles,
       ...(claims.scp === undefined ? {} : { scopes: claims.scp }),
+      ...(claims.key_issuer === undefined ? {} : { keyIssuer: claims.key_issuer }),
     }
   }
 }

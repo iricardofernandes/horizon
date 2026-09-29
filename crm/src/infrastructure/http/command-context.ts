@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common'
 import { z } from 'zod'
 import type { CommandContext, IdempotentContext } from '@/application/use-cases/commands'
-import { actorOf, type CrmRequest, tenantOf } from './authorization'
+import { actorOf, type CrmRequest, tenantOf, viaOf } from './authorization'
 import { parse } from './request-parsing'
 
 const IDEMPOTENCY_KEY = /^[\x21-\x7e]{8,255}$/
@@ -21,6 +21,7 @@ export function context(request: CrmRequest): CommandContext {
   return {
     tenantId: tenantOf(request),
     actor: actorOf(request),
+    via: viaOf(request),
     requestId: typeof requestId === 'string' ? requestId.slice(0, 128) : null,
   }
 }

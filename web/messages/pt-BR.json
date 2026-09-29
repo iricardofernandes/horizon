@@ -3090,5 +3090,10 @@
     "outcome": "Resultado",
     "rows": "Linhas",
     "truncated": "cortado"
+  },
+  "agentDrafts": {
+    "badge": "Rascunho do agente",
+    "badgeHint": "Criado por um agente com uma chave de API; abrir o log de chamadas",
+    "filter": "Rascunhos do agente ({count})"
   }
 }

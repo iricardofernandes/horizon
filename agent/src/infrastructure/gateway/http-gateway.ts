@@ -91,6 +91,28 @@ export class HttpGateway extends Gateway {
     })
     return { status: response.status, body: await bodyOf(response) }
   }
+
+  async write(
+    path: string,
+    body: Readonly<Record<string, unknown>>,
+    accessToken: string,
+    idempotencyKey: string,
+  ): Promise<GatewayAnswer> {
+    const url = new URL(path, this.gatewayUrl)
+    if (url.origin !== new URL(this.gatewayUrl).origin) throw new Error('refusing a foreign URL')
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'idempotency-key': idempotencyKey,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    })
+    return { status: response.status, body: await bodyOf(response) }
+  }
 }
 
 /** The claims of a freshly exchanged token, verified against Identity's published keys. */

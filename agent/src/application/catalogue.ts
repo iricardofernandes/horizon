@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
 /**
@@ -23,11 +24,14 @@ export type CatalogueModule =
 export interface ToolEntry {
   readonly name: string
   readonly module: CatalogueModule
-  readonly kind: 'list' | 'get'
+  /** `draft` tools create a record a person must still take further (ADR 0066). */
+  readonly kind: 'list' | 'get' | 'draft'
   readonly description: string
   /** Gateway path; `{param}` segments are filled from validated arguments only. */
   readonly path: string
   readonly input: z.ZodRawShape
+  /** What a draft creates, as the agent's log and the lists name it. */
+  readonly record?: string
 }
 
 const id = z.uuid().describe('The record id')
@@ -401,12 +405,163 @@ export const CATALOGUE: readonly ToolEntry[] = [
     path: '/reporting/dashboard',
     input: { cutoff: instant.optional() },
   },
+  // --- drafts (ADR 0066): each creates a record a person must still take further -----
+  {
+    name: 'draft_quote',
+    module: 'sales',
+    kind: 'draft',
+    record: 'quote',
+    description:
+      'Draft a sales quote for a customer. It stays a draft until a person sends or accepts it.',
+    path: '/sales/quotes',
+    input: {
+      customerId: z.uuid(),
+      opportunityId: z.uuid().optional(),
+      lines: z
+        .array(
+          z.strictObject({ itemId: z.uuid(), quantity: z.string().regex(/^\d+(?:\.\d{1,6})?$/) }),
+        )
+        .min(1)
+        .max(100),
+      terms: z
+        .strictObject({
+          discount: z
+            .string()
+            .regex(/^\d{1,18}$/)
+            .optional(),
+          freight: z
+            .string()
+            .regex(/^\d{1,18}$/)
+            .optional(),
+          paymentTermDays: z.array(z.number().int().min(0).max(365)).min(1).max(12).optional(),
+          notes: z.string().max(500).optional(),
+        })
+        .optional(),
+    },
+  },
+  {
+    name: 'draft_purchase_requisition',
+    module: 'procurement',
+    kind: 'draft',
+    record: 'requisition',
+    description: 'Draft a purchase requisition. A person submits it, and someone else approves it.',
+    path: '/procurement/requisitions',
+    input: {
+      warehouseId: z.uuid(),
+      neededBy: date,
+      justification: z.string().max(500).optional(),
+      lines: z
+        .array(
+          z.strictObject({
+            itemId: z.uuid(),
+            description: z.string().trim().min(1).max(160).optional(),
+            quantity: z.string().regex(/^\d{1,15}(\.\d{1,6})?$/),
+          }),
+        )
+        .min(1)
+        .max(200),
+    },
+  },
+  {
+    name: 'draft_payable',
+    module: 'financial',
+    kind: 'draft',
+    record: 'payable',
+    description:
+      'Draft a payable from a supplier document. It is never posted here: a person posts it.',
+    path: '/financial/payables',
+    input: {
+      partyId: z.uuid(),
+      documentNumber: z.string().trim().min(1).max(40),
+      description: z.string().max(500).optional(),
+      currency: z.string().regex(/^[A-Z]{3}$/),
+      categoryId: z.uuid().optional(),
+      issuedOn: date,
+      competenceOn: date.optional(),
+      installments: z
+        .array(z.strictObject({ dueOn: date, amount: z.string().regex(/^\d{1,18}$/) }))
+        .min(1)
+        .max(120),
+    },
+  },
+  {
+    name: 'create_crm_task',
+    module: 'crm',
+    kind: 'draft',
+    record: 'task',
+    description:
+      'Create a CRM task about an account, contact or opportunity, for the key issuer unless another assignee is named.',
+    path: '/crm/tasks',
+    input: {
+      subject: z.strictObject({
+        type: z.enum(['account', 'contact', 'opportunity']),
+        id: z.uuid(),
+      }),
+      title: z.string().min(1).max(200),
+      dueAt: instant,
+      remindAt: instant.optional(),
+      assigneeId: z.uuid().optional(),
+    },
+  },
+  {
+    name: 'record_crm_activity',
+    module: 'crm',
+    kind: 'draft',
+    record: 'activity',
+    description: 'Record a call, meeting, email or visit on an account, contact or opportunity.',
+    path: '/crm/activities',
+    input: {
+      subject: z.strictObject({
+        type: z.enum(['account', 'contact', 'opportunity']),
+        id: z.uuid(),
+      }),
+      kind: z.enum(['call', 'meeting', 'email', 'visit']),
+      occurredAt: instant,
+      title: z.string().min(1).max(200),
+      summary: z.string().max(5000).optional(),
+      contactIds: z.array(z.uuid()).max(20).optional(),
+    },
+  },
+  {
+    name: 'write_crm_note',
+    module: 'crm',
+    kind: 'draft',
+    record: 'note',
+    description: 'Write a note on an account, contact or opportunity.',
+    path: '/crm/notes',
+    input: {
+      subject: z.strictObject({
+        type: z.enum(['account', 'contact', 'opportunity']),
+        id: z.uuid(),
+      }),
+      body: z.string().min(1).max(12_000),
+    },
+  },
 ]
+
+/**
+ * The only routes a tool may write to (ADR 0066): creations of records a person must still
+ * take further. A new write tool means editing this list and its test, in review.
+ */
+export const DRAFT_ROUTES: readonly string[] = [
+  '/sales/quotes',
+  '/procurement/requisitions',
+  '/financial/payables',
+  '/crm/tasks',
+  '/crm/activities',
+  '/crm/notes',
+]
+
+/** Decisions, postings and access: no tool path may ever look like one of these. */
+export const DENIED_ROUTE =
+  /approve|reject|submit|post(?:s|ing)?\b|settle|cancel|revers|issue|convert|realis|confirm|dispatch|transmi|api-keys|roles|settings|erase|import|export|delegation|polic/
 
 /** A key reaches a module's tools with `<module>:read` or `<module>:write` (ADR 0064). */
 export function toolsFor(scopes: readonly string[]): readonly ToolEntry[] {
-  return CATALOGUE.filter(
-    (tool) => scopes.includes(`${tool.module}:read`) || scopes.includes(`${tool.module}:write`),
+  return CATALOGUE.filter((tool) =>
+    tool.kind === 'draft'
+      ? scopes.includes(`${tool.module}:write`)
+      : scopes.includes(`${tool.module}:read`) || scopes.includes(`${tool.module}:write`),
   )
 }
 
@@ -439,4 +594,34 @@ export function requestFor(
   if (tool.kind === 'list' && 'limit' in tool.input && query.limit === undefined)
     query.limit = String(maxRows)
   return { path, query }
+}
+
+/** A UUID derived from a digest, so a retried call sends the very same line ids. */
+function derivedUuid(seed: string, index: number): string {
+  const hex = createHash('sha256').update(`${seed}:${index}`).digest('hex')
+  const variant = ((Number.parseInt(hex.slice(16, 18), 16) & 0x3f) | 0x80).toString(16)
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant}${hex.slice(18, 20)}-${hex.slice(20, 32)}`
+}
+
+/**
+ * The body a draft tool's validated arguments make: what the route asks for, with what the
+ * agent derives — line ids from the call's own digest, and a task's assignee (the key's
+ * issuer unless another is named).
+ */
+export function draftBody(
+  tool: ToolEntry,
+  args: Readonly<Record<string, unknown>>,
+  derive: { readonly seed: string; readonly issuer: string | null },
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { ...args }
+  if (Array.isArray(args.lines))
+    body.lines = (args.lines as Record<string, unknown>[]).map((line, index) => ({
+      lineId: derivedUuid(derive.seed, index),
+      ...line,
+    }))
+  if (tool.name === 'create_crm_task' && body.assigneeId === undefined) {
+    if (!derive.issuer) throw new Error('the task needs an assigneeId')
+    body.assigneeId = derive.issuer
+  }
+  return body
 }

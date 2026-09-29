@@ -1,0 +1,125 @@
+{
+  "phase": 73,
+  "kind": "agent-drafts-smoke",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-29T17:27:05.424Z",
+  "finishedAt": "2026-09-29T17:27:05.747Z",
+  "passed": true,
+  "tenantId": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+  "requisitionId": "01a0ee34-b0b1-700f-9a21-1691e015de2b",
+  "checks": [
+    {
+      "name": "an agent drafts a requisition through its key",
+      "passed": true,
+      "detail": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"truncated\":false,\"result\":{\"id\":\"01a0ee34-b0b1-700f-9a21-1691e015de2b\"}}"
+            }
+          ]
+        },
+        "jsonrpc": "2.0",
+        "id": "phase73-5b0fc40a-5559-4d9d-8596-685fbd4fad98"
+      }
+    },
+    {
+      "name": "the same MCP request retried creates nothing new",
+      "passed": true,
+      "detail": {
+        "id": "01a0ee34-b0b1-700f-9a21-1691e015de2b"
+      }
+    },
+    {
+      "name": "the draft counts as its issuer’s",
+      "passed": true,
+      "detail": {
+        "requestedBy": "01a0b6b8-c349-703a-b2ce-2f923e6fbc36",
+        "issuer": "01a0b6b8-c349-703a-b2ce-2f923e6fbc36"
+      }
+    },
+    {
+      "name": "the issuer is refused approval of what their agent drafted",
+      "passed": true,
+      "detail": {
+        "type": "https://horizon.dev/problems/segregation-of-duties",
+        "title": "Segregation of duties",
+        "status": 403,
+        "detail": "the person who requested or submitted the requisition cannot decide it",
+        "code": "segregation-of-duties",
+        "pair": "procurement.requisition"
+      }
+    },
+    {
+      "name": "another person approves it",
+      "passed": true,
+      "detail": {
+        "status": "approved"
+      }
+    },
+    {
+      "name": "Procurement’s audit names the issuer and the key",
+      "passed": true,
+      "detail": {
+        "actorIsIssuer": true,
+        "viaIsTheKey": true
+      }
+    },
+    {
+      "name": "the agent log lists the draft for the requisitions screen",
+      "passed": true,
+      "detail": [
+        {
+          "recordId": "01a0ee34-b0b1-700f-9a21-1691e015de2b",
+          "type": "requisition",
+          "keyId": "01a0ee34-b091-717d-94c1-9ee636ef8dde",
+          "sequence": 14,
+          "occurredAt": "2026-09-29T17:27:05.669Z"
+        },
+        {
+          "recordId": "01a0ee34-b0b1-700f-9a21-1691e015de2b",
+          "type": "requisition",
+          "keyId": "01a0ee34-b091-717d-94c1-9ee636ef8dde",
+          "sequence": 13,
+          "occurredAt": "2026-09-29T17:27:05.652Z"
+        },
+        {
+          "recordId": "01a0edc7-7ce0-7429-85ac-5b15d8e37227",
+          "type": "requisition",
+          "keyId": "01a0edc7-7cc6-7234-a572-cf2e90485169",
+          "sequence": 9,
+          "occurredAt": "2026-09-29T15:27:48.979Z"
+        }
+      ]
+    },
+    {
+      "name": "a read-only key is offered no draft tool",
+      "passed": true,
+      "detail": [
+        "list_requisitions",
+        "get_requisition",
+        "list_purchase_orders",
+        "get_purchase_order",
+        "list_suppliers"
+      ]
+    },
+    {
+      "name": "a read-only key cannot write by naming the tool",
+      "passed": true,
+      "detail": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "No tool named draft_purchase_requisition is available to this key"
+            }
+          ],
+          "isError": true
+        },
+        "jsonrpc": "2.0",
+        "id": 4
+      }
+    }
+  ]
+}

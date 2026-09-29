@@ -3,9 +3,11 @@
 import { Tabs } from '@base-ui/react/tabs'
 import { useTranslations } from 'next-intl'
 import { useEffect, useRef, useState } from 'react'
+import { AgentDraftBadge, AgentDraftFilter } from '@/components/ui/agent-draft'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ColumnPicker, SavedViewsMenu } from '@/features/views/saved-views-menu'
+import { useAgentDrafts, withDrafts } from '@/lib/agent-drafts'
 import { filtersOf, queryOf, shownColumns } from '@/lib/saved-views'
 import { useStatusLabel } from '@/lib/status'
 import { useUrlParam } from '@/lib/url-param'
@@ -71,8 +73,11 @@ export function TitlesView({
     linked.current = true
     setSelected(openParam)
   }, [openParam, data.titles])
+  // Payables an agent drafted (ADR 0066), marked from the agent's own log.
+  const drafts = useAgentDrafts(direction === 'payable' ? 'financial' : null, 'payable')
   const normalized = query.trim().toLocaleLowerCase()
-  const rows = data.titles.filter(
+  const listed = withDrafts(data.titles, drafts.ids, (row) => [row.id], drafts.only)
+  const rows = listed.filter(
     (row) =>
       inView(row, view) &&
       (!normalized ||
@@ -89,6 +94,7 @@ export function TitlesView({
           <p className="catalog-page-copy">{t('copy')}</p>
         </div>
         <div className="page-actions">
+          <AgentDraftFilter count={drafts.ids.size} onChange={drafts.setOnly} only={drafts.only} />
           {direction === 'payable' && abilities.canConfigure ? (
             <ApprovalPolicyDialog data={data} onChanged={onChanged} setNotice={setNotice} />
           ) : null}
@@ -148,7 +154,13 @@ export function TitlesView({
         </div>
         <div className="panel table-panel">
           <div className="table-scroll">
-            <TitlesTable columns={shown} direction={direction} onOpen={setSelected} rows={rows} />
+            <TitlesTable
+              columns={shown}
+              direction={direction}
+              drafted={(row) => drafts.ids.has(row.id)}
+              onOpen={setSelected}
+              rows={rows}
+            />
           </div>
           {!rows.length ? (
             <div className="catalog-empty">
@@ -242,11 +254,13 @@ function TitlesTable({
   rows,
   columns,
   onOpen,
+  drafted,
 }: {
   direction: Direction
   rows: TitleRow[]
   columns: readonly string[]
   onOpen: (id: string) => void
+  drafted: (row: TitleRow) => boolean
 }) {
   const shown = OPTIONAL_COLUMNS.filter((column) => columns.includes(column))
   const t = useTranslations(namespaceOf(direction))
@@ -285,6 +299,7 @@ function TitlesTable({
                 {row.origin.type === 'manual' ? null : (
                   <small className="receivable-origin">{t(`from.${row.origin.type}`)}</small>
                 )}
+                {drafted(row) ? <AgentDraftBadge /> : null}
               </td>
               {shown.map((column) => (
                 <td className={NUMERIC.includes(column) ? 'numeric' : undefined} key={column}>
