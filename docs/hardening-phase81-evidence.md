@@ -59,6 +59,40 @@
 
   Both now wait for both reads.
 
+### Found by CI after the push
+
+The golden path workflow failed on `8d4f9d9` at the browser path, waiting for an order's
+forecast to be realised. Rerunning `make test-phase10` locally, one run in three failed,
+with two causes:
+
+- **One person's browser reached Kong's global limit.** Since Phase 80 Kong counts each
+  browser's own address, and the browser golden path makes about 610 requests a minute from
+  one address; a screen reads a dozen resources at once. The limit was 600 a minute. A
+  `429` answered the approval request, and in CI it answered the forecast poll until it
+  timed out. The global per-address limit is now 1200 a minute (`deck file validate`
+  passes). Four runs in a row then passed. The script now prints Financial's answers and
+  the open dialog when it fails, which is how the `429` was found.
+- **A delivery could overtake its order's confirmation in Financial.** Both events race
+  through the queue. A delivery handled first found no forecast to reduce, and the
+  confirmation that followed expected the whole order again, next to what the delivery
+  already made owed; that forecast never went away.
+  - The delivery now raises the forecast itself when none exists, then reduces or
+    withdraws it, and the confirmation finds it and does nothing.
+  - Run at the same moment, the unique index on a title's origin makes one of the two fail
+    and be redelivered.
+  - A Financial e2e test covers both orders, whole and partial. It fails on the old code.
+- **Found on the way, not changed: no workflow and no `ci-local` step runs `test:cov`.**
+  The coverage gates in each module's `vitest.config.mts` are enforced nowhere. Financial,
+  for one, is at 44% of lines, well under its own 80%. Enforcing them is a decision for
+  the owner, since several modules would fail today.
+- **After the fix:**
+  - `node scripts/ci-local.mjs --full` passed in full;
+  - `make demo` twice, `make test-alerts`, and `make test-phase10` five more times passed;
+  - `deck file validate gateway/kong.yml` passed;
+  - no DLQ holds a message.
+- **Dependabot works again.** Right after the push it opened grouped pull requests for
+  catalog, sales, inventory and webhooks, where every npm run had failed before.
+
 ## Not done, stated
 
 - **Dependabot covers only 8 npm projects** (identity, catalog, inventory, sales, webhooks,

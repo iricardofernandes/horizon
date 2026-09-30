@@ -319,10 +319,12 @@ plugins:
       credentials: true
       max_age: 3600
 
-  # A global ceiling. Per-consumer and per-API-key tiers are attached to consumers.
+  # A global ceiling, per address. Per-consumer and per-API-key tiers are attached to
+  # consumers. Since Phase 80 the address is each browser's: one person working quickly
+  # reached 600 a minute (a screen reads a dozen resources at once), so it is 1200.
   - name: rate-limiting
     config:
-      minute: 600
+      minute: 1200
       policy: local
       limit_by: ip
       fault_tolerant: true

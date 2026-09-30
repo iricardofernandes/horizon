@@ -719,6 +719,73 @@ describe('following sales and parties', () => {
     expect((await list('draft')).total).toBe(2)
   })
 
+  it('ends the same when a delivery overtakes the order’s confirmation', async () => {
+    // Sales publishes both, and they race through the queue: the delivery can be handled
+    // first. The confirmation must not then expect money the delivery already made owed.
+    const { tenantId, partyId } = await workspace()
+    const list = (view: 'draft' | 'forecast') =>
+      database.listTitles(tenantId, 'receivable', {
+        view,
+        today: '2026-09-16',
+        limit: 50,
+        offset: 0,
+      })
+    const money = (amount: string) => ({ amount, currency: 'BRL' })
+    const line = {
+      lineId: randomUUID(),
+      itemId: randomUUID(),
+      quantity: '2',
+      description: 'Coffee',
+      unitPrice: money('1250'),
+      lineTotal: money('2500'),
+    }
+    const confirmed = (orderId: string) =>
+      deliver(tenantId, 'sales.order.confirmed', {
+        orderId,
+        orderVersion: 2,
+        customerId: partyId,
+        reservationId: randomUUID(),
+        confirmedAt: '2026-09-15T21:30:00.000Z',
+        lines: [line],
+        total: money('2500'),
+      })
+    const dispatched = (orderId: string, remaining: string) =>
+      deliver(tenantId, 'sales.shipment.dispatched', {
+        orderId,
+        orderVersion: 3,
+        shipmentId: randomUUID(),
+        customerId: partyId,
+        warehouseId: randomUUID(),
+        dispatchedBy: 'user:warehouse',
+        dispatchedOn: '2026-09-16',
+        carrier: null,
+        trackingCode: null,
+        lines: [{ ...line, quantity: '1', lineTotal: money('1250') }],
+        value: money('1250'),
+        installments: [{ number: 1, dueOn: '2026-09-16', amount: money('1250') }],
+        remaining: money(remaining),
+        remainingInstallments:
+          remaining === '0' ? [] : [{ number: 1, dueOn: '2026-09-16', amount: money(remaining) }],
+        complete: remaining === '0',
+      })
+
+    // Everything left in one delivery, before the confirmation: nothing stays expected.
+    const whole = randomUUID()
+    await dispatched(whole, '0')
+    await confirmed(whole)
+    expect((await list('forecast')).total).toBe(0)
+    expect((await list('draft')).total).toBe(1)
+
+    // Half left first: only the other half stays expected, once.
+    const half = randomUUID()
+    await dispatched(half, '1250')
+    await confirmed(half)
+    const expected = await list('forecast')
+    expect(expected.total).toBe(1)
+    expect(expected.data[0]).toMatchObject({ total: '1250' })
+    expect((await list('draft')).total).toBe(2)
+  })
+
   it('withdraws what a returned delivery made owed, and expects it again', async () => {
     const { tenantId, partyId } = await workspace()
     const orderId = randomUUID()

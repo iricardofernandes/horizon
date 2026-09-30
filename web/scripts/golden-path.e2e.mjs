@@ -22,6 +22,9 @@ const browser = await chromium.launch({
   args: ['--no-sandbox', '--disable-dev-shm-usage'],
 })
 
+// What Financial answered, and what the screen showed, printed when the path fails.
+const financialCalls = []
+let lastPage = null
 try {
   // A Brazilian browser with no stored choice must be answered in Portuguese (ADR 0044).
   const page = await browser.newPage({
@@ -34,6 +37,20 @@ try {
   let orderTraceId = ''
   let placedOrderId = ''
   page.on('pageerror', (error) => pageErrors.push(error.message))
+  lastPage = page
+  page.on('response', async (response) => {
+    const url = new URL(response.url())
+    if (!url.pathname.startsWith('/api/horizon/financial/payables')) return
+    const body = await response.json().catch(() => null)
+    financialCalls.push({
+      at: new Date().toISOString().slice(11, 23),
+      call: `${response.request().method()} ${url.pathname}`,
+      status: response.status(),
+      ...(body && 'approvalState' in body
+        ? { approvalState: body.approvalState, requestedBy: body.approvalRequestedBy }
+        : {}),
+    })
+  })
   page.on('response', (response) => {
     if (response.url().includes('/v1/traces'))
       telemetryRequests.push(`${response.status()} ${response.url()}`)
@@ -577,6 +594,16 @@ try {
   process.stdout.write(
     `${JSON.stringify({ status: 'ok', traceId: orderTraceId, services, responsiveWidth: 390 })}\n`,
   )
+} catch (error) {
+  const dialog = await lastPage
+    ?.locator('[role="dialog"]')
+    .last()
+    .innerText({ timeout: 2000 })
+    .catch(() => null)
+  console.error(
+    JSON.stringify({ financialCalls: financialCalls.slice(-12), dialog: dialog?.slice(0, 800) }, null, 2),
+  )
+  throw error
 } finally {
   await browser.close()
 }

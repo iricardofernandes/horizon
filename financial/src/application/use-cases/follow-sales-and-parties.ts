@@ -183,6 +183,8 @@ export class RecordReceivableFromShipmentUseCase {
     shipment: DispatchedShipment,
   ): Promise<Either<InvalidInputError, 'raised' | 'ignored'>> {
     const now = this.clock.now()
+    const overtaken = await forecastBehindDelivery(scope, shipment, now)
+    if (overtaken.isLeft()) return left(overtaken.value)
     const reduced = await reduceForecast(scope, forecastOf(shipment.orderId, shipment, now))
     if (reduced.isLeft()) return left(reduced.value)
     if (await scope.titles.findByOriginForUpdate('receivable', shipment.shipmentId))
@@ -203,6 +205,39 @@ export class RecordReceivableFromShipmentUseCase {
       now,
     })
   }
+}
+
+/**
+ * A delivery handled before its order's confirmation (Phase 81).
+ *
+ * Both are published by Sales and race through the queue, so the delivery can arrive with no
+ * forecast to reduce. Left alone, the confirmation that follows would expect the whole order
+ * again, beside what the delivery already made owed. So the delivery raises the forecast
+ * itself, from what it carried, and the reduction that follows brings it down to what is
+ * still to come, or withdraws it; the confirmation then finds it and does nothing. Were the
+ * two to run at once, the index on a title's origin lets one of them fail and be redelivered.
+ */
+async function forecastBehindDelivery(
+  scope: FinancialScope,
+  shipment: DispatchedShipment,
+  now: Date,
+): Promise<Either<InvalidInputError, void>> {
+  if (await scope.titles.findByOriginForUpdate('receivable', shipment.orderId))
+    return right(undefined)
+  if (shipment.installments.length === 0) return right(undefined)
+  const raised = await raise(
+    scope,
+    {
+      orderId: shipment.orderId,
+      customerId: shipment.customerId,
+      confirmedAt: shipment.dispatchedOn,
+      total: shipment.value,
+      installments: shipment.installments,
+    },
+    'forecast',
+    now,
+  )
+  return raised.isLeft() ? left(raised.value) : right(undefined)
 }
 
 export interface ReturnedShipment {
