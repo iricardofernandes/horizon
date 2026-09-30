@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type postgres from 'postgres'
 import { z } from 'zod'
+import { ruleExpressionSchema } from './formula'
 import type { TaxRule } from './rules'
 
 /** Rule and reference shapes, and their row mapping, shared by a workspace's store and the catalogue. */
@@ -61,10 +62,19 @@ export const taxRuleImportSchema = z
       'LINE_NET_TIMES_RATE',
       'DOCUMENT_NET_TIMES_RATE',
       'RETURN_LINE_NET_TIMES_RATE',
+      'EXPRESSION',
     ]),
+    /** How the base is built, when the formula is `EXPRESSION` (Phase 83, ADR 0071). */
+    expression: ruleExpressionSchema.optional(),
     sourceLocator: z.string().min(1).max(300),
   })
   .superRefine((rule, context) => {
+    if ((rule.formula === 'EXPRESSION') !== Boolean(rule.expression))
+      context.addIssue({
+        code: 'custom',
+        path: ['expression'],
+        message: 'an EXPRESSION formula carries an expression, and no other formula does',
+      })
     const required =
       rule.precedence === 'operation'
         ? rule.operation
@@ -137,6 +147,7 @@ export function toTaxRule(row: postgres.Row): TaxRule {
     },
     rate: { numerator: String(row.rate_numerator), denominator: String(row.rate_denominator) },
     formula: row.formula as TaxRule['formula'],
+    ...(row.expression ? { expression: ruleExpressionSchema.parse(row.expression) } : {}),
     rule: { id: String(row.id), version: Number(row.version) },
     source: {
       packageId: String(row.package_id),

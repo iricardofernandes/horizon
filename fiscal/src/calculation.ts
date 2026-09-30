@@ -14,12 +14,26 @@ import {
   reduce,
   roundHalfAwayFromZero,
 } from './exact-decimal'
+import {
+  evaluateComponent,
+  evaluationOrder,
+  type LineValues,
+  lineValues,
+  type RuleExpression,
+  ruleExpressionSchema,
+} from './formula'
 
 export type ResolvedComponentRule = {
   group: 'legacy' | 'ibsCbs'
   code: string
   rate: { numerator: string; denominator: string }
-  formula: 'LINE_NET_TIMES_RATE' | 'DOCUMENT_NET_TIMES_RATE' | 'RETURN_LINE_NET_TIMES_RATE'
+  formula:
+    | 'LINE_NET_TIMES_RATE'
+    | 'DOCUMENT_NET_TIMES_RATE'
+    | 'RETURN_LINE_NET_TIMES_RATE'
+    | 'EXPRESSION'
+  /** Present exactly when the formula is `EXPRESSION` (Phase 83, ADR 0071). */
+  expression?: RuleExpression
   rule: { id: string; version: number }
   source: {
     packageId: string
@@ -33,7 +47,7 @@ export type ResolvedComponentRule = {
 export type ResolvedRuleSet = {
   schemaVersion: 1
   currencyMinorUnitScale: number
-  explanationTemplateVersion: 'fiscal-explanation-v1'
+  explanationTemplateVersion: 'fiscal-explanation-v1' | 'fiscal-explanation-v2'
   lines: Readonly<Record<string, readonly ResolvedComponentRule[]>>
 }
 
@@ -67,6 +81,13 @@ export function calculateFiscal(
     const lineRules = normalizedRules.lines[line.id]
     if (!lineRules) throw new Error('Resolved rule validation invariant failed')
     const calculated = calculateLine(input, line, lineRules, normalizedRules.currencyMinorUnitScale)
+    if ('missing' in calculated)
+      return unsupported(
+        'UNSUPPORTED_RULE',
+        'A selected formula reads a component no rule selects for this line',
+        `component:${calculated.missing}`,
+        inputDigest,
+      )
     const invalidDirection =
       calculationInputDirection(input) === 1n
         ? BigInt(calculated.net.amount) < 0n
@@ -129,7 +150,7 @@ function calculateLine(
   line: FiscalCalculationInput['lines'][number],
   rules: readonly ResolvedComponentRule[],
   currencyMinorUnitScale: number,
-): CalculatedLine {
+): CalculatedLine | { missing: string } {
   const scale = integer(10n ** BigInt(currencyMinorUnitScale))
   // A value complement carries no quantity: its line value is the complemented amount.
   const commercial =
@@ -145,8 +166,28 @@ function calculateLine(
       BigInt(line.charges.amount)) *
     direction
   const components = { legacy: [] as CalculatedComponent[], ibsCbs: [] as CalculatedComponent[] }
-  for (const rule of rules)
-    components[rule.group].push(calculateComponent(net, input.currency, rule))
+  if (rules.some((rule) => rule.expression)) {
+    // Components read one another, so each is computed after the ones it reads (Phase 83).
+    const ordered = evaluationOrder(rules)
+    if ('missing' in ordered) return { missing: ordered.missing }
+    const values = lineValues({
+      gross,
+      discount: BigInt(line.discount.amount) * direction,
+      charges: BigInt(line.charges.amount) * direction,
+      net,
+      quantity: line.quantity,
+    })
+    const amounts = new Map<string, bigint>()
+    for (const rule of ordered.order) {
+      const component = rule.expression
+        ? calculateExpressionComponent(values, amounts, input.currency, rule, rule.expression)
+        : calculateComponent(net, input.currency, rule)
+      amounts.set(rule.code, BigInt(component.amount.amount))
+      components[rule.group].push(component)
+    }
+  } else
+    for (const rule of rules)
+      components[rule.group].push(calculateComponent(net, input.currency, rule))
   return {
     lineId: line.id,
     gross: money(gross, input.currency),
@@ -174,6 +215,41 @@ function calculateComponent(
     formula: rule.formula,
     rounding: { mode: 'half-away-from-zero', scale: 0 },
     rule: rule.rule,
+    source: {
+      packageId: rule.source.packageId,
+      digest: rule.source.digest,
+      uri: rule.source.uri,
+      section: rule.source.section,
+    },
+  }
+}
+
+function calculateExpressionComponent(
+  values: LineValues,
+  amounts: ReadonlyMap<string, bigint>,
+  currency: string,
+  rule: ResolvedComponentRule,
+  expression: RuleExpression,
+): CalculatedComponent {
+  const rate = reduce({
+    numerator: BigInt(rule.rate.numerator),
+    denominator: BigInt(rule.rate.denominator),
+  })
+  const evaluated = evaluateComponent(expression, rate, values, amounts)
+  return {
+    code: rule.code,
+    base: money(evaluated.base, currency),
+    rate: stringifyRational(rate),
+    unrounded: { ...stringifyRational(evaluated.unrounded), currency },
+    amount: money(evaluated.amount, currency),
+    formula: 'EXPRESSION',
+    rounding: { mode: 'half-away-from-zero', scale: 0 },
+    rule: rule.rule,
+    outcome: evaluated.outcome,
+    steps: evaluated.steps.map((step) => ({
+      step: step.step,
+      value: stringifyRational(step.value),
+    })),
     source: {
       packageId: rule.source.packageId,
       digest: rule.source.digest,
@@ -257,7 +333,16 @@ function validateRules(
     const identities = new Set<string>()
     for (const rule of lineRules) {
       const returnFormula = rule.formula === 'RETURN_LINE_NET_TIMES_RATE'
-      if ((input.purpose === 'return') !== returnFormula)
+      // An expression rule is matched to its purpose by scope; its bases carry the sign.
+      if (rule.formula === 'EXPRESSION') {
+        if (!rule.expression || !ruleExpressionSchema.safeParse(rule.expression).success)
+          return unsupported(
+            'INVALID_FISCAL_INPUT',
+            'A selected expression is invalid',
+            `${rule.group}:${rule.code}`,
+            inputDigest,
+          )
+      } else if ((input.purpose === 'return') !== returnFormula)
         return unsupported(
           'UNSUPPORTED_RULE',
           'The selected formula does not match the document purpose',
@@ -351,9 +436,15 @@ function renderExplanation(lines: readonly CalculatedLine[]): string {
   return lines
     .flatMap((line) => [
       `Line ${line.lineId}: net ${line.net.amount} ${line.net.currency} minor units.`,
-      ...[...line.components.legacy, ...line.components.ibsCbs].map(
-        (component) =>
-          `${component.code}: ${component.base.amount} × ${component.rate.numerator}/${component.rate.denominator} = ${component.amount.amount}; rule ${component.rule.id} v${component.rule.version}; source ${component.source.uri} § ${component.source.section}.`,
+      ...[...line.components.legacy, ...line.components.ibsCbs].map((component) =>
+        component.steps
+          ? [
+              `${component.code} (${component.outcome}): rule ${component.rule.id} v${component.rule.version}; source ${component.source.uri} § ${component.source.section}.`,
+              ...component.steps.map(
+                (step) => `  ${step.step} = ${step.value.numerator}/${step.value.denominator}`,
+              ),
+            ].join('\n')
+          : `${component.code}: ${component.base.amount} × ${component.rate.numerator}/${component.rate.denominator} = ${component.amount.amount}; rule ${component.rule.id} v${component.rule.version}; source ${component.source.uri} § ${component.source.section}.`,
       ),
     ])
     .join('\n')

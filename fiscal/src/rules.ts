@@ -117,7 +117,12 @@ export function resolveTaxRules(
     rules: {
       schemaVersion: 1,
       currencyMinorUnitScale,
-      explanationTemplateVersion: 'fiscal-explanation-v1',
+      // Expressions explain every step; Phase 41's formulas keep their v1 explanation.
+      explanationTemplateVersion: Object.values(lines).some((rules) =>
+        rules.some((rule) => rule.expression),
+      )
+        ? 'fiscal-explanation-v2'
+        : 'fiscal-explanation-v1',
       lines,
     },
     trace,
@@ -166,6 +171,7 @@ function toResolvedRule(rule: TaxRule): ResolvedComponentRule {
     code: rule.code,
     rate: rule.rate,
     formula: rule.formula,
+    ...(rule.expression ? { expression: rule.expression } : {}),
     rule: rule.rule,
     source: rule.source,
   }

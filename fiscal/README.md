@@ -221,6 +221,21 @@ rows only for what is its own. `npm run phase82:catalog -- <action>`:
 `verify` and `verify-lock` also need `FISCAL_ARTIFACT_KEY_HEX`. See the
 [Phase 82 evidence](../docs/tax-phase82-evidence.md).
 
+### Formulas (Phase 83)
+
+A rule with `formula: "EXPRESSION"` carries
+`expression: { "version": "formula-v1", "base": <node>, "outcome": "levied" }`. The amount
+is `round(round(base) × rate)`, with the rule's rate. The nodes are:
+- `{ "line": "gross" | "discount" | "charges" | "net" | "quantity" }`;
+- `{ "component": "<CODE>" }`;
+- `{ "rate": { numerator, denominator } }`;
+- `sum`, `product`, `min` and `max` (2 to 8 operands);
+- `{ "grossUp": { base, rate } }` and `{ "reduce": { base, by } }`.
+
+Outcomes are `levied`, `exempt`, `suspended`, `deferred` and `not-levied`. Cycles, unknown
+components and trees deeper than 8 or larger than 64 nodes are refused when a package is
+imported or published (ADR 0071).
+
 ## Audit log (Phase 68)
 
 `GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered

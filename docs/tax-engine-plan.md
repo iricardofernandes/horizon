@@ -1,6 +1,6 @@
 # Tax rules engine implementation plan — Phase O
 
-Status: **in progress** — Phase 82 delivered on 2026-09-30 ([evidence](tax-phase82-evidence.md)). This is the execution plan for Phase O,
+Status: **in progress** — Phases 82 and 83 delivered on 2026-09-30 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md)). This is the execution plan for Phase O,
 split into phases 82–89 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to N
 and 79 to 81.
@@ -183,6 +183,10 @@ during the phase.
 - An unadopted package is never used.
 
 ### 83 — The formula language and its interpreter
+
+**Delivered on 2026-09-30** ([plan](tax-phase83-implementation-plan.md), [evidence](tax-phase83-evidence.md)).
+An expression builds the base, and the rule's rate applies to it. Contracts went to 0.53.0
+for the optional `outcome` and `steps`.
 
 **Work**
 1. **The expression schema in contracts:**

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { appendAudit } from './audit'
 import { canonicalDigest } from './canonical-json'
 import { adoptedCatalogReferences, adoptedCatalogRules } from './catalog'
+import { packageProblem } from './formula'
 import {
   deterministicUuid,
   referenceEntrySchema,
@@ -61,6 +62,10 @@ export class FiscalRuleStore {
     if (!Buffer.isBuffer(candidate.bytes) || candidate.bytes.length === 0)
       throw new Error('Fiscal source bytes are required')
     const value = sourceImportSchema.parse(candidate)
+    // A package whose formulas read an unknown component, or each other in a cycle, is
+    // refused here rather than when a document is calculated (ADR 0071).
+    const formulaProblem = packageProblem(value.rules)
+    if (formulaProblem) throw new Error(`Fiscal source package refused: ${formulaProblem}`)
     const packageDigest =
       value.artifact?.digest ?? createHash('sha256').update(candidate.bytes).digest('hex')
     return this.#db.begin(async (tx) => {
@@ -343,7 +348,7 @@ export class FiscalRuleStore {
       precedence, priority, date_basis, purpose, model, environment, operation, issuer_establishment_id,
       issuer_regime, recipient_party_id, recipient_regime, origin_state, destination_state, subject_kind,
       subject_id, classification_kind, classification_code, effective_from, effective_to,
-      rate_numerator, rate_denominator, formula, source_locator, definition_digest
+      rate_numerator, rate_denominator, formula, expression, source_locator, definition_digest
     ) values (
       ${id}, ${tenantId}, ${packageId}, ${rule.ruleKey}, ${rule.version},
       ${rule.group === 'ibsCbs' ? 'ibs_cbs' : 'legacy'}, ${rule.code}, ${rule.precedence},
@@ -355,6 +360,7 @@ export class FiscalRuleStore {
       ${rule.subject?.id ?? '*'}, ${rule.classification?.kind ?? '*'},
       ${rule.classification?.code ?? '*'}, ${rule.effectiveFrom}, ${rule.effectiveTo ?? null},
       ${rule.rate.numerator}, ${rule.rate.denominator}, ${rule.formula},
+      ${rule.expression ? sql.json(rule.expression as postgres.JSONValue) : null},
       ${rule.sourceLocator}, ${definitionDigest}
     )`
     return id

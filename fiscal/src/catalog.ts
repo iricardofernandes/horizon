@@ -3,6 +3,7 @@ import postgres from 'postgres'
 import { z } from 'zod'
 import { appendAudit } from './audit'
 import { canonicalDigest } from './canonical-json'
+import { packageProblem } from './formula'
 import {
   deterministicUuid,
   referenceEntrySchema,
@@ -125,6 +126,8 @@ export class FiscalCatalog {
     if (!Buffer.isBuffer(candidate.bytes) || candidate.bytes.length === 0)
       throw new Error('Catalogue source bytes are required')
     const value = publicationSchema.parse(candidate)
+    const formulaProblem = packageProblem(value.rules)
+    if (formulaProblem) throw new Error(`Catalogue package refused: ${formulaProblem}`)
     const packageDigest =
       value.artifact?.digest ?? createHash('sha256').update(candidate.bytes).digest('hex')
     return this.#db.begin(async (tx) => {
@@ -176,7 +179,7 @@ export class FiscalCatalog {
           priority, date_basis, purpose, model, environment, operation, issuer_regime,
           recipient_regime, origin_state, destination_state, classification_kind,
           classification_code, effective_from, effective_to, rate_numerator, rate_denominator,
-          formula, source_locator, definition_digest
+          formula, expression, source_locator, definition_digest
         ) values (
           ${id}, ${packageId}, ${rule.ruleKey}, ${rule.version},
           ${rule.group === 'ibsCbs' ? 'ibs_cbs' : 'legacy'}, ${rule.code}, ${rule.precedence},
@@ -185,7 +188,9 @@ export class FiscalCatalog {
           ${rule.originState ?? '*'}, ${rule.destinationState ?? '*'},
           ${rule.classification?.kind ?? '*'}, ${rule.classification?.code ?? '*'},
           ${rule.effectiveFrom}, ${rule.effectiveTo ?? null}, ${rule.rate.numerator},
-          ${rule.rate.denominator}, ${rule.formula}, ${rule.sourceLocator}, ${definitionDigest}
+          ${rule.rate.denominator}, ${rule.formula},
+          ${rule.expression ? tx.json(rule.expression as postgres.JSONValue) : null},
+          ${rule.sourceLocator}, ${definitionDigest}
         )`
         ruleIds.push(id)
       }

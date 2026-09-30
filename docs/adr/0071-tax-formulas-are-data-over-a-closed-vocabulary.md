@@ -1,6 +1,8 @@
 # 71. Tax formulas are data over a closed vocabulary
 
-- Status: accepted. To be implemented in Phase 83.
+- Status: accepted. Implemented in Phase 83 ([plan](../tax-phase83-implementation-plan.md),
+  [evidence](../tax-phase83-evidence.md)). An expression builds the component's base, and
+  the rule's own rate applies to it.
 - Date: 2026-09-30
 
 ## Context

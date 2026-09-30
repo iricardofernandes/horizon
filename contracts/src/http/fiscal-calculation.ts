@@ -213,6 +213,24 @@ function fiscalTaxComponentSchema() {
     formula: z.string().min(1).max(120),
     rounding: z.object({ mode: z.literal('half-away-from-zero'), scale: z.int().min(0).max(6) }),
     rule: z.object({ id: uuidSchema, version: z.int().positive() }),
+    /**
+     * What an expression rule decided (Phase 83, ADR 0071); absent for Phase 41's formulas,
+     * which always levy.
+     */
+    outcome: z.enum(['levied', 'exempt', 'suspended', 'deferred', 'not-levied']).optional(),
+    /** Every intermediate value of an expression rule, in the order it was computed. */
+    steps: z
+      .array(
+        z.object({
+          step: z.string().min(1).max(200),
+          value: z.object({
+            numerator: integerStringSchema,
+            denominator: z.string().regex(/^[1-9]\d*$/),
+          }),
+        }),
+      )
+      .max(256)
+      .optional(),
     source: z.object({
       packageId: uuidSchema,
       digest: digestSchema,

@@ -52,3 +52,20 @@ function greatestCommonDivisor(left: bigint, right: bigint): bigint {
   while (b !== 0n) [a, b] = [b, a % b]
   return a === 0n ? 1n : a
 }
+
+export function subtract(left: Rational, right: Rational): Rational {
+  return add(left, { numerator: -right.numerator, denominator: right.denominator })
+}
+
+export function divide(left: Rational, right: Rational): Rational {
+  if (right.numerator === 0n) throw new Error('A rational cannot be divided by zero')
+  return reduce({
+    numerator: left.numerator * right.denominator,
+    denominator: left.denominator * right.numerator,
+  })
+}
+
+export function compare(left: Rational, right: Rational): -1 | 0 | 1 {
+  const difference = subtract(left, right).numerator
+  return difference === 0n ? 0 : difference < 0n ? -1 : 1
+}

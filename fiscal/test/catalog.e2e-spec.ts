@@ -8,7 +8,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FiscalCalculations } from '../src/calculations'
 import { canonicalJson } from '../src/canonical-json'
-import { CatalogAdoptionClash, FiscalCatalog } from '../src/catalog'
+import { CatalogAdoptionClash, type CatalogPublication, FiscalCatalog } from '../src/catalog'
 import {
   approvedPhase41Publication,
   approvedPhase41Source,
@@ -274,3 +274,102 @@ async function insertDraft(tenantId: string, documentId: string, establishmentId
     ${'d'.repeat(64)}, ${Buffer.from('encrypted-placeholder')}
   )`
 }
+
+describe('formulas as data (Phase 83, ADR 0071)', () => {
+  const OPERATION = 'phase83-worked-example'
+  const expressionRule = (
+    code: string,
+    numerator: string,
+    base: unknown,
+  ): CatalogPublication['rules'][number] => ({
+    ruleKey: `phase83.${code.toLowerCase()}`,
+    version: 1,
+    group: 'legacy',
+    code,
+    precedence: 'operation',
+    priority: 500,
+    model: '55',
+    environment: 'simulation',
+    operation: OPERATION,
+    effectiveFrom: '2026-01-01',
+    rate: { numerator, denominator: '100' },
+    formula: 'EXPRESSION',
+    expression: { version: 'formula-v1', base } as never,
+    sourceLocator: `worked example ${code}`,
+  })
+  const publication = (rules: CatalogPublication['rules'], label: string): CatalogPublication => {
+    const base = approvedPhase41Publication({ byteSize: ARTIFACT_BYTES })
+    return {
+      ...base,
+      authority: 'Horizon worked example (Phase 83)',
+      artifact: undefined,
+      bytes: Buffer.from(`phase83 ${label}`),
+      entries: base.entries.filter((entry) => entry.family === 'ncm'),
+      rules,
+    }
+  }
+  const ipi = expressionRule('IPI', '10', { line: 'net' })
+  const icms = expressionRule('ICMS', '18', {
+    grossUp: {
+      base: { sum: [{ line: 'net' }, { component: 'IPI' }] },
+      rate: { rate: { numerator: '18', denominator: '100' } },
+    },
+  })
+
+  it('refuses to publish a package whose components read each other in a cycle', async () => {
+    const circular = expressionRule('IPI', '10', { component: 'ICMS' })
+    await expect(publisher.publish(publication([circular, icms], 'cycle'))).rejects.toThrow(/cycle/)
+  })
+
+  it('publishes, adopts and calculates tax on tax through the store', async () => {
+    const published = await publisher.publish(publication([icms, ipi], 'worked'))
+    const tenantId = await workspace()
+    await catalog.adopt({
+      tenantId,
+      packageId: published.packageId,
+      effectiveFrom: '2026-01-01',
+      reviewedBy: 'workspace-owner',
+      interpretation: 'A worked example of tax on tax, not law.',
+      actorId: 'owner:test',
+      reason: 'Phase 83 e2e',
+    })
+    const result = await calculations.preview({ ...inputFor(tenantId), operation: OPERATION })
+    if (!result.supported) throw new Error(JSON.stringify(result))
+    expect(result.explanation.templateVersion).toBe('fiscal-explanation-v2')
+    expect(
+      result.lines[0]?.components.legacy.map((component) => [
+        component.code,
+        component.base.amount,
+        component.amount.amount,
+        component.outcome,
+      ]),
+    ).toEqual([
+      ['IPI', '10000', '1000', 'levied'],
+      ['ICMS', '13415', '2415', 'levied'],
+    ])
+    expect(result.lines[0]?.components.legacy[1]?.steps?.[0]?.step).toBe(
+      'base = grossUp((line.net + IPI), 18/100)',
+    )
+  })
+
+  it('refuses a workspace import whose formula reads a component no rule defines', async () => {
+    const tenantId = await workspace()
+    const source = approvedPhase41Source(tenantId, {
+      byteSize: ARTIFACT_BYTES,
+      storageUri: 'file://t',
+    })
+    await expect(
+      store.importSource({
+        ...source,
+        artifact: undefined,
+        bytes: Buffer.from('phase83 unknown component'),
+        rules: [
+          {
+            ...expressionRule('ICMS', '18', { component: 'IPI' }),
+            precedence: 'operation',
+          } as never,
+        ],
+      }),
+    ).rejects.toThrow(/no rule of the package/)
+  })
+})
