@@ -666,7 +666,10 @@ services:
 
   web:
     restart: unless-stopped
-    networks: [horizon]
+    # Kong only (ADR 0008), from the one address Kong trusts to name the browser (Phase 80).
+    networks:
+      edge:
+        ipv4_address: ${HORIZON_WEB_EDGE_ADDRESS:-10.213.80.6}
     build:
       context: ../web
     container_name: horizon-web
@@ -676,6 +679,9 @@ services:
       # The frontend addresses Kong, never a service directly (ADR 0008).
       HORIZON_API_URL: http://kong:8000
       HORIZON_COOKIE_SECURE: 'false'
+      # Browsers connect straight to this server; behind a load balancer that appends the
+      # address it saw, this is 1.
+      HORIZON_WEB_TRUSTED_HOPS: '0'
       NEXT_PUBLIC_HORIZON_API_URL: http://localhost:${HORIZON_KONG_PROXY_PORT:-8000}
       NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:${HORIZON_OTLP_HTTP_PORT:-4318}
       OTEL_SERVICE_NAME: web

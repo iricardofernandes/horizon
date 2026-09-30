@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { gatewayFetch } from '@/lib/gateway'
 
-const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
 const token = z.string().regex(/^[A-Za-z0-9_-]{20,100}$/)
 const acceptSchema = z.strictObject({
   token,
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const parsed = token.safeParse(request.nextUrl.searchParams.get('token'))
   if (!parsed.success) return NextResponse.json({ message: 'Unknown link.' }, { status: 410 })
   return relay(
-    await fetch(`${apiUrl}/identity/invitations/lookup?token=${parsed.data}`, {
+    await gatewayFetch(`/identity/invitations/lookup?token=${parsed.data}`, {
       cache: 'no-store',
     }),
   )
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   const parsed = acceptSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ message: 'Check the fields.' }, { status: 400 })
   return relay(
-    await fetch(`${apiUrl}/identity/invitations/accept`, {
+    await gatewayFetch(`/identity/invitations/accept`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(parsed.data),

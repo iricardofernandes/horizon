@@ -13,6 +13,18 @@ export async function readJson<T>(name: string, url: string): Promise<T> {
   return (await response.json()) as T
 }
 
+/**
+ * A read the person's roles may not allow: `null` when refused (403), so a screen can do
+ * without it, as Catalog's items do without Inventory's stock (Phase 80).
+ */
+export async function readJsonIfAllowed<T>(name: string, url: string): Promise<T | null> {
+  const response = await tracedFetch(name, url, { cache: 'no-store' })
+  if (response.status === 401) throw new SessionExpiredError(name)
+  if (response.status === 403) return null
+  if (!response.ok) throw new ResourceUnavailableError(name)
+  return (await response.json()) as T
+}
+
 /** Reads a paginated collection, which the API returns as `{ data: [...] }`. */
 export async function readPage<T>(name: string, url: string): Promise<T[]> {
   return (await readJson<{ data: T[] }>(name, url)).data

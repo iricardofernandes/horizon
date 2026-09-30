@@ -20,12 +20,24 @@ export function kit({ baseUrl, label }) {
   const password = `${label}-${randomBytes(8).toString('hex')}`
   const checks = []
 
-  async function call(path, { method = 'GET', body, token, raw, type, headers = {} } = {}) {
+  async function call(path, options = {}) {
+    // A module that has not provisioned a new workspace yet answers 503 with Retry-After
+    // (Phase 80); every call here carries an idempotency key, so asking again is safe.
+    const key = randomUUID()
+    for (let attempt = 1; ; attempt++) {
+      const answer = await send(path, options, key)
+      const wait = Number(answer.headers.get('retry-after'))
+      if (answer.status !== 503 || !answer.headers.has('retry-after') || attempt >= 4) return answer
+      await new Promise((resolve) => setTimeout(resolve, Math.min(wait * 1000, 5000)))
+    }
+  }
+
+  async function send(path, { method = 'GET', body, token, raw, type, headers = {} }, key) {
     const response = await fetch(path.startsWith('http') ? path : `${baseUrl}${path}`, {
       method,
       headers: {
         ...(token ? { authorization: `Bearer ${token}` } : {}),
-        'idempotency-key': randomUUID(),
+        'idempotency-key': key,
         ...(raw ? { 'content-type': type } : body === undefined ? {} : { 'content-type': 'application/json' }),
         ...headers,
       },

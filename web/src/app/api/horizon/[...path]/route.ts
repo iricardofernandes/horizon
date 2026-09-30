@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { hostedDemoEnabled, hostedDemoResponse } from '@/lib/hosted-demo'
+import { askUntilReady, mayAskAgain } from '@/lib/not-ready'
 import { authenticatedFetch } from '@/lib/session'
 import { buildUpstreamPath } from '@/lib/upstream-path'
 
@@ -14,14 +15,24 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     if (value) headers.set(name, value)
   }
   const hasBody = !['GET', 'HEAD'].includes(request.method)
-  const response = await authenticatedFetch(pathname, {
-    method: request.method,
-    headers,
-    ...(hasBody ? { body: await request.arrayBuffer() } : {}),
-  })
+  const body = hasBody ? await request.arrayBuffer() : undefined
+  const send = () =>
+    authenticatedFetch(pathname, {
+      method: request.method,
+      headers,
+      ...(body === undefined ? {} : { body }),
+    })
+  // A module that has not provisioned a new workspace yet asks for a moment (Phase 80).
+  const response = mayAskAgain(request.method, headers) ? await askUntilReady(send) : await send()
   const responseHeaders = new Headers()
   // Artifact downloads keep their file name and digest so a reader can verify the bytes.
-  for (const name of ['content-type', 'x-request-id', 'content-disposition', 'digest']) {
+  for (const name of [
+    'content-type',
+    'x-request-id',
+    'content-disposition',
+    'digest',
+    'retry-after',
+  ]) {
     const value = response.headers.get(name)
     if (value) responseHeaders.set(name, value)
   }

@@ -1,0 +1,67 @@
+{
+  "phase": 80,
+  "kind": "web-gateway-smoke",
+  "baseUrl": "http://localhost:8000",
+  "web": "http://localhost:3000",
+  "startedAt": "2026-09-30T14:14:37.633Z",
+  "finishedAt": "2026-09-30T14:14:40.676Z",
+  "passed": true,
+  "checks": [
+    {
+      "name": "one browser spending its sign-in limit leaves another untouched, and forging X-Forwarded-For buys nothing",
+      "passed": true,
+      "detail": {
+        "first": {
+          "refused": 30,
+          "limited": 2
+        },
+        "forged": [
+          429,
+          429
+        ],
+        "second": [
+          401
+        ]
+      }
+    },
+    {
+      "name": "every page has a content security policy with a fresh nonce, and cannot be sniffed or framed",
+      "passed": true,
+      "detail": {
+        "policy": "default-src 'self'; script-src 'self' 'nonce-OGY4Zjc5OGItMDc3NC00ZmQ4LWI4YzEtNGJiMTUyZWE2YzI0' 'strict-dynamic'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' http://localhost:4318; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+        "freshNonce": true
+      }
+    },
+    {
+      "name": "a write another site started is refused with 403; the same origin reaches the route",
+      "passed": true,
+      "detail": {
+        "crossSite": 403,
+        "foreignOrigin": 403,
+        "sameOrigin": 400
+      }
+    },
+    {
+      "name": "a person with Catalog and no Inventory reads the items, and Inventory refuses the stock the screen does without",
+      "passed": true,
+      "detail": {
+        "items": 200,
+        "warehouses": 403
+      }
+    },
+    {
+      "name": "writes right after signup are served, or asked to wait with Retry-After, never a 500",
+      "passed": true,
+      "detail": {
+        "catalog": {
+          "status": 503,
+          "retryAfter": "2"
+        },
+        "inventory": {
+          "status": 201,
+          "retryAfter": null
+        }
+      }
+    }
+  ]
+}

@@ -241,3 +241,16 @@ it('drops a type it no longer reads and removes its binding, instead of dead-let
   })
   expect((await publisher.checkQueue(`${queue}.dlq`)).messageCount).toBe(0)
 })
+
+it('takes a write in a workspace whose creation event has not arrived yet', async () => {
+  // Signup publishes the workspace; a person can act in Sales before Sales hears of it.
+  const tenantId = randomUUID()
+  const placed = await new PlaceOrderUseCase(database, { now: () => new Date() }).execute({
+    context: { tenantId, actor: 'ana', requestId: null, idempotencyKey: randomUUID() },
+    customerId: randomUUID(),
+    fulfillmentWarehouseId: randomUUID(),
+    lines: [{ lineId: randomUUID(), itemId: randomUUID(), quantity: '1' }],
+  })
+  expect(placed.isRight()).toBe(true)
+  expect(await administrator`select id from tenants where id = ${tenantId}`).toHaveLength(1)
+})

@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { z } from 'zod'
+import { gatewayFetch } from '@/lib/gateway'
 
-const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
 const issuedSessionSchema = z.object({
   accessToken: z.string().min(1),
   accessTokenExpiresAt: z.string().datetime(),
@@ -147,7 +147,7 @@ async function refreshSession(): Promise<string | null> {
   const familyId = jar.get('horizon_family')?.value
   const refreshToken = jar.get('horizon_refresh')?.value
   if (!tenantId || !familyId || !refreshToken) return null
-  const response = await fetch(`${apiUrl}/auth/refresh`, {
+  const response = await gatewayFetch(`/auth/refresh`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ tenantId, familyId, refreshToken }),
@@ -165,7 +165,7 @@ async function refreshSession(): Promise<string | null> {
 function upstream(path: string, token: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers)
   headers.set('authorization', `Bearer ${token}`)
-  return fetch(`${apiUrl}${path}`, { ...init, headers, cache: 'no-store' })
+  return gatewayFetch(`${path}`, { ...init, headers, cache: 'no-store' })
 }
 
 function tenantIdFrom(token: string): string {

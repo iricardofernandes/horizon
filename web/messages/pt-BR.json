@@ -486,6 +486,7 @@
     "demoNote": "Senha da demonstração local:",
     "email": "E-mail",
     "error": "Não foi possível entrar. Confira o e-mail e a senha.",
+    "tooMany": "Muitas tentativas de entrar a partir deste endereço. Tente de novo em um minuto.",
     "eyebrow": "Um sistema operacional mais tranquilo",
     "headline": "Uma conta. Toda a operação ao alcance.",
     "intro": "Apresentação do produto",

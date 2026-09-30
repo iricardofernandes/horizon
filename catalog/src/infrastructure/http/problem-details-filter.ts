@@ -25,6 +25,9 @@ interface Violation {
 }
 
 const UNIQUE_VIOLATION = '23505'
+const FOREIGN_KEY_VIOLATION = '23503'
+/** Seconds a client waits before trying a write again in a workspace not yet provisioned. */
+const NOT_READY_RETRY_SECONDS = '2'
 
 interface ProblemResponse {
   status(code: number): ProblemResponse
@@ -49,6 +52,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       })
 
     if (problem.status === 401) response.header('WWW-Authenticate', 'Bearer')
+    if (problem.status === 503) response.header('Retry-After', NOT_READY_RETRY_SECONDS)
     response
       .status(problem.status)
       .type('application/problem+json')
@@ -60,6 +64,15 @@ export class ProblemDetailsFilter implements ExceptionFilter {
   }
 
   private describe(exception: unknown) {
+    // Signup publishes the workspace and Catalog provisions it from that event (Phase 80):
+    // a write that arrives first finds no workspace yet, which is a wait, not a failure.
+    if (isUnprovisionedWorkspace(exception))
+      return {
+        status: 503,
+        type: 'https://horizon.dev/problems/workspace-not-ready',
+        title: 'Workspace not ready',
+        detail: 'The workspace is still being prepared; try again in a moment',
+      }
     // A uniqueness check that loses a race still owes the client a conflict, not a 500.
     if (isUniqueViolation(exception))
       return {
@@ -126,6 +139,24 @@ function violationsOf(issue: z.core.$ZodIssue): Violation[] {
       code: issue.code,
     }))
   return [{ pointer: pointer(issue.path), detail: issue.message, code: issue.code }]
+}
+
+/** A write refused because its workspace has no row in `tenants` yet. */
+function isUnprovisionedWorkspace(exception: unknown): boolean {
+  if (typeof exception !== 'object' || exception === null) return false
+  if (
+    'code' in exception &&
+    exception.code === FOREIGN_KEY_VIOLATION &&
+    'detail' in exception &&
+    typeof exception.detail === 'string' &&
+    exception.detail.includes('table "tenants"')
+  )
+    return true
+  return (
+    'cause' in exception &&
+    exception.cause !== exception &&
+    isUnprovisionedWorkspace(exception.cause)
+  )
 }
 
 function isUniqueViolation(exception: unknown): boolean {

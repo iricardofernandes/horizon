@@ -22,9 +22,11 @@ WORKDIR /app
 COPY --from=build /app/public ./public
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/trusted-address.cjs ./
 
 USER node
 EXPOSE 3000
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "server.js"]
+# The browser's address is set before Next reads the request (Phase 80).
+CMD ["node", "--require", "./trusted-address.cjs", "server.js"]

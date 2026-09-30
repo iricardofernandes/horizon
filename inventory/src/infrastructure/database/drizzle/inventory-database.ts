@@ -82,6 +82,9 @@ export class InventoryDatabase extends InventoryUnitOfWork implements TenantSql 
       throw new Error('Nested tenant transactions are not supported')
     return this.#db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
+      // A request or an event can arrive before the workspace's creation event (Phases 79
+      // and 80): the token or the envelope already vouches for it, so it is recorded here.
+      await tx.insert(schema.tenants).values({ id: tenantId }).onConflictDoNothing()
       return this.#transactions.run({ tx, tenantId }, () => work(makeScope(tx, tenantId)))
     })
   }
@@ -147,11 +150,6 @@ export class InventoryDatabase extends InventoryUnitOfWork implements TenantSql 
     work: (scope: InventoryScope) => Promise<T>,
   ): Promise<EventOutcome<T>> {
     return this.inTenant(tenantId, async (scope) => {
-      // An event can arrive before the workspace's own creation event (Phase 79).
-      await this.currentTransaction()
-        .insert(schema.tenants)
-        .values({ id: tenantId })
-        .onConflictDoNothing()
       const claimed = await this.currentTransaction()
         .insert(schema.inbox)
         .values({ ...event, tenantId })

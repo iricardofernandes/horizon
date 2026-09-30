@@ -31,7 +31,7 @@ export default function LoginPage() {
     }).catch(() => null)
     setBusy(false)
     if (!response?.ok) {
-      setError(t('error'))
+      setError(t(response?.status === 429 ? 'tooMany' : 'error'))
       return
     }
     const answer = (await response.json().catch(() => ({}))) as {

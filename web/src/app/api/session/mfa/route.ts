@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { gatewayFetch } from '@/lib/gateway'
 import {
   clearMfaChallenge,
   clearWorkspaceSelection,
   mfaChallengeToken,
   storeWorkspaceSelection,
 } from '@/lib/session'
-
-const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
 
 const answerSchema = z.discriminatedUnion('method', [
   z.strictObject({ method: z.enum(['totp', 'recovery']), code: z.string().min(6).max(20) }),
@@ -23,7 +22,7 @@ const selectionSchema = z.object({
 })
 
 function identity(path: string, body: unknown) {
-  return fetch(`${apiUrl}${path}`, {
+  return gatewayFetch(`${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),

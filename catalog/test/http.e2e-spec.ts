@@ -562,3 +562,21 @@ it('publishes request schemas, permissions and the outage exception in OpenAPI',
     '/units',
   ])
 })
+
+it('answers a write before the workspace is provisioned with 503 and Retry-After, not 500', async () => {
+  // Signup publishes the workspace; Catalog provisions it from that event a moment later.
+  const minted = await identity.mint({
+    tenantId: randomUUID(),
+    roles: [{ module: 'catalog', role: 'admin' }],
+  })
+  const response = await request(app.getHttpServer())
+    .post('/units')
+    .set(authorized(minted.token))
+    .send({ code: 'UN', name: 'Unit', decimalPlaces: 0 })
+  expect(response.status).toBe(503)
+  expect(response.headers['retry-after']).toBe('2')
+  expect(response.body).toMatchObject({
+    type: 'https://horizon.dev/problems/workspace-not-ready',
+    title: 'Workspace not ready',
+  })
+})

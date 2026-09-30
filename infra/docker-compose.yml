@@ -20,6 +20,13 @@ x-restart: &restart
 networks:
   horizon:
     name: horizon
+  # Only the web server and Kong (Phase 80). Kong believes `X-Forwarded-For` from one
+  # address, the web server's, and no other container or host can hold it.
+  edge:
+    name: horizon-edge
+    ipam:
+      config:
+        - subnet: ${HORIZON_EDGE_SUBNET:-10.213.80.0/29}
 
 volumes:
   postgres-data:
@@ -435,7 +442,11 @@ services:
     <<: *restart
     image: kong:3.9
     container_name: horizon-kong
-    networks: [horizon]
+    networks:
+      horizon: {}
+      # Fixed, like the web server's, so neither can take the other's address.
+      edge:
+        ipv4_address: ${HORIZON_KONG_EDGE_ADDRESS:-10.213.80.5}
     ports:
       - '${HORIZON_KONG_PROXY_PORT:-8000}:8000'
       - '${HORIZON_KONG_ADMIN_PORT:-8001}:8001'
@@ -453,6 +464,12 @@ services:
       KONG_ADMIN_ACCESS_LOG: /dev/stdout
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_PLUGINS: bundled
+      # Every browser reaches Kong through the web server, which names the browser's address
+      # (web/trusted-address.cjs); limits per address then count each browser (Phase 80).
+      # Any other caller is limited by its own connection's address.
+      KONG_TRUSTED_IPS: ${HORIZON_WEB_EDGE_ADDRESS:-10.213.80.6}
+      KONG_REAL_IP_HEADER: X-Forwarded-For
+      KONG_REAL_IP_RECURSIVE: 'off'
       # Upstreams are resolved per request, so the gateway starts before the services
       # exist and answers 503 for them until they do.
       KONG_DNS_RESOLVER: 127.0.0.11

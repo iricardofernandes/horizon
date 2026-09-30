@@ -64,6 +64,11 @@ more defects, all fixed.
 
 ## Phase 80 — The web and the gateway
 
+**Delivered on 2026-09-30** ([plan](hardening-phase80-implementation-plan.md),
+[evidence](hardening-phase80-evidence.md)). Writes before provisioning answer `503` only in
+Catalog, whose provisioning creates default data. Sales and Inventory now take them, since
+their provisioning is only the workspace's row.
+
 1. **Limits per browser.**
    - The web server forwards the browser's address in `X-Forwarded-For`.
    - Kong reads it (`real_ip_header`, `trusted_ips` set to the web server's network), so

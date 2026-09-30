@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { gatewayFetch } from '@/lib/gateway'
 import { clearEnrollment, enrollmentToken } from '@/lib/session'
-
-const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
 
 const actionSchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('start') }),
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
     parsed.data.action === 'start'
       ? { enrollmentToken: token }
       : { enrollmentToken: token, factorId: parsed.data.factorId, code: parsed.data.code }
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await gatewayFetch(`${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),

@@ -486,6 +486,7 @@
     "demoNote": "Local demo password:",
     "email": "Email",
     "error": "We could not sign you in. Check your email and password.",
+    "tooMany": "Too many sign-in attempts from this address. Try again in a minute.",
     "eyebrow": "A calmer operating system",
     "headline": "One account. Every operation in reach.",
     "intro": "Product introduction",

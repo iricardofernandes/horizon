@@ -53,7 +53,8 @@ type CatalogViewProps = {
   items: CatalogItem[]
   units: CatalogUnit[]
   priceLists: CatalogPriceList[]
-  warehouses: Warehouse[]
+  /** Null when the person holds no Inventory role: the items show without availability. */
+  warehouses: Warehouse[] | null
   readOnly: boolean
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
@@ -190,7 +191,7 @@ function ItemsTable({
   items: CatalogItem[]
   units: CatalogUnit[]
   priceLists: CatalogPriceList[]
-  warehouses: Warehouse[]
+  warehouses: Warehouse[] | null
   readOnly: boolean
   onChanged: () => Promise<void>
   setNotice: (value: string) => void
@@ -208,6 +209,7 @@ function ItemsTable({
     [priceLists],
   )
   const availabilityByItem = useMemo(() => {
+    if (warehouses === null) return null
     const result = new Map<string, number>()
     for (const balance of warehouses.flatMap((warehouse) => warehouse.balances)) {
       const available = Number(balance.onHand) - Number(balance.reserved)
@@ -227,7 +229,7 @@ function ItemsTable({
               <th>{t('type')}</th>
               <th>{t('unit')}</th>
               <th>{t('price')}</th>
-              <th>{t('available')}</th>
+              {availabilityByItem ? <th>{t('available')}</th> : null}
               <th>{t('status')}</th>
               {!readOnly ? <th aria-label={common('actions')} /> : null}
             </tr>
@@ -235,7 +237,7 @@ function ItemsTable({
           <tbody>
             {items.map((item) => (
               <ItemRow
-                availability={availabilityByItem.get(item.id) ?? 0}
+                availability={availabilityByItem ? (availabilityByItem.get(item.id) ?? 0) : null}
                 item={item}
                 key={item.id}
                 onChanged={onChanged}
@@ -269,7 +271,7 @@ function ItemRow({
   item: CatalogItem
   unit: CatalogUnit | undefined
   price: ItemPrice | undefined
-  availability: number
+  availability: number | null
   priceLists: CatalogPriceList[]
   readOnly: boolean
   onChanged: () => Promise<void>
@@ -300,7 +302,7 @@ function ItemRow({
       <td>{item.kind === 'service' ? t('kindService') : t('kindProduct')}</td>
       <td>{unit?.code ?? '—'}</td>
       <td>{price ? money(price.amount, price.currency) : common('notSet')}</td>
-      <td>{quantity(availability)}</td>
+      {availability === null ? null : <td>{quantity(availability)}</td>}
       <td>
         <Badge status={status} label={statusLabel(status)} />
       </td>

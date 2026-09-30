@@ -119,6 +119,9 @@ export class SalesDatabase extends SalesUnitOfWork {
       throw new Error('Nested tenant transactions are not supported')
     return this.#db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('app.current_tenant', ${tenantId}, true)`)
+      // A request or an event can arrive before the workspace's creation event (Phases 79
+      // and 80): the token or the envelope already vouches for it, so it is recorded here.
+      await tx.insert(schema.tenants).values({ id: tenantId }).onConflictDoNothing()
       return this.#transactions.run({ tx, tenantId }, () =>
         work(makeScope(tx, tenantId, this.#customerPrivacy)),
       )
@@ -173,8 +176,6 @@ export class SalesDatabase extends SalesUnitOfWork {
     return this.inTenant(tenantId, async (scope) => {
       const current = this.#transactions.getStore()
       if (!current) throw new Error('Inbox processing requires a transaction')
-      // An event can arrive before the workspace's own creation event (Phase 79).
-      await current.tx.insert(schema.tenants).values({ id: tenantId }).onConflictDoNothing()
       const claimed = await current.tx
         .insert(schema.inbox)
         .values({ ...event, tenantId })

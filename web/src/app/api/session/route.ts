@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { isLocale, localeCookie } from '@/i18n/locale'
+import { gatewayFetch } from '@/lib/gateway'
 import {
   beginHostedDemoLogin,
   clearHostedDemoSession,
@@ -35,8 +36,6 @@ const challengeSchema = z.object({
   challengeExpiresAt: z.iso.datetime(),
   methods: z.array(z.enum(['totp', 'recovery', 'passkey'])),
 })
-const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
-
 export async function POST(request: Request) {
   const parsed = loginSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success)
@@ -48,12 +47,18 @@ export async function POST(request: Request) {
       ? NextResponse.json({ workspaces })
       : NextResponse.json({ message: 'Email or password is incorrect.' }, { status: 401 })
   }
-  const response = await fetch(`${apiUrl}/auth/login`, {
+  const response = await gatewayFetch(`/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(parsed.data),
     cache: 'no-store',
   })
+  // Kong limits sign-ins per browser address (Phase 80): say so rather than blame the password.
+  if (response.status === 429)
+    return NextResponse.json(
+      { message: 'Too many sign-in attempts. Try again in a minute.' },
+      { status: 429, headers: { 'retry-after': response.headers.get('retry-after') ?? '60' } },
+    )
   if (!response.ok)
     return NextResponse.json(
       { message: 'Email or password is incorrect.' },

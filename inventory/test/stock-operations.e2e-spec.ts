@@ -452,3 +452,15 @@ it('reads the audit log a page at a time, and shows a tampered row as broken', a
   const page = await database.auditPage(fixture.tenantId, { limit: 10 })
   expect(page.chain).toMatchObject({ status: 'broken', broken: [2] })
 })
+
+it('takes a write in a workspace whose creation event has not arrived yet', async () => {
+  // Signup publishes the workspace; a person can act in Inventory before it hears of it.
+  const tenantId = randomUUID()
+  const defined = await new DefineAdjustmentPolicyUseCase(database, clock).execute({
+    context: context(tenantId, MANAGER),
+    currency: 'BRL',
+    threshold: '10000',
+  })
+  expect(defined.isRight()).toBe(true)
+  expect(await administrator`select id from tenants where id = ${tenantId}`).toHaveLength(1)
+})

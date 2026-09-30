@@ -2893,6 +2893,26 @@ A to N left open. The Anthropic adapter's run against the real API stays out.
 
 ---
 
+## Phase 80 — The web and the gateway
+
+**Delivered on 2026-09-30.**
+- **Kong limits each browser by its own address.**
+  - The web server names the browser's address, and it is the only caller Kong believes.
+  - The two share a network of their own, with fixed addresses.
+  - A forged `X-Forwarded-For` changes nothing.
+- **Web security headers:**
+  - every page has a content security policy with a fresh nonce, and no inline scripts;
+  - responses cannot be sniffed or framed;
+  - a write to the web's API that another site started is `403`.
+- **Catalog's items screen** works without an Inventory role.
+- **A write right after signup is never a `500`.** Sales and Inventory take it. Catalog asks
+  the client to wait (`503`, `Retry-After`), and the web and the scripts ask again.
+
+[Plan](hardening-phase80-implementation-plan.md), [evidence](hardening-phase80-evidence.md),
+[smoke](drills/2026-09-30-phase80-web-gateway-smoke.json).
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

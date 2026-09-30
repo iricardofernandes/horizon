@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { gatewayFetch } from '@/lib/gateway'
 import {
   hostedDemoEnabled,
   hostedDemoSession,
@@ -17,7 +18,6 @@ import {
   workspaceSelectionToken,
 } from '@/lib/session'
 
-const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
 const selectSchema = z.strictObject({
   tenantId: z.uuid(),
   slug: z.string().min(1).max(200),
@@ -57,7 +57,7 @@ export async function GET() {
     token = selection.selectionToken
     return NextResponse.json({ workspaces: selection.workspaces })
   }
-  const response = await fetch(`${apiUrl}/auth/workspaces`, {
+  const response = await gatewayFetch(`/auth/workspaces`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ selectionToken: token }),
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
   if (!token) return NextResponse.json({ message: 'Sign in again.' }, { status: 401 })
   // The session shows the person's device and network, not the web server's (Phase 67).
   const forwarded = request.headers.get('x-forwarded-for')
-  const response = await fetch(`${apiUrl}/auth/workspace`, {
+  const response = await gatewayFetch(`/auth/workspace`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
