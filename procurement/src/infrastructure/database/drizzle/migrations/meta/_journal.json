@@ -29,6 +29,13 @@
       "when": 1791400000000,
       "tag": "0003_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791486400000,
+      "tag": "0004_relay_known_tenants",
+      "breakpoints": true
     }
   ]
 }

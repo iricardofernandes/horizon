@@ -2864,6 +2864,35 @@ caller's workspace.
 
 ---
 
+## Phases 79 to 81 — Debts and hardening
+
+Before choosing Phase O, the [debts and hardening plan](hardening-plan.md) pays what Phases
+A to N left open. The Anthropic adapter's run against the real API stays out.
+
+## Phase 79 — Messaging: dead letters of their own, and webhooks that deliver
+
+**Delivered on 2026-09-30.**
+- **Each consumer's DLQ holds only what it refused.** Dead letters are routed by the queue
+  they died in (`x-first-death-queue`, a headers exchange). Before, every DLQ held a copy
+  of every dead letter: about 9,000 each.
+- **Every DLQ is empty,** after fixing what filled them:
+  - Financial's leftover binding for an event it no longer reads;
+  - Sales and Inventory refusing a workspace's events before its creation event;
+  - `webhooks` refusing every workspace it never provisioned.
+
+  `scripts/dead-letters.mjs` reports them, purges copies and replays a queue's own.
+- **Consumers:** a binding left by an older version is removed rather than dead-lettering
+  its events, and handler failures are logged in every consumer.
+- **`webhooks`** names each event's producing module, answers `400` to an invalid body,
+  and exports the inbox metrics.
+- **Reporting** gets a seal from every source for every workspace, even one that never
+  used that source.
+
+[Plan](hardening-phase79-implementation-plan.md), [evidence](hardening-phase79-evidence.md),
+[smoke](drills/2026-09-30-phase79-messaging-smoke.json).
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

@@ -13,6 +13,9 @@ import {
   WebhookSubscription,
 } from '@/domain/webhook'
 
+/** The producing module: the event type's first word (`sales.order.confirmed` → `sales`). */
+export const sourceModuleOf = (eventType: string) => eventType.split('.')[0] || 'unknown'
+
 export class WebhookDatabase extends WebhookRepository {
   readonly #app: ReturnType<typeof postgres>
   readonly #worker: ReturnType<typeof postgres>
@@ -37,6 +40,8 @@ export class WebhookDatabase extends WebhookRepository {
   async createSubscription(subscription: WebhookSubscription): Promise<void> {
     const row = subscription.snapshot()
     await this.inTenant(row.tenantId, async (transaction) => {
+      // A workspace is known here from its first subscription or event (Phase 79).
+      await transaction`insert into tenants (id) values (${row.tenantId}) on conflict do nothing`
       await transaction`insert into webhook_subscriptions
         (id, tenant_id, endpoint_url, event_types, secret_ciphertext, active, created_at, updated_at)
         values (${row.id}, ${row.tenantId}, ${row.endpointUrl}, ${row.eventTypes},
@@ -69,15 +74,22 @@ export class WebhookDatabase extends WebhookRepository {
 
   async recordEvent(event: WebhookEvent, now: Date): Promise<number> {
     return this.inTenant(event.tenantId, async (transaction) => {
+      // Until Phase 79 nothing provisioned a workspace here, so every event of a workspace
+      // without a subscription died on the foreign key and was dead-lettered.
+      await transaction`insert into tenants (id) values (${event.tenantId}) on conflict do nothing`
       const claimed = await transaction`insert into inbox
         (source_module, event_id, event_type, tenant_id) values
-        ('sales', ${event.eventId}, ${event.eventType}, ${event.tenantId})
+        (${sourceModuleOf(event.eventType)}, ${event.eventId}, ${event.eventType}, ${event.tenantId})
         on conflict do nothing returning event_id`
       if (claimed.length === 0) return 0
-      await transaction`insert into webhook_events
+      // An event claimed before Phase 79 was claimed as 'sales', so a redelivery passes the
+      // inbox under its real module; the event's own row says it was already taken.
+      const recorded = await transaction`insert into webhook_events
         (event_id, tenant_id, event_type, event_version, occurred_at, trace_id, envelope)
         values (${event.eventId}, ${event.tenantId}, ${event.eventType}, ${event.eventVersion},
-          ${event.occurredAt}, ${event.traceId}, ${transaction.json(event as never)})`
+          ${event.occurredAt}, ${event.traceId}, ${transaction.json(event as never)})
+        on conflict (event_id) do nothing returning event_id`
+      if (recorded.length === 0) return 0
       const subscriptions = await transaction`select id from webhook_subscriptions
         where active = 1 and event_types @> array[${event.eventType}]::text[]`
       for (const subscription of subscriptions)

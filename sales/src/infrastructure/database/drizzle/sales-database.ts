@@ -173,6 +173,8 @@ export class SalesDatabase extends SalesUnitOfWork {
     return this.inTenant(tenantId, async (scope) => {
       const current = this.#transactions.getStore()
       if (!current) throw new Error('Inbox processing requires a transaction')
+      // An event can arrive before the workspace's own creation event (Phase 79).
+      await current.tx.insert(schema.tenants).values({ id: tenantId }).onConflictDoNothing()
       const claimed = await current.tx
         .insert(schema.inbox)
         .values({ ...event, tenantId })

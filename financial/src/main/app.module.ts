@@ -30,7 +30,14 @@ export class AppModule {
           new RabbitMqEventConsumer({
             url: config.RABBITMQ_URL,
             queue: 'financial.events',
-            handlers: runtime.eventHandlers.handlers,
+            handlers: {
+              ...runtime.eventHandlers.handlers,
+              // Every workspace is known from its creation (Phase 79), so the journal seal
+              // covers it even before it acts in this module.
+              'identity.tenant.created': async (event) => {
+                await runtime.database.inTenant(event.tenantId, async () => undefined)
+              },
+            },
             prefetch: config.AMQP_PREFETCH,
           }),
       },

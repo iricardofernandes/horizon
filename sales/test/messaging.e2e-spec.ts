@@ -175,3 +175,69 @@ it('applies a reservation rejection once and ignores its redelivery', async () =
     await administrator`select * from inbox where event_id = ${rejected.eventId}`,
   ).toHaveLength(1)
 })
+
+it('projects an item of a workspace whose creation event has not arrived yet', async () => {
+  // Before Phase 79 the inbox's foreign key refused it, and the event was dead-lettered.
+  const tenantId = randomUUID()
+  const itemId = randomUUID()
+  publish(
+    envelope(tenantId, 'catalog.item.created', {
+      itemId,
+      kind: 'product',
+      sku: 'TEA-1',
+      name: 'Chá mate',
+      unitId: randomUUID(),
+      ncm: '09030010',
+    }),
+  )
+  await waitFor(async () => {
+    const [row] = await administrator`select item_id from catalog_items
+      where tenant_id = ${tenantId} and item_id = ${itemId}`
+    return row ?? null
+  })
+  expect(await administrator`select id from tenants where id = ${tenantId}`).toHaveLength(1)
+})
+
+it('drops a type it no longer reads and removes its binding, instead of dead-lettering it', async () => {
+  // A binding left by an older version, as Financial's to `sales.invoicing.requested` was.
+  // Sales publishes this type and never reads it; only this binding routes it here.
+  const retired = 'sales.invoicing.requested'
+  await publisher.bindQueue(queue, 'horizon.events', retired)
+  const money = { amount: '1250', currency: 'BRL' }
+  const body = () =>
+    Buffer.from(
+      JSON.stringify(
+        envelope(randomUUID(), 'sales.invoicing.requested', {
+          orderId: randomUUID(),
+          orderVersion: 4,
+          customerId: randomUUID(),
+          shipmentId: randomUUID(),
+          confirmedAt: new Date().toISOString(),
+          total: money,
+          installments: [{ number: 1, dueOn: '2026-09-29', amount: money }],
+          lines: [
+            {
+              lineId: randomUUID(),
+              itemId: randomUUID(),
+              description: 'Roasted coffee',
+              quantity: '1',
+              unitPrice: money,
+              lineTotal: money,
+            },
+          ],
+        }),
+      ),
+    )
+  let returned = false
+  publisher.on('return', () => {
+    returned = true
+  })
+  // Each probe is either dropped by the consumer or, once the binding is gone, comes back
+  // unroutable; none may reach the dead letters.
+  await waitFor(async () => {
+    publisher.publish('horizon.events', retired, body(), { mandatory: true })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    return returned ? true : null
+  })
+  expect((await publisher.checkQueue(`${queue}.dlq`)).messageCount).toBe(0)
+})

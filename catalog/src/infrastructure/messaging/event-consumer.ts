@@ -25,6 +25,7 @@ export interface EventConsumerOptions {
 const meter = metrics.getMeter('catalog.consumer')
 const consumed = meter.createCounter('inbox_consumed_total')
 const deadLettered = meter.createCounter('inbox_dead_lettered_total')
+const unbound = meter.createCounter('inbox_unbound_total')
 
 /**
  * Durable topology, bounded prefetch, explicit dead-lettering (ADR 0024, ADR 0027).
@@ -73,7 +74,16 @@ export class RabbitMqEventConsumer {
     await channel.assertExchange(exchange, 'topic', { durable: true })
     await channel.assertExchange(deadLetterExchange, 'topic', { durable: true })
     await channel.assertQueue(`${queue}.dlq`, { durable: true })
-    await channel.bindQueue(`${queue}.dlq`, deadLetterExchange, '#')
+    // Each queue's dead letters reach its own DLQ only (Phase 79). RabbitMQ stamps a dead
+    // letter with the queue it died in, and a headers exchange routes on that stamp; the old
+    // catch-all binding copied every module's dead letters into every DLQ.
+    await channel.assertExchange('horizon.dead-letters', 'headers', { durable: true })
+    await channel.bindExchange('horizon.dead-letters', deadLetterExchange, '#')
+    await channel.unbindQueue(`${queue}.dlq`, deadLetterExchange, '#')
+    await channel.bindQueue(`${queue}.dlq`, 'horizon.dead-letters', '', {
+      'x-match': 'all-with-x',
+      'x-first-death-queue': queue,
+    })
     await channel.assertQueue(queue, {
       durable: true,
       deadLetterExchange,
@@ -105,7 +115,21 @@ export class RabbitMqEventConsumer {
             return
           }
           const handler = this.options.handlers[event.eventType]
-          if (handler === undefined) throw new Error('No handler for a bound event type')
+          if (handler === undefined) {
+            // Left bound by a version that read this type (Phase 79): nothing here reads it now,
+            // so the binding goes and the message is dropped rather than dead-lettered. The
+            // routing key is the type, even for one replayed straight into the queue.
+            await channel.unbindQueue(
+              this.options.queue ?? 'catalog.events',
+              this.options.exchange ?? 'horizon.events',
+              event.eventType,
+            )
+            unbound.add(1, { event_type: event.eventType })
+            this.logger.warn(`${event.eventType} is no longer read here; its binding was removed`)
+            span.setStatus({ code: SpanStatusCode.OK })
+            channel.ack(message)
+            return
+          }
           await handler(event)
           consumed.add(1, { event_type: event.eventType })
           span.setStatus({ code: SpanStatusCode.OK })

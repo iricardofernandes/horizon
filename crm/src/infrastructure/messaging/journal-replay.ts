@@ -163,15 +163,23 @@ function confirm(channel: ConfirmChannel, messageId: string, body: ReplayMessage
 }
 
 /**
- * Seals every tenant that has outbox rows, through the margin (Phase 62), so reporting's
- * cutoffs settle without anyone running a command. Returns the number of seals sent.
+ * Seals every tenant this module knows, through the margin (Phase 62), so reporting's
+ * cutoffs settle without anyone running a command. A tenant with no outbox rows is sealed
+ * with a count of 0 (Phase 79): before, it was never sealed, and its watermark for this
+ * source stayed behind. Returns the number of seals sent.
  */
 export async function sealAllTenants(sql: postgres.Sql, deliver: Deliver, now: Date) {
   const through = throughOf(null, now)
   const rows = await sql`
-    select tenant_id, count(*) filter (
-      where date_trunc('milliseconds', occurred_at) <= ${through})::int as count
-    from outbox group by tenant_id order by tenant_id`
+    with counted as (
+      select tenant_id, count(*) filter (
+        where date_trunc('milliseconds', occurred_at) <= ${through})::int as count
+      from outbox group by tenant_id
+    ), known as (
+      select id as tenant_id from tenants union select tenant_id from counted
+    )
+    select known.tenant_id, coalesce(counted.count, 0)::int as count
+    from known left join counted using (tenant_id) order by known.tenant_id`
   for (const row of rows) {
     const seal = sealOf(String(row.tenant_id), through, Number(row.count))
     await deliver(seal.sealId, seal)

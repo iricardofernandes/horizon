@@ -258,7 +258,9 @@ try {
   resources.push(() =>
     deleteQueues(rabbitUrl, [
       inventoryQueue,
+      `${inventoryQueue}.dlq`,
       salesQueue,
+      `${salesQueue}.dlq`,
       financialQueue,
       `${financialQueue}.dlq`,
       treasuryQueue,

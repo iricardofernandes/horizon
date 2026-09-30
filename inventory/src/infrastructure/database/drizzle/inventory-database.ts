@@ -147,6 +147,11 @@ export class InventoryDatabase extends InventoryUnitOfWork implements TenantSql 
     work: (scope: InventoryScope) => Promise<T>,
   ): Promise<EventOutcome<T>> {
     return this.inTenant(tenantId, async (scope) => {
+      // An event can arrive before the workspace's own creation event (Phase 79).
+      await this.currentTransaction()
+        .insert(schema.tenants)
+        .values({ id: tenantId })
+        .onConflictDoNothing()
       const claimed = await this.currentTransaction()
         .insert(schema.inbox)
         .values({ ...event, tenantId })

@@ -55,7 +55,16 @@ export class QueueConsumer {
     await channel.assertExchange(exchange, 'topic', { durable: true })
     await channel.assertExchange(deadLetterExchange, 'topic', { durable: true })
     await channel.assertQueue(`${this.options.queue}.dlq`, { durable: true })
-    await channel.bindQueue(`${this.options.queue}.dlq`, deadLetterExchange, '#')
+    // Each queue's dead letters reach its own DLQ only (Phase 79). RabbitMQ stamps a dead
+    // letter with the queue it died in, and a headers exchange routes on that stamp; the old
+    // catch-all binding copied every module's dead letters into every DLQ.
+    await channel.assertExchange('horizon.dead-letters', 'headers', { durable: true })
+    await channel.bindExchange('horizon.dead-letters', deadLetterExchange, '#')
+    await channel.unbindQueue(`${this.options.queue}.dlq`, deadLetterExchange, '#')
+    await channel.bindQueue(`${this.options.queue}.dlq`, 'horizon.dead-letters', '', {
+      'x-match': 'all-with-x',
+      'x-first-death-queue': this.options.queue,
+    })
     await channel.assertQueue(this.options.queue, { durable: true, deadLetterExchange })
     for (const eventType of this.options.bindings)
       await channel.bindQueue(this.options.queue, exchange, eventType)

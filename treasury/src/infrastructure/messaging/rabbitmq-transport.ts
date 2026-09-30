@@ -38,6 +38,7 @@ const failed = meter.createCounter('outbox_publish_failures_total')
 const lag = meter.createGauge('outbox_lag_seconds')
 const consumed = meter.createCounter('inbox_consumed_total')
 const deadLettered = meter.createCounter('inbox_dead_lettered_total')
+const unbound = meter.createCounter('inbox_unbound_total')
 const circuitOpened = meter.createCounter('messaging_circuit_opened_total')
 
 export interface EventPublisher {
@@ -212,6 +213,7 @@ export class RabbitMqEventPublisher implements EventPublisher {
 }
 
 export class RabbitMqEventConsumer {
+  private readonly logger = new Logger(RabbitMqEventConsumer.name)
   private connection: ChannelModel | undefined
   private channel: Channel | undefined
   private consumerTag: string | undefined
@@ -238,7 +240,16 @@ export class RabbitMqEventConsumer {
     await channel.assertExchange(exchange, 'topic', { durable: true })
     await channel.assertExchange(deadLetterExchange, 'topic', { durable: true })
     await channel.assertQueue(`${this.options.queue}.dlq`, { durable: true })
-    await channel.bindQueue(`${this.options.queue}.dlq`, deadLetterExchange, '#')
+    // Each queue's dead letters reach its own DLQ only (Phase 79). RabbitMQ stamps a dead
+    // letter with the queue it died in, and a headers exchange routes on that stamp; the old
+    // catch-all binding copied every module's dead letters into every DLQ.
+    await channel.assertExchange('horizon.dead-letters', 'headers', { durable: true })
+    await channel.bindExchange('horizon.dead-letters', deadLetterExchange, '#')
+    await channel.unbindQueue(`${this.options.queue}.dlq`, deadLetterExchange, '#')
+    await channel.bindQueue(`${this.options.queue}.dlq`, 'horizon.dead-letters', '', {
+      'x-match': 'all-with-x',
+      'x-first-death-queue': this.options.queue,
+    })
     await channel.assertQueue(this.options.queue, { durable: true, deadLetterExchange })
     for (const eventType of Object.keys(this.options.handlers))
       await channel.bindQueue(this.options.queue, exchange, eventType)
@@ -263,20 +274,41 @@ export class RabbitMqEventConsumer {
             return
           }
           const handler = this.options.handlers[event.eventType]
-          if (!handler) throw new Error('No handler for a bound event type')
+          if (!handler) {
+            // Left bound by a version that read this type (Phase 79): nothing here reads it now,
+            // so the binding goes and the message is dropped rather than dead-lettered. The
+            // routing key is the type, even for one replayed straight into the queue.
+            await channel.unbindQueue(
+              this.options.queue,
+              this.options.exchange ?? 'horizon.events',
+              event.eventType,
+            )
+            unbound.add(1, { event_type: event.eventType })
+            this.logger.warn(`${event.eventType} is no longer read here; its binding was removed`)
+            span.setStatus({ code: SpanStatusCode.OK })
+            channel.ack(message)
+            return
+          }
           await handler(event)
           consumed.add(1, { event_type: event.eventType })
           span.setStatus({ code: SpanStatusCode.OK })
           channel.ack(message)
-        } catch {
+        } catch (error) {
           span.setStatus({ code: SpanStatusCode.ERROR })
           const retry = !message.fields.redelivered
+          this.reportFailure(message.fields.routingKey, error, retry)
           if (!retry) deadLettered.add(1, { reason: 'handler-failed' })
           channel.nack(message, false, retry)
         } finally {
           span.end()
         }
       })
+  }
+
+  /** The type and the error class only: a message may quote a payload with personal data. */
+  private reportFailure(eventType: string, error: unknown, retry: boolean): void {
+    const kind = error instanceof Error ? error.name : 'unknown'
+    this.logger.warn(`${eventType} failed (${kind}); ${retry ? 'redelivering' : 'dead-lettering'}`)
   }
 
   private parse(message: ConsumeMessage): EventEnvelope | null {

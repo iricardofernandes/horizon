@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { connect } from 'amqplib'
+import postgres from 'postgres'
 import {
   CreateSubscriptionUseCase,
   ReplayDeliveryUseCase,
@@ -139,6 +140,113 @@ describe('webhook persistence and transport', () => {
     await channel.deleteQueue(queue)
     await channel.close()
     await connection.close()
+  })
+})
+
+describe('workspaces never provisioned, and dead letters of their own (Phase 79)', () => {
+  let database: WebhookDatabase
+
+  beforeEach(() => {
+    database = new WebhookDatabase({
+      appUrl: process.env.DATABASE_URL ?? '',
+      workerUrl: process.env.DATABASE_RELAY_URL ?? '',
+      encryptionKey: key,
+    })
+  })
+
+  afterEach(() => database.close())
+
+  it('records an event of a workspace it never saw, once, under the module that produced it', async () => {
+    const tenantId = randomUUID()
+    const incoming = event(tenantId)
+    expect(await database.recordEvent(incoming, new Date())).toBe(0)
+    expect(await database.recordEvent(incoming, new Date())).toBe(0)
+    const sql = postgres(process.env.DATABASE_URL ?? '', { max: 1 })
+    try {
+      const rows = await sql.begin(async (tx) => {
+        await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+        return tx<
+          { source_module: string }[]
+        >`select source_module from inbox where event_id = ${incoming.eventId}`
+      })
+      expect(rows).toEqual([{ source_module: 'sales' }])
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('takes back an event recorded before Phase 79 under the wrong module, without failing', async () => {
+    // Until Phase 79 every event was claimed as 'sales'. One recorded then and redelivered now
+    // passes the inbox under its real module, and must find itself already recorded.
+    const tenantId = randomUUID()
+    const incoming = event(tenantId)
+    await database.recordEvent(incoming, new Date())
+    const admin = postgres(process.env.ADMIN_DATABASE_URL ?? '', { max: 1 })
+    try {
+      await admin`update inbox set source_module = 'legacy' where event_id = ${incoming.eventId}`
+    } finally {
+      await admin.end()
+    }
+    expect(await database.recordEvent(incoming, new Date())).toBe(0)
+  })
+
+  it('lets a workspace subscribe before any of its events arrived', async () => {
+    const tenantId = randomUUID()
+    const created = await new CreateSubscriptionUseCase(database, clock).execute({
+      tenantId,
+      endpointUrl: 'https://example.test/hooks',
+      eventTypes: ['sales.order.confirmed'],
+    })
+    expect((await database.listSubscriptions(tenantId))[0]?.id).toBe(created.subscriptionId)
+    expect(await database.recordEvent(event(tenantId), new Date())).toBe(1)
+  })
+
+  it('puts a refused event in the refusing queue’s DLQ only, never in another’s', async () => {
+    const failing = `webhooks.e2e.failing.${randomUUID()}`
+    const healthy = `webhooks.e2e.healthy.${randomUUID()}`
+    const refuses = {
+      recordEvent: async () => {
+        throw new Error('refused on purpose')
+      },
+    } as unknown as WebhookDatabase
+    const consumers = [
+      new WebhookEventConsumer({
+        url: process.env.RABBITMQ_URL ?? '',
+        repository: refuses,
+        queue: failing,
+      }),
+      new WebhookEventConsumer({
+        url: process.env.RABBITMQ_URL ?? '',
+        repository: database,
+        queue: healthy,
+      }),
+    ]
+    for (const consumer of consumers) await consumer.start()
+    const connection = await connect(process.env.RABBITMQ_URL ?? '')
+    const channel = await connection.createChannel()
+    try {
+      const incoming = event(randomUUID())
+      channel.publish('horizon.events', incoming.eventType, Buffer.from(JSON.stringify(incoming)), {
+        persistent: true,
+        messageId: incoming.eventId,
+      })
+      await waitFor(async () => (await channel.checkQueue(`${failing}.dlq`)).messageCount === 1)
+      // Give a wrong copy the time to arrive before saying it did not.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect((await channel.checkQueue(`${healthy}.dlq`)).messageCount).toBe(0)
+      const dead = await channel.get(`${failing}.dlq`, { noAck: true })
+      expect(dead === false ? undefined : dead.properties.headers?.['x-first-death-queue']).toBe(
+        failing,
+      )
+    } finally {
+      for (const consumer of consumers) await consumer.close()
+      for (const queue of [failing, healthy]) {
+        await channel.deleteQueue(queue)
+        await channel.deleteQueue(`${queue}.dlq`)
+      }
+      await channel.close()
+      await connection.close()
+    }
   })
 })
 

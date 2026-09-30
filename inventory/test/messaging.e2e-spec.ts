@@ -160,3 +160,15 @@ it('keeps a row pending after relay failure and publishes it after restart', asy
       where tenant_id = ${fixture.tenantId} and dispatched_at is null`,
   ).toHaveLength(0)
 })
+
+it('takes an order of a workspace whose creation event has not arrived yet', async () => {
+  // Before Phase 79 the inbox's foreign key refused it, and the event was dead-lettered.
+  const tenantId = randomUUID()
+  const event = placedEvent({ tenantId, warehouseId: randomUUID(), itemId: randomUUID() })
+  publish(event)
+  await waitFor(async () => {
+    const rows = await administrator`select event_id from inbox where event_id = ${event.eventId}`
+    return rows.length === 1 ? rows : null
+  })
+  expect(await administrator`select id from tenants where id = ${tenantId}`).toHaveLength(1)
+})

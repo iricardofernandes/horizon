@@ -25,11 +25,19 @@ export class FiscalConsumer {
     await channel.assertExchange('horizon.events', 'topic', { durable: true })
     await channel.assertExchange('horizon.events.dlx', 'topic', { durable: true })
     await channel.assertQueue(`${this.queue}.dlq`, { durable: true })
-    // Older deployments bound this shared exchange with '#'. Remove that binding
-    // so another module's rejected messages do not appear in Fiscal's dead letters.
+    // Each queue's dead letters reach its own DLQ only (Phase 79). RabbitMQ stamps a dead
+    // letter with the queue it died in, and a headers exchange routes on that stamp. The
+    // earlier bindings (first '#', then one per event type) also caught other modules'
+    // dead letters of the same types, so both are removed.
+    await channel.assertExchange('horizon.dead-letters', 'headers', { durable: true })
+    await channel.bindExchange('horizon.dead-letters', 'horizon.events.dlx', '#')
     await channel.unbindQueue(`${this.queue}.dlq`, 'horizon.events.dlx', '#')
     for (const type of FISCAL_EVENT_TYPES)
-      await channel.bindQueue(`${this.queue}.dlq`, 'horizon.events.dlx', type)
+      await channel.unbindQueue(`${this.queue}.dlq`, 'horizon.events.dlx', type)
+    await channel.bindQueue(`${this.queue}.dlq`, 'horizon.dead-letters', '', {
+      'x-match': 'all-with-x',
+      'x-first-death-queue': this.queue,
+    })
     await channel.assertQueue(this.queue, {
       durable: true,
       deadLetterExchange: 'horizon.events.dlx',

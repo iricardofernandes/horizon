@@ -116,6 +116,19 @@ describe('republish:journal', () => {
     ).rejects.toThrow(/in the past/)
   })
 
+  it('seals a tenant it knows with no outbox rows too, with a count of 0 (Phase 79)', async () => {
+    const quiet = randomUUID()
+    await admin.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${quiet}, true)`
+      await tx`insert into tenants (id) values (${quiet}) on conflict do nothing`
+    })
+    const sink = collector()
+    await sealAllTenants(relay, sink.deliver, now)
+    const seals = sink.messages as JournalSeal[]
+    expect(seals.find((seal) => seal.tenantId === quiet)?.count).toBe(0)
+    expect(seals.find((seal) => seal.tenantId === tenantId)?.count).toBe(3)
+  })
+
   it('seals every tenant with outbox rows on a schedule, each with its own count', async () => {
     const sink = collector()
     expect(await sealAllTenants(relay, sink.deliver, now)).toBeGreaterThanOrEqual(2)

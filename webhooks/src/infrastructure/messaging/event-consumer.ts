@@ -1,7 +1,19 @@
 import { eventEnvelopeSchema, findEvent } from '@horizon/contracts'
-import { propagation, ROOT_CONTEXT, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api'
+import {
+  metrics,
+  propagation,
+  ROOT_CONTEXT,
+  SpanKind,
+  SpanStatusCode,
+  trace,
+} from '@opentelemetry/api'
 import { type Channel, type ChannelModel, type ConsumeMessage, connect } from 'amqplib'
 import type { WebhookRepository } from '@/application/webhook-service'
+
+// The same inbox SLIs every other consumer exports (Phase 70), so a dead letter here is seen.
+const meter = metrics.getMeter('webhooks.messaging')
+const consumed = meter.createCounter('inbox_consumed_total')
+const deadLettered = meter.createCounter('inbox_dead_lettered_total')
 
 export class WebhookEventConsumer {
   private connection: ChannelModel | undefined
@@ -24,7 +36,16 @@ export class WebhookEventConsumer {
     await this.channel.assertExchange('horizon.events.dlx', 'topic', { durable: true })
     const queue = this.options.queue ?? 'webhooks.events'
     await this.channel.assertQueue(`${queue}.dlq`, { durable: true })
-    await this.channel.bindQueue(`${queue}.dlq`, 'horizon.events.dlx', '#')
+    // Each queue's dead letters reach its own DLQ only (Phase 79). RabbitMQ stamps a dead
+    // letter with the queue it died in, and a headers exchange routes on that stamp; the old
+    // catch-all binding copied every module's dead letters into every DLQ.
+    await this.channel.assertExchange('horizon.dead-letters', 'headers', { durable: true })
+    await this.channel.bindExchange('horizon.dead-letters', 'horizon.events.dlx', '#')
+    await this.channel.unbindQueue(`${queue}.dlq`, 'horizon.events.dlx', '#')
+    await this.channel.bindQueue(`${queue}.dlq`, 'horizon.dead-letters', '', {
+      'x-match': 'all-with-x',
+      'x-first-death-queue': queue,
+    })
     await this.channel.assertQueue(queue, {
       durable: true,
       deadLetterExchange: 'horizon.events.dlx',
@@ -56,10 +77,13 @@ export class WebhookEventConsumer {
           await this.options.repository.recordEvent({ ...event, payload }, new Date())
           span.setStatus({ code: SpanStatusCode.OK })
           channel.ack(message)
+          consumed.add(1, { event_type: event.eventType })
         } catch (error) {
           span.recordException(error instanceof Error ? error : new Error('Event handling failed'))
           span.setStatus({ code: SpanStatusCode.ERROR })
-          channel.nack(message, false, message.fields.redelivered === false)
+          const retry = message.fields.redelivered === false
+          if (!retry) deadLettered.add(1, { reason: 'handler-failed' })
+          channel.nack(message, false, retry)
         } finally {
           span.end()
         }

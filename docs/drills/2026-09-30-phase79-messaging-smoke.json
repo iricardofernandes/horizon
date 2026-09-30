@@ -1,0 +1,61 @@
+{
+  "phase": 79,
+  "kind": "messaging-smoke",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-30T13:13:28.952Z",
+  "finishedAt": "2026-09-30T13:16:44.259Z",
+  "passed": true,
+  "tenantId": "01a0f272-dca4-7131-9423-aaa01bd21ca0",
+  "checks": [
+    {
+      "name": "every DLQ receives only its own queue’s dead letters, and no catch-all binding is left",
+      "passed": true,
+      "detail": {
+        "dlqs": 16,
+        "catchAll": [],
+        "unrouted": []
+      }
+    },
+    {
+      "name": "an invalid webhook body is refused with 400, naming the fields",
+      "passed": true,
+      "detail": {
+        "status": 400,
+        "message": "endpointUrl: Invalid URL; eventTypes: Too small: expected array to have >=1 items"
+      }
+    },
+    {
+      "name": "a new workspace subscribes, and its first event is scheduled for delivery, not dead-lettered",
+      "passed": true,
+      "detail": {
+        "subscribed": 201,
+        "deliveries": 1,
+        "deadLettersBefore": 0,
+        "deadLettersAfter": 0
+      }
+    },
+    {
+      "name": "sources the workspace never used are sealed, so their watermarks move",
+      "passed": true,
+      "detail": [
+        {
+          "source": "ledger",
+          "watermark": true
+        },
+        {
+          "source": "procurement",
+          "watermark": true
+        },
+        {
+          "source": "treasury",
+          "watermark": true
+        }
+      ]
+    },
+    {
+      "name": "no dead-letter queue grew during the run",
+      "passed": true,
+      "detail": {}
+    }
+  ]
+}
