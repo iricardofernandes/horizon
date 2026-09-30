@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { type TurnPlace, TurnSealer } from '@/application/assistant-ports'
+import type { MasterKeyring } from './keyring'
 
 const VERSION = 1
 const NONCE = 12
@@ -32,21 +33,29 @@ const turnAad = (place: TurnPlace) =>
 /**
  * A person's conversation turns, sealed under a data key of theirs, wrapped by the master key
  * (ADR 0068). Each turn binds its tenant, person, conversation and place; erasing the person
- * destroys the key, and every turn with it.
+ * destroys the key, and every turn with it. The master keys form a ring, so they can be
+ * rotated (Phase 81).
  */
 export class AesGcmTurnSealer extends TurnSealer {
-  readonly #master: Buffer
+  readonly #keyring: MasterKeyring
 
-  constructor(masterKey: Buffer) {
+  constructor(keyring: MasterKeyring) {
     super()
-    if (masterKey.length !== 32) throw new Error('The assistant master key must be 32 bytes')
-    this.#master = Buffer.from(masterKey)
+    this.#keyring = keyring
+  }
+
+  /** The name of the master key new person keys are wrapped under. */
+  get masterKeyId(): string {
+    return this.#keyring.currentId
   }
 
   newKey(tenantId: string, userId: string): string {
-    return sealWith(this.#master, `person-key:${tenantId}:${userId}`, randomBytes(32)).toString(
-      'base64',
-    )
+    return this.#keyring.wrap(personKeyAad(tenantId, userId), randomBytes(32))
+  }
+
+  /** The person's data key, wrapped under the current master key (Phase 81). */
+  rewrap(wrappedKey: string, tenantId: string, userId: string): string {
+    return this.#keyring.rewrap(personKeyAad(tenantId, userId), wrappedKey)
   }
 
   seal(wrappedKey: string, place: TurnPlace, plaintext: string): Buffer {
@@ -58,19 +67,8 @@ export class AesGcmTurnSealer extends TurnSealer {
   }
 
   private keyOf(wrappedKey: string, place: TurnPlace): Buffer {
-    return openWith(
-      this.#master,
-      `person-key:${place.tenantId}:${place.userId}`,
-      Buffer.from(wrappedKey, 'base64'),
-    )
+    return this.#keyring.unwrap(personKeyAad(place.tenantId, place.userId), wrappedKey)
   }
 }
 
-/** The master key from the environment: 64 hex characters or 32 bytes of base64. */
-export function masterKeyOf(value: string): Buffer {
-  const key = /^[0-9a-f]{64}$/i.test(value)
-    ? Buffer.from(value, 'hex')
-    : Buffer.from(value, 'base64')
-  if (key.length !== 32) throw new Error('ASSISTANT_MASTER_KEY must hold 32 bytes')
-  return key
-}
+const personKeyAad = (tenantId: string, userId: string) => `person-key:${tenantId}:${userId}`

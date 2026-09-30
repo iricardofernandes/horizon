@@ -23,6 +23,21 @@ const environmentSchema = z
     SERVICE_TOKEN_SECRET: z.string().min(32),
     /** Wraps every document key: 64 hex characters or 32 bytes of base64, never shared. */
     KNOWLEDGE_MASTER_KEY: z.string().min(44).max(64),
+    /**
+     * Master keys being retired (Phase 81), comma-separated: they still open what they
+     * wrapped, and the rewrap worker moves every document key off them.
+     */
+    KNOWLEDGE_PREVIOUS_MASTER_KEYS: z.string().max(4096).default(''),
+    /**
+     * The key lexemes are hashed under; the master key when unset. Set it to the old master
+     * key before rotating to keep the index as it is; a new value re-indexes every document.
+     */
+    // Compose passes an unset key as an empty string: that is no key.
+    KNOWLEDGE_LEXEME_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().min(44).max(64).optional(),
+    ),
+    KNOWLEDGE_REWRAP_INTERVAL_MS: positive.min(1000).max(86_400_000).default(60_000),
     /** `hash` (deterministic, CI and a stack without the `ai` profile) or `tei`. */
     KNOWLEDGE_EMBEDDER: z.enum(['hash', 'tei']).default('hash'),
     TEI_URL: z.url().default('http://localhost:8088'),

@@ -133,6 +133,8 @@ export abstract class Lexicon {
 
 /** A lexeme under a key of its tenant: equal words match within a tenant, and nowhere else. */
 export abstract class LexemeHasher {
+  /** The name of the key lexemes are hashed under; a new key re-indexes (Phase 81). */
+  abstract readonly keyId: string
   abstract hash(tenantId: string, lexeme: string): string
 }
 

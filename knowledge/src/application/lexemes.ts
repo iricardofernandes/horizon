@@ -9,6 +9,15 @@ export const indexVersionOf = (embedder: Pick<Embedder, 'version'>) =>
   `${embedder.version}+${LEXICAL_VERSION}`
 
 /**
+ * What a document was indexed with: the above, and the key its lexemes were hashed under.
+ * A new lexeme key re-indexes rather than leaving the words unfindable (Phase 81).
+ */
+export const documentIndexVersionOf = (
+  embedder: Pick<Embedder, 'version'>,
+  lexemes: Pick<Lexemes, 'keyId'>,
+) => `${indexVersionOf(embedder)}+${lexemes.keyId}`
+
+/**
  * Keyed lexemes (Phase 75): the stemming is PostgreSQL's, the key is the tenant's, and the
  * words themselves are never stored.
  */
@@ -17,6 +26,10 @@ export class Lexemes {
     private readonly lexicon: Lexicon,
     private readonly hasher: LexemeHasher,
   ) {}
+
+  get keyId(): string {
+    return this.hasher.keyId
+  }
 
   /** One `tsvector` text per chunk, in order. */
   async ofChunks(tenantId: string, texts: readonly string[]): Promise<string[]> {

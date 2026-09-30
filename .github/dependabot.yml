@@ -13,6 +13,10 @@ version: 2
 #     but @swc-node/register still peers `typescript >= 4.3 < 7`, so the dev runner will
 #     not install. Revisit when that peer range moves (ADR 0005).
 #   - node major: the project targets Node 24 LTS deliberately (ADR 0005).
+#
+# @horizon/contracts is ignored everywhere (Phase 81): it is published by our own release
+# flow to a registry Dependabot cannot reach (`.npmrc` points the scope at a local
+# Verdaccio), and trying it failed every npm update with private_source_authentication_failure.
 
 updates:
 
@@ -26,6 +30,7 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
     ignore:
+      - dependency-name: '@horizon/contracts'
       - dependency-name: typescript
         update-types: [version-update:semver-major]
 
@@ -39,6 +44,7 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
     ignore:
+      - dependency-name: '@horizon/contracts'
       - dependency-name: typescript
         update-types: [version-update:semver-major]
 
@@ -52,6 +58,7 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
     ignore:
+      - dependency-name: '@horizon/contracts'
       - dependency-name: typescript
         update-types: [version-update:semver-major]
 
@@ -65,6 +72,7 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
     ignore:
+      - dependency-name: '@horizon/contracts'
       - dependency-name: typescript
         update-types: [version-update:semver-major]
 
@@ -78,6 +86,7 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
     ignore:
+      - dependency-name: '@horizon/contracts'
       - dependency-name: typescript
         update-types: [version-update:semver-major]
 
@@ -91,6 +100,7 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
     ignore:
+      - dependency-name: '@horizon/contracts'
       - dependency-name: typescript
         update-types: [version-update:semver-major]
 
@@ -104,6 +114,7 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
     ignore:
+      - dependency-name: '@horizon/contracts'
       - dependency-name: typescript
         update-types: [version-update:semver-major]
 
@@ -117,6 +128,7 @@ updates:
         patterns: ['*']
         update-types: [minor, patch]
     ignore:
+      - dependency-name: '@horizon/contracts'
       - dependency-name: typescript
         update-types: [version-update:semver-major]
 

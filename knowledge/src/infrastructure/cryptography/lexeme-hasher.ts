@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import { LexemeHasher } from '@/application/ports'
 
 /** 128 bits of HMAC-SHA-256: no two lexemes of a tenant will meet by chance. */
@@ -12,13 +12,20 @@ const CACHED_TENANTS = 1000
  * and the same word hashes differently in every tenant.
  */
 export class HmacLexemeHasher extends LexemeHasher {
+  readonly keyId: string
   readonly #master: Buffer
   readonly #keys = new Map<string, Buffer>()
 
+  /** The lexeme key: the master key's value unless `KNOWLEDGE_LEXEME_KEY` names another. */
   constructor(masterKey: Buffer) {
     super()
-    if (masterKey.length !== 32) throw new Error('The knowledge master key must be 32 bytes')
+    if (masterKey.length !== 32) throw new Error('The knowledge lexeme key must be 32 bytes')
     this.#master = Buffer.from(masterKey)
+    this.keyId = createHash('sha256')
+      .update('horizon-lexeme-key:')
+      .update(masterKey)
+      .digest('hex')
+      .slice(0, 8)
   }
 
   hash(tenantId: string, lexeme: string): string {

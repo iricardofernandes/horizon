@@ -1,8 +1,9 @@
-import { Body, Controller, Header, HttpCode, Inject, Post, Req } from '@nestjs/common'
+import { Body, Controller, Header, HttpCode, Inject, Logger, Post, Req } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { z } from 'zod'
 
 import { IdentityRuntime } from '@/main/identity-runtime'
+import { recordExchange } from './api-key-exchanges'
 import { RequestSchema } from './api-schema'
 import { PublicRoute } from './authorization'
 import { type IdentityHttpRequest, principal, requestMetadata } from './http-context'
@@ -40,6 +41,8 @@ const serviceToken = z.strictObject({
 @Controller('auth')
 @ApiTags('authentication')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name)
+
   constructor(@Inject(IdentityRuntime) private readonly runtime: IdentityRuntime) {}
 
   @Post('signup')
@@ -179,7 +182,10 @@ export class AuthController {
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   async apiKeyToken(@Body() body: unknown) {
-    return presentExchange(unwrap(await this.runtime.exchangeApiKey.forKey(apiKey.parse(body))))
+    const request = apiKey.parse(body)
+    const result = await this.runtime.exchangeApiKey.forKey(request)
+    recordExchange(result, request.presented, this.logger)
+    return presentExchange(unwrap(result))
   }
 
   /** The fiscal worker's reader token, one case of the same exchange. */
@@ -190,7 +196,10 @@ export class AuthController {
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   async fiscalToken(@Body() body: unknown) {
-    const exchanged = unwrap(await this.runtime.exchangeApiKey.forFiscalReader(apiKey.parse(body)))
+    const request = apiKey.parse(body)
+    const result = await this.runtime.exchangeApiKey.forFiscalReader(request)
+    recordExchange(result, request.presented, this.logger)
+    const exchanged = unwrap(result)
     return {
       tenantId: exchanged.tenantId,
       accessToken: exchanged.accessToken,

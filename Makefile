@@ -115,10 +115,21 @@ up: infra/.env infra/keys/public kong-config ## Start the local platform and wai
 	@echo
 	@echo "  next: make smoke"
 
-.PHONY: up-apps
-up-apps: infra/.env infra/keys/public kong-config ## Start the platform plus Horizon's own services
+# A dozen `npm ci` at once fail at random (ETXTBSY, SIGBUS): images build a few at a time.
+HORIZON_BUILD_BATCH ?= 4
+
+.PHONY: build-apps
+build-apps: infra/.env ## Build Horizon's images, HORIZON_BUILD_BATCH at a time
 	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
-		$(COMPOSE) -f infra/docker-compose.apps.yml up -d --build --wait
+		$(COMPOSE) -f infra/docker-compose.apps.yml config --format json \
+		| node -e 'let s="";process.stdin.on("data",(c)=>s+=c).on("end",()=>{const {services}=JSON.parse(s);console.log(Object.keys(services).filter((name)=>services[name].build).sort().join("\n"))})' \
+		| HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
+			xargs -n $(HORIZON_BUILD_BATCH) $(COMPOSE) -f infra/docker-compose.apps.yml build
+
+.PHONY: up-apps
+up-apps: infra/.env infra/keys/public kong-config build-apps ## Start the platform plus Horizon's own services
+	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
+		$(COMPOSE) -f infra/docker-compose.apps.yml up -d --wait
 	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
 		$(COMPOSE) -f infra/docker-compose.apps.yml restart kong
 	@for attempt in $$(seq 1 30); do \

@@ -81,8 +81,21 @@ as open.
   It is proven against a fake `fetch` (request, tool choice, parsing, refusals), and the
   structural defences (closed tools, cited statements) do not depend on the model.
 - **A stolen key is usable until it is revoked.** The per-key rate limit bounds its speed,
-  and the audit names every call, but Horizon does not detect unusual use by itself. A
-  per-key anomaly alert is not built.
-- **Master keys are configuration.** Rotating `KNOWLEDGE_MASTER_KEY` or
-  `ASSISTANT_MASTER_KEY` needs a re-wrap of every document or person key, and none is
-  built. That is the same limit as the Phase M keys.
+  and the audit names every call.
+  - *Since Phase 81*, Identity counts refused and rate-limited exchanges, and
+    `ApiKeyExchangesRefused` fires on a burst. The log names the key by its prefix. See
+    the [runbook](service-levels.md#apikeyexchangesrefused).
+  - What stays open: a stolen key used within its limit, and never refused, looks like its
+    owner. Only its audit trail shows it.
+
+## Closed since
+
+- **Master key rotation (Phase 81).** `KNOWLEDGE_MASTER_KEY` and `ASSISTANT_MASTER_KEY`
+  are rings: a current key and retiring ones.
+  - Each wrapped key names its master key. A worker rewraps every document and person key
+    under the current one, and reports when none is left.
+  - The drill rotated both keys on the running stack, retired the old ones, and rotated
+    back. Documents and conversations read throughout
+    ([record](drills/2026-09-30-phase81-rotation-drill.json)).
+  - The procedure is in the [runbook](service-levels.md#rotating-a-master-key-phase-81).
+  - The Phase M keys are not part of this.

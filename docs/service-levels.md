@@ -116,6 +116,7 @@ Delivered in [Phase 78](ai-phase78-implementation-plan.md).
 | Agent call latency | `sli:agent_calls_under_2s:ratio_rate10m`: from `tools/call` to its audited answer, within two seconds (`agent_tool_call_seconds`) | 95% | [AgentCallsSlow](#agentcallsslow) |
 | Index freshness | `sli:document_index_lag_seconds:max`: how long the oldest due document has waited, across tenants (`knowledge_index_lag_seconds`) | under 10 minutes | [DocumentIndexBehind](#documentindexbehind) |
 | Search latency | `sli:document_search_under_1s:ratio_rate10m`: searches answered within a second (`knowledge_search_seconds`) | 95% | [DocumentSearchSlow](#documentsearchslow) |
+| API key exchanges refused (Phase 81) | `sli:api_key_exchanges_refused:increase5m`: exchanges refused or rate-limited in five minutes (`identity_api_key_exchanges_total{outcome}`). No key label; the log names the key | none unexplained | [ApiKeyExchangesRefused](#apikeyexchangesrefused) |
 | Suggestion acceptance | `sli:suggestions_accepted:ratio_1d`: accepted among decided suggestions over a day, per kind (`knowledge_suggestion_decisions_total`). A quality signal, never a training set | 30% or more, with at least 20 decisions | [SuggestionsRarelyAccepted](#suggestionsrarelyaccepted) |
 
 Every Phase N duration histogram has bounds in seconds, from 5 ms to 60 s (300 s for the
@@ -148,6 +149,36 @@ A search embeds the question and asks two lists of one tenant's partition.
 - With e5, TEI's latency comes first.
 - Otherwise look at the partition's size and plan: `EXPLAIN` a nearest query in the tenant,
   which must name one partition and its HNSW index.
+
+### ApiKeyExchangesRefused
+More than 20 key exchanges were refused or rate-limited in five minutes. The usual causes:
+- a key that was revoked, or has outgrown its issuer, is still in use;
+- a leaked key is being tried;
+- an integration is looping.
+
+1. `docker logs horizon-identity | grep 'API key exchange'`. Each line names the key by its
+   prefix (`hz_…<prefix>`) and the outcome. The secret is never logged.
+2. Match the prefix under *Developers → API keys* in the issuing workspace.
+   - **`refused`:** the key is revoked or unknown, or its issuer lost a role it needs.
+   - **`rate-limited`:** the key is being used faster than 120 exchanges a minute.
+3. If the use is not the owner's, revoke the key. The next exchange is then refused, and a
+   token already issued expires within a minute.
+
+### Rotating a master key (Phase 81)
+`knowledge/` wraps document keys and `agent/` wraps person keys with a master key
+(ADR 0068). To rotate one:
+1. **`knowledge/` only:** set `KNOWLEDGE_LEXEME_KEY` to the current master key's value, so
+   the keyed full-text index stays as it is. Leaving it unset means the lexemes follow the
+   new master key, and every document is re-indexed in the background.
+2. Move the current key to `…_PREVIOUS_MASTER_KEYS` (comma-separated), and put the new one in
+   `KNOWLEDGE_MASTER_KEY` / `ASSISTANT_MASTER_KEY`. Restart the service.
+3. The rewrap worker moves every key, a batch at a time (`…_REWRAP_INTERVAL_MS`).
+   `knowledge_keys_on_old_master_keys` and `assistant_keys_on_old_master_keys` fall to 0,
+   and the log says "every … key is wrapped under the current master key".
+4. Remove the old key from `…_PREVIOUS_MASTER_KEYS`, and restart.
+
+Nothing is re-encrypted but the wrapped keys: chunks and turns stay sealed under their own
+data keys. A key that no listed master key opens is logged by error class and left as it is.
 
 ### SuggestionsRarelyAccepted
 People reject most suggestions of one kind. That is a quality signal, not an outage.

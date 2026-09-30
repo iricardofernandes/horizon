@@ -8,6 +8,7 @@ import { McpController } from '@/infrastructure/http/mcp.controller'
 import { SettingsController } from '@/infrastructure/http/settings.controller'
 import { erasureHandlers } from '@/infrastructure/messaging/erasure-handlers'
 import { RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-consumer'
+import { KeyRewrapWorker } from '@/infrastructure/worker/key-rewrap-worker'
 import { PurgeWorker } from '@/infrastructure/worker/purge-worker'
 import { type AgentAdapters, AgentRuntime } from './agent-runtime'
 import type { AgentEnvironment } from './environment'
@@ -31,6 +32,17 @@ export class AppModule {
     ]
     if (options.background !== false) {
       // Conversations past their 30 days go, across tenants (Phase 76).
+      // Person keys move off retired master keys (Phase 81).
+      providers.push({
+        provide: KeyRewrapWorker,
+        inject: [AgentRuntime],
+        useFactory: (runtime: AgentRuntime) =>
+          new KeyRewrapWorker(
+            runtime.assistantDatabase,
+            runtime.turnSealer,
+            config.ASSISTANT_REWRAP_INTERVAL_MS,
+          ),
+      })
       providers.push({
         provide: PurgeWorker,
         inject: [AgentRuntime],

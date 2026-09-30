@@ -473,6 +473,10 @@ services:
       # Upstreams are resolved per request, so the gateway starts before the services
       # exist and answers 503 for them until they do.
       KONG_DNS_RESOLVER: 127.0.0.11
+      # Docker answers with a 600 s TTL, so a recreated service stayed unreachable through
+      # Kong (502) for minutes at its old address (Phase 81). Five seconds bounds that.
+      KONG_DNS_VALID_TTL: '5'
+      KONG_RESOLVER_VALID_TTL: '5'
     volumes:
       # The rendered file, not gateway/kong.yml: Kong OSS has no JWKS plugin, so the
       # public keys are injected by infra/scripts/render-kong-config.sh. See that script

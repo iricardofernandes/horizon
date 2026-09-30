@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { chunkText } from '@/domain/chunking'
 import { afterFailure } from '@/domain/documents'
-import { indexVersionOf, type Lexemes } from './lexemes'
+import { documentIndexVersionOf, type Lexemes } from './lexemes'
 import type {
   Clock,
   DocumentReference,
@@ -53,10 +53,15 @@ export class Indexing {
     return this.store.recordEnded(event, document, reason, this.clock.now())
   }
 
+  /** The version every document is indexed at, and re-indexed to when it changes. */
+  get indexVersion(): string {
+    return documentIndexVersionOf(this.embedder, this.lexemes)
+  }
+
   /** One pass over a tenant: stale versions requeued, then a batch of due documents. */
   async indexDue(tenantId: string): Promise<number> {
     const now = this.clock.now()
-    await this.store.requeueStale(tenantId, indexVersionOf(this.embedder), now)
+    await this.store.requeueStale(tenantId, this.indexVersion, now)
     const due = await this.store.claimDue(tenantId, now, this.options.leaseMs, this.options.batch)
     for (const document of due) await this.indexOne(document)
     return due.length
@@ -81,7 +86,7 @@ export class Indexing {
         document,
         {
           digest: createHash('sha256').update(content.bytes).digest('hex'),
-          indexVersion: indexVersionOf(this.embedder),
+          indexVersion: this.indexVersion,
           wrappedKey,
           truncated,
           chunks: chunks.map((chunk, ordinal) => ({

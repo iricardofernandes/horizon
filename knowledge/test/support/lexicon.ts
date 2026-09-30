@@ -17,6 +17,7 @@ export class FakeLexicon extends Lexicon {
 
 /** A hash that still names its tenant, so a test can see which key was used. */
 export class FakeHasher extends LexemeHasher {
+  readonly keyId = 'fake'
   hash(tenantId: string, lexeme: string) {
     return createHash('sha256').update(`${tenantId}|${lexeme}`).digest('hex').slice(0, 16)
   }

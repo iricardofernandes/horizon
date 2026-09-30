@@ -122,7 +122,7 @@ describe('indexing a due document', () => {
     expect(await indexing.indexDue('t')).toBe(1)
     const [written] = store.completed
     expect(written).toMatchObject({
-      indexVersion: 'test-v1+lex-v1',
+      indexVersion: 'test-v1+lex-v1+fake',
       wrappedKey: 'wrapped',
       truncated: false,
     })

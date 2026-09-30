@@ -1,10 +1,12 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import postgres from 'postgres'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { NOTICE_VERSION } from '@/application/assistant'
+import { MasterKeyring } from '@/infrastructure/cryptography/keyring'
+import { AesGcmTurnSealer } from '@/infrastructure/cryptography/turn-sealer'
 import { AgentRuntime } from '@/main/agent-runtime'
 import { AppModule } from '@/main/app.module'
 import { readEnvironment } from '@/main/environment'
@@ -198,6 +200,45 @@ describe('asking (Phase 76)', () => {
       .set('authorization', `Bearer ${other}`)
       .expect(200)
     expect(theirs.body.data).toEqual([])
+  })
+
+  it('keeps a conversation readable when the master key rotates and the person key is rewrapped', async () => {
+    const tenantId = randomUUID()
+    await turnOn(tenantId)
+    const userId = randomUUID()
+    const answered = await ask(
+      await gateway.person(tenantId, READER, userId),
+      'Quem fornece café para nós?',
+    )
+    expect(answered.status).toBe(201)
+
+    // Phase 81: the stack's master key becomes the previous one.
+    const current = randomBytes(32).toString('hex')
+    const during = new AesGcmTurnSealer(MasterKeyring.of(current, 'ab'.repeat(32)))
+    const before = await runtime.assistantDatabase.tenantsOnOldMasterKeys(during.masterKeyId)
+    expect(before.find((tenant) => tenant.tenantId === tenantId)?.keys).toBe(1)
+    const moved = await runtime.assistantDatabase.rewrapKeys(
+      tenantId,
+      during.masterKeyId,
+      (person, wrapped) => during.rewrap(wrapped, tenantId, person),
+      50,
+    )
+    expect(moved).toBe(1)
+    const after = await runtime.assistantDatabase.tenantsOnOldMasterKeys(during.masterKeyId)
+    expect(after.find((tenant) => tenant.tenantId === tenantId)).toBeUndefined()
+
+    // The new master key alone opens the turn sealed before the rotation.
+    const [key] = await administrator<{ wrapped_key: string; master_key_id: string }[]>`
+      select wrapped_key, master_key_id from assistant_keys
+      where tenant_id = ${tenantId} and user_id = ${userId}`
+    expect(key?.master_key_id).toBe(during.masterKeyId)
+    const [turn] = await administrator<{ sealed: Buffer }[]>`
+      select sealed from assistant_turns where conversation_id = ${answered.body.conversationId}`
+    const alone = new AesGcmTurnSealer(MasterKeyring.of(current))
+    const place = { tenantId, userId, conversationId: answered.body.conversationId, ordinal: 0 }
+    expect(alone.open(key?.wrapped_key ?? '', place, turn?.sealed ?? Buffer.alloc(0))).toContain(
+      'Quem fornece café para nós?',
+    )
   })
 
   it('stops at the monthly budget, and audits each question without its words', async () => {

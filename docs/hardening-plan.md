@@ -1,6 +1,6 @@
 # Debts and hardening — Phases 79 to 81
 
-Status: **in progress**. Before choosing Phase O's theme, this plan pays the debts and
+Status: **delivered** (79 to 81, on 2026-09-30). Before choosing Phase O's theme, this plan pays the debts and
 hardens what Phases A to N left open. It holds only the items still true when checked on
 2026-09-29, each with its evidence. The Anthropic adapter's run against the real API stays
 out, by the owner's decision.
@@ -88,6 +88,10 @@ their provisioning is only the workspace's row.
    module that provisions from Identity's event. The web and the scripts retry them.
 
 ## Phase 81 — Keys, alerts and quality
+
+**Delivered on 2026-09-30** ([plan](hardening-phase81-implementation-plan.md),
+[evidence](hardening-phase81-evidence.md)). Knowledge's lexeme key became its own, so
+rotating the master key cannot break keyword search.
 
 1. **Master key rotation for `knowledge/` and `agent/`.**
    - Each accepts a list of master keys, the first one current.

@@ -3,8 +3,8 @@
   "kind": "web-gateway-smoke",
   "baseUrl": "http://localhost:8000",
   "web": "http://localhost:3000",
-  "startedAt": "2026-09-30T14:14:37.633Z",
-  "finishedAt": "2026-09-30T14:14:40.676Z",
+  "startedAt": "2026-09-30T15:07:45.981Z",
+  "finishedAt": "2026-09-30T15:07:48.358Z",
   "passed": true,
   "checks": [
     {
@@ -28,7 +28,7 @@
       "name": "every page has a content security policy with a fresh nonce, and cannot be sniffed or framed",
       "passed": true,
       "detail": {
-        "policy": "default-src 'self'; script-src 'self' 'nonce-OGY4Zjc5OGItMDc3NC00ZmQ4LWI4YzEtNGJiMTUyZWE2YzI0' 'strict-dynamic'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' http://localhost:4318; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+        "policy": "default-src 'self'; script-src 'self' 'nonce-NzE5ZDJjZTEtMDliNi00YTc1LTg5ZTgtYmZhZjgwZDkxMDYz' 'strict-dynamic'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' http://localhost:4318; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
         "freshNonce": true
       }
     },

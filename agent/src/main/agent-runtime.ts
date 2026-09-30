@@ -5,7 +5,8 @@ import type { AssistantMetrics } from '@/application/assistant-ports'
 import type { Generator } from '@/application/generation'
 import type { CallMetrics, Clock, Gateway, KeyExchange } from '@/application/ports'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
-import { AesGcmTurnSealer, masterKeyOf } from '@/infrastructure/cryptography/turn-sealer'
+import { MasterKeyring } from '@/infrastructure/cryptography/keyring'
+import { AesGcmTurnSealer } from '@/infrastructure/cryptography/turn-sealer'
 import { AssistantDatabase } from '@/infrastructure/database/assistant-database'
 import { AgentDatabase } from '@/infrastructure/database/drizzle/agent-database'
 import {
@@ -39,6 +40,8 @@ export class AgentRuntime implements OnModuleInit, OnModuleDestroy {
   readonly assistantDatabase: AssistantDatabase
   readonly generator: Generator
   readonly assistant: Assistant
+  /** Person keys, wrapped by the master keyring (Phase 81). */
+  readonly turnSealer: AesGcmTurnSealer
 
   constructor(config: AgentEnvironment, adapters: AgentAdapters = {}) {
     this.clock = { now: () => new Date() }
@@ -73,12 +76,15 @@ export class AgentRuntime implements OnModuleInit, OnModuleDestroy {
             timeoutMs: config.ASSISTANT_TIMEOUT_MS,
           })
         : new ExtractiveGenerator())
+    this.turnSealer = new AesGcmTurnSealer(
+      MasterKeyring.of(config.ASSISTANT_MASTER_KEY, config.ASSISTANT_PREVIOUS_MASTER_KEYS),
+    )
     this.assistant = new Assistant(
       this.assistantDatabase,
       this.database,
       this.generator,
       adapters.gateway ?? new HttpGateway(config.GATEWAY_URL, config.GATEWAY_TIMEOUT_MS),
-      new AesGcmTurnSealer(masterKeyOf(config.ASSISTANT_MASTER_KEY)),
+      this.turnSealer,
       this.clock,
       adapters.assistantMetrics ?? new OtelAssistantMetrics(),
     )

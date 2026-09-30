@@ -121,3 +121,36 @@ tests:
         exp_samples:
           - labels: 'sli:suggestions_accepted:ratio_1d{kind="ncm"}'
             value: 0
+
+  - name: a burst of refused or limited key exchanges fires; issued ones never count
+    interval: 1m
+    input_series:
+      - series: 'identity_api_key_exchanges_total{outcome="issued"}'
+        values: '0+500x30'
+      - series: 'identity_api_key_exchanges_total{outcome="refused"}'
+        values: '0x10 0+2x20'
+      - series: 'identity_api_key_exchanges_total{outcome="rate-limited"}'
+        values: '0x10 0+10x20'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ApiKeyExchangesRefused
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ApiKeyExchangesRefused
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: api-key-exchanges }
+            exp_annotations:
+              summary: 'More than 20 API key exchanges were refused or rate-limited in five minutes'
+              runbook: docs/service-levels.md#apikeyexchangesrefused
+
+  - name: no refused exchange is a count of 0, not a missing series
+    interval: 1m
+    input_series:
+      - series: 'identity_api_key_exchanges_total{outcome="issued"}'
+        values: '0+10x10'
+    promql_expr_test:
+      - expr: sli:api_key_exchanges_refused:increase5m
+        eval_time: 8m
+        exp_samples:
+          - labels: 'sli:api_key_exchanges_refused:increase5m'
+            value: 0

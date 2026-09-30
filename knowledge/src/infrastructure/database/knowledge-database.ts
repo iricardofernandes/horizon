@@ -14,6 +14,7 @@ import {
 } from '@/application/ports'
 import type { DocumentState } from '@/domain/documents'
 import type { ChunkKey } from '@/domain/ranking'
+import { masterKeyIdOf } from '@/infrastructure/cryptography/keyring'
 
 type Sql = postgres.Sql
 type Tx = postgres.TransactionSql
@@ -144,9 +145,41 @@ export class KnowledgeDatabase extends KnowledgeStore implements Lexicon, Search
           ${now}, ${now}, ${now})
         on conflict (tenant_id, attachment_id) do update
           set state = 'deleted', deletion_reason = excluded.deletion_reason, wrapped_key = null,
+              master_key_id = null,
               chunks = 0, due_at = null, updated_at = excluded.updated_at,
               deleted_at = coalesce(documents.deleted_at, excluded.deleted_at)`
       return true
+    })
+  }
+
+  /** Tenants holding document keys not wrapped under the current master key (Phase 81). */
+  async tenantsOnOldMasterKeys(currentId: string): Promise<{ tenantId: string; keys: number }[]> {
+    const rows = await this.#sql<{ tenant_id: string; keys: string }[]>`
+      select tenant_id, keys from tenants_on_old_master_keys(${currentId})`
+    return rows.map((row) => ({ tenantId: row.tenant_id, keys: Number(row.keys) }))
+  }
+
+  /**
+   * Up to `limit` of a tenant's document keys, rewrapped under the current master key; the
+   * number moved, 0 once none is left.
+   */
+  rewrapKeys(
+    tenantId: string,
+    currentId: string,
+    rewrap: (attachmentId: string, wrappedKey: string) => string,
+    limit: number,
+  ): Promise<number> {
+    return this.inTenant(tenantId, async (tx) => {
+      const rows = await tx<{ attachment_id: string; wrapped_key: string }[]>`
+        select attachment_id, wrapped_key from documents
+        where wrapped_key is not null and master_key_id is distinct from ${currentId}
+        limit ${limit} for update skip locked`
+      for (const row of rows) {
+        const wrapped = rewrap(row.attachment_id, row.wrapped_key)
+        await tx`update documents set wrapped_key = ${wrapped},
+          master_key_id = ${masterKeyIdOf(wrapped)} where attachment_id = ${row.attachment_id}`
+      }
+      return rows.length
     })
   }
 
@@ -218,6 +251,7 @@ export class KnowledgeDatabase extends KnowledgeStore implements Lexicon, Search
       await tx`
         update documents set state = 'indexed', digest = ${indexed.digest},
           index_version = ${indexed.indexVersion}, wrapped_key = ${indexed.wrappedKey},
+          master_key_id = ${masterKeyIdOf(indexed.wrappedKey)},
           chunks = ${indexed.chunks.length}, truncated = ${indexed.truncated}, due_at = null,
           last_error = null, indexed_at = ${now}, updated_at = ${now}
         where attachment_id = ${document.attachmentId}`

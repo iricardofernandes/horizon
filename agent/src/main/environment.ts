@@ -21,6 +21,12 @@ const environmentSchema = z.object({
     .optional(),
   /** Wraps every person's conversation key: 64 hex characters or 32 bytes of base64. */
   ASSISTANT_MASTER_KEY: z.string().min(44).max(64),
+  /**
+   * Master keys being retired (Phase 81), comma-separated: they still open what they wrapped,
+   * and the rewrap worker moves every person key off them.
+   */
+  ASSISTANT_PREVIOUS_MASTER_KEYS: z.string().max(4096).default(''),
+  ASSISTANT_REWRAP_INTERVAL_MS: positive.min(1000).max(86_400_000).default(60_000),
   /** `extractive` (deterministic, in the stack) or `anthropic` (needs ANTHROPIC_API_KEY). */
   ASSISTANT_GENERATOR: z.enum(['extractive', 'anthropic']).default('extractive'),
   ASSISTANT_MODEL: z.string().min(1).max(100).default('claude-opus-5-5'),

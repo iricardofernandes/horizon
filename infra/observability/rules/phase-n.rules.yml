@@ -37,8 +37,23 @@ groups:
           )
             / sum by (kind) (increase(knowledge_suggestion_decisions_total[1d]))
 
+      # API key exchanges refused or limited (Phase 81): what a stolen or over-grown key looks
+      # like from Identity. No key label; the log names the key.
+      - record: sli:api_key_exchanges_refused:increase5m
+        expr: |
+          sum(increase(identity_api_key_exchanges_total{outcome=~"refused|rate-limited"}[5m]))
+            or vector(0)
+
   - name: phase-n-alerts
     rules:
+      - alert: ApiKeyExchangesRefused
+        expr: sli:api_key_exchanges_refused:increase5m > 20
+        for: 2m
+        labels: { severity: warning, slo: api-key-exchanges }
+        annotations:
+          summary: 'More than 20 API key exchanges were refused or rate-limited in five minutes'
+          runbook: docs/service-levels.md#apikeyexchangesrefused
+
       - alert: AgentCallsFailing
         expr: sli:agent_calls_failed:ratio_rate10m > 0.05
         for: 10m

@@ -1,6 +1,5 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common'
 import { APP_GUARD, Reflector } from '@nestjs/core'
-import { indexVersionOf } from '@/application/lexemes'
 import { RelayDueScan } from '@/infrastructure/database/knowledge-database'
 import { KnowledgeAuthGuard } from '@/infrastructure/http/authorization'
 import { SearchController } from '@/infrastructure/http/search.controller'
@@ -10,6 +9,7 @@ import { exampleHandlers } from '@/infrastructure/messaging/example-handlers'
 import { indexHandlers } from '@/infrastructure/messaging/handlers'
 import { RabbitMqEventConsumer } from '@/infrastructure/messaging/rabbitmq-consumer'
 import { IndexWorker } from '@/infrastructure/worker/index-worker'
+import { KeyRewrapWorker } from '@/infrastructure/worker/key-rewrap-worker'
 import { NcmTableWorker } from '@/infrastructure/worker/ncm-table-worker'
 import type { KnowledgeEnvironment } from './environment'
 import { type KnowledgeAdapters, KnowledgeRuntime, suggestionsOn } from './knowledge-runtime'
@@ -56,10 +56,22 @@ export class AppModule {
           new IndexWorker({
             scan: new RelayDueScan(relayUrl),
             indexing: runtime.indexing,
-            indexVersion: indexVersionOf(runtime.embedder),
+            indexVersion: runtime.indexing.indexVersion,
             intervalMs: config.KNOWLEDGE_POLL_INTERVAL_MS,
             lag: (seconds) => runtime.metrics.lag(seconds),
           }),
+      })
+    if (options.consume !== false)
+      providers.push({
+        // Document keys move off retired master keys (Phase 81).
+        provide: KeyRewrapWorker,
+        inject: [KnowledgeRuntime],
+        useFactory: (runtime: KnowledgeRuntime) =>
+          new KeyRewrapWorker(
+            runtime.database,
+            runtime.sealer,
+            config.KNOWLEDGE_REWRAP_INTERVAL_MS,
+          ),
       })
     if (suggestionsOn(config) && options.consume !== false)
       providers.push({

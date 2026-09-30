@@ -509,6 +509,8 @@ services:
       AGENT_MAX_RESULT_BYTES: '65536'
       # The in-app assistant (Phase 76): deterministic unless a provider and its key are set.
       ASSISTANT_MASTER_KEY: ${HORIZON_ASSISTANT_MASTER_KEY:-6c6f63616c2d617373697374616e742d6d61737465722d6b65792d6368616e67}
+      # Rotation (Phase 81): keys being retired, comma-separated; see docs/service-levels.md.
+      ASSISTANT_PREVIOUS_MASTER_KEYS: ${HORIZON_ASSISTANT_PREVIOUS_MASTER_KEYS:-}
       ASSISTANT_GENERATOR: ${HORIZON_ASSISTANT_GENERATOR:-extractive}
       ASSISTANT_MODEL: ${HORIZON_ASSISTANT_MODEL:-claude-opus-5-5}
       ANTHROPIC_API_KEY: ${HORIZON_ANTHROPIC_API_KEY:-}
@@ -547,6 +549,9 @@ services:
       GATEWAY_URL: http://kong:8000
       SERVICE_TOKEN_SECRET: ${HORIZON_KNOWLEDGE_SERVICE_SECRET:-local-knowledge-service-secret-change-me-0123456789}
       KNOWLEDGE_MASTER_KEY: ${HORIZON_KNOWLEDGE_MASTER_KEY:-6c6f63616c2d6b6e6f776c656467652d6d61737465722d6b65792d6368616e67}
+      # Rotation (Phase 81): keys being retired, and the key lexemes stay hashed under.
+      KNOWLEDGE_PREVIOUS_MASTER_KEYS: ${HORIZON_KNOWLEDGE_PREVIOUS_MASTER_KEYS:-}
+      KNOWLEDGE_LEXEME_KEY: ${HORIZON_KNOWLEDGE_LEXEME_KEY:-}
       # `tei` once `make up-ai` runs the local model; the deterministic hash otherwise.
       KNOWLEDGE_EMBEDDER: ${HORIZON_KNOWLEDGE_EMBEDDER:-hash}
       TEI_URL: http://tei:80

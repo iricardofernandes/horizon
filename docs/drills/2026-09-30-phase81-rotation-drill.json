@@ -1,0 +1,80 @@
+{
+  "phase": 81,
+  "kind": "rotation-drill",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-09-30T14:48:11.188Z",
+  "finishedAt": "2026-09-30T14:48:28.825Z",
+  "passed": true,
+  "tenantId": "01a0f2c9-90cd-7720-bdd4-2063efe1c45c",
+  "checks": [
+    {
+      "name": "before: the document is found and cited, and the conversation reads back",
+      "passed": true,
+      "detail": {
+        "found": true,
+        "conversation": true
+      }
+    },
+    {
+      "name": "rotated: every document and person key moved to the new master keys, and read throughout",
+      "passed": true,
+      "detail": {
+        "before": {
+          "knowledge": [
+            "96aa721f"
+          ],
+          "assistant": [
+            "a16e2913"
+          ]
+        },
+        "after": {
+          "knowledge": [
+            "25224225"
+          ],
+          "assistant": [
+            "79357a03"
+          ]
+        },
+        "during": {
+          "found": true,
+          "conversation": true
+        }
+      }
+    },
+    {
+      "name": "retired: with the old master keys gone, the document and the conversation read as before",
+      "passed": true,
+      "detail": {
+        "found": true,
+        "conversation": true
+      }
+    },
+    {
+      "name": "rotated back to the original keys, and everything still reads",
+      "passed": true,
+      "detail": {
+        "names": {
+          "knowledge": [
+            "96aa721f"
+          ],
+          "assistant": [
+            "a16e2913"
+          ]
+        },
+        "after": {
+          "found": true,
+          "conversation": true
+        }
+      }
+    },
+    {
+      "name": "refused key exchanges are counted by outcome, and logged by the key’s prefix, never its secret",
+      "passed": true,
+      "detail": {
+        "refused": 25,
+        "counted": 26,
+        "loggedByPrefix": 25
+      }
+    }
+  ]
+}

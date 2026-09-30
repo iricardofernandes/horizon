@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { AesGcmTurnSealer, masterKeyOf } from './turn-sealer'
+import { MasterKeyring } from './keyring'
+import { AesGcmTurnSealer } from './turn-sealer'
 
 describe('sealed turns (ADR 0068)', () => {
-  const sealer = new AesGcmTurnSealer(randomBytes(32))
+  const ring = () => MasterKeyring.of(randomBytes(32).toString('hex'))
+  const sealer = new AesGcmTurnSealer(ring())
   const key = sealer.newKey('t', 'u')
   const place = { tenantId: 't', userId: 'u', conversationId: 'c', ordinal: 0 }
 
@@ -17,13 +19,18 @@ describe('sealed turns (ADR 0068)', () => {
     const sealed = sealer.seal(key, place, 'x')
     expect(() => sealer.open(key, { ...place, ordinal: 1 }, sealed)).toThrow()
     expect(() => sealer.open(key, { ...place, userId: 'v' }, sealed)).toThrow()
-    expect(() => new AesGcmTurnSealer(randomBytes(32)).open(key, place, sealed)).toThrow()
+    expect(() => new AesGcmTurnSealer(ring()).open(key, place, sealed)).toThrow()
   })
 
-  it('reads the master key as hex or base64, of 32 bytes only', () => {
-    expect(masterKeyOf('ab'.repeat(32))).toHaveLength(32)
-    expect(masterKeyOf(randomBytes(32).toString('base64'))).toHaveLength(32)
-    expect(() => masterKeyOf('abc')).toThrow()
-    expect(() => new AesGcmTurnSealer(randomBytes(16))).toThrow()
+  it('keeps every turn readable when the master key rotates and the person key is rewrapped', () => {
+    const [old, current] = [randomBytes(32).toString('hex'), randomBytes(32).toString('hex')]
+    const before = new AesGcmTurnSealer(MasterKeyring.of(old))
+    const wrapped = before.newKey('t', 'u')
+    const sealed = before.seal(wrapped, place, 'Quanto devemos à Aurora?')
+    const rewrapped = new AesGcmTurnSealer(MasterKeyring.of(current, old)).rewrap(wrapped, 't', 'u')
+    // Once rewrapped, the old master key can go: the new one alone opens every turn.
+    const after = new AesGcmTurnSealer(MasterKeyring.of(current))
+    expect(after.open(rewrapped, place, sealed)).toBe('Quanto devemos à Aurora?')
+    expect(() => after.open(wrapped, place, sealed)).toThrow()
   })
 })

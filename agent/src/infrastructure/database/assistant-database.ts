@@ -10,6 +10,7 @@ import {
 } from '@/application/assistant-ports'
 import type { GenerationUsage } from '@/application/generation'
 import type { AgentStore } from '@/application/ports'
+import { masterKeyIdOf } from '@/infrastructure/cryptography/keyring'
 
 type Tx = postgres.TransactionSql
 
@@ -142,11 +143,41 @@ export class AssistantDatabase extends AssistantStore {
     })
   }
 
+  /** Tenants holding person keys not wrapped under the current master key (Phase 81). */
+  async tenantsOnOldMasterKeys(currentId: string): Promise<{ tenantId: string; keys: number }[]> {
+    const rows = await this.#sql<{ tenant_id: string; keys: string }[]>`
+      select tenant_id, keys from tenants_on_old_master_keys(${currentId})`
+    return rows.map((row) => ({ tenantId: row.tenant_id, keys: Number(row.keys) }))
+  }
+
+  /** Up to `limit` of a tenant's person keys, rewrapped under the current master key. */
+  rewrapKeys(
+    tenantId: string,
+    currentId: string,
+    rewrap: (userId: string, wrappedKey: string) => string,
+    limit: number,
+  ): Promise<number> {
+    return this.inTenant(tenantId, async (tx) => {
+      const rows = await tx<{ user_id: string; wrapped_key: string }[]>`
+        select user_id, wrapped_key from assistant_keys
+        where master_key_id is distinct from ${currentId}
+        limit ${limit} for update skip locked`
+      for (const row of rows) {
+        const wrapped = rewrap(row.user_id, row.wrapped_key)
+        await tx`update assistant_keys set wrapped_key = ${wrapped},
+          master_key_id = ${masterKeyIdOf(wrapped)} where user_id = ${row.user_id}`
+      }
+      return rows.length
+    })
+  }
+
   keyOf(tenantId: string, userId: string, create: () => string, at: Date): Promise<string> {
     return this.inTenant(tenantId, async (tx) => {
+      const wrapped = create()
       await tx`
-        insert into assistant_keys (tenant_id, user_id, wrapped_key, created_at)
-        values (${tenantId}, ${userId}, ${create()}, ${at}) on conflict do nothing`
+        insert into assistant_keys (tenant_id, user_id, wrapped_key, master_key_id, created_at)
+        values (${tenantId}, ${userId}, ${wrapped}, ${masterKeyIdOf(wrapped)}, ${at})
+        on conflict do nothing`
       const [row] = await tx<{ wrapped_key: string }[]>`
         select wrapped_key from assistant_keys where user_id = ${userId}`
       if (!row) throw new Error('the person key could not be kept')

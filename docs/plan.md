@@ -2913,6 +2913,28 @@ A to N left open. The Anthropic adapter's run against the real API stays out.
 
 ---
 
+## Phase 81 — Keys, alerts and quality
+
+**Delivered on 2026-09-30. The debts and hardening phases are closed.**
+- **Master key rotation for `knowledge/` and `agent/`.**
+  - A ring of keys: every wrapped key names its master key, and a worker rewraps them under
+    the current one.
+  - Knowledge's lexeme key is its own, and the index follows it.
+  - The drill rotated both keys on the running stack and back, with documents and
+    conversations readable throughout.
+- **`ApiKeyExchangesRefused`** fires on a burst of refused or limited key exchanges, and the
+  log names the key by its prefix.
+- **Other items:**
+  - Inventory's branch coverage is back over its gate;
+  - images build four at a time;
+  - Dependabot ignores `@horizon/contracts`;
+  - Kong no longer holds a recreated service's old address for minutes.
+
+[Plan](hardening-phase81-implementation-plan.md), [evidence](hardening-phase81-evidence.md),
+[drill](drills/2026-09-30-phase81-rotation-drill.json).
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.

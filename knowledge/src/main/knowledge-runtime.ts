@@ -6,8 +6,9 @@ import { Search } from '@/application/search'
 import type { PayableSource } from '@/application/suggestion-ports'
 import { ExampleIndex, NcmTableLoader, Suggestions } from '@/application/suggestions'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
+import { keyOf, MasterKeyring } from '@/infrastructure/cryptography/keyring'
 import { HmacLexemeHasher } from '@/infrastructure/cryptography/lexeme-hasher'
-import { AesGcmSealer, masterKeyOf } from '@/infrastructure/cryptography/sealer'
+import { AesGcmSealer } from '@/infrastructure/cryptography/sealer'
 import { ExampleDatabase } from '@/infrastructure/database/example-database'
 import { KnowledgeDatabase } from '@/infrastructure/database/knowledge-database'
 import { HashEmbedder, TeiEmbedder } from '@/infrastructure/embedding/embedders'
@@ -64,9 +65,13 @@ export class KnowledgeRuntime implements OnModuleInit, OnModuleDestroy {
       config.SERVICE_TOKEN_SECRET,
       config.GATEWAY_TIMEOUT_MS,
     )
-    const masterKey = masterKeyOf(config.KNOWLEDGE_MASTER_KEY)
-    this.sealer = new AesGcmSealer(masterKey)
-    const lexemes = new Lexemes(this.database, new HmacLexemeHasher(masterKey))
+    this.sealer = new AesGcmSealer(
+      MasterKeyring.of(config.KNOWLEDGE_MASTER_KEY, config.KNOWLEDGE_PREVIOUS_MASTER_KEYS),
+    )
+    const lexemes = new Lexemes(
+      this.database,
+      new HmacLexemeHasher(keyOf(config.KNOWLEDGE_LEXEME_KEY ?? config.KNOWLEDGE_MASTER_KEY)),
+    )
     this.metrics = new OtelIndexMetrics()
     this.indexing = new Indexing(
       this.database,

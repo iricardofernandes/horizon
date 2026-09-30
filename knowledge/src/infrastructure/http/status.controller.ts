@@ -1,5 +1,4 @@
 import { Controller, Get, Inject, Req } from '@nestjs/common'
-import { indexVersionOf } from '@/application/lexemes'
 import { KnowledgeRuntime } from '@/main/knowledge-runtime'
 import {
   type KnowledgeRequest,
@@ -31,7 +30,7 @@ export class StatusController {
     requireWorkspaceRole(request, ['owner', 'admin', 'auditor'])
     return {
       ...(await this.runtime.database.status(principalOf(request).tenantId)),
-      indexVersion: indexVersionOf(this.runtime.embedder),
+      indexVersion: this.runtime.indexing.indexVersion,
     }
   }
 }
