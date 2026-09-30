@@ -77,12 +77,17 @@ for (const [path, script] of [
 run('git whitespace check', 'git', ['diff', '--check'])
 
 if (full) {
-  run('Docker images', 'docker', [
-    'compose', '-f', 'infra/docker-compose.yml', '-f', 'infra/docker-compose.apps.yml',
-    '--profile', 'fiscal', 'build',
+  // Four at a time: a dozen `npm ci` at once fail at random (ETXTBSY, ECONNRESET), as in
+  // `make build-apps` (Phase 81).
+  const images = [
     'identity', 'catalog', 'inventory', 'sales', 'webhooks', 'parties',
     'financial', 'treasury', 'ledger', 'procurement', 'fiscal', 'crm', 'reporting', 'files', 'agent', 'knowledge', 'web',
-  ])
+  ]
+  for (let start = 0; start < images.length; start += 4)
+    run(`Docker images ${start + 1}–${Math.min(start + 4, images.length)}`, 'docker', [
+      'compose', '-f', 'infra/docker-compose.yml', '-f', 'infra/docker-compose.apps.yml',
+      '--profile', 'fiscal', 'build', ...images.slice(start, start + 4),
+    ])
 }
 
 if (failures.length > 0) {

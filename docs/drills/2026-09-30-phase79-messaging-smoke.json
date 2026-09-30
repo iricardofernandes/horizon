@@ -2,10 +2,10 @@
   "phase": 79,
   "kind": "messaging-smoke",
   "baseUrl": "http://localhost:8000",
-  "startedAt": "2026-09-30T15:04:26.447Z",
-  "finishedAt": "2026-09-30T15:06:45.888Z",
+  "startedAt": "2026-09-30T16:27:29.904Z",
+  "finishedAt": "2026-09-30T16:27:44.460Z",
   "passed": true,
-  "tenantId": "01a0f2d8-727a-7ff1-9ced-1ef2905e1850",
+  "tenantId": "01a0f324-7d1b-77c6-b177-7f5103e7015c",
   "checks": [
     {
       "name": "every DLQ receives only its own queue’s dead letters, and no catch-all binding is left",
