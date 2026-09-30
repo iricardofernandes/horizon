@@ -1,6 +1,6 @@
 # Tax rules engine implementation plan — Phase O
 
-Status: **planned on 2026-09-30**, not started. This is the execution plan for Phase O,
+Status: **in progress** — Phase 82 delivered on 2026-09-30 ([evidence](tax-phase82-evidence.md)). This is the execution plan for Phase O,
 split into phases 82–89 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to N
 and 79 to 81.
@@ -149,6 +149,11 @@ ADRs 0070–0073:
 ## Phases
 
 ### 82 — Decisions, the reform's source matrix, and a shared catalogue
+
+**Delivered on 2026-09-30** ([plan](tax-phase82-implementation-plan.md), [evidence](tax-phase82-evidence.md)).
+The sources confirmed the transition. They also showed that the full CBS/IBS rates from
+2027 are not yet published, and that the official calculator moved from V0057 to V0059
+during the phase.
 
 **Work**
 1. ADRs 0070–0073, indexed in `docs/adr/README.md`.

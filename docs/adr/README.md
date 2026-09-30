@@ -113,6 +113,15 @@ one means writing a new ADR that supersedes it.
 | [0068](0068-derived-ai-data-follows-its-source.md) | Derived AI data follows its source's erasure and retention |
 | [0069](0069-models-are-ports-and-generation-is-opt-in.md) | Models are ports, generation is opt-in, and nothing depends on them |
 
+## The tax rules engine
+
+| # | Decision |
+|---|---|
+| [0070](0070-tax-law-is-a-shared-catalogue-that-workspaces-adopt.md) | Tax law is a shared catalogue that workspaces adopt |
+| [0071](0071-tax-formulas-are-data-over-a-closed-vocabulary.md) | Tax formulas are data over a closed vocabulary |
+| [0072](0072-a-tax-scenario-is-supported-only-with-evidence.md) | A tax scenario is supported only with evidence |
+| [0073](0073-tax-estimates-outside-fiscal-amounts-inside-it.md) | Tax estimates outside Fiscal, amounts inside it |
+
 ## Frontend
 
 | # | Decision |

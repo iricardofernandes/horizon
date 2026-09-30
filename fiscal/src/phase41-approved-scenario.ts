@@ -1,5 +1,6 @@
 import type { FiscalCalculationInput } from '@horizon/contracts'
 import type { ResolvedRuleSet } from './calculation'
+import type { CatalogPublication } from './catalog'
 import type { SourceImport } from './rule-store'
 
 export const PHASE41_SOURCE_SHA256 =
@@ -180,5 +181,37 @@ export function approvedPhase41ResolvedRules(input: {
         },
       ],
     },
+  }
+}
+
+/**
+ * Phase 41's approved package as the catalogue's first version (Phase 82, ADR 0070). It keeps
+ * the package and rule identifiers the approved fixture names, so its result keeps its
+ * digests.
+ */
+export const PHASE41_CATALOG_IDENTITY = {
+  packageId: '2dd2ffbe-2571-5c1d-a7a0-73162538f1da',
+  ruleIds: {
+    'rtc.v0057.model55.normal-sale.cbs': 'aaa6f7d7-057b-5584-b718-8d9c14a16334',
+    'rtc.v0057.model55.normal-sale.ibsuf': '0b2a52b0-b339-5476-8f48-815025e8313e',
+    'rtc.v0057.model55.normal-sale.ibsmun': '92c5c7ea-a1c0-5763-bc41-3bb5b56df70c',
+  },
+} as const
+
+export function approvedPhase41Publication(artifact: { byteSize: number }): CatalogPublication {
+  const source = approvedPhase41Source('00000000-0000-4000-8000-000000000000', {
+    byteSize: artifact.byteSize,
+    storageUri: 'file://catalogue',
+  })
+  return {
+    authority: source.authority,
+    sourceUri: source.sourceUri,
+    publishedAt: source.publishedAt,
+    effectiveFrom: source.effectiveFrom,
+    publisher: 'platform:phase82',
+    artifact: { digest: PHASE41_SOURCE_SHA256, byteSize: artifact.byteSize },
+    entries: source.entries,
+    rules: source.rules,
+    bytes: source.bytes,
   }
 }

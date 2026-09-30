@@ -203,6 +203,24 @@ Issuance remains unavailable for every tuple in
 [Phase 40 evidence record](../docs/fiscal-phase40-evidence.md) maps implementation and
 verification to the phase exit criteria.
 
+## The tax rule catalogue (Phase 82)
+
+Tax law lives in a catalogue that every workspace reads and none writes (ADR 0070). The
+tables are `fiscal_catalog_packages`, `fiscal_catalog_references` and
+`fiscal_catalog_rules`. A workspace adopts a package version from a date, and keeps its own
+rows only for what is its own. `npm run phase82:catalog -- <action>`:
+
+| Action | Role | What it does |
+|---|---|---|
+| `publish-phase41 --artifact <calculadora.zip>` | `DATABASE_MIGRATION_URL` | Publishes Phase 41's approved package with its original identifiers |
+| `retire-copy --tenant <id> --actor <who>` | `DATABASE_URL` | Deactivates the workspace's own copy of a published package |
+| `adopt --tenant <id> --effective-from <date> --reviewed-by <who> --actor <who>` | `DATABASE_URL` | Adopts a package; refused while an active own rule would tie with it |
+| `verify --fixture <file>` | `DATABASE_URL` | Previews a fixture and requires its approved result |
+| `verify-lock --tenant <id> --document <id>` | `DATABASE_URL` | Replays a locked calculation and prints its digests |
+
+`verify` and `verify-lock` also need `FISCAL_ARTIFACT_KEY_HEX`. See the
+[Phase 82 evidence](../docs/tax-phase82-evidence.md).
+
 ## Audit log (Phase 68)
 
 `GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered

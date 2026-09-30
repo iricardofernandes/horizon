@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "phase": 82,
+  "retrievedAt": "2026-09-30T14:02:00Z",
+  "store": ".artifacts/fiscal (gitignored, content-addressed by SHA-256)",
+  "sources": [
+    {
+      "id": "ec-132-2023",
+      "authority": "Presidência da República — Planalto",
+      "title": "Emenda Constitucional nº 132, de 20 de dezembro de 2023",
+      "uri": "https://www.planalto.gov.br/ccivil_03/constituicao/emendas/emc/emc132.htm",
+      "mediaType": "text/html",
+      "byteSize": 510399,
+      "sha256": "1c2213f8b6bceb2e3b04f0c64b32b8095a668a3de2f93bd18b72ae8d0d8e389a",
+      "sectionsUsed": [
+        "ADCT art. 125 (2026: IBS 0,1% estadual, CBS 0,9%, compensated against PIS/Cofins)",
+        "ADCT art. 126 (from 2027: CBS and the Imposto Seletivo; PIS/Cofins end; IPI zero except Zona Franca de Manaus)",
+        "ADCT art. 127 (2027–2028: IBS 0,05% estadual and 0,05% municipal; CBS reduced by 0,1 p.p.)",
+        "ADCT art. 128 (2029–2032: ICMS and ISS at 9/10, 8/10, 7/10, 6/10 of their rates)",
+        "ADCT art. 129 (ICMS and ISS end from 2033)",
+        "ADCT art. 130 (reference rates set by Senate resolution)"
+      ]
+    },
+    {
+      "id": "lc-214-2025",
+      "authority": "Presidência da República — Planalto",
+      "title": "Lei Complementar nº 214, de 16 de janeiro de 2025",
+      "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm",
+      "mediaType": "text/html",
+      "byteSize": 5402213,
+      "sha256": "11ff1e2bc64ffac283b694e943ca9552bc0f31668bbef043df03cdf317058d9f",
+      "sectionsUsed": [
+        "art. 14 (CBS and IBS rates: reference rates, set by Senate resolution)",
+        "art. 343 (2026: IBS 0,1% estadual)",
+        "art. 344 (2027–2028: IBS 0,05% estadual and 0,05% municipal, with reduced-rate regimes applied)",
+        "art. 346 (2026: CBS 0,9%)",
+        "art. 347 (2027–2028: CBS at the art. 14 rate minus 0,1 p.p., except fuels)"
+      ]
+    },
+    {
+      "id": "rtc-calculator-v0057",
+      "authority": "Receita Federal do Brasil / SERPRO",
+      "title": "Calculadora de tributos sobre o consumo (offline), database V0057",
+      "uri": "https://obs-13820-calcpr-apr.obsv3.br-df-1.hcs.serpro.gov.br/calculadora.zip",
+      "mediaType": "application/zip",
+      "byteSize": 346174581,
+      "sha256": "f451c3902621f02f3a63da29cd63d1e8e0f0456cce44425f1e22c89c079cb68e",
+      "status": "in use: catalogue package version 1 (Phase 41's approved scenario)",
+      "pinnedBy": "docs/fiscal-phase41-source-manifest.json"
+    },
+    {
+      "id": "rtc-calculator-v0059",
+      "authority": "Receita Federal do Brasil / SERPRO",
+      "title": "Calculadora de tributos sobre o consumo (offline), database V0059 (2026-09-30, \"Habilitação de 820 para NFSe\")",
+      "uri": "https://obs-13820-calcpr-apr.obsv3.br-df-1.hcs.serpro.gov.br/calculadora.zip",
+      "resolvedBy": "https://piloto-cbs.tributos.gov.br/servico/calculadora-consumo/api/calculadora/download/url?platform=default",
+      "httpEtag": "\"5c895dc0763893b1052c817d2b890db0-22\"",
+      "httpLastModified": "Wed, 30 Sep 2026 16:18:33 GMT",
+      "mediaType": "application/zip",
+      "byteSize": 337833496,
+      "sha256": "13870dea14ddf0b59754ee4375b2a98548fffcf80d7d99f2635325d0e18da2fa",
+      "members": [
+        {
+          "name": "calculadora.tar.gz",
+          "byteSize": 335904236,
+          "sha256": "b59df3ff82d54142787d399d433a461ddd409f7a86aa889ed367b327a4467a66"
+        },
+        {
+          "name": "codigo-fonte-backend.zip",
+          "byteSize": 2485123,
+          "sha256": "9c10710b7f0747e8a229efb2de4fd1f7e04c28681a5e4cf825b671a969eeb827"
+        },
+        {
+          "name": "codigo-fonte-simples-nacional.zip",
+          "byteSize": 1434396,
+          "sha256": "5afcd69985ce23cb8bf3836263d895d48d478a2bf8fe748eeee2f78818d33b54"
+        },
+        {
+          "name": "scripts-python-exemplo.zip",
+          "byteSize": 12652,
+          "sha256": "04ddf4cb68fff2791a8f121f0ca488b992ccb3b955d60032686c4a570e5a51bb"
+        }
+      ],
+      "status": "retained, not adopted: the oracle candidate for Phase 84",
+      "observations": [
+        "ALIQUOTA_REFERENCIA holds 2026 rows only: CBS 0,9, IBS UF 0,1, IBS municipal 0",
+        "The 2027-onward reference rates are not yet published as data"
+      ]
+    }
+  ],
+  "pending": [
+    {
+      "id": "senate-reference-rates",
+      "why": "The full CBS and IBS reference rates from 2027 are set by Senate resolution (EC 132 ADCT art. 130; LC 214 art. 14). Until they are published, 2027-onward packages can only carry the transition deltas, and scenarios that need the full rate stay unsupported."
+    },
+    {
+      "id": "nfe-technical-notes-rtc",
+      "why": "The NF-e technical notes for IBS/CBS/IS fields are needed by Phase 84's document mapping, not by the catalogue."
+    }
+  ]
+}
