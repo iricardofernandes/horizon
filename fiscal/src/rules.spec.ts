@@ -135,6 +135,26 @@ describe('temporal tax rule resolution', () => {
     ).toMatchObject({ supported: false, code: 'MISSING_CLASSIFICATION' })
   })
 
+  it("scopes a rule by the line's tax classification (cClassTrib)", () => {
+    const [line] = input.lines
+    if (!line) throw new Error('fixture line missing')
+    const reduced = rule({
+      scope: { ...rule().scope, classification: { kind: 'class_trib', code: '200032' } },
+    })
+    const classified = (classTrib?: string) => ({
+      ...input,
+      lines: [
+        { ...line, classifications: { ncm: '12345678', ...(classTrib ? { classTrib } : {}) } },
+      ],
+    })
+    expect(resolveTaxRules(classified('200032'), [reduced], 2).supported).toBe(true)
+    expect(resolveTaxRules(classified('200003'), [reduced], 2)).toMatchObject({
+      supported: false,
+      code: 'UNSUPPORTED_RULE',
+    })
+    expect(resolveTaxRules(classified(), [reduced], 2)).toMatchObject({ supported: false })
+  })
+
   it('uses competence date only when the selected component declares it', () => {
     const competenceRule = rule({
       dateBasis: 'competence_date',

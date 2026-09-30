@@ -21,7 +21,10 @@ export type TaxRule = ResolvedComponentRule & {
     originState?: string
     destinationState?: string
     subject?: { kind: 'item' | 'service'; id: string }
-    classification?: { kind: 'ncm' | 'cest' | 'service' | 'origin'; code: string }
+    classification?: {
+      kind: 'ncm' | 'cest' | 'service' | 'origin' | 'class_trib'
+      code: string
+    }
   }
 }
 
@@ -155,11 +158,20 @@ function matches(
   }
   if (
     scope.classification &&
-    line.classifications[scope.classification.kind] !== scope.classification.code
+    line.classifications[classificationKey[scope.classification.kind]] !== scope.classification.code
   )
     return false
   return true
 }
+
+/** Where a line carries each classification a rule can be scoped by. */
+const classificationKey = {
+  ncm: 'ncm',
+  cest: 'cest',
+  service: 'service',
+  origin: 'origin',
+  class_trib: 'classTrib',
+} as const
 
 function missingClassification(line: FiscalCalculationInput['lines'][number]): boolean {
   return line.itemId ? !line.classifications.ncm : !line.classifications.service

@@ -243,7 +243,7 @@ function calculateExpressionComponent(
     unrounded: { ...stringifyRational(evaluated.unrounded), currency },
     amount: money(evaluated.amount, currency),
     formula: 'EXPRESSION',
-    rounding: { mode: 'half-away-from-zero', scale: 0 },
+    rounding: { mode: evaluated.rounding, scale: 0 },
     rule: rule.rule,
     outcome: evaluated.outcome,
     steps: evaluated.steps.map((step) => ({

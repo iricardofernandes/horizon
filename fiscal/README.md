@@ -236,6 +236,28 @@ Outcomes are `levied`, `exempt`, `suspended`, `deferred` and `not-levied`. Cycle
 components and trees deeper than 8 or larger than 64 nodes are refused when a package is
 imported or published (ADR 0071).
 
+A formula may name its rounding: `"rounding": "half-even"` rounds the base and the amount half
+to even, as the official IBS/CBS calculator does. Without it, rounding is half away from zero,
+as Phase 41's rules are.
+
+### IBS and CBS by tax classification (Phase 84)
+
+A calculation line may carry `classifications.classTrib`, the six-digit `cClassTrib`, and a
+rule may be scoped by it (`class_trib`). The 2026 package is built from the official
+calculator's own database and checked against the calculator itself (ADR 0072):
+
+```bash
+make tax-oracle             # DOWNLOAD=1 fetches the calculator; refused unless its digest is pinned
+npm run phase84:oracle -- build --database <calculadora-pro.db> --artifact <calculadora.zip> --out <package.json> [--hypothetical-2027]
+npm run phase84:oracle -- oracle --package <package.json> --database <db> --url http://127.0.0.1:18080 --out <report.json> [--cases 3000] [--seed 84]
+npm run phase84:oracle -- publish --package <package.json>    # DATABASE_MIGRATION_URL; never a hypothetical one
+```
+
+The oracle fails on any difference, any refusal and any class of the package without an
+agreeing case. A workspace adopts the package with `phase82:catalog adopt --package <id>`.
+Lines without a classification, and Phase 41's operation, keep their own rules. See the
+[Phase 84 evidence](../docs/tax-phase84-evidence.md).
+
 ## Audit log (Phase 68)
 
 `GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered

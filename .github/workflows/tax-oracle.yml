@@ -1,0 +1,56 @@
+name: tax-oracle
+
+# Phase 84 (ADR 0072): the IBS/CBS package against the official calculator. The calculator is
+# downloaded from its publisher and refused unless its digest is the one Phase 82 pinned, so a
+# new version fails here first ("the oracle changed: re-run and review"). Weekly, on demand,
+# and whenever the package, its builder or the arithmetic it relies on changes.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - 'fiscal/src/rtc-package.ts'
+      - 'fiscal/src/phase84-oracle-cli.ts'
+      - 'fiscal/src/formula.ts'
+      - 'fiscal/src/exact-decimal.ts'
+      - 'fiscal/src/calculation.ts'
+      - 'fiscal/src/rules.ts'
+      - 'scripts/tax-oracle.mjs'
+      - 'docs/tax-phase82-source-manifest.json'
+      - '.github/workflows/tax-oracle.yml'
+
+jobs:
+  oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: fiscal/package-lock.json
+
+      - name: publish contracts to a job-local registry
+        run: scripts/ci-publish-contracts.sh
+
+      - name: install and build fiscal
+        working-directory: fiscal
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: put the package to the official calculator
+        run: node scripts/tax-oracle.mjs --download --out-dir "$RUNNER_TEMP/oracle"
+
+      - name: keep the reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tax-oracle-reports
+          path: ${{ runner.temp }}/oracle
+          if-no-files-found: ignore

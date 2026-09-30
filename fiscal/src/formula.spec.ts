@@ -138,6 +138,38 @@ describe('a component’s base, rate and amount', () => {
   })
 })
 
+describe('the rounding a formula names', () => {
+  it('rounds the base and the amount half to even when the formula says so', () => {
+    const halfEven = ruleExpressionSchema.parse({
+      version: FORMULA_VERSION,
+      base: { line: 'net' },
+      rounding: 'half-even',
+    })
+    const tie = lineValues({ gross: 50n, discount: 0n, charges: 0n, net: 50n, quantity: '1' })
+    // 50 × 9/100 = 4.5: half to even gives 4, half away from zero 5.
+    const even = evaluateComponent(halfEven, { numerator: 9n, denominator: 100n }, tie, none)
+    const away = evaluateComponent(
+      expression({ line: 'net' }),
+      { numerator: 9n, denominator: 100n },
+      tie,
+      none,
+    )
+    expect(even).toMatchObject({ amount: 4n, rounding: 'half-even' })
+    expect(away).toMatchObject({ amount: 5n, rounding: 'half-away-from-zero' })
+    expect(even.steps.map((step) => step.step)).toContain('amount, rounded half to even')
+  })
+
+  it('refuses a rounding mode outside the vocabulary', () => {
+    expect(
+      ruleExpressionSchema.safeParse({
+        version: FORMULA_VERSION,
+        base: { line: 'net' },
+        rounding: 'bankers',
+      }).success,
+    ).toBe(false)
+  })
+})
+
 describe('components that read one another', () => {
   const rule = (code: string, base?: Expression) => ({
     code,

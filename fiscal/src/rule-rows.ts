@@ -10,7 +10,7 @@ const date = z.iso.date()
 const digest = z.string().regex(/^[0-9a-f]{64}$/)
 
 export const referenceEntrySchema = z.object({
-  family: z.enum(['cfop', 'ncm', 'cest', 'cst', 'csosn', 'ibs_cbs', 'service']),
+  family: z.enum(['cfop', 'ncm', 'cest', 'cst', 'csosn', 'ibs_cbs', 'service', 'class_trib']),
   code: z.string().min(1).max(40),
   description: z.string().min(1).max(1000),
   model: z.enum(['*', '55', '65', 'nfse']).default('*'),
@@ -47,7 +47,7 @@ export const taxRuleImportSchema = z
     subject: z.object({ kind: z.enum(['item', 'service']), id: z.uuid() }).optional(),
     classification: z
       .object({
-        kind: z.enum(['ncm', 'cest', 'service', 'origin']),
+        kind: z.enum(['ncm', 'cest', 'service', 'origin', 'class_trib']),
         code: z.string().min(1).max(40),
       })
       .optional(),
@@ -139,7 +139,7 @@ export function toTaxRule(row: postgres.Row): TaxRule {
       ...(classificationKind
         ? {
             classification: {
-              kind: classificationKind as 'ncm' | 'cest' | 'service' | 'origin',
+              kind: classificationKind as NonNullable<TaxRule['scope']['classification']>['kind'],
               code: String(row.classification_code),
             },
           }

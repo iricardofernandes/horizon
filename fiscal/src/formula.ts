@@ -9,6 +9,7 @@ import {
   type Rational,
   reduce,
   roundHalfAwayFromZero,
+  roundHalfEven,
   subtract,
 } from './exact-decimal'
 
@@ -66,6 +67,8 @@ export const ruleExpressionSchema = z
     version: z.literal(FORMULA_VERSION),
     base: expressionSchema,
     outcome: z.enum(OUTCOMES).default('levied'),
+    /** Absent means half away from zero, as Phase 41; the reform's packages use half-even. */
+    rounding: z.enum(['half-away-from-zero', 'half-even']).optional(),
   })
   .superRefine((value, context) => {
     const problem = sizeProblem(value.base)
@@ -219,26 +222,37 @@ export function evaluateComponent(
   rate: Rational,
   line: LineValues,
   components: ReadonlyMap<string, bigint>,
-): { base: bigint; unrounded: Rational; amount: bigint; outcome: Outcome; steps: Step[] } {
+): {
+  base: bigint
+  unrounded: Rational
+  amount: bigint
+  outcome: Outcome
+  rounding: 'half-away-from-zero' | 'half-even'
+  steps: Step[]
+} {
+  const rounding = expression.rounding ?? 'half-away-from-zero'
+  const round = rounding === 'half-even' ? roundHalfEven : roundHalfAwayFromZero
+  const roundedAs = rounding === 'half-even' ? 'half to even' : 'half away from zero'
   const baseValue = evaluate(expression.base, line, components)
-  const base = roundHalfAwayFromZero(baseValue)
+  const base = round(baseValue)
   const levied = expression.outcome === 'levied'
   const unrounded = levied ? multiply(integer(base), rate) : integer(0n)
-  const amount = roundHalfAwayFromZero(unrounded)
+  const amount = round(unrounded)
   return {
     base,
     unrounded,
     amount,
     outcome: expression.outcome,
+    rounding,
     steps: [
       { step: `base = ${render(expression.base)}`, value: baseValue },
-      { step: 'base, rounded half away from zero', value: integer(base) },
+      { step: `base, rounded ${roundedAs}`, value: integer(base) },
       { step: 'rate', value: rate },
       {
         step: levied ? 'base × rate' : `${expression.outcome}: nothing is owed`,
         value: unrounded,
       },
-      { step: 'amount, rounded half away from zero', value: integer(amount) },
+      { step: `amount, rounded ${roundedAs}`, value: integer(amount) },
     ],
   }
 }

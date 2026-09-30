@@ -209,6 +209,10 @@ phase-n-golden-path: ## Walk Phase N end to end; AI=on after make up-ai (Phase 7
 phase-m-golden-path: ## Walk Phase M end to end and write its record to docs/drills (Phase 70)
 	@node scripts/phase-m-golden-path.mjs
 
+.PHONY: tax-oracle
+tax-oracle: ## Put the IBS/CBS package to the official calculator; DOWNLOAD=1 fetches it (Phase 84)
+	@node scripts/tax-oracle.mjs $(if $(DOWNLOAD),--download,)
+
 .PHONY: probe-user
 probe-user: ## Create the synthetic probe's own account in the demo workspace (Phase 70)
 	@node scripts/probe-user.mjs

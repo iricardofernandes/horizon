@@ -15,6 +15,7 @@ import {
   PHASE41_CATALOG_IDENTITY,
   PHASE41_FIXTURE_ID,
 } from '../src/phase41-approved-scenario'
+import { buildRtcPackage } from '../src/rtc-package'
 import { FiscalRuleStore } from '../src/rule-store'
 
 /** Phase 82 (ADR 0070): tax law as a catalogue every workspace reads, none writes, and each adopts. */
@@ -371,5 +372,97 @@ describe('formulas as data (Phase 83, ADR 0071)', () => {
         ],
       }),
     ).rejects.toThrow(/no rule of the package/)
+  })
+})
+
+describe('IBS and CBS by tax classification (Phase 84, ADR 0072)', () => {
+  const calculatorClass = (
+    code: string,
+    reduction: string,
+    treatmentId = 3,
+  ): Parameters<typeof buildRtcPackage>[0]['classes'][number] => ({
+    code,
+    description: `class ${code}`,
+    situation: code.slice(0, 3),
+    treatmentId,
+    treatment: 'test',
+    startsOn: '2026-01-01',
+    endsOn: null,
+    documentModels: ['55', '65'],
+    reductions: { CBS: reduction, IBSUF: reduction, IBSMun: reduction },
+  })
+  const built = buildRtcPackage({
+    label: 'rtc.e2e',
+    classes: [
+      calculatorClass('000001', '0'),
+      calculatorClass('200032', '60'),
+      calculatorClass('410001', '0', 18),
+    ],
+    ncms: [],
+    rates: { CBS: '0.9', IBSUF: '0.1', IBSMun: '0' },
+    window: { effectiveFrom: '2026-01-01', effectiveTo: '2027-01-01' },
+  })
+  const classified = (tenantId: string, classTrib: string | undefined, unitPrice: string) => {
+    const [line] = fixture.input.lines
+    if (!line) throw new Error('fixture line missing')
+    return {
+      ...inputFor(tenantId),
+      operation: 'sale',
+      lines: [
+        {
+          ...line,
+          unitPrice,
+          classifications: { ...line.classifications, ...(classTrib ? { classTrib } : {}) },
+        },
+      ],
+    }
+  }
+  const components = (result: Awaited<ReturnType<FiscalCalculations['preview']>>) => {
+    if (!result.supported) throw new Error(JSON.stringify(result))
+    return result.lines[0]?.components.ibsCbs.map((component) => [
+      component.code,
+      component.amount.amount,
+      component.outcome,
+      component.rounding.mode,
+    ])
+  }
+
+  it('publishes the package from the calculator, adopts it and previews a reduced line', async () => {
+    const base = approvedPhase41Publication({ byteSize: ARTIFACT_BYTES })
+    const published = await publisher.publish({
+      ...base,
+      authority: 'Calculadora RTC (Phase 84 e2e)',
+      artifact: undefined,
+      bytes: Buffer.from('phase84 e2e'),
+      entries: [...built.entries, ...base.entries.filter((entry) => entry.family === 'ncm')],
+      rules: built.rules as never,
+    })
+    const tenantId = await workspace()
+    await catalog.adopt({
+      tenantId,
+      packageId: published.packageId,
+      effectiveFrom: '2026-01-01',
+      reviewedBy: 'workspace-owner',
+      interpretation: 'IBS and CBS 2026 by tax classification.',
+      actorId: 'owner:test',
+      reason: 'Phase 84 e2e',
+    })
+    // 60% less: CBS 0,36% and IBS UF 0,04% over 1.000,00, as the official calculator gives.
+    expect(components(await calculations.preview(classified(tenantId, '200032', '1000')))).toEqual([
+      ['CBS', '360', 'levied', 'half-even'],
+      ['IBS_MUN', '0', 'levied', 'half-even'],
+      ['IBS_UF', '40', 'levied', 'half-even'],
+    ])
+    // 5,00 × 0,9% = 0,045: half to even keeps 0,04.
+    expect(
+      components(await calculations.preview(classified(tenantId, '000001', '5')))?.[0],
+    ).toEqual(['CBS', '4', 'levied', 'half-even'])
+    expect(
+      components(await calculations.preview(classified(tenantId, '410001', '1000')))?.[0],
+    ).toEqual(['CBS', '0', 'exempt', 'half-even'])
+    // Without a classification the package has nothing to say.
+    expect(await calculations.preview(classified(tenantId, undefined, '1000'))).toMatchObject({
+      supported: false,
+    })
   })
 })

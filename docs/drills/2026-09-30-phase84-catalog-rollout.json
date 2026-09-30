@@ -1,0 +1,97 @@
+{
+  "phase": 84,
+  "kind": "catalog-rollout",
+  "ranAt": "2026-09-30T15:05:00Z",
+  "stack": "local, make up-fiscal, migration 0056_phase84_tax_classification.sql applied",
+  "workspace": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+  "calculator": {
+    "version": "V0059",
+    "artifactDigest": "13870dea14ddf0b59754ee4375b2a98548fffcf80d7d99f2635325d0e18da2fa"
+  },
+  "steps": [
+    {
+      "command": "phase84:oracle publish --package rtc-v0059-ibs-cbs-hypothetical-2027.json",
+      "refused": "A hypothetical package is never published"
+    },
+    {
+      "command": "phase84:oracle publish --package rtc-v0059-ibs-cbs-2026.json (migration role)",
+      "packageId": "d5791739-cbf0-5afe-a4de-0abde90f31ea",
+      "packageDigest": "13870dea14ddf0b59754ee4375b2a98548fffcf80d7d99f2635325d0e18da2fa",
+      "rules": 285,
+      "classes": 56,
+      "note": "Published before the manifest carried the content digest, so this package is named by the calculator digest. Its rules and references are byte for byte those of the final build; a fresh publish is named by its manifest (c472edfd…), and the catalogue refuses a second package over the same scopes."
+    },
+    {
+      "command": "phase82:catalog adopt --package d5791739-cbf0-5afe-a4de-0abde90f31ea --effective-from 2026-01-01",
+      "adoptionId": "6470f385-3458-48bb-8488-c9075a3d23fe",
+      "fixtureIds": [
+        "docs/drills/2026-09-30-phase84-oracle-2026.json"
+      ]
+    },
+    {
+      "command": "preview, operation sale, the Phase 41 fixture line with a tax classification",
+      "results": [
+        {
+          "classTrib": "200032",
+          "unitPrice": "1000",
+          "supported": true,
+          "rulesDigest": "8f5eaae4026e",
+          "ibsCbsTax": "400",
+          "components": [
+            "CBS base 100000 rate 9/2500 = 360 levied half-even",
+            "IBS_MUN base 100000 rate 0/1 = 0 levied half-even",
+            "IBS_UF base 100000 rate 1/2500 = 40 levied half-even"
+          ]
+        },
+        {
+          "classTrib": "000001",
+          "unitPrice": "100",
+          "supported": true,
+          "rulesDigest": "7218e7018c0d",
+          "ibsCbsTax": "100",
+          "components": [
+            "CBS base 10000 rate 9/1000 = 90 levied half-even",
+            "IBS_MUN base 10000 rate 0/1 = 0 levied half-even",
+            "IBS_UF base 10000 rate 1/1000 = 10 levied half-even"
+          ]
+        },
+        {
+          "classTrib": "200003",
+          "unitPrice": "1000",
+          "supported": true,
+          "rulesDigest": "ee1f6fa946ec",
+          "ibsCbsTax": "0",
+          "components": [
+            "CBS base 100000 rate 0/1 = 0 levied half-even",
+            "IBS_MUN base 100000 rate 0/1 = 0 levied half-even",
+            "IBS_UF base 100000 rate 0/1 = 0 levied half-even"
+          ]
+        },
+        {
+          "classTrib": "410001",
+          "unitPrice": "1000",
+          "supported": true,
+          "rulesDigest": "d0086c347786",
+          "ibsCbsTax": "0",
+          "components": [
+            "CBS base 100000 rate 9/1000 = 0 not-levied half-even",
+            "IBS_MUN base 100000 rate 0/1 = 0 not-levied half-even",
+            "IBS_UF base 100000 rate 1/1000 = 0 not-levied half-even"
+          ]
+        },
+        {
+          "classTrib": null,
+          "unitPrice": "1000",
+          "supported": false,
+          "code": "UNSUPPORTED_RULE"
+        }
+      ]
+    },
+    {
+      "command": "preview, the Phase 41 operation (rtc-v0057-model55-normal-sale) with classTrib 200032",
+      "supported": true,
+      "rulesDigest": "25ade44c1a5fe2b14c3444802dc7903e4691d769390bbc20dab17cd30e2d1c99",
+      "note": "The operation rules of Phase 41 outrank default precedence, as decision 3 says; the approved result is unchanged."
+    }
+  ]
+}

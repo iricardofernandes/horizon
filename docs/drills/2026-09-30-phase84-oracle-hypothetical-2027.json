@@ -1,0 +1,961 @@
+{
+ "phase": 84,
+ "kind": "oracle-mechanics-hypothetical-2027",
+ "calculatorVersion": "V0059",
+ "artifactDigest": "13870dea14ddf0b59754ee4375b2a98548fffcf80d7d99f2635325d0e18da2fa",
+ "packageDigest": "5f461510b348049999dfe875e08d1c627c3fcb8c28016b367808a203efa1a403",
+ "rates": {
+  "CBS": "8.8",
+  "IBSUF": "0.05",
+  "IBSMun": "0.05"
+ },
+ "window": {
+  "effectiveFrom": "2027-01-01",
+  "effectiveTo": "2028-01-01"
+ },
+ "seed": 84,
+ "documents": 3000,
+ "notApplicable": 0,
+ "lines": 6104,
+ "agree": 6104,
+ "differ": 0,
+ "refused": 0,
+ "classes": {
+  "supported": 45,
+  "differing": 0,
+  "refusedByOracle": 0
+ },
+ "notModelled": [
+  {
+   "code": "000001",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "000002",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "000003",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "000004",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "000005",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "000006",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "000007",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "000008",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "000009",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "000010",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "010001",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "010002",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "011001",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "011002",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "011003",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "011004",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "011005",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "100001",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "200001",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "200002",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "200003",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "200004",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "200005",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "200006",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "200007",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "200008",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "200016",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200017",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200018",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200019",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200021",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200022",
+   "why": "treatment 38 (Operação originada fora da ZFM - 200022) is not modelled"
+  },
+  {
+   "code": "200024",
+   "why": "treatment 39 (Operação originada fora das Áreas de Livre Comércio - 200024) is not modelled"
+  },
+  {
+   "code": "200025",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200026",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200027",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200028",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200029",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200037",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200040",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200041",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200042",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200044",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200045",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200046",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200048",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200049",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200050",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200051",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "200052",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "221001",
+   "why": "treatment 43 (Alíquota fixa fictícia) is not modelled"
+  },
+  {
+   "code": "221002",
+   "why": "treatment 34 (Alíquota fixa) is not modelled"
+  },
+  {
+   "code": "221003",
+   "why": "treatment 35 (Alíquota fixa) is not modelled"
+  },
+  {
+   "code": "221004",
+   "why": "treatment 36 (Alíquota fixa) is not modelled"
+  },
+  {
+   "code": "222001",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "300001",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "300002",
+   "why": "treatment 1 (Tributação pelo Imposto Seletivo - Com Cálculo) is not modelled"
+  },
+  {
+   "code": "400001",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "400002",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410010",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410011",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410015",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410018",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410021",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410022",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410023",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410024",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410025",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410028",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410032",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410033",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410034",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410036",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "410037",
+   "why": "not applicable to NF-e or NFC-e"
+  },
+  {
+   "code": "500001",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "500003",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "500004",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "500007",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "500008",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "510001",
+   "why": "treatment 20 (Diferimento) is not modelled"
+  },
+  {
+   "code": "515001",
+   "why": "treatment 21 (Diferimento com redução de alíquota) is not modelled"
+  },
+  {
+   "code": "550001",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550002",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550003",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550004",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550005",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550006",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550007",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550008",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550009",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550010",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550011",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550012",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550013",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550014",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550015",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550016",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550017",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550018",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550019",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550020",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550021",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550022",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550023",
+   "why": "treatment 41 (Suspensão em operações com hidrocarbonetos líquidos) is not modelled"
+  },
+  {
+   "code": "550024",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "550025",
+   "why": "treatment 22 (Suspensão) is not modelled"
+  },
+  {
+   "code": "600001",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "600002",
+   "why": "treatment 2 (Tributação pelo Imposto Seletivo - Sem Cálculo) is not modelled"
+  },
+  {
+   "code": "620001",
+   "why": "treatment 23 (Tributação monofásica sobre combustíveis) is not modelled"
+  },
+  {
+   "code": "620002",
+   "why": "treatment 24 (Tributação monofásica com responsabilidade pela retenção sobre combustíveis) is not modelled"
+  },
+  {
+   "code": "620003",
+   "why": "treatment 25 (Tributação monofásica com tributos retidos por responsabilidade sobre combustíveis) is not modelled"
+  },
+  {
+   "code": "620004",
+   "why": "treatment 26 (Tributação monofásica sobre mistura de EAC com gasolina A em percentual superior ao obrigatório) is not modelled"
+  },
+  {
+   "code": "620005",
+   "why": "treatment 27 (Tributação monofásica sobre mistura de EAC com gasolina A em percentual inferior ao obrigatório) is not modelled"
+  },
+  {
+   "code": "620006",
+   "why": "treatment 28 (Tributação monofásica sobre combustíveis cobrada anteriormente) is not modelled"
+  },
+  {
+   "code": "620007",
+   "why": "treatment 42 (Tributação monofásica sem alíquota) is not modelled"
+  },
+  {
+   "code": "800001",
+   "why": "treatment 29 (Transferência de crédito) is not modelled"
+  },
+  {
+   "code": "800002",
+   "why": "treatment 29 (Transferência de crédito) is not modelled"
+  },
+  {
+   "code": "810001",
+   "why": "treatment 30 (Ajuste de IBS na ZFM) is not modelled"
+  },
+  {
+   "code": "811001",
+   "why": "treatment 31 (Ajustes) is not modelled"
+  },
+  {
+   "code": "811002",
+   "why": "treatment 31 (Ajustes) is not modelled"
+  },
+  {
+   "code": "811003",
+   "why": "treatment 31 (Ajustes) is not modelled"
+  },
+  {
+   "code": "820001",
+   "why": "treatment 32 (Tributação em documento específico) is not modelled"
+  },
+  {
+   "code": "820002",
+   "why": "treatment 32 (Tributação em documento específico) is not modelled"
+  },
+  {
+   "code": "820003",
+   "why": "treatment 32 (Tributação em documento específico) is not modelled"
+  },
+  {
+   "code": "820004",
+   "why": "treatment 32 (Tributação em documento específico) is not modelled"
+  },
+  {
+   "code": "820005",
+   "why": "treatment 32 (Tributação em documento específico) is not modelled"
+  },
+  {
+   "code": "820006",
+   "why": "treatment 32 (Tributação em documento específico) is not modelled"
+  },
+  {
+   "code": "820007",
+   "why": "treatment 32 (Tributação em documento específico) is not modelled"
+  },
+  {
+   "code": "820008",
+   "why": "treatment 32 (Tributação em documento específico) is not modelled"
+  },
+  {
+   "code": "820009",
+   "why": "treatment 32 (Tributação em documento específico) is not modelled"
+  },
+  {
+   "code": "830001",
+   "why": "treatment 33 (Exclusão de base de cálculo) is not modelled"
+  }
+ ],
+ "matrix": [
+  {
+   "classTrib": "200009",
+   "supported": true,
+   "agree": 135,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200010",
+   "supported": true,
+   "agree": 139,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200011",
+   "supported": true,
+   "agree": 154,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200012",
+   "supported": true,
+   "agree": 124,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200013",
+   "supported": true,
+   "agree": 134,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200014",
+   "supported": true,
+   "agree": 143,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200015",
+   "supported": true,
+   "agree": 138,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200020",
+   "supported": true,
+   "agree": 142,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200023",
+   "supported": true,
+   "agree": 124,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200030",
+   "supported": true,
+   "agree": 135,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200031",
+   "supported": true,
+   "agree": 140,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200032",
+   "supported": true,
+   "agree": 139,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200033",
+   "supported": true,
+   "agree": 139,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200034",
+   "supported": true,
+   "agree": 140,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200035",
+   "supported": true,
+   "agree": 129,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200036",
+   "supported": true,
+   "agree": 141,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200038",
+   "supported": true,
+   "agree": 134,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200039",
+   "supported": true,
+   "agree": 135,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200043",
+   "supported": true,
+   "agree": 139,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200047",
+   "supported": true,
+   "agree": 130,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200053",
+   "supported": true,
+   "agree": 132,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "200054",
+   "supported": true,
+   "agree": 143,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410001",
+   "supported": true,
+   "agree": 145,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410002",
+   "supported": true,
+   "agree": 125,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410003",
+   "supported": true,
+   "agree": 137,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410004",
+   "supported": true,
+   "agree": 141,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410005",
+   "supported": true,
+   "agree": 133,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410006",
+   "supported": true,
+   "agree": 142,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410007",
+   "supported": true,
+   "agree": 140,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410008",
+   "supported": true,
+   "agree": 129,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410009",
+   "supported": true,
+   "agree": 136,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410012",
+   "supported": true,
+   "agree": 120,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410013",
+   "supported": true,
+   "agree": 134,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410014",
+   "supported": true,
+   "agree": 132,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410016",
+   "supported": true,
+   "agree": 136,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410017",
+   "supported": true,
+   "agree": 136,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410019",
+   "supported": true,
+   "agree": 140,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410020",
+   "supported": true,
+   "agree": 138,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410026",
+   "supported": true,
+   "agree": 139,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410027",
+   "supported": true,
+   "agree": 123,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410029",
+   "supported": true,
+   "agree": 141,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410030",
+   "supported": true,
+   "agree": 130,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410031",
+   "supported": true,
+   "agree": 123,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410035",
+   "supported": true,
+   "agree": 134,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  },
+  {
+   "classTrib": "410999",
+   "supported": true,
+   "agree": 141,
+   "differ": 0,
+   "refused": 0,
+   "differences": [],
+   "refusals": []
+  }
+ ]
+}

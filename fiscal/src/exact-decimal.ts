@@ -69,3 +69,13 @@ export function compare(left: Rational, right: Rational): -1 | 0 | 1 {
   const difference = subtract(left, right).numerator
   return difference === 0n ? 0 : difference < 0n ? -1 : 1
 }
+
+/** Half to even, the official calculator's rounding for IBS and CBS (Phase 84). */
+export function roundHalfEven(value: Rational): bigint {
+  const sign = value.numerator < 0n ? -1n : 1n
+  const absolute = value.numerator < 0n ? -value.numerator : value.numerator
+  const quotient = absolute / value.denominator
+  const twice = (absolute % value.denominator) * 2n
+  const up = twice > value.denominator || (twice === value.denominator && quotient % 2n === 1n)
+  return sign * (quotient + (up ? 1n : 0n))
+}

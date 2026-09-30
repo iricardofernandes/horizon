@@ -379,6 +379,9 @@ function missingApprovedReference(
       expected.push({ family: 'service', code: line.classifications.service })
     if (line.classifications.cest)
       expected.push({ family: 'cest', code: line.classifications.cest })
+    // A tax classification must come from an approved source too (Phase 84).
+    if (line.classifications.classTrib)
+      expected.push({ family: 'class_trib', code: line.classifications.classTrib })
     for (const classification of expected) {
       const valid = rows.some(
         (row) =>

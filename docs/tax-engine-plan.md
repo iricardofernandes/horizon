@@ -1,6 +1,6 @@
 # Tax rules engine implementation plan — Phase O
 
-Status: **in progress** — Phases 82 and 83 delivered on 2026-09-30 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md)). This is the execution plan for Phase O,
+Status: **in progress** — Phases 82, 83 and 84 delivered on 2026-09-30 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md), [84](tax-phase84-evidence.md)). This is the execution plan for Phase O,
 split into phases 82–89 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to N
 and 79 to 81.
@@ -213,6 +213,11 @@ for the optional `outcome` and `steps`.
 - Explanations list every step with its value.
 
 ### 84 — IBS, CBS and the Imposto Seletivo through the transition, checked by the oracle
+
+**Delivered on 2026-09-30 for IBS and CBS in 2026** ([plan](tax-phase84-implementation-plan.md),
+[evidence](tax-phase84-evidence.md)). 56 tax classifications agree with the official
+calculator on every seeded case. 2027 is proven with stated hypothetical rates and never
+published; 2029 and 2033 and the Imposto Seletivo wait for published rates.
 
 **Work**
 1. **Packages for 2026 to 2033 from the source matrix:**

@@ -74,6 +74,11 @@ const fiscalCalculationInputBaseSchema = z.object({
             .optional(),
           service: z.string().trim().min(1).max(40).optional(),
           origin: z.string().trim().min(1).max(10).optional(),
+          /** The IBS/CBS tax classification (cClassTrib) of the line (Phase 84). */
+          classTrib: z
+            .string()
+            .regex(/^\d{6}$/)
+            .optional(),
         }),
         taxFacts: z.record(z.string().min(1).max(80), z.string().max(200)).default({}),
       }),
@@ -211,7 +216,11 @@ function fiscalTaxComponentSchema() {
     }),
     amount: moneySchema,
     formula: z.string().min(1).max(120),
-    rounding: z.object({ mode: z.literal('half-away-from-zero'), scale: z.int().min(0).max(6) }),
+    /** Half-even is the official calculator's rounding for IBS and CBS (Phase 84). */
+    rounding: z.object({
+      mode: z.enum(['half-away-from-zero', 'half-even']),
+      scale: z.int().min(0).max(6),
+    }),
     rule: z.object({ id: uuidSchema, version: z.int().positive() }),
     /**
      * What an expression rule decided (Phase 83, ADR 0071); absent for Phase 41's formulas,
