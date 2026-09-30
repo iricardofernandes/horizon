@@ -9,12 +9,13 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts src/phase43-issuance-prep-cli.ts src/phase43-exchange-resume-cli.ts src/phase43-cancellation-prep-cli.ts src/phase43-restore-verify-cli.ts src/phase43-reparse-cli.ts src/phase43-activation-cli.ts src/phase43-grant-cli.ts src/phase43-danfe-cli.ts src/phase43-wsdl-cli.ts src/phase43-emulator-cli.ts src/phase44-reindex-parties-cli.ts src/phase44-supplier-invoice-cli.ts src/phase45-rollout-cli.ts src/phase46-rollout-cli.ts src/phase47-rollout-cli.ts src/phase82-catalog-cli.ts src/phase84-oracle-cli.ts src/support-cli.ts --format cjs --platform node --out-dir dist --clean",
+    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts src/phase43-issuance-prep-cli.ts src/phase43-exchange-resume-cli.ts src/phase43-cancellation-prep-cli.ts src/phase43-restore-verify-cli.ts src/phase43-reparse-cli.ts src/phase43-activation-cli.ts src/phase43-grant-cli.ts src/phase43-danfe-cli.ts src/phase43-wsdl-cli.ts src/phase43-emulator-cli.ts src/phase44-reindex-parties-cli.ts src/phase44-supplier-invoice-cli.ts src/phase45-rollout-cli.ts src/phase46-rollout-cli.ts src/phase47-rollout-cli.ts src/phase82-catalog-cli.ts src/phase84-oracle-cli.ts src/phase85-scenarios-cli.ts src/support-cli.ts --format cjs --platform node --out-dir dist --clean",
     "start": "node dist/worker.js",
     "backfill": "node dist/backfill-cli.js",
     "phase41:rollout": "node dist/phase41-rollout-cli.js",
     "phase82:catalog": "node dist/phase82-catalog-cli.js",
     "phase84:oracle": "node dist/phase84-oracle-cli.js",
+    "phase85:scenarios": "node dist/phase85-scenarios-cli.js",
     "phase42:capability": "node dist/phase42-capability-cli.js",
     "phase42:rollout-prep": "node dist/phase42-rollout-prep-cli.js",
     "phase43:observations": "node dist/phase43-observations-cli.js",
@@ -52,7 +53,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1137.0",
-    "@horizon/contracts": "0.55.0",
+    "@horizon/contracts": "0.58.0",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/auto-instrumentations-node": "0.80.0",
     "@opentelemetry/exporter-logs-otlp-http": "0.222.0",

@@ -20,6 +20,12 @@ export type TaxRule = ResolvedComponentRule & {
     recipientRegime?: string
     originState?: string
     destinationState?: string
+    /** Whether the recipient is an ICMS contributor (Phase 85). */
+    recipientTaxpayer?: boolean
+    /** Where the provider is established, for ISS (Phase 85). */
+    issuerMunicipality?: string
+    /** A fact the line states (its `taxFacts`), such as whether IPI is due on the item (Phase 85). */
+    fact?: { key: string; value: string }
     subject?: { kind: 'item' | 'service'; id: string }
     classification?: {
       kind: 'ncm' | 'cest' | 'service' | 'origin' | 'class_trib'
@@ -152,6 +158,11 @@ function matches(
   if (scope.recipientRegime && scope.recipientRegime !== input.recipient.regime) return false
   if (scope.originState && scope.originState !== input.origin.stateCode) return false
   if (scope.destinationState && scope.destinationState !== input.destination.stateCode) return false
+  if (scope.recipientTaxpayer !== undefined && scope.recipientTaxpayer !== input.recipient.taxpayer)
+    return false
+  if (scope.issuerMunicipality && scope.issuerMunicipality !== input.issuer.municipalityCode)
+    return false
+  if (scope.fact && line.taxFacts[scope.fact.key] !== scope.fact.value) return false
   if (scope.subject) {
     const subjectId = scope.subject.kind === 'item' ? line.itemId : line.serviceId
     if (subjectId !== scope.subject.id) return false

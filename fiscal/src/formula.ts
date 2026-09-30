@@ -38,6 +38,7 @@ export type Expression =
   | { product: Expression[] }
   | { grossUp: { base: Expression; rate: Expression } }
   | { reduce: { base: Expression; by: Expression } }
+  | { difference: [Expression, Expression] }
   | { min: Expression[] }
   | { max: Expression[] }
 
@@ -54,6 +55,8 @@ export const expressionSchema: z.ZodType<Expression> = z.lazy(() =>
       grossUp: z.strictObject({ base: expressionSchema, rate: expressionSchema }),
     }),
     z.strictObject({ reduce: z.strictObject({ base: expressionSchema, by: expressionSchema }) }),
+    // Phase 85: the revenue less the ICMS charged on it, for PIS/Cofins.
+    z.strictObject({ difference: z.tuple([expressionSchema, expressionSchema]) }),
     z.strictObject({ min: operands(expressionSchema) }),
     z.strictObject({ max: operands(expressionSchema) }),
   ]),
@@ -69,6 +72,15 @@ export const ruleExpressionSchema = z
     outcome: z.enum(OUTCOMES).default('levied'),
     /** Absent means half away from zero, as Phase 41; the reform's packages use half-even. */
     rounding: z.enum(['half-away-from-zero', 'half-even']).optional(),
+    /**
+     * Components subtracted from the rounded amount, never below zero (Phase 85): ICMS-ST is
+     * the tax at the destination's rate less the own-operation ICMS (LC 87/1996 art. 8º §5º).
+     */
+    deduct: z
+      .array(z.string().regex(/^[A-Z][A-Z0-9_]{0,39}$/))
+      .min(1)
+      .max(4)
+      .optional(),
   })
   .superRefine((value, context) => {
     const problem = sizeProblem(value.base)
@@ -85,6 +97,7 @@ function children(expression: Expression): Expression[] {
   if ('max' in expression) return expression.max
   if ('grossUp' in expression) return [expression.grossUp.base, expression.grossUp.rate]
   if ('reduce' in expression) return [expression.reduce.base, expression.reduce.by]
+  if ('difference' in expression) return expression.difference
   return []
 }
 
@@ -109,6 +122,11 @@ export function references(expression: Expression): string[] {
   return [...new Set(children(expression).flatMap(references))].sort()
 }
 
+/** The components a rule's expression reads: in its base, and those it deducts. */
+export function ruleReferences(expression: RuleExpression): string[] {
+  return [...new Set([...references(expression.base), ...(expression.deduct ?? [])])].sort()
+}
+
 /**
  * Checked when a package is published or imported: every referenced component is defined by
  * some rule of the package, and the references form no cycle.
@@ -120,7 +138,7 @@ export function packageProblem(
   const edges = new Map<string, Set<string>>()
   for (const rule of rules) {
     if (!rule.expression) continue
-    for (const reference of references(rule.expression.base)) {
+    for (const reference of ruleReferences(rule.expression)) {
       if (!defined.has(reference))
         return `${rule.code} reads component ${reference}, which no rule of the package defines`
       if (reference === rule.code) return `${rule.code} reads itself`
@@ -160,7 +178,7 @@ export function evaluationOrder<
     if (placed.has(rule.code)) return null
     if (trail.has(rule.code)) throw new Error('A cycle reached evaluation; packages are checked')
     trail.add(rule.code)
-    for (const reference of rule.expression ? references(rule.expression.base) : []) {
+    for (const reference of rule.expression ? ruleReferences(rule.expression) : []) {
       const dependency = byCode.get(reference)
       if (!dependency) return reference
       const missing = place(dependency, trail)
@@ -205,6 +223,7 @@ export function evaluate(
   if ('min' in expression) return values.reduce((a, b) => (compare(a, b) <= 0 ? a : b))
   if ('max' in expression) return values.reduce((a, b) => (compare(a, b) >= 0 ? a : b))
   const [base, rate] = values as [Rational, Rational]
+  if ('difference' in expression) return subtract(base, rate)
   if ('grossUp' in expression) {
     const remainder = subtract(integer(1n), rate)
     if (compare(remainder, integer(0n)) <= 0) throw new Error('A gross-up rate must be below one')
@@ -236,24 +255,35 @@ export function evaluateComponent(
   const baseValue = evaluate(expression.base, line, components)
   const base = round(baseValue)
   const levied = expression.outcome === 'levied'
-  const unrounded = levied ? multiply(integer(base), rate) : integer(0n)
-  const amount = round(unrounded)
+  const taxed = levied ? multiply(integer(base), rate) : integer(0n)
+  const rounded = round(taxed)
+  const deductions = levied
+    ? (expression.deduct ?? []).map((code) => {
+        const amount = components.get(code)
+        if (amount === undefined) throw new Error(`component ${code} is not computed`)
+        return { code, amount }
+      })
+    : []
+  const deducted = deductions.reduce((total, deduction) => total + deduction.amount, 0n)
+  const amount = rounded - deducted > 0n ? rounded - deducted : 0n
+  const steps: Step[] = [
+    { step: `base = ${render(expression.base)}`, value: baseValue },
+    { step: `base, rounded ${roundedAs}`, value: integer(base) },
+    { step: 'rate', value: rate },
+    { step: levied ? 'base × rate' : `${expression.outcome}: nothing is owed`, value: taxed },
+    { step: `amount, rounded ${roundedAs}`, value: integer(rounded) },
+  ]
+  for (const deduction of deductions)
+    steps.push({ step: `less ${deduction.code}`, value: integer(-deduction.amount) })
+  if (deductions.length > 0)
+    steps.push({ step: 'amount due, never below zero', value: integer(amount) })
   return {
     base,
-    unrounded,
+    unrounded: deductions.length > 0 ? subtract(taxed, integer(deducted)) : taxed,
     amount,
     outcome: expression.outcome,
     rounding,
-    steps: [
-      { step: `base = ${render(expression.base)}`, value: baseValue },
-      { step: `base, rounded ${roundedAs}`, value: integer(base) },
-      { step: 'rate', value: rate },
-      {
-        step: levied ? 'base × rate' : `${expression.outcome}: nothing is owed`,
-        value: unrounded,
-      },
-      { step: `amount, rounded ${roundedAs}`, value: integer(amount) },
-    ],
+    steps,
   }
 }
 
@@ -266,6 +296,8 @@ export function render(expression: Expression): string {
   if ('product' in expression) return `(${expression.product.map(render).join(' × ')})`
   if ('min' in expression) return `min(${expression.min.map(render).join(', ')})`
   if ('max' in expression) return `max(${expression.max.map(render).join(', ')})`
+  if ('difference' in expression)
+    return `(${render(expression.difference[0])} − ${render(expression.difference[1])})`
   if ('grossUp' in expression)
     return `grossUp(${render(expression.grossUp.base)}, ${render(expression.grossUp.rate)})`
   return `reduce(${render(expression.reduce.base)}, ${render(expression.reduce.by)})`

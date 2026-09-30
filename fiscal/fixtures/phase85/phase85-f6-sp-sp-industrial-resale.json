@@ -1,0 +1,313 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "phase85-f6-sp-sp-industrial-resale",
+  "title": "SP industrial → SP contributor buying to resell",
+  "covers": {
+    "model": "55",
+    "from": "2026-01-01",
+    "until": "2027-01-01",
+    "taxes": [
+      "IPI",
+      "ICMS"
+    ],
+    "originState": "35",
+    "destinationState": "35",
+    "recipientTaxpayer": true,
+    "classification": {
+      "kind": "ncm",
+      "code": "85094010"
+    },
+    "facts": {
+      "ipiTaxpayer": "true",
+      "destinationUse": "resale"
+    }
+  },
+  "packages": [
+    {
+      "label": "phase85.goods.sp-rj-ba.2026",
+      "packageDigest": "ac0f1161144e701360f30232bc5b7d3115d1c6296b7330016e0d77c14219e803"
+    },
+    {
+      "label": "phase85.iss.sao-paulo.2026",
+      "packageDigest": "636595494e59f108c29f9fe245949b33c342f486e9b0be230e8ae215f12ea7af"
+    }
+  ],
+  "input": {
+    "schemaVersion": 1,
+    "tenantId": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+    "issuerEstablishmentId": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+    "model": "55",
+    "environment": "simulation",
+    "operation": "sale",
+    "purpose": "normal",
+    "issuer": {
+      "regime": "normal",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "recipient": {
+      "regime": "normal",
+      "stateCode": "35",
+      "municipalityCode": "3550308",
+      "taxpayer": true
+    },
+    "origin": {
+      "countryCode": "1058",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "destination": {
+      "countryCode": "1058",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "issueDate": "2026-10-15",
+    "currency": "BRL",
+    "lines": [
+      {
+        "id": "4f4636e7-dd57-5345-ab17-964a6c0624c3",
+        "itemId": "455ef4f0-676f-501a-bae6-e66eabfbb48b",
+        "quantity": "2",
+        "unitPrice": "189.9",
+        "discount": {
+          "amount": "0",
+          "currency": "BRL"
+        },
+        "charges": {
+          "amount": "0",
+          "currency": "BRL"
+        },
+        "classifications": {
+          "ncm": "85094010",
+          "origin": "0"
+        },
+        "taxFacts": {
+          "ipiTaxpayer": "true",
+          "destinationUse": "resale"
+        }
+      }
+    ]
+  },
+  "expectedResult": {
+    "schemaVersion": 1,
+    "supported": true,
+    "inputDigest": "8fb4e067ac32356c23f50f93e49ffa4bb7a0a1f1a84eca27e445341fc840e920",
+    "rulesDigest": "0b43525e00a8c29bc03aa15c4c4f65f56e93c7af013d29a86477f6f170263abb",
+    "resultDigest": "8b6ac342bd4a085ef8e2cdedc85e6f80c86fe349f5e9d7e76c093167552ab0f6",
+    "lines": [
+      {
+        "lineId": "4f4636e7-dd57-5345-ab17-964a6c0624c3",
+        "gross": {
+          "amount": "37980",
+          "currency": "BRL"
+        },
+        "net": {
+          "amount": "37980",
+          "currency": "BRL"
+        },
+        "components": {
+          "legacy": [
+            {
+              "code": "ICMS",
+              "base": {
+                "amount": "37980",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "9",
+                "denominator": "50"
+              },
+              "unrounded": {
+                "numerator": "34182",
+                "denominator": "5",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "6836",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "b813fd92-6c8d-5907-9a90-6d006ca9e854",
+                "version": 1
+              },
+              "outcome": "levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "9",
+                    "denominator": "50"
+                  }
+                },
+                {
+                  "step": "base × rate",
+                  "value": {
+                    "numerator": "34182",
+                    "denominator": "5"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "6836",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "cd59e153-4176-5ad8-a430-dd0bff93b2e8",
+                "digest": "ac0f1161144e701360f30232bc5b7d3115d1c6296b7330016e0d77c14219e803",
+                "uri": "https://legislacao.fazenda.sp.gov.br/Paginas/art052.aspx",
+                "section": "ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+              }
+            },
+            {
+              "code": "IPI",
+              "base": {
+                "amount": "37980",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "13",
+                "denominator": "200"
+              },
+              "unrounded": {
+                "numerator": "24687",
+                "denominator": "10",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "2469",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "1465b716-c957-58e4-86b5-c9c42e914131",
+                "version": 1
+              },
+              "outcome": "levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "13",
+                    "denominator": "200"
+                  }
+                },
+                {
+                  "step": "base × rate",
+                  "value": {
+                    "numerator": "24687",
+                    "denominator": "10"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "2469",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "cd59e153-4176-5ad8-a430-dd0bff93b2e8",
+                "digest": "ac0f1161144e701360f30232bc5b7d3115d1c6296b7330016e0d77c14219e803",
+                "uri": "https://legislacao.fazenda.sp.gov.br/Paginas/art052.aspx",
+                "section": "tipi-2022: 8509.40.10 (6.5%)"
+              }
+            }
+          ],
+          "ibsCbs": []
+        }
+      }
+    ],
+    "totals": {
+      "gross": {
+        "amount": "37980",
+        "currency": "BRL"
+      },
+      "discounts": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "charges": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "net": {
+        "amount": "37980",
+        "currency": "BRL"
+      },
+      "legacyTax": {
+        "amount": "9305",
+        "currency": "BRL"
+      },
+      "ibsCbsTax": {
+        "amount": "0",
+        "currency": "BRL"
+      }
+    },
+    "reconciliation": {
+      "lineNetSum": {
+        "amount": "37980",
+        "currency": "BRL"
+      },
+      "legacyComponentSum": {
+        "amount": "9305",
+        "currency": "BRL"
+      },
+      "ibsCbsComponentSum": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "balanced": true
+    },
+    "explanation": {
+      "templateVersion": "fiscal-explanation-v2",
+      "text": "Line 4f4636e7-dd57-5345-ab17-964a6c0624c3: net 37980 BRL minor units.\nICMS (levied): rule b813fd92-6c8d-5907-9a90-6d006ca9e854 v1; source https://legislacao.fazenda.sp.gov.br/Paginas/art052.aspx § ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale).\n  base = line.net = 37980/1\n  base, rounded half away from zero = 37980/1\n  rate = 9/50\n  base × rate = 34182/5\n  amount, rounded half away from zero = 6836/1\nIPI (levied): rule 1465b716-c957-58e4-86b5-c9c42e914131 v1; source https://legislacao.fazenda.sp.gov.br/Paginas/art052.aspx § tipi-2022: 8509.40.10 (6.5%).\n  base = line.net = 37980/1\n  base, rounded half away from zero = 37980/1\n  rate = 13/200\n  base × rate = 24687/10\n  amount, rounded half away from zero = 2469/1"
+    }
+  },
+  "approval": {
+    "approvedBy": "workspace-owner",
+    "approvedAt": "2026-09-30T19:53:02.036Z",
+    "scope": "SP industrial → SP contributor buying to resell — IPI, ICMS, 2026 simulation",
+    "fixtureDigest": "1b3292753de348e7614752c5866661eb64027ed49f448e05027cd630612368f7"
+  }
+}

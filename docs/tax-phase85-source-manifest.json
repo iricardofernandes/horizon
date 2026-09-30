@@ -1,0 +1,206 @@
+{
+ "schemaVersion": 1,
+ "phase": 85,
+ "retrievedAt": "2026-09-30",
+ "store": ".artifacts/fiscal (gitignored, content-addressed by SHA-256)",
+ "sources": [
+  {
+   "id": "lc-87-1996",
+   "authority": "Presidência da República — Planalto",
+   "title": "Lei Complementar nº 87, de 13 de setembro de 1996 (compilada, com a LC 190/2022)",
+   "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp87.htm",
+   "mediaType": "text/html",
+   "byteSize": 270282,
+   "sha256": "15d1043f3701f756dc7fab6b4277b3465dcc7c6369ded8d858f81b41414653e5",
+   "sectionsUsed": [
+    "art. 13 I (base: o valor da operação)",
+    "art. 13 §1º I (o ICMS integra a própria base)",
+    "art. 13 §2º (o IPI não integra a base entre contribuintes, para industrialização ou comercialização)",
+    "art. 13 X e §3º (não contribuinte: base única; DIFAL é a diferença entre a alíquota interna do destino e a interestadual)"
+   ]
+  },
+  {
+   "id": "conv-icms-236-2021",
+   "authority": "CONFAZ",
+   "title": "Convênio ICMS nº 236, de 27 de dezembro de 2021",
+   "uri": "https://www.confaz.fazenda.gov.br/legislacao/convenios/2021/CV236_21",
+   "mediaType": "text/html",
+   "byteSize": 179037,
+   "sha256": "f7fff0115f2c8e2a2ed55445aa232160c9e3c41d9162e13c5736c719cbc709a7",
+   "sectionsUsed": [
+    "cláusula segunda I e §1º (base única; DIFAL = interna do destino − interestadual)",
+    "cláusula segunda §4º (o adicional de até 2 p.p. do fundo de pobreza compõe a alíquota interna, recolhido à parte)"
+   ]
+  },
+  {
+   "id": "ricms-sp-art-52",
+   "authority": "Secretaria da Fazenda e Planejamento do Estado de São Paulo",
+   "title": "RICMS/SP (Decreto 45.490/2000), artigos 52 a 56-C",
+   "uri": "https://legislacao.fazenda.sp.gov.br/Paginas/art052.aspx",
+   "mediaType": "text/html",
+   "byteSize": 210656,
+   "sha256": "00cee20d7692f2c3a9ab7a1f6aa6246f3a30f7ca2d93017bf6c3c0472f2d7b28",
+   "sectionsUsed": [
+    "art. 52 I (18% nas operações internas)",
+    "art. 52 II (7% para N, NE, CO e ES)",
+    "art. 52 III (12% para S e SE)",
+    "art. 52 §2º (4% para bens e mercadorias importados, Res. SF 13/2012)",
+    "arts. 53-A a 56 (exceções; a NCM 8509.40 não consta)"
+   ]
+  },
+  {
+   "id": "rj-lei-2657-1996",
+   "authority": "Assembleia Legislativa do Estado do Rio de Janeiro",
+   "title": "Lei nº 2.657, de 26 de dezembro de 1996 (ICMS/RJ)",
+   "uri": "http://alerjln1.alerj.rj.gov.br/contlei.nsf/f25edae7e64db53b032564fe005262ef/01cc04eee53b3b30032564fb005c2ddf",
+   "mediaType": "text/html",
+   "byteSize": 659950,
+   "sha256": "d141b053ba0b2a66a898d9121abc398b172b3e0c13f41c8d1bedc6ac0268aac0",
+   "sectionsUsed": [
+    "art. 14 I (20% nas operações internas, Lei 10.253/2023)",
+    "art. 14 V (DIFAL: a diferença entre a interna e a interestadual)"
+   ]
+  },
+  {
+   "id": "rj-lc-210-2023",
+   "authority": "Assembleia Legislativa do Estado do Rio de Janeiro",
+   "title": "Lei Complementar nº 210, de 21 de julho de 2023 (FECP)",
+   "uri": "http://alerjln1.alerj.rj.gov.br/contlei.nsf/a99e317a9cfec383032568620071f5d2/1769d26d18823fea03258a5300625f7f?OpenDocument",
+   "mediaType": "text/html",
+   "byteSize": 33600,
+   "sha256": "8af6c06961b01992b1c439ae22ba2849f57b9e3538b292729396d70727b224d3",
+   "sectionsUsed": [
+    "art. 2º I (adicional geral de 2 p.p. ao ICMS, com as exceções das alíneas a a i)"
+   ]
+  },
+  {
+   "id": "tipi-2022",
+   "authority": "Receita Federal do Brasil",
+   "title": "TIPI (Decreto 11.158/2022), atualizada até o ADE RFB nº 1/2026",
+   "uri": "https://www.gov.br/receitafederal/pt-br/acesso-a-informacao/legislacao/documentos-e-arquivos/tipi.xlsx",
+   "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+   "byteSize": 673645,
+   "sha256": "d155f1baafb4039dcb74f97bb5abc1aec69f6760da9bd3f94a90bd40b33a2e9a",
+   "sectionsUsed": [
+    "8509.40.10 (liquidificadores): 6,5%"
+   ]
+  },
+  {
+   "id": "lei-10637-2002",
+   "authority": "Presidência da República — Planalto",
+   "title": "Lei nº 10.637, de 30 de dezembro de 2002 (PIS não cumulativo)",
+   "uri": "https://www.planalto.gov.br/ccivil_03/leis/2002/l10637.htm",
+   "mediaType": "text/html",
+   "byteSize": 238160,
+   "sha256": "aa8ab6be7066da10751489838cdd288e80dae0eb62252f88635d1a6e20f96515",
+   "sectionsUsed": [
+    "art. 2º (1,65%)",
+    "art. 8º II (lucro presumido fica no regime cumulativo)"
+   ]
+  },
+  {
+   "id": "lei-10833-2003",
+   "authority": "Presidência da República — Planalto",
+   "title": "Lei nº 10.833, de 29 de dezembro de 2003 (Cofins não cumulativa)",
+   "uri": "https://www.planalto.gov.br/ccivil_03/leis/2003/l10.833.htm",
+   "mediaType": "text/html",
+   "byteSize": 533449,
+   "sha256": "aa20b93a50576b04ae849ef5728c804fd7aa49903312430669ec4bddd4194a2e",
+   "sectionsUsed": [
+    "art. 1º (base: o total das receitas)",
+    "art. 2º (7,6%)",
+    "art. 10 II (lucro presumido fica no regime cumulativo)"
+   ]
+  },
+  {
+   "id": "lei-9715-1998",
+   "authority": "Presidência da República — Planalto",
+   "title": "Lei nº 9.715, de 25 de novembro de 1998 (PIS)",
+   "uri": "https://www.planalto.gov.br/ccivil_03/leis/l9715.htm",
+   "mediaType": "text/html",
+   "byteSize": 22739,
+   "sha256": "4360a3efabc92261cc1eb6222aa29d802a68d0172b4710f4875e812a5253edd6",
+   "sectionsUsed": [
+    "art. 8º I (0,65% sobre o faturamento)"
+   ]
+  },
+  {
+   "id": "lei-9718-1998",
+   "authority": "Presidência da República — Planalto",
+   "title": "Lei nº 9.718, de 27 de novembro de 1998 (compilada)",
+   "uri": "https://www.planalto.gov.br/ccivil_03/leis/l9718compilada.htm",
+   "mediaType": "text/html",
+   "byteSize": 77417,
+   "sha256": "4f6a8b79be88794ce761bfc1f38162603b33b9d85d89542e1216cd0c81c970e2",
+   "sectionsUsed": [
+    "art. 8º (Cofins a 3%)"
+   ]
+  },
+  {
+   "id": "dl-1598-1977",
+   "authority": "Presidência da República — Planalto",
+   "title": "Decreto-Lei nº 1.598, de 26 de dezembro de 1977",
+   "uri": "https://www.planalto.gov.br/ccivil_03/decreto-lei/del1598.htm",
+   "mediaType": "text/html",
+   "byteSize": 335035,
+   "sha256": "6e13c1d0e913fd41fcdbce624de18c5485fccb3a232dd681a4960316092862b5",
+   "sectionsUsed": [
+    "art. 12 §4º (tributos não cumulativos cobrados destacadamente, como o IPI, não integram a receita bruta)"
+   ]
+  },
+  {
+   "id": "pgfn-parecer-7698-2021",
+   "authority": "Procuradoria-Geral da Fazenda Nacional",
+   "title": "Parecer SEI nº 7698/2021/ME (RE 574.706, Tema 69 do STF)",
+   "uri": "https://www.gov.br/receitafederal/pt-br/acesso-a-informacao/legislacao/decisoes-vinculantes-do-stf-e-do-stj-repercussao-geral-e-recursos-repetitivos/arquivos-e-imagens/parecer_sei_7698_2021_meedespacho_246_2021_pgfn_me.pdf",
+   "mediaType": "application/pdf",
+   "byteSize": 159534,
+   "sha256": "fd5fc882b0e989746c537f35ab3c447c7b83dae7c65b6fe9d1a7668d9c1cb987",
+   "sectionsUsed": [
+    "o ICMS a excluir da base do PIS/Cofins é o destacado na nota fiscal"
+   ]
+  },
+  {
+   "id": "lc-116-2003",
+   "authority": "Presidência da República — Planalto",
+   "title": "Lei Complementar nº 116, de 31 de julho de 2003",
+   "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp116.htm",
+   "mediaType": "text/html",
+   "byteSize": 104392,
+   "sha256": "596d4c91c1392e56a93a66fbf95b80ca507e4e588d6b95b8c9f3b980b9338a8f",
+   "sectionsUsed": [
+    "art. 3º (o ISS é devido no local do estabelecimento prestador)",
+    "art. 7º (base: o preço do serviço)",
+    "lista, subitem 1.01 (análise e desenvolvimento de sistemas)"
+   ]
+  },
+  {
+   "id": "sp-lei-13701-2003",
+   "authority": "Prefeitura do Município de São Paulo",
+   "title": "Lei nº 13.701, de 24 de dezembro de 2003 (ISS)",
+   "uri": "https://legislacao.prefeitura.sp.gov.br/lei-13701-de-24-de-dezembro-de-2003",
+   "mediaType": "text/html",
+   "byteSize": 180179,
+   "sha256": "35632c29f753d4c5ebd4ad9961039b17d47a83e45b0d48dd7c24d25770a253f8",
+   "sectionsUsed": [
+    "art. 16 III (2,9% para o item 1, exceto 1.09, Lei 18.066/2023)"
+   ]
+  }
+ ],
+ "citedNotPinned": [
+  {
+   "id": "senate-resolutions-22-1989-13-2012",
+   "why": "The interstate rates of 12%, 7% and 4% are applied as RICMS/SP art. 52 states them, citing both resolutions; the resolutions' own text is not pinned."
+  },
+  {
+   "id": "stf-re-574706",
+   "why": "The exclusion of the ICMS from PIS/Cofins is read from the PGFN opinion that implements it; IN RFB 2.121/2022 art. 26 XII, which consolidates it, could not be retrieved as a document (the Receita's portal is a single-page application)."
+  }
+ ],
+ "deferred": [
+  {
+   "id": "interstate-icms-st",
+   "why": "No interstate ICMS-ST agreement with its original MVA was pinned for a declared NCM, so scenario F7 is left out; the deduction node it needs is built and tested."
+  }
+ ]
+}

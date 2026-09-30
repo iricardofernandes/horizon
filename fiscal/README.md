@@ -258,6 +258,27 @@ agreeing case. A workspace adopts the package with `phase82:catalog adopt --pack
 Lines without a classification, and Phase 41's operation, keep their own rules. See the
 [Phase 84 evidence](../docs/tax-phase84-evidence.md).
 
+### The legacy taxes and the support matrix (Phase 85)
+
+Rules can also be scoped by `recipientTaxpayer`, `issuerMunicipality` and one `fact` of the
+line's `taxFacts` (`ipiTaxpayer`, `destinationUse`). Formulas gain `difference` and
+`deduct`. The declared scenarios, and the steps that take them from package to adoption:
+
+```bash
+npm run phase85:scenarios -- fixtures            # build fixtures; an unchanged one keeps its approval
+npm run phase85:scenarios -- approve --fixture <id> --by <who> --scope <text>   # only on the owner's word
+npm run phase85:scenarios -- publish             # DATABASE_MIGRATION_URL
+npm run phase85:scenarios -- adopt --tenant <id> --actor <who>
+npm run phase85:scenarios -- verify              # DATABASE_URL, FISCAL_ARTIFACT_KEY_HEX
+npm run phase85:scenarios -- matrix              # regenerate support-matrix.json from the evidence
+```
+
+`GET /fiscal/support` returns the matrix. Given `model`, `date`, `tax`, one of `ncm`,
+`service` or `classTrib`, and optionally the states, `recipientTaxpayer`,
+`issuerRegime`, `issuerMunicipality`, `origin` and `fact.<key>=<value>`, it answers
+`supported` with the rows that cover the scenario, or `unsupported` with the missing
+dimension. See the [Phase 85 evidence](../docs/tax-phase85-evidence.md).
+
 ## Audit log (Phase 68)
 
 `GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered

@@ -155,6 +155,17 @@ describe('temporal tax rule resolution', () => {
     expect(resolveTaxRules(classified(), [reduced], 2)).toMatchObject({ supported: false })
   })
 
+  it("scopes a rule by whether the recipient is a contributor, and by the provider's municipality", () => {
+    const contributor = rule({ scope: { ...rule().scope, recipientTaxpayer: true } })
+    const nonContributor = { ...input, recipient: { ...input.recipient, taxpayer: false } }
+    expect(resolveTaxRules(input, [contributor], 2).supported).toBe(true)
+    expect(resolveTaxRules(nonContributor, [contributor], 2).supported).toBe(false)
+    const saoPaulo = rule({ scope: { ...rule().scope, issuerMunicipality: '3550308' } })
+    const campinas = { ...input, issuer: { ...input.issuer, municipalityCode: '3509502' } }
+    expect(resolveTaxRules(input, [saoPaulo], 2).supported).toBe(true)
+    expect(resolveTaxRules(campinas, [saoPaulo], 2).supported).toBe(false)
+  })
+
   it('uses competence date only when the selected component declares it', () => {
     const competenceRule = rule({
       dateBasis: 'competence_date',

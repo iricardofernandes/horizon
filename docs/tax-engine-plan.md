@@ -1,6 +1,6 @@
 # Tax rules engine implementation plan — Phase O
 
-Status: **in progress** — Phases 82, 83 and 84 delivered on 2026-09-30 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md), [84](tax-phase84-evidence.md)). This is the execution plan for Phase O,
+Status: **in progress** — Phases 82 to 85 delivered on 2026-09-30 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md), [84](tax-phase84-evidence.md), [85](tax-phase85-evidence.md)). This is the execution plan for Phase O,
 split into phases 82–89 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to N
 and 79 to 81.
@@ -244,6 +244,12 @@ published; 2029 and 2033 and the Imposto Seletivo wait for published rates.
   re-run.
 
 ### 85 — The legacy taxes, bounded by reviewed scenarios
+
+**Delivered on 2026-09-30** ([plan](tax-phase85-implementation-plan.md),
+[evidence](tax-phase85-evidence.md)). Seven scenarios were approved by the workspace owner:
+ICMS for SP, RJ and BA; IPI; PIS/Cofins in both methods; DIFAL and FCP to an RJ
+non-contributor; and São Paulo ISS. ICMS-ST and gross-up were left out, with their reasons.
+`GET /fiscal/support` answers from a matrix generated from the oracle and the approvals.
 
 **Work**
 1. **Packages, each scenario with a fixture approved by the workspace owner:**

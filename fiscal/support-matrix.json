@@ -1,0 +1,1247 @@
+{
+  "schemaVersion": 1,
+  "defaultStatus": "unsupported",
+  "rows": [
+    {
+      "id": "oracle:2026-01-01:000001",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "000001"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:000003",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "000003"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:000004",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "000004"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:000005",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "000005"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200002",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200002"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200003",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200003"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200004",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200004"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200005",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200005"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200006",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200006"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200007",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200007"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200008",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200008"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200009",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200009"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200010",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200010"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200011",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200011"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200012",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200012"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200013",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200013"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200014",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200014"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200015",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200015"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200020",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200020"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200023",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200023"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200030",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200030"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200031",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200031"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200032",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200032"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200033",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200033"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200034",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200034"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200035",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200035"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200036",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200036"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200038",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200038"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200039",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200039"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200043",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200043"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200047",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200047"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200053",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200053"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:200054",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "200054"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410001",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410001"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410002",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410002"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410003",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410003"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410004",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410004"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410005",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410005"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410006",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410006"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410007",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410007"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410008",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410008"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410009",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410009"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410012",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410012"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410013",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410013"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410014",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410014"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410016",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410016"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410017",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410017"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410019",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410019"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410020",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410020"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410026",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410026"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410027",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410027"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410029",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410029"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410030",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410030"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410031",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410031"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410035",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410035"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "oracle:2026-01-01:410999",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "class_trib",
+          "code": "410999"
+        }
+      },
+      "evidence": {
+        "kind": "oracle",
+        "reference": "docs/drills/2026-09-30-phase84-oracle-2026.json",
+        "digest": "a6e00fe309a04c0f56de7dc1abdec39e50720fbf3613030d21120f688840b44e"
+      }
+    },
+    {
+      "id": "phase85-f1-sp-sp-resale-lucro-real",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["COFINS", "ICMS", "PIS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerRegime": "lucro-real",
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase85/phase85-f1-sp-sp-resale-lucro-real.json",
+        "digest": "1e3573c7aeb83040a418f67ca83b1944a1d5ce0740022f714a9e05d47aec8da0"
+      }
+    },
+    {
+      "id": "phase85-f2-sp-rj-resale",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2029-01-01",
+      "taxes": ["ICMS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "33",
+        "recipientTaxpayer": true,
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase85/phase85-f2-sp-rj-resale.json",
+        "digest": "a0c5efdb99bdb2c60ec7a89f79aebb84a609a98687f1548f02feb034ea07705b"
+      }
+    },
+    {
+      "id": "phase85-f3-sp-ba-resale",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2029-01-01",
+      "taxes": ["ICMS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "29",
+        "recipientTaxpayer": true,
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase85/phase85-f3-sp-ba-resale.json",
+        "digest": "9b901c6c779131e0cf13e3fff33ab5b6d68fe18a1c054348f7ef727134d2529b"
+      }
+    },
+    {
+      "id": "phase85-f4-sp-rj-imported-resale",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2029-01-01",
+      "taxes": ["ICMS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "33",
+        "recipientTaxpayer": true,
+        "origin": "1",
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase85/phase85-f4-sp-rj-imported-resale.json",
+        "digest": "a71adb94beacf126682b398be9c75ee20343c2133fd5545c8be191bf911b52db"
+      }
+    },
+    {
+      "id": "phase85-f5-sp-rj-non-contributor-lucro-presumido",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["COFINS", "FCP_UF_DEST", "ICMS", "ICMS_UF_DEST", "IPI", "PIS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "33",
+        "recipientTaxpayer": false,
+        "issuerRegime": "lucro-presumido",
+        "facts": {
+          "ipiTaxpayer": "true"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase85/phase85-f5-sp-rj-non-contributor-lucro-presumido.json",
+        "digest": "e206e90da67b5a4ef581a34fc4c488b90841b54de161b413a000795b7efc8fb9"
+      }
+    },
+    {
+      "id": "phase85-f6-sp-sp-industrial-resale",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["ICMS", "IPI"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "facts": {
+          "ipiTaxpayer": "true",
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase85/phase85-f6-sp-sp-industrial-resale.json",
+        "digest": "1b3292753de348e7614752c5866661eb64027ed49f448e05027cd630612368f7"
+      }
+    },
+    {
+      "id": "phase85-f8-nfse-sao-paulo-1-01",
+      "model": "nfse",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2029-01-01",
+      "taxes": ["ISS"],
+      "dimensions": {
+        "classification": {
+          "kind": "service",
+          "code": "010101"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerMunicipality": "3550308"
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase85/phase85-f8-nfse-sao-paulo-1-01.json",
+        "digest": "5fff93e682b13eeae2dd241c828a8f353cca297d562b277377337f5ff707dbac"
+      }
+    }
+  ]
+}

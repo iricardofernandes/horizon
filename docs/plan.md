@@ -2953,7 +2953,7 @@ Phase 41's single approved scenario into the roadmap's engine:
 | 82 | Decisions (ADRs 0070–0073), the reform's source matrix, a shared catalogue — **delivered 2026-09-30** ([evidence](tax-phase82-evidence.md)) |
 | 83 | The formula language and its interpreter — **delivered 2026-09-30** ([evidence](tax-phase83-evidence.md)) |
 | 84 | IBS, CBS and the Imposto Seletivo through the transition, checked by the oracle — **delivered 2026-09-30 for IBS/CBS 2026** ([evidence](tax-phase84-evidence.md)) |
-| 85 | The legacy taxes, bounded by reviewed scenarios |
+| 85 | The legacy taxes, bounded by reviewed scenarios — **delivered 2026-09-30** ([evidence](tax-phase85-evidence.md)) |
 | 86 | Regimes and the blend |
 | 87 | Taxes where money is decided |
 | 88 | Governing the rules |

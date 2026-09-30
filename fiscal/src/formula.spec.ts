@@ -138,6 +138,65 @@ describe('a component’s base, rate and amount', () => {
   })
 })
 
+describe('differences and deductions (Phase 85)', () => {
+  const computed = new Map<string, bigint>([
+    ['ICMS', 1_764n],
+    ['IPI', 490n],
+  ])
+
+  it('takes the ICMS charged out of the revenue, for PIS/Cofins', () => {
+    const pis = evaluateComponent(
+      expression({ difference: [{ line: 'net' }, { component: 'ICMS' }] }),
+      { numerator: 165n, denominator: 10_000n },
+      line,
+      computed,
+    )
+    // (9800 − 1764) × 1,65% = 132.594 → 133
+    expect(pis).toMatchObject({ base: 8_036n, amount: 133n })
+    expect(pis.steps[0]?.step).toBe('base = (line.net − ICMS)')
+  })
+
+  it('deducts the own-operation ICMS from the tax at the destination rate, never below zero', () => {
+    const st = (deducted: bigint) =>
+      evaluateComponent(
+        ruleExpressionSchema.parse({
+          version: FORMULA_VERSION,
+          base: { product: [{ line: 'net' }, rate('14', '10')] },
+          deduct: ['ICMS'],
+        }),
+        { numerator: 18n, denominator: 100n },
+        line,
+        new Map([['ICMS', deducted]]),
+      )
+    // 9800 × 1.4 = 13720; × 18% = 2469.6 → 2470; less 1176 → 1294
+    const due = st(1_176n)
+    expect(due).toMatchObject({ base: 13_720n, amount: 1_294n })
+    expect(due.steps.slice(-2).map((step) => step.step)).toEqual([
+      'less ICMS',
+      'amount due, never below zero',
+    ])
+    expect(st(3_000n).amount).toBe(0n)
+  })
+
+  it('orders a deducting rule after what it deducts, and refuses an undefined deduction', () => {
+    const icms = { code: 'ICMS', expression: expression({ line: 'net' }) }
+    const st = {
+      code: 'ICMS_ST',
+      expression: ruleExpressionSchema.parse({
+        version: FORMULA_VERSION,
+        base: { line: 'net' },
+        deduct: ['ICMS'],
+      }),
+    }
+    const ordered = evaluationOrder([st, icms])
+    expect('order' in ordered && ordered.order.map((rule) => rule.code)).toEqual([
+      'ICMS',
+      'ICMS_ST',
+    ])
+    expect(packageProblem([st])).toMatch(/reads component ICMS/)
+  })
+})
+
 describe('the rounding a formula names', () => {
   it('rounds the base and the amount half to even when the formula says so', () => {
     const halfEven = ruleExpressionSchema.parse({

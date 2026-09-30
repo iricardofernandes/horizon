@@ -36,6 +36,7 @@ const NOT_INDEPENDENTLY_VERSIONED = new Set([
   'fiscalCalculationProblemCodeSchema',
   'fiscalCalculationResultSchema',
   'fiscalUnsupportedCalculationSchema',
+  'fiscalTaxSupportRowSchema', // only ever inside the matrix and the answer
   'consistencyCheckSchema', // only ever inside consistencyRunSchema
   'consistencyDifferenceSchema', // likewise
 ])

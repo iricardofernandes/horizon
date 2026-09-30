@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "phase85-f4-sp-rj-imported-resale",
+  "title": "SP → RJ, imported goods (origin 1), contributor buying to resell",
+  "covers": {
+    "model": "55",
+    "from": "2026-01-01",
+    "until": "2029-01-01",
+    "taxes": [
+      "ICMS"
+    ],
+    "originState": "35",
+    "destinationState": "33",
+    "recipientTaxpayer": true,
+    "classification": {
+      "kind": "ncm",
+      "code": "85094010"
+    },
+    "facts": {
+      "destinationUse": "resale"
+    },
+    "origin": "1"
+  },
+  "packages": [
+    {
+      "label": "phase85.goods.sp-rj-ba.2026",
+      "packageDigest": "ac0f1161144e701360f30232bc5b7d3115d1c6296b7330016e0d77c14219e803"
+    },
+    {
+      "label": "phase85.iss.sao-paulo.2026",
+      "packageDigest": "636595494e59f108c29f9fe245949b33c342f486e9b0be230e8ae215f12ea7af"
+    }
+  ],
+  "input": {
+    "schemaVersion": 1,
+    "tenantId": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+    "issuerEstablishmentId": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+    "model": "55",
+    "environment": "simulation",
+    "operation": "sale",
+    "purpose": "normal",
+    "issuer": {
+      "regime": "normal",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "recipient": {
+      "regime": "normal",
+      "stateCode": "33",
+      "municipalityCode": "3304557",
+      "taxpayer": true
+    },
+    "origin": {
+      "countryCode": "1058",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "destination": {
+      "countryCode": "1058",
+      "stateCode": "33",
+      "municipalityCode": "3304557"
+    },
+    "issueDate": "2026-10-15",
+    "currency": "BRL",
+    "lines": [
+      {
+        "id": "22df3fb4-1662-57d8-ad81-5b8e66418f26",
+        "itemId": "455ef4f0-676f-501a-bae6-e66eabfbb48b",
+        "quantity": "2",
+        "unitPrice": "189.9",
+        "discount": {
+          "amount": "0",
+          "currency": "BRL"
+        },
+        "charges": {
+          "amount": "0",
+          "currency": "BRL"
+        },
+        "classifications": {
+          "ncm": "85094010",
+          "origin": "1"
+        },
+        "taxFacts": {
+          "destinationUse": "resale"
+        }
+      }
+    ]
+  },
+  "expectedResult": {
+    "schemaVersion": 1,
+    "supported": true,
+    "inputDigest": "2f2e9fdae7f10709a736b702220c30bcac2227abadb14f82888989dce376a913",
+    "rulesDigest": "5859495e93a09521c836c44789a70d33eba46e34f370ad35fdb9746651d3d09f",
+    "resultDigest": "1540aa4e54b93018ad0a4a2b80df45063f13ffa7211caf6609490ec693aa5b89",
+    "lines": [
+      {
+        "lineId": "22df3fb4-1662-57d8-ad81-5b8e66418f26",
+        "gross": {
+          "amount": "37980",
+          "currency": "BRL"
+        },
+        "net": {
+          "amount": "37980",
+          "currency": "BRL"
+        },
+        "components": {
+          "legacy": [
+            {
+              "code": "ICMS",
+              "base": {
+                "amount": "37980",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "1",
+                "denominator": "25"
+              },
+              "unrounded": {
+                "numerator": "7596",
+                "denominator": "5",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "1519",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "d45b8511-2d0d-5988-9736-f29ff74d2714",
+                "version": 1
+              },
+              "outcome": "levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "1",
+                    "denominator": "25"
+                  }
+                },
+                {
+                  "step": "base × rate",
+                  "value": {
+                    "numerator": "7596",
+                    "denominator": "5"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "1519",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "cd59e153-4176-5ad8-a430-dd0bff93b2e8",
+                "digest": "ac0f1161144e701360f30232bc5b7d3115d1c6296b7330016e0d77c14219e803",
+                "uri": "https://legislacao.fazenda.sp.gov.br/Paginas/art052.aspx",
+                "section": "ricms-sp-art-52: art. 52 §2º (4% for imported goods, Res. SF 13/2012)"
+              }
+            }
+          ],
+          "ibsCbs": []
+        }
+      }
+    ],
+    "totals": {
+      "gross": {
+        "amount": "37980",
+        "currency": "BRL"
+      },
+      "discounts": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "charges": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "net": {
+        "amount": "37980",
+        "currency": "BRL"
+      },
+      "legacyTax": {
+        "amount": "1519",
+        "currency": "BRL"
+      },
+      "ibsCbsTax": {
+        "amount": "0",
+        "currency": "BRL"
+      }
+    },
+    "reconciliation": {
+      "lineNetSum": {
+        "amount": "37980",
+        "currency": "BRL"
+      },
+      "legacyComponentSum": {
+        "amount": "1519",
+        "currency": "BRL"
+      },
+      "ibsCbsComponentSum": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "balanced": true
+    },
+    "explanation": {
+      "templateVersion": "fiscal-explanation-v2",
+      "text": "Line 22df3fb4-1662-57d8-ad81-5b8e66418f26: net 37980 BRL minor units.\nICMS (levied): rule d45b8511-2d0d-5988-9736-f29ff74d2714 v1; source https://legislacao.fazenda.sp.gov.br/Paginas/art052.aspx § ricms-sp-art-52: art. 52 §2º (4% for imported goods, Res. SF 13/2012).\n  base = line.net = 37980/1\n  base, rounded half away from zero = 37980/1\n  rate = 1/25\n  base × rate = 7596/5\n  amount, rounded half away from zero = 1519/1"
+    }
+  },
+  "approval": {
+    "approvedBy": "workspace-owner",
+    "approvedAt": "2026-09-30T19:53:01.789Z",
+    "scope": "SP → RJ, imported goods (origin 1), contributor buying to resell — ICMS, 2026 simulation",
+    "fixtureDigest": "a71adb94beacf126682b398be9c75ee20343c2133fd5545c8be191bf911b52db"
+  }
+}

@@ -44,6 +44,17 @@ export const taxRuleImportSchema = z
       .string()
       .regex(/^\d{2}$/)
       .optional(),
+    recipientTaxpayer: z.boolean().optional(),
+    issuerMunicipality: z
+      .string()
+      .regex(/^\d{7}$/)
+      .optional(),
+    fact: z
+      .object({
+        key: z.string().regex(/^[a-z][A-Za-z0-9]{0,39}$/),
+        value: z.string().min(1).max(80),
+      })
+      .optional(),
     subject: z.object({ kind: z.enum(['item', 'service']), id: z.uuid() }).optional(),
     classification: z
       .object({
@@ -110,6 +121,9 @@ export function toTaxRule(row: postgres.Row): TaxRule {
   const recipientRegime = optional(row.recipient_regime)
   const originState = optional(row.origin_state)
   const destinationState = optional(row.destination_state)
+  const recipientTaxpayer = optional(row.recipient_taxpayer)
+  const issuerMunicipality = optional(row.issuer_municipality)
+  const factKey = optional(row.fact_key)
   const subjectKind = optional(row.subject_kind)
   const classificationKind = optional(row.classification_kind)
   return {
@@ -133,6 +147,9 @@ export function toTaxRule(row: postgres.Row): TaxRule {
       ...(recipientRegime ? { recipientRegime } : {}),
       ...(originState ? { originState } : {}),
       ...(destinationState ? { destinationState } : {}),
+      ...(recipientTaxpayer ? { recipientTaxpayer: recipientTaxpayer === 'true' } : {}),
+      ...(issuerMunicipality ? { issuerMunicipality } : {}),
+      ...(factKey ? { fact: { key: factKey, value: String(row.fact_value) } } : {}),
       ...(subjectKind
         ? { subject: { kind: subjectKind as 'item' | 'service', id: String(row.subject_id) } }
         : {}),

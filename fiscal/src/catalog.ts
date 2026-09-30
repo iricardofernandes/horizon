@@ -98,6 +98,10 @@ const TIE_COLUMNS = [
   'subject_id',
   'classification_kind',
   'classification_code',
+  'recipient_taxpayer',
+  'issuer_municipality',
+  'fact_key',
+  'fact_value',
 ] as const
 
 /**
@@ -178,8 +182,10 @@ export class FiscalCatalog {
           id, package_id, rule_key, version, component_group, component_code, precedence,
           priority, date_basis, purpose, model, environment, operation, issuer_regime,
           recipient_regime, origin_state, destination_state, classification_kind,
-          classification_code, effective_from, effective_to, rate_numerator, rate_denominator,
-          formula, expression, source_locator, definition_digest
+          classification_code, recipient_taxpayer, issuer_municipality, fact_key, fact_value,
+          effective_from,
+          effective_to, rate_numerator, rate_denominator, formula, expression, source_locator,
+          definition_digest
         ) values (
           ${id}, ${packageId}, ${rule.ruleKey}, ${rule.version},
           ${rule.group === 'ibsCbs' ? 'ibs_cbs' : 'legacy'}, ${rule.code}, ${rule.precedence},
@@ -187,6 +193,8 @@ export class FiscalCatalog {
           ${rule.operation ?? '*'}, ${rule.issuerRegime ?? '*'}, ${rule.recipientRegime ?? '*'},
           ${rule.originState ?? '*'}, ${rule.destinationState ?? '*'},
           ${rule.classification?.kind ?? '*'}, ${rule.classification?.code ?? '*'},
+          ${rule.recipientTaxpayer === undefined ? '*' : String(rule.recipientTaxpayer)},
+          ${rule.issuerMunicipality ?? '*'}, ${rule.fact?.key ?? '*'}, ${rule.fact?.value ?? '*'},
           ${rule.effectiveFrom}, ${rule.effectiveTo ?? null}, ${rule.rate.numerator},
           ${rule.rate.denominator}, ${rule.formula},
           ${rule.expression ? tx.json(rule.expression as postgres.JSONValue) : null},

@@ -33,6 +33,7 @@ import { handleServiceRoute, type ServiceDependencies } from './nfse/api'
 import { ConsumerNotEligible, type FiscalReadiness } from './readiness'
 import type { FiscalRuleStore } from './rule-store'
 import type { FiscalSupport } from './support'
+import { taxSupportResponse } from './tax-support-api'
 
 export type FiscalServerDependencies = {
   verifier: Pick<FiscalTokenVerifier, 'verify'>
@@ -334,6 +335,14 @@ async function handle(
         problem(response, 400, 'Bad Request', 'Invalid Fiscal document list query')
       else throw error
     }
+    return
+  }
+
+  if (request.method === 'GET' && url.pathname === '/support') {
+    if (!requirePermission(principal, 'read', response)) return
+    const outcome = taxSupportResponse(url.searchParams)
+    if (outcome.status === 400) problem(response, 400, 'Bad Request', outcome.detail)
+    else json(response, 200, outcome.body)
     return
   }
 

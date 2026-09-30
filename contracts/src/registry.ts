@@ -94,6 +94,9 @@ import {
   fiscalServiceSourceKeySchema,
   fiscalServiceSubstitutionRequestSchema,
   fiscalSupportOverviewSchema,
+  fiscalTaxSupportAnswerSchema,
+  fiscalTaxSupportMatrixSchema,
+  fiscalTaxSupportQuerySchema,
   grantDelegationSchema,
   importFieldSchema,
   importJobSchema,
@@ -624,6 +627,25 @@ const staticEntries: readonly RegistryEntry[] = [
     kind: 'http',
     description: 'Counts and ages an operator needs to support one tenant Fiscal context.',
     schema: fiscalSupportOverviewSchema,
+  },
+  {
+    id: 'http:fiscal-tax-support-matrix-v1',
+    kind: 'http',
+    description: 'The tax scenarios Fiscal calculates with evidence (Phase 85, ADR 0072).',
+    schema: fiscalTaxSupportMatrixSchema,
+  },
+  {
+    id: 'http:fiscal-tax-support-query-v1',
+    kind: 'http',
+    description: 'A tax scenario asked of the support matrix.',
+    schema: fiscalTaxSupportQuerySchema,
+  },
+  {
+    id: 'http:fiscal-tax-support-answer-v1',
+    kind: 'http',
+    description:
+      'Supported with the rows that cover a scenario, or unsupported naming the missing dimension.',
+    schema: fiscalTaxSupportAnswerSchema,
   },
   {
     id: 'http:problem-details',

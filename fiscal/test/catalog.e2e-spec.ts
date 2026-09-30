@@ -9,6 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FiscalCalculations } from '../src/calculations'
 import { canonicalJson } from '../src/canonical-json'
 import { CatalogAdoptionClash, type CatalogPublication, FiscalCatalog } from '../src/catalog'
+import { DECLARED_NCM, goodsPackage, issPackage } from '../src/legacy-packages'
+import { DEMO_WORKSPACE, scenarios } from '../src/legacy-scenarios'
 import {
   approvedPhase41Publication,
   approvedPhase41Source,
@@ -464,5 +466,54 @@ describe('IBS and CBS by tax classification (Phase 84, ADR 0072)', () => {
     expect(await calculations.preview(classified(tenantId, undefined, '1000'))).toMatchObject({
       supported: false,
     })
+  })
+})
+
+describe('the legacy taxes, bounded by reviewed scenarios (Phase 85, ADR 0072)', () => {
+  it('publishes the packages, adopts them and reproduces every fixture through the store', async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        new URL('../../docs/tax-phase85-source-manifest.json', import.meta.url),
+        'utf8',
+      ),
+    )
+    const packs = [
+      goodsPackage(manifest, new Map([[DECLARED_NCM, '6.5']]), [DECLARED_NCM]),
+      issPackage(manifest),
+    ]
+    const tenantId = await workspace(DEMO_WORKSPACE)
+    for (const pack of packs) {
+      const { label: _label, ...publication } = pack
+      const published = await publisher.publish(publication)
+      await catalog.adopt({
+        tenantId,
+        packageId: published.packageId,
+        effectiveFrom: '2026-01-01',
+        reviewedBy: 'workspace-owner',
+        interpretation: 'The Phase 85 declared scenarios.',
+        actorId: 'owner:test',
+        reason: 'Phase 85 e2e',
+      })
+    }
+    for (const scenario of scenarios()) {
+      const fixture = JSON.parse(
+        await readFile(new URL(`../fixtures/phase85/${scenario.id}.json`, import.meta.url), 'utf8'),
+      )
+      const result = await calculations.preview(scenario.input)
+      expect(canonicalJson(result).toString(), `${scenario.id} through the store`).toBe(
+        canonicalJson(fixture.expectedResult).toString(),
+      )
+    }
+    // Outside the declared scenarios, a contributor buying for its own use: the rules that exist
+    // (IPI) still calculate, and the ICMS they cannot give is the support matrix's to refuse.
+    const [f6] = scenarios().filter((scenario) => scenario.id.includes('f6'))
+    const [line] = f6?.input.lines ?? []
+    if (!f6 || !line) throw new Error('F6 is declared')
+    const ownUse = await calculations.preview({
+      ...f6.input,
+      lines: [{ ...line, taxFacts: { ipiTaxpayer: 'true', destinationUse: 'consumption' } }],
+    })
+    if (!ownUse.supported) throw new Error(JSON.stringify(ownUse))
+    expect(ownUse.lines[0]?.components.legacy.map((component) => component.code)).toEqual(['IPI'])
   })
 })
