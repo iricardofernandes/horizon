@@ -1,0 +1,622 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "phase86-g2-mei-resale",
+  "title": "SP → SP resale by an MEI (SIMEI), a classified line",
+  "covers": {
+    "model": "55",
+    "from": "2026-01-01",
+    "until": "2027-01-01",
+    "taxes": [
+      "ICMS",
+      "PIS",
+      "COFINS",
+      "CBS",
+      "IBS_UF",
+      "IBS_MUN"
+    ],
+    "originState": "35",
+    "destinationState": "35",
+    "recipientTaxpayer": true,
+    "issuerRegime": "mei",
+    "classification": {
+      "kind": "ncm",
+      "code": "85094010"
+    },
+    "facts": {
+      "destinationUse": "resale"
+    }
+  },
+  "packages": [
+    {
+      "label": "phase85.goods.sp-rj-ba.2026",
+      "packageDigest": "ac0f1161144e701360f30232bc5b7d3115d1c6296b7330016e0d77c14219e803"
+    },
+    {
+      "label": "phase85.iss.sao-paulo.2026",
+      "packageDigest": "636595494e59f108c29f9fe245949b33c342f486e9b0be230e8ae215f12ea7af"
+    },
+    {
+      "label": "phase86.pis-cofins.normal.2026",
+      "packageDigest": "bb9262f93ee6d3a21e61106a2a7fbe28cc33b88b2380123d3a11b9daf3ce3d49"
+    },
+    {
+      "label": "phase86.simples-mei",
+      "packageDigest": "9472086d3591f2fcf3ac06ae0320104e1cf856cb9dbbeaa0759fc47cdb60f7c2"
+    },
+    {
+      "label": "phase86.blend.2029-2032",
+      "packageDigest": "5dd37f3ae74ef9fcba62760708b94c0a82e2e8213215c4e951a6fa2e740f4d19"
+    }
+  ],
+  "input": {
+    "schemaVersion": 1,
+    "tenantId": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+    "issuerEstablishmentId": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+    "model": "55",
+    "environment": "simulation",
+    "operation": "sale",
+    "purpose": "normal",
+    "issuer": {
+      "regime": "mei",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "recipient": {
+      "regime": "normal",
+      "stateCode": "35",
+      "municipalityCode": "3550308",
+      "taxpayer": true
+    },
+    "origin": {
+      "countryCode": "1058",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "destination": {
+      "countryCode": "1058",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "issueDate": "2026-10-15",
+    "currency": "BRL",
+    "lines": [
+      {
+        "id": "73c4d3a8-2e7a-5e1d-a0c4-95d3850ad9c0",
+        "itemId": "455ef4f0-676f-501a-bae6-e66eabfbb48b",
+        "quantity": "2",
+        "unitPrice": "189.9",
+        "discount": {
+          "amount": "0",
+          "currency": "BRL"
+        },
+        "charges": {
+          "amount": "0",
+          "currency": "BRL"
+        },
+        "classifications": {
+          "ncm": "85094010",
+          "origin": "0",
+          "classTrib": "000001"
+        },
+        "taxFacts": {
+          "destinationUse": "resale"
+        }
+      }
+    ]
+  },
+  "expectedResult": {
+    "schemaVersion": 1,
+    "supported": true,
+    "inputDigest": "27701127d6fa81f1582045ac426d7f84e9ce4c927bdbc9ede9f75925771f3043",
+    "rulesDigest": "f975b7aae28930a8f2971f6747eb7e58687839e53204539bc7fa9b3c3b530753",
+    "resultDigest": "87a6fb04c6dc2548b457b1a872764d2e2e0e36afddd8a6f4a5325d7972fa7de6",
+    "lines": [
+      {
+        "lineId": "73c4d3a8-2e7a-5e1d-a0c4-95d3850ad9c0",
+        "gross": {
+          "amount": "37980",
+          "currency": "BRL"
+        },
+        "net": {
+          "amount": "37980",
+          "currency": "BRL"
+        },
+        "components": {
+          "legacy": [
+            {
+              "code": "COFINS",
+              "base": {
+                "amount": "37980",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "0",
+                "denominator": "1"
+              },
+              "unrounded": {
+                "numerator": "0",
+                "denominator": "1",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "0",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "4e227f28-2a77-52ab-b703-912bd9b08529",
+                "version": 1
+              },
+              "outcome": "not-levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "not-levied: nothing is owed",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "d1001103-eae3-5c99-b49f-1102f849b375",
+                "digest": "9472086d3591f2fcf3ac06ae0320104e1cf856cb9dbbeaa0759fc47cdb60f7c2",
+                "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm",
+                "section": "lc-123-2006: art. 18-A (collected in the DAS, not on the document)"
+              }
+            },
+            {
+              "code": "ICMS",
+              "base": {
+                "amount": "37980",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "0",
+                "denominator": "1"
+              },
+              "unrounded": {
+                "numerator": "0",
+                "denominator": "1",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "0",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "d330c885-a11f-5252-9f10-d948b293afeb",
+                "version": 1
+              },
+              "outcome": "not-levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "not-levied: nothing is owed",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "d1001103-eae3-5c99-b49f-1102f849b375",
+                "digest": "9472086d3591f2fcf3ac06ae0320104e1cf856cb9dbbeaa0759fc47cdb60f7c2",
+                "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm",
+                "section": "lc-123-2006: art. 18-A (collected in the DAS, not on the document)"
+              }
+            },
+            {
+              "code": "PIS",
+              "base": {
+                "amount": "37980",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "0",
+                "denominator": "1"
+              },
+              "unrounded": {
+                "numerator": "0",
+                "denominator": "1",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "0",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "c5750a19-afd9-5b2d-bb3a-b52cde35523e",
+                "version": 1
+              },
+              "outcome": "not-levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "not-levied: nothing is owed",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "d1001103-eae3-5c99-b49f-1102f849b375",
+                "digest": "9472086d3591f2fcf3ac06ae0320104e1cf856cb9dbbeaa0759fc47cdb60f7c2",
+                "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm",
+                "section": "lc-123-2006: art. 18-A (collected in the DAS, not on the document)"
+              }
+            }
+          ],
+          "ibsCbs": [
+            {
+              "code": "CBS",
+              "base": {
+                "amount": "37980",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "0",
+                "denominator": "1"
+              },
+              "unrounded": {
+                "numerator": "0",
+                "denominator": "1",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "0",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "b84a6990-39d4-528f-91a9-62d6e1037820",
+                "version": 1
+              },
+              "outcome": "not-levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "not-levied: nothing is owed",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "d1001103-eae3-5c99-b49f-1102f849b375",
+                "digest": "9472086d3591f2fcf3ac06ae0320104e1cf856cb9dbbeaa0759fc47cdb60f7c2",
+                "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm",
+                "section": "lc-214-2025: art. 348 III c (the 2026 rates do not apply to Simples optants)"
+              }
+            },
+            {
+              "code": "IBS_MUN",
+              "base": {
+                "amount": "37980",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "0",
+                "denominator": "1"
+              },
+              "unrounded": {
+                "numerator": "0",
+                "denominator": "1",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "0",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "46eec7a4-0fad-5f16-95e0-69804cd9a65f",
+                "version": 1
+              },
+              "outcome": "not-levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "not-levied: nothing is owed",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "d1001103-eae3-5c99-b49f-1102f849b375",
+                "digest": "9472086d3591f2fcf3ac06ae0320104e1cf856cb9dbbeaa0759fc47cdb60f7c2",
+                "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm",
+                "section": "lc-214-2025: art. 348 III c (the 2026 rates do not apply to Simples optants)"
+              }
+            },
+            {
+              "code": "IBS_UF",
+              "base": {
+                "amount": "37980",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "0",
+                "denominator": "1"
+              },
+              "unrounded": {
+                "numerator": "0",
+                "denominator": "1",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "0",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "9efe0ba9-a0fc-571e-8a66-adccc6d0c6d8",
+                "version": 1
+              },
+              "outcome": "not-levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "37980",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "not-levied: nothing is owed",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "d1001103-eae3-5c99-b49f-1102f849b375",
+                "digest": "9472086d3591f2fcf3ac06ae0320104e1cf856cb9dbbeaa0759fc47cdb60f7c2",
+                "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm",
+                "section": "lc-214-2025: art. 348 III c (the 2026 rates do not apply to Simples optants)"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "totals": {
+      "gross": {
+        "amount": "37980",
+        "currency": "BRL"
+      },
+      "discounts": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "charges": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "net": {
+        "amount": "37980",
+        "currency": "BRL"
+      },
+      "legacyTax": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "ibsCbsTax": {
+        "amount": "0",
+        "currency": "BRL"
+      }
+    },
+    "reconciliation": {
+      "lineNetSum": {
+        "amount": "37980",
+        "currency": "BRL"
+      },
+      "legacyComponentSum": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "ibsCbsComponentSum": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "balanced": true
+    },
+    "explanation": {
+      "templateVersion": "fiscal-explanation-v2",
+      "text": "Line 73c4d3a8-2e7a-5e1d-a0c4-95d3850ad9c0: net 37980 BRL minor units.\nCOFINS (not-levied): rule 4e227f28-2a77-52ab-b703-912bd9b08529 v1; source https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm § lc-123-2006: art. 18-A (collected in the DAS, not on the document).\n  base = line.net = 37980/1\n  base, rounded half away from zero = 37980/1\n  rate = 0/1\n  not-levied: nothing is owed = 0/1\n  amount, rounded half away from zero = 0/1\nICMS (not-levied): rule d330c885-a11f-5252-9f10-d948b293afeb v1; source https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm § lc-123-2006: art. 18-A (collected in the DAS, not on the document).\n  base = line.net = 37980/1\n  base, rounded half away from zero = 37980/1\n  rate = 0/1\n  not-levied: nothing is owed = 0/1\n  amount, rounded half away from zero = 0/1\nPIS (not-levied): rule c5750a19-afd9-5b2d-bb3a-b52cde35523e v1; source https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm § lc-123-2006: art. 18-A (collected in the DAS, not on the document).\n  base = line.net = 37980/1\n  base, rounded half away from zero = 37980/1\n  rate = 0/1\n  not-levied: nothing is owed = 0/1\n  amount, rounded half away from zero = 0/1\nCBS (not-levied): rule b84a6990-39d4-528f-91a9-62d6e1037820 v1; source https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm § lc-214-2025: art. 348 III c (the 2026 rates do not apply to Simples optants).\n  base = line.net = 37980/1\n  base, rounded half away from zero = 37980/1\n  rate = 0/1\n  not-levied: nothing is owed = 0/1\n  amount, rounded half away from zero = 0/1\nIBS_MUN (not-levied): rule 46eec7a4-0fad-5f16-95e0-69804cd9a65f v1; source https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm § lc-214-2025: art. 348 III c (the 2026 rates do not apply to Simples optants).\n  base = line.net = 37980/1\n  base, rounded half away from zero = 37980/1\n  rate = 0/1\n  not-levied: nothing is owed = 0/1\n  amount, rounded half away from zero = 0/1\nIBS_UF (not-levied): rule 9efe0ba9-a0fc-571e-8a66-adccc6d0c6d8 v1; source https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm § lc-214-2025: art. 348 III c (the 2026 rates do not apply to Simples optants).\n  base = line.net = 37980/1\n  base, rounded half away from zero = 37980/1\n  rate = 0/1\n  not-levied: nothing is owed = 0/1\n  amount, rounded half away from zero = 0/1"
+    }
+  },
+  "approval": {
+    "approvedBy": "workspace-owner",
+    "approvedAt": "2026-09-30T20:57:12.956Z",
+    "scope": "SP → SP resale by an MEI (SIMEI), a classified line — ICMS, PIS, COFINS, CBS, IBS_UF, IBS_MUN, 2026 simulation",
+    "fixtureDigest": "1f9b9f6aa394ab9607e56021f1fd3546567f1bb09c31547f4825b9b14d6c05bd"
+  }
+}

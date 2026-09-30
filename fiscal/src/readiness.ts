@@ -11,6 +11,7 @@ import {
   supportedKind,
 } from './document-kinds'
 import type { FiscalDocuments } from './documents'
+import { issuerRegimeOf } from './issuer-regime'
 import { jurisdictionOfAddress } from './nfe55/jurisdiction'
 import { type FiscalOriginSnapshot, parseFiscalOriginSnapshot } from './origin-snapshot'
 import { PHASE41_FIXTURE_ID, PHASE41_SCENARIO_ID } from './phase41-approved-scenario'
@@ -232,11 +233,9 @@ function deriveCalculationInput(input: {
 }): FiscalCalculationInput {
   const issuerAddress = input.issuer.company.address
   const recipientAddress = input.recipient.profile.address
-  if (
-    input.issuer.company.fiscalRegime !== 'lucro-real' &&
-    input.issuer.company.fiscalRegime !== 'lucro-presumido'
-  )
-    throw new Error('Fiscal capability is unsupported')
+  const regime = issuerRegimeOf(input.issuer.company.fiscalRegime)
+  // Issuing for a Simples or MEI issuer (CSOSN) is not built; its calculation is previewable.
+  if (regime?.regime !== 'normal') throw new Error('Fiscal capability is unsupported')
   const issuer = jurisdictionOfAddress(issuerAddress)
   const recipient = jurisdictionOfAddress(recipientAddress)
   // The normal-sale operation is intrastate (`idDest` 1); interstate sales need their
@@ -275,7 +274,7 @@ function deriveCalculationInput(input: {
       ? { referencedDocumentId: linkedFacts.referencedDocumentId }
       : {}),
     issuer: {
-      regime: 'normal',
+      ...regime,
       stateCode: issuer.ufCode,
       municipalityCode: issuer.municipalityCode,
     },

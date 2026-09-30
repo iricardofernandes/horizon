@@ -68,6 +68,7 @@ try {
     '0055_phase83_expressions.sql',
     '0056_phase84_tax_classification.sql',
     '0057_phase85_scope_dimensions.sql',
+    '0058_phase86_income_tax_regime.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

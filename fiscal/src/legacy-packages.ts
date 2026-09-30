@@ -13,8 +13,8 @@ import type { TaxRule } from './rules'
  * a scenario is supported only once its fixture is approved.
  */
 
-type Rule = z.input<typeof taxRuleImportSchema>
-type Entry = z.infer<typeof referenceEntrySchema>
+export type Rule = z.input<typeof taxRuleImportSchema>
+export type Entry = z.infer<typeof referenceEntrySchema>
 
 export const SAO_PAULO = '35'
 export const RIO_DE_JANEIRO = '33'
@@ -62,19 +62,25 @@ function goodsRule(
   }
 }
 
-/** A published package, named by its manifest: the sources it reads and its own content. */
-function publication(
+/**
+ * A published package, named by its manifest: the sources it reads and its own content, and
+ * what it reads from other packages when it does (Phase 86).
+ */
+export function publication(
   label: string,
   authority: string,
   sourceUri: string,
   sources: readonly { id: string; sha256: string }[],
   rules: Rule[],
   entries: Entry[],
+  options: { requires?: string[]; publisher?: string } = {},
 ): CatalogPublication & { label: string } {
+  const requires = options.requires ?? []
   const manifest = {
     label,
     sources: sources.map((source) => ({ id: source.id, sha256: source.sha256 })),
     contentDigest: canonicalDigest({ entries, rules }),
+    ...(requires.length > 0 ? { requires } : {}),
   }
   return {
     label,
@@ -82,9 +88,10 @@ function publication(
     sourceUri,
     publishedAt: '2026-09-30',
     effectiveFrom: FROM,
-    publisher: 'platform:phase85',
+    publisher: options.publisher ?? 'platform:phase85',
     entries,
     rules: rules as CatalogPublication['rules'],
+    ...(requires.length > 0 ? { requires } : {}),
     bytes: Buffer.from(JSON.stringify(manifest)),
   }
 }
@@ -93,14 +100,15 @@ export type SourceManifest = {
   sources: { id: string; uri: string; sha256: string }[]
 }
 
-const source = (manifest: SourceManifest, id: string) => {
+export const source = (manifest: SourceManifest, id: string) => {
   const found = manifest.sources.find((entry) => entry.id === id)
   if (!found) throw new Error(`the source manifest has no ${id}`)
   return found
 }
 
 /** ICMS: SP's internal and interstate rates, RJ's internal rate and FECP for DIFAL. */
-function icmsPart() {
+/** The Phase 85 ICMS rules, which the 2029–2032 blend repeats at a fraction (Phase 86). */
+export function icmsPart() {
   const contributorResale = {
     recipientTaxpayer: true,
     fact: { key: FACTS.destinationUse, value: 'resale' },
@@ -335,8 +343,9 @@ export function goodsPackage(
 }
 
 /** ISS in São Paulo for the declared service. */
-export function issPackage(manifest: SourceManifest) {
-  const rules: Rule[] = [
+/** The Phase 85 ISS rules, which the 2029–2032 blend repeats at a fraction (Phase 86). */
+export function issRules(): Rule[] {
+  return [
     {
       ...goodsRule({
         ruleKey: `iss.3550308.${DECLARED_SERVICE}`,
@@ -353,6 +362,10 @@ export function issPackage(manifest: SourceManifest) {
       model: 'nfse',
     },
   ]
+}
+
+export function issPackage(manifest: SourceManifest) {
+  const rules = issRules()
   const entries: Entry[] = [
     {
       family: 'service',
@@ -402,6 +415,7 @@ export function publicationAsTaxRules(pack: CatalogPublication, tenantId: string
         ? { recipientTaxpayer: rule.recipientTaxpayer }
         : {}),
       ...(rule.issuerMunicipality ? { issuerMunicipality: rule.issuerMunicipality } : {}),
+      ...(rule.issuerIncomeTaxRegime ? { issuerIncomeTaxRegime: rule.issuerIncomeTaxRegime } : {}),
       ...(rule.fact ? { fact: rule.fact } : {}),
       ...(rule.classification ? { classification: rule.classification } : {}),
     },

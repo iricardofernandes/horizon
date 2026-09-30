@@ -27,7 +27,10 @@ const fiscalCalculationInputBaseSchema = z.object({
   purpose: z.enum(['normal', 'return', 'complementary', 'adjustment']),
   referencedDocumentId: uuidSchema.optional(),
   issuer: z.object({
+    /** The NF-e's CRT: `normal` (Lucro Real or Presumido), `simples-nacional` or `mei`. */
     regime: z.string().trim().min(1).max(80),
+    /** For a `normal` issuer, what decides the PIS/Cofins method (Phase 86). */
+    incomeTaxRegime: z.enum(['lucro-real', 'lucro-presumido']).optional(),
     stateCode: z.string().regex(/^\d{2}$/),
     municipalityCode: z.string().regex(/^\d{7}$/),
   }),

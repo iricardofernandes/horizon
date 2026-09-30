@@ -133,12 +133,18 @@ export function ruleReferences(expression: RuleExpression): string[] {
  */
 export function packageProblem(
   rules: readonly { code: string; expression?: RuleExpression | undefined }[],
+  /** Components the package reads from other packages (Phase 86); absent at calculation, unsupported. */
+  requires: readonly string[] = [],
 ): string | null {
   const defined = new Set(rules.map((rule) => rule.code))
+  const required = new Set(requires)
+  for (const code of required)
+    if (defined.has(code)) return `${code} is both defined and required by the package`
   const edges = new Map<string, Set<string>>()
   for (const rule of rules) {
     if (!rule.expression) continue
     for (const reference of ruleReferences(rule.expression)) {
+      if (required.has(reference)) continue
       if (!defined.has(reference))
         return `${rule.code} reads component ${reference}, which no rule of the package defines`
       if (reference === rule.code) return `${rule.code} reads itself`

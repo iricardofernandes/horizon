@@ -166,6 +166,18 @@ describe('temporal tax rule resolution', () => {
     expect(resolveTaxRules(campinas, [saoPaulo], 2).supported).toBe(false)
   })
 
+  it("scopes a rule by the issuer's income-tax regime (Phase 86)", () => {
+    const real = rule({ scope: { ...rule().scope, issuerIncomeTaxRegime: 'lucro-real' } })
+    expect(resolveTaxRules(input, [real], 2).supported).toBe(false)
+    expect(
+      resolveTaxRules(
+        { ...input, issuer: { ...input.issuer, incomeTaxRegime: 'lucro-real' } },
+        [real],
+        2,
+      ).supported,
+    ).toBe(true)
+  })
+
   it('uses competence date only when the selected component declares it', () => {
     const competenceRule = rule({
       dateBasis: 'competence_date',

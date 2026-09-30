@@ -1,6 +1,6 @@
 # Tax rules engine implementation plan — Phase O
 
-Status: **in progress** — Phases 82 to 85 delivered on 2026-09-30 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md), [84](tax-phase84-evidence.md), [85](tax-phase85-evidence.md)). This is the execution plan for Phase O,
+Status: **in progress** — Phases 82 to 85 delivered on 2026-09-30 and 86 on 2026-10-01 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md), [84](tax-phase84-evidence.md), [85](tax-phase85-evidence.md), [86](tax-phase86-evidence.md)). This is the execution plan for Phase O,
 split into phases 82–89 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to N
 and 79 to 81.
@@ -273,6 +273,11 @@ non-contributor; and São Paulo ISS. ICMS-ST and gross-up were left out, with th
 - An interstate sale to a non-contributor shows own ICMS, DIFAL and FCP, each explained.
 
 ### 86 — Regimes and the blend
+
+**Delivered on 2026-10-01** ([plan](tax-phase86-implementation-plan.md),
+[evidence](tax-phase86-evidence.md)). Eight scenarios were approved: the same resale for a
+Simples, an MEI, a Presumido and a Real issuer; a Simples NFS-e; ICMS at 8/10 in 2030; and a
+Simples exclusion on 1 July. The IBS side of the blend waits for the Senate's rates.
 
 **Work**
 1. **Taxpayer regimes as profile facts that rules read:**

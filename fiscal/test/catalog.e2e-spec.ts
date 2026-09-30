@@ -17,6 +17,8 @@ import {
   PHASE41_CATALOG_IDENTITY,
   PHASE41_FIXTURE_ID,
 } from '../src/phase41-approved-scenario'
+import { blendPackage, pisCofinsNormalPackage, simplesMeiPackage } from '../src/regime-packages'
+import { regimeScenarios } from '../src/regime-scenarios'
 import { buildRtcPackage } from '../src/rtc-package'
 import { FiscalRuleStore } from '../src/rule-store'
 
@@ -515,5 +517,72 @@ describe('the legacy taxes, bounded by reviewed scenarios (Phase 85, ADR 0072)',
     })
     if (!ownUse.supported) throw new Error(JSON.stringify(ownUse))
     expect(ownUse.lines[0]?.components.legacy.map((component) => component.code)).toEqual(['IPI'])
+  })
+})
+
+describe('regimes and the blend (Phase 86)', () => {
+  it('publishes and adopts the regime packages, reproduces every fixture, and replays a June lock', async () => {
+    const sources = (
+      await Promise.all(
+        ['82', '85', '86'].map(
+          async (phase) =>
+            JSON.parse(
+              await readFile(
+                new URL(`../../docs/tax-phase${phase}-source-manifest.json`, import.meta.url),
+                'utf8',
+              ),
+            ).sources,
+        ),
+      )
+    ).flat()
+    const manifest = { sources }
+    const packs = [
+      goodsPackage(manifest, new Map([[DECLARED_NCM, '6.5']]), [DECLARED_NCM]),
+      issPackage(manifest),
+      pisCofinsNormalPackage(manifest),
+      simplesMeiPackage(manifest),
+      blendPackage(manifest),
+    ]
+    const tenantId = await workspace(DEMO_WORKSPACE)
+    for (const pack of packs) {
+      const { label: _label, ...publication } = pack
+      const published = await publisher.publish(publication)
+      // The Phase 85 packages may already be adopted by the test before this one.
+      await catalog
+        .adopt({
+          tenantId,
+          packageId: published.packageId,
+          effectiveFrom: '2026-01-01',
+          reviewedBy: 'workspace-owner',
+          interpretation: 'The Phase 85 and 86 declared scenarios.',
+          actorId: 'owner:test',
+          reason: 'Phase 86 e2e',
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof Error && /already adopted/.test(error.message))) throw error
+        })
+    }
+    for (const scenario of regimeScenarios()) {
+      const fixture = JSON.parse(
+        await readFile(new URL(`../fixtures/phase86/${scenario.id}.json`, import.meta.url), 'utf8'),
+      )
+      const result = await calculations.preview(scenario.input)
+      expect(canonicalJson(result).toString(), `${scenario.id} through the store`).toBe(
+        canonicalJson(fixture.expectedResult).toString(),
+      )
+    }
+    // A sale locked on 30 June as Simples replays as it was, whatever the issuer became on 1 July.
+    const [june] = regimeScenarios().filter((scenario) => scenario.id.includes('g7a'))
+    if (!june) throw new Error('G7a is declared')
+    const documentId = randomUUID()
+    await insertDraft(tenantId, documentId, june.input.issuerEstablishmentId)
+    const locked = await calculations.validateDocument({
+      tenantId,
+      documentId,
+      actorId: 'issuer:test',
+      calculationInput: june.input,
+    })
+    expect(locked.supported).toBe(true)
+    expect(await calculations.replay(tenantId, documentId)).toEqual(locked)
   })
 })

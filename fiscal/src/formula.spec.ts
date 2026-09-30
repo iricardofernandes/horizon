@@ -194,6 +194,10 @@ describe('differences and deductions (Phase 85)', () => {
       'ICMS_ST',
     ])
     expect(packageProblem([st])).toMatch(/reads component ICMS/)
+    // Phase 86: a package may name what it reads from another one, and nothing else.
+    expect(packageProblem([st], ['ICMS'])).toBeNull()
+    expect(packageProblem([st], ['IPI'])).toMatch(/reads component ICMS/)
+    expect(packageProblem([icms, st], ['ICMS'])).toMatch(/both defined and required/)
   })
 })
 

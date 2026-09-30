@@ -40,6 +40,11 @@ const publicationSchema = z.object({
   artifact: z.object({ digest, byteSize: z.int().positive() }).optional(),
   entries: z.array(referenceEntrySchema).max(100_000),
   rules: z.array(catalogRuleSchema).max(100_000),
+  /** Components read from other packages, such as ICMS for PIS/Cofins (Phase 86). */
+  requires: z
+    .array(z.string().regex(/^[A-Z][A-Z0-9_]{0,39}$/))
+    .max(16)
+    .default([]),
 })
 
 export type CatalogPublication = z.input<typeof publicationSchema> & { bytes: Buffer }
@@ -100,6 +105,7 @@ const TIE_COLUMNS = [
   'classification_code',
   'recipient_taxpayer',
   'issuer_municipality',
+  'issuer_income_tax_regime',
   'fact_key',
   'fact_value',
 ] as const
@@ -130,7 +136,7 @@ export class FiscalCatalog {
     if (!Buffer.isBuffer(candidate.bytes) || candidate.bytes.length === 0)
       throw new Error('Catalogue source bytes are required')
     const value = publicationSchema.parse(candidate)
-    const formulaProblem = packageProblem(value.rules)
+    const formulaProblem = packageProblem(value.rules, value.requires)
     if (formulaProblem) throw new Error(`Catalogue package refused: ${formulaProblem}`)
     const packageDigest =
       value.artifact?.digest ?? createHash('sha256').update(candidate.bytes).digest('hex')
@@ -183,6 +189,7 @@ export class FiscalCatalog {
           priority, date_basis, purpose, model, environment, operation, issuer_regime,
           recipient_regime, origin_state, destination_state, classification_kind,
           classification_code, recipient_taxpayer, issuer_municipality, fact_key, fact_value,
+          issuer_income_tax_regime,
           effective_from,
           effective_to, rate_numerator, rate_denominator, formula, expression, source_locator,
           definition_digest
@@ -195,6 +202,7 @@ export class FiscalCatalog {
           ${rule.classification?.kind ?? '*'}, ${rule.classification?.code ?? '*'},
           ${rule.recipientTaxpayer === undefined ? '*' : String(rule.recipientTaxpayer)},
           ${rule.issuerMunicipality ?? '*'}, ${rule.fact?.key ?? '*'}, ${rule.fact?.value ?? '*'},
+          ${rule.issuerIncomeTaxRegime ?? '*'},
           ${rule.effectiveFrom}, ${rule.effectiveTo ?? null}, ${rule.rate.numerator},
           ${rule.rate.denominator}, ${rule.formula},
           ${rule.expression ? tx.json(rule.expression as postgres.JSONValue) : null},

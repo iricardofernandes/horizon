@@ -7,13 +7,21 @@ import { FiscalCalculations } from './calculations'
 import { canonicalJson } from './canonical-json'
 import { FiscalCatalog } from './catalog'
 import { DECLARED_NCM, goodsPackage, issPackage, type SourceManifest } from './legacy-packages'
-import { expectedResult, type Fixture, fixtureDigest, scenarios } from './legacy-scenarios'
+import {
+  expectedResult,
+  type Fixture,
+  fixtureDigest,
+  type Scenario,
+  scenarios,
+} from './legacy-scenarios'
+import { blendPackage, pisCofinsNormalPackage, simplesMeiPackage } from './regime-packages'
+import { regimeScenarios } from './regime-scenarios'
 import { deterministicUuid } from './rule-rows'
 import { FiscalRuleStore } from './rule-store'
 import { buildSupportMatrix, supportEvidence } from './tax-support'
 
 /**
- * Phase 85 (ADR 0072): the legacy-tax scenarios, reviewed by the workspace owner.
+ * Phases 85 and 86 (ADR 0072): the reviewed tax scenarios, `--phase 85` (the default) or `86`.
  *   fixtures                                   build every fixture; an unchanged one keeps its approval
  *   approve --fixture <id> --by <who> --scope <text>   only on the workspace owner's word
  *   publish                                    as the migration role (DATABASE_MIGRATION_URL)
@@ -23,15 +31,21 @@ import { buildSupportMatrix, supportEvidence } from './tax-support'
  */
 
 const REPOSITORY = resolve(__dirname, '..', '..')
-const MANIFEST = join(REPOSITORY, 'docs/tax-phase85-source-manifest.json')
+const MANIFESTS = ['82', '85', '86'].map((phase) =>
+  join(REPOSITORY, `docs/tax-phase${phase}-source-manifest.json`),
+)
 const LAW_STORE = join(REPOSITORY, '.artifacts/fiscal/law')
-const FIXTURES = join(REPOSITORY, 'fiscal/fixtures/phase85')
 const MATRIX = join(REPOSITORY, 'fiscal/support-matrix.json')
 
 const option = (name: string): string | undefined => {
   const index = process.argv.indexOf(`--${name}`)
   return index < 0 ? undefined : process.argv[index + 1]
 }
+
+const PHASE = option('phase') ?? '85'
+if (PHASE !== '85' && PHASE !== '86') throw new Error('--phase is 85 or 86')
+const FIXTURES = join(REPOSITORY, `fiscal/fixtures/phase${PHASE}`)
+const SCENARIOS: () => Scenario[] = PHASE === '85' ? scenarios : regimeScenarios
 const required = (name: string): string => {
   const found = option(name)
   if (!found) throw new Error(`--${name} is required`)
@@ -77,14 +91,34 @@ export function readTipi(path: string): Map<string, string> {
   return rates
 }
 
-async function packages() {
-  const manifest = JSON.parse(await readFile(MANIFEST, 'utf8')) as SourceManifest
+/** Every package a phase's fixtures are calculated with, and the ones the phase publishes. */
+async function packageSet() {
+  const manifest: SourceManifest = {
+    sources: (
+      await Promise.all(
+        MANIFESTS.map(
+          async (path) => (JSON.parse(await readFile(path, 'utf8')) as SourceManifest).sources,
+        ),
+      )
+    ).flat(),
+  }
   const tipi = manifest.sources.find((source) => source.id === 'tipi-2022')
   if (!tipi) throw new Error('the manifest pins no TIPI')
   const tipiPath = join(LAW_STORE, tipi.sha256)
   if (!existsSync(tipiPath))
     throw new Error(`${tipiPath} is missing: the pinned TIPI is not stored`)
-  return [goodsPackage(manifest, readTipi(tipiPath), [DECLARED_NCM]), issPackage(manifest)]
+  const phase85 = [goodsPackage(manifest, readTipi(tipiPath), [DECLARED_NCM]), issPackage(manifest)]
+  if (PHASE === '85') return { all: phase85, own: phase85 }
+  const phase86 = [
+    pisCofinsNormalPackage(manifest),
+    simplesMeiPackage(manifest),
+    blendPackage(manifest),
+  ]
+  return { all: [...phase85, ...phase86], own: phase86 }
+}
+
+async function packages() {
+  return (await packageSet()).all
 }
 
 async function readFixtures(): Promise<Fixture[]> {
@@ -103,7 +137,7 @@ async function fixtures(): Promise<unknown> {
   const prior = new Map((await readFixtures()).map((fixture) => [fixture.fixtureId, fixture]))
   await mkdir(FIXTURES, { recursive: true })
   const summary = []
-  for (const scenario of scenarios()) {
+  for (const scenario of SCENARIOS()) {
     const unsigned: Omit<Fixture, 'approval'> = {
       schemaVersion: 1,
       fixtureId: scenario.id,
@@ -150,7 +184,7 @@ async function publish(): Promise<unknown> {
   const catalog = new FiscalCatalog(env('DATABASE_MIGRATION_URL'), 300_000)
   try {
     const published = []
-    for (const pack of await packages()) {
+    for (const pack of (await packageSet()).own) {
       const { label, ...publication } = pack
       published.push({ label, ...(await catalog.publish(publication)) })
     }
@@ -166,7 +200,7 @@ async function adopt(): Promise<unknown> {
   const catalog = new FiscalCatalog(env('DATABASE_URL'))
   try {
     const adoptions = []
-    for (const pack of await packages()) {
+    for (const pack of (await packageSet()).own) {
       const digest = packageDigest(pack)
       const cited = approved
         .filter((fixture) => fixture.packages.some((entry) => entry.packageDigest === digest))
@@ -178,10 +212,13 @@ async function adopt(): Promise<unknown> {
           packageId: deterministicUuid('catalog', pack.authority, digest),
           effectiveFrom: '2026-01-01',
           reviewedBy: 'workspace-owner',
-          interpretation: `${pack.label}, as reviewed in the approved Phase 85 fixtures.`,
+          interpretation: `${pack.label}, as reviewed in the approved Phase ${PHASE} fixtures.`,
           fixtureIds: cited,
           actorId: required('actor'),
-          reason: 'Phase 85: the legacy taxes, bounded by reviewed scenarios',
+          reason:
+            PHASE === '85'
+              ? 'Phase 85: the legacy taxes, bounded by reviewed scenarios'
+              : 'Phase 86: regimes and the blend',
         }),
       })
     }
@@ -240,9 +277,12 @@ const actions: Record<string, () => Promise<unknown>> = {
   matrix,
 }
 
-const action = actions[process.argv[2] ?? '']
+const named = process.argv.slice(2).find((argument) => argument in actions)
+const action = named ? actions[named] : undefined
 if (!action) {
-  process.stderr.write(`usage: phase85-scenarios-cli <${Object.keys(actions).join('|')}>\n`)
+  process.stderr.write(
+    `usage: tax-scenarios-cli <${Object.keys(actions).join('|')}> [--phase 85|86]\n`,
+  )
   process.exit(2)
 }
 action()

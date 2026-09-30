@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "phase86-g5-simples-nfse-sao-paulo",
+  "title": "NFS-e of a Simples Nacional provider in São Paulo, LC 116 subitem 1.01",
+  "covers": {
+    "model": "nfse",
+    "from": "2026-01-01",
+    "until": "2033-01-01",
+    "taxes": [
+      "ISS"
+    ],
+    "originState": "35",
+    "destinationState": "35",
+    "recipientTaxpayer": true,
+    "issuerRegime": "simples-nacional",
+    "classification": {
+      "kind": "service",
+      "code": "010101"
+    },
+    "facts": {},
+    "issuerMunicipality": "3550308"
+  },
+  "packages": [
+    {
+      "label": "phase85.goods.sp-rj-ba.2026",
+      "packageDigest": "ac0f1161144e701360f30232bc5b7d3115d1c6296b7330016e0d77c14219e803"
+    },
+    {
+      "label": "phase85.iss.sao-paulo.2026",
+      "packageDigest": "636595494e59f108c29f9fe245949b33c342f486e9b0be230e8ae215f12ea7af"
+    },
+    {
+      "label": "phase86.pis-cofins.normal.2026",
+      "packageDigest": "bb9262f93ee6d3a21e61106a2a7fbe28cc33b88b2380123d3a11b9daf3ce3d49"
+    },
+    {
+      "label": "phase86.simples-mei",
+      "packageDigest": "9472086d3591f2fcf3ac06ae0320104e1cf856cb9dbbeaa0759fc47cdb60f7c2"
+    },
+    {
+      "label": "phase86.blend.2029-2032",
+      "packageDigest": "5dd37f3ae74ef9fcba62760708b94c0a82e2e8213215c4e951a6fa2e740f4d19"
+    }
+  ],
+  "input": {
+    "schemaVersion": 1,
+    "tenantId": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+    "issuerEstablishmentId": "01a0b6b8-c334-7136-8144-e48a7ba17e08",
+    "model": "nfse",
+    "environment": "simulation",
+    "operation": "sale",
+    "purpose": "normal",
+    "issuer": {
+      "regime": "simples-nacional",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "recipient": {
+      "regime": "normal",
+      "stateCode": "35",
+      "municipalityCode": "3550308",
+      "taxpayer": true
+    },
+    "origin": {
+      "countryCode": "1058",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "destination": {
+      "countryCode": "1058",
+      "stateCode": "35",
+      "municipalityCode": "3550308"
+    },
+    "issueDate": "2026-10-15",
+    "currency": "BRL",
+    "lines": [
+      {
+        "id": "de69aec6-96b6-52a6-9056-ff7ffa3f8cc4",
+        "serviceId": "52bb4eb6-3302-56b8-aa11-2811965310f9",
+        "quantity": "1",
+        "unitPrice": "1500",
+        "discount": {
+          "amount": "0",
+          "currency": "BRL"
+        },
+        "charges": {
+          "amount": "0",
+          "currency": "BRL"
+        },
+        "classifications": {
+          "service": "010101"
+        },
+        "taxFacts": {}
+      }
+    ]
+  },
+  "expectedResult": {
+    "schemaVersion": 1,
+    "supported": true,
+    "inputDigest": "0db9e4f704ac4c08a22da27b47348e64ad715165a3a20e4ba22eb0696e3bbf5e",
+    "rulesDigest": "c1c7c1f9a2c66fb4349898cb0ecf7417c21a5c4e95e6e52eb04a20cf2badd064",
+    "resultDigest": "3e919447facc3938368fb9fe8a530df78639fbac5ea96feb46780703d44786a9",
+    "lines": [
+      {
+        "lineId": "de69aec6-96b6-52a6-9056-ff7ffa3f8cc4",
+        "gross": {
+          "amount": "150000",
+          "currency": "BRL"
+        },
+        "net": {
+          "amount": "150000",
+          "currency": "BRL"
+        },
+        "components": {
+          "legacy": [
+            {
+              "code": "ISS",
+              "base": {
+                "amount": "150000",
+                "currency": "BRL"
+              },
+              "rate": {
+                "numerator": "0",
+                "denominator": "1"
+              },
+              "unrounded": {
+                "numerator": "0",
+                "denominator": "1",
+                "currency": "BRL"
+              },
+              "amount": {
+                "amount": "0",
+                "currency": "BRL"
+              },
+              "formula": "EXPRESSION",
+              "rounding": {
+                "mode": "half-away-from-zero",
+                "scale": 0
+              },
+              "rule": {
+                "id": "277a7ee5-a9a1-511f-8f04-f1fc21d5c0bb",
+                "version": 1
+              },
+              "outcome": "not-levied",
+              "steps": [
+                {
+                  "step": "base = line.net",
+                  "value": {
+                    "numerator": "150000",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "base, rounded half away from zero",
+                  "value": {
+                    "numerator": "150000",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "rate",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "not-levied: nothing is owed",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                },
+                {
+                  "step": "amount, rounded half away from zero",
+                  "value": {
+                    "numerator": "0",
+                    "denominator": "1"
+                  }
+                }
+              ],
+              "source": {
+                "packageId": "d1001103-eae3-5c99-b49f-1102f849b375",
+                "digest": "9472086d3591f2fcf3ac06ae0320104e1cf856cb9dbbeaa0759fc47cdb60f7c2",
+                "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm",
+                "section": "lc-123-2006: art. 13 (ISS collected in the DAS)"
+              }
+            }
+          ],
+          "ibsCbs": []
+        }
+      }
+    ],
+    "totals": {
+      "gross": {
+        "amount": "150000",
+        "currency": "BRL"
+      },
+      "discounts": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "charges": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "net": {
+        "amount": "150000",
+        "currency": "BRL"
+      },
+      "legacyTax": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "ibsCbsTax": {
+        "amount": "0",
+        "currency": "BRL"
+      }
+    },
+    "reconciliation": {
+      "lineNetSum": {
+        "amount": "150000",
+        "currency": "BRL"
+      },
+      "legacyComponentSum": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "ibsCbsComponentSum": {
+        "amount": "0",
+        "currency": "BRL"
+      },
+      "balanced": true
+    },
+    "explanation": {
+      "templateVersion": "fiscal-explanation-v2",
+      "text": "Line de69aec6-96b6-52a6-9056-ff7ffa3f8cc4: net 150000 BRL minor units.\nISS (not-levied): rule 277a7ee5-a9a1-511f-8f04-f1fc21d5c0bb v1; source https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm § lc-123-2006: art. 13 (ISS collected in the DAS).\n  base = line.net = 150000/1\n  base, rounded half away from zero = 150000/1\n  rate = 0/1\n  not-levied: nothing is owed = 0/1\n  amount, rounded half away from zero = 0/1"
+    }
+  },
+  "approval": {
+    "approvedBy": "workspace-owner",
+    "approvedAt": "2026-09-30T20:57:13.336Z",
+    "scope": "NFS-e of a Simples Nacional provider in São Paulo, LC 116 subitem 1.01 — ISS, 2026 simulation",
+    "fixtureDigest": "63ce47f7786eda95dbc9799615495b0f8c012b13a0ca3ffbb1b75882ff0655bb"
+  }
+}

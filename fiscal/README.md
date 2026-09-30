@@ -279,6 +279,21 @@ npm run phase85:scenarios -- matrix              # regenerate support-matrix.jso
 `supported` with the rows that cover the scenario, or `unsupported` with the missing
 dimension. See the [Phase 85 evidence](../docs/tax-phase85-evidence.md).
 
+### Regimes and the blend (Phase 86)
+
+`issuer.regime` is the NF-e's CRT (`normal`, `simples-nacional`, `mei`), and
+`issuer.incomeTaxRegime` (`lucro-real`, `lucro-presumido`) decides PIS/Cofins. Both come from
+the issuer profile revision in force on the issue date (`issuer-regime.ts`). A package may
+name components it reads from others (`requires`). The reviewed scenarios of both phases:
+
+```bash
+npm run tax:scenarios -- fixtures --phase 86     # phase85:scenarios is the same with --phase 85
+npm run tax:scenarios -- approve --phase 86 --fixture <id> --by <who> --scope <text>
+npm run tax:scenarios -- publish --phase 86      # then adopt, verify; matrix reads every phase
+```
+
+See the [Phase 86 evidence](../docs/tax-phase86-evidence.md).
+
 ## Audit log (Phase 68)
 
 `GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered

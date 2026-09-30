@@ -24,6 +24,8 @@ export type TaxRule = ResolvedComponentRule & {
     recipientTaxpayer?: boolean
     /** Where the provider is established, for ISS (Phase 85). */
     issuerMunicipality?: string
+    /** For a `normal` issuer, Lucro Real or Presumido, which decides PIS/Cofins (Phase 86). */
+    issuerIncomeTaxRegime?: 'lucro-real' | 'lucro-presumido'
     /** A fact the line states (its `taxFacts`), such as whether IPI is due on the item (Phase 85). */
     fact?: { key: string; value: string }
     subject?: { kind: 'item' | 'service'; id: string }
@@ -161,6 +163,8 @@ function matches(
   if (scope.recipientTaxpayer !== undefined && scope.recipientTaxpayer !== input.recipient.taxpayer)
     return false
   if (scope.issuerMunicipality && scope.issuerMunicipality !== input.issuer.municipalityCode)
+    return false
+  if (scope.issuerIncomeTaxRegime && scope.issuerIncomeTaxRegime !== input.issuer.incomeTaxRegime)
     return false
   if (scope.fact && line.taxFacts[scope.fact.key] !== scope.fact.value) return false
   if (scope.subject) {

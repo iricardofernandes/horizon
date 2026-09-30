@@ -49,6 +49,7 @@ export const taxRuleImportSchema = z
       .string()
       .regex(/^\d{7}$/)
       .optional(),
+    issuerIncomeTaxRegime: z.enum(['lucro-real', 'lucro-presumido']).optional(),
     fact: z
       .object({
         key: z.string().regex(/^[a-z][A-Za-z0-9]{0,39}$/),
@@ -123,6 +124,10 @@ export function toTaxRule(row: postgres.Row): TaxRule {
   const destinationState = optional(row.destination_state)
   const recipientTaxpayer = optional(row.recipient_taxpayer)
   const issuerMunicipality = optional(row.issuer_municipality)
+  const issuerIncomeTaxRegime = optional(row.issuer_income_tax_regime) as
+    | 'lucro-real'
+    | 'lucro-presumido'
+    | undefined
   const factKey = optional(row.fact_key)
   const subjectKind = optional(row.subject_kind)
   const classificationKind = optional(row.classification_kind)
@@ -149,6 +154,7 @@ export function toTaxRule(row: postgres.Row): TaxRule {
       ...(destinationState ? { destinationState } : {}),
       ...(recipientTaxpayer ? { recipientTaxpayer: recipientTaxpayer === 'true' } : {}),
       ...(issuerMunicipality ? { issuerMunicipality } : {}),
+      ...(issuerIncomeTaxRegime ? { issuerIncomeTaxRegime } : {}),
       ...(factKey ? { fact: { key: factKey, value: String(row.fact_value) } } : {}),
       ...(subjectKind
         ? { subject: { kind: subjectKind as 'item' | 'service', id: String(row.subject_id) } }

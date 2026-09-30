@@ -4,6 +4,7 @@ import type { FiscalCalculations } from '../calculations'
 import { canonicalDigest } from '../canonical-json'
 import type { FiscalCapabilities } from '../capabilities'
 import type { FiscalDocuments } from '../documents'
+import { issuerRegimeOf } from '../issuer-regime'
 import { jurisdictionOfAddress } from '../nfe55/jurisdiction'
 import { PHASE47_FIXTURE, phase47Scenario } from '../phase47-approved-scenario'
 import type { FiscalProjections } from '../projections'
@@ -152,6 +153,7 @@ export function serviceCalculationInput(input: {
   const issuer = jurisdictionOfAddress(input.issuer.company.address)
   const recipient = jurisdictionOfAddress(input.recipient.profile.address)
   if (!issuer || !recipient) throw new Error('Fiscal capability is unsupported')
+  const regimeOf = issuerRegimeOf(input.issuer.company.fiscalRegime)?.incomeTaxRegime
   return {
     schemaVersion: 1,
     tenantId: input.tenantId,
@@ -165,6 +167,8 @@ export function serviceCalculationInput(input: {
     purpose: 'normal',
     issuer: {
       regime: 'normal',
+      // assertIssuer admits only Lucro Real and Presumido providers.
+      ...(regimeOf ? { incomeTaxRegime: regimeOf } : {}),
       stateCode: issuer.ufCode,
       municipalityCode: issuer.municipalityCode,
     },

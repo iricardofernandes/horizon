@@ -1,0 +1,70 @@
+{
+ "schemaVersion": 1,
+ "phase": 86,
+ "retrievedAt": "2026-10-01",
+ "store": ".artifacts/fiscal (gitignored, content-addressed by SHA-256)",
+ "sources": [
+  {
+   "id": "lc-123-2006",
+   "authority": "Presidência da República — Planalto",
+   "title": "Lei Complementar nº 123, de 14 de dezembro de 2006 (compilada)",
+   "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm",
+   "mediaType": "text/html",
+   "byteSize": 1622252,
+   "sha256": "91d045893077bb4acfa65f9adc6ff5f6a100d9fc1adc20a8b312dab44788b1b6",
+   "sectionsUsed": [
+    "art. 13 (the DAS collects IRPJ, IPI, CSLL, Cofins, PIS, CPP, ICMS and ISS)",
+    "art. 13 §1º XIII a and h (ICMS under substitution, and the rate difference on acquisitions from other states, fall outside the DAS)",
+    "art. 18-A (the MEI collects in fixed monthly amounts, SIMEI)",
+    "arts. 30 and 31 II (an exclusion takes effect from the month after the impeding situation)"
+   ]
+  },
+  {
+   "id": "ec-132-2023",
+   "authority": "Presidência da República — Planalto",
+   "title": "Emenda Constitucional nº 132, de 20 de dezembro de 2023",
+   "uri": "https://www.planalto.gov.br/ccivil_03/constituicao/emendas/emc/emc132.htm",
+   "mediaType": "text/html",
+   "byteSize": 510399,
+   "sha256": "1c2213f8b6bceb2e3b04f0c64b32b8095a668a3de2f93bd18b72ae8d0d8e389a",
+   "sectionsUsed": [
+    "ADCT art. 128 (2029–2032: ICMS and ISS rates at 9/10, 8/10, 7/10 and 6/10 of those the laws fix; §1º benefits reduced in the same proportion)",
+    "ADCT art. 126 (from 2027: PIS/Cofins end; IPI zero except the Zona Franca de Manaus)"
+   ]
+  },
+  {
+   "id": "lc-214-2025",
+   "authority": "Presidência da República — Planalto",
+   "title": "Lei Complementar nº 214, de 16 de janeiro de 2025",
+   "uri": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm",
+   "mediaType": "text/html",
+   "byteSize": 5402213,
+   "sha256": "11ff1e2bc64ffac283b694e943ca9552bc0f31668bbef043df03cdf317058d9f",
+   "sectionsUsed": [
+    "art. 348 III c (the 2026 IBS and CBS rates do not apply to Simples Nacional optants)"
+   ]
+  },
+  {
+   "id": "lei-9718-1998",
+   "authority": "Presidência da República — Planalto",
+   "title": "Lei nº 9.718, de 27 de novembro de 1998 (compilada)",
+   "uri": "https://www.planalto.gov.br/ccivil_03/leis/l9718compilada.htm",
+   "mediaType": "text/html",
+   "byteSize": 77417,
+   "sha256": "4f6a8b79be88794ce761bfc1f38162603b33b9d85d89542e1216cd0c81c970e2",
+   "sectionsUsed": [
+    "art. 13 §1º (the Lucro Presumido option is definitive for the whole calendar year)"
+   ]
+  }
+ ],
+ "notPinned": [
+  {
+   "id": "senate-reference-rates-2029-2032",
+   "why": "The IBS reference rates of 2029 to 2032 are set by a Senate resolution not yet published; the IBS side of a blended document is shown with stated hypothetical rates in a test and never published."
+  },
+  {
+   "id": "simples-annexes-credit",
+   "why": "The Simples ICMS credit (CSOSN 101) depends on the issuer's revenue over the last 12 months and its LC 123 annex bracket, which Fiscal does not hold; CSOSN 102 is modelled."
+  }
+ ]
+}

@@ -13,7 +13,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "000001"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -32,7 +33,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "000003"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -51,7 +53,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "000004"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -70,7 +73,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "000005"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -89,7 +93,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200002"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -108,7 +113,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200003"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -127,7 +133,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200004"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -146,7 +153,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200005"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -165,7 +173,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200006"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -184,7 +193,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200007"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -203,7 +213,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200008"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -222,7 +233,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200009"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -241,7 +253,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200010"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -260,7 +273,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200011"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -279,7 +293,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200012"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -298,7 +313,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200013"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -317,7 +333,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200014"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -336,7 +353,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200015"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -355,7 +373,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200020"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -374,7 +393,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200023"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -393,7 +413,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200030"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -412,7 +433,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200031"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -431,7 +453,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200032"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -450,7 +473,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200033"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -469,7 +493,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200034"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -488,7 +513,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200035"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -507,7 +533,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200036"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -526,7 +553,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200038"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -545,7 +573,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200039"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -564,7 +593,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200043"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -583,7 +613,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200047"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -602,7 +633,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200053"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -621,7 +653,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "200054"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -640,7 +673,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410001"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -659,7 +693,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410002"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -678,7 +713,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410003"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -697,7 +733,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410004"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -716,7 +753,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410005"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -735,7 +773,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410006"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -754,7 +793,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410007"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -773,7 +813,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410008"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -792,7 +833,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410009"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -811,7 +853,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410012"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -830,7 +873,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410013"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -849,7 +893,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410014"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -868,7 +913,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410016"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -887,7 +933,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410017"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -906,7 +953,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410019"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -925,7 +973,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410020"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -944,7 +993,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410026"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -963,7 +1013,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410027"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -982,7 +1033,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410029"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -1001,7 +1053,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410030"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -1020,7 +1073,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410031"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -1039,7 +1093,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410035"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -1058,7 +1113,8 @@
         "classification": {
           "kind": "class_trib",
           "code": "410999"
-        }
+        },
+        "issuerRegime": "normal"
       },
       "evidence": {
         "kind": "oracle",
@@ -1107,6 +1163,7 @@
         "originState": "35",
         "destinationState": "33",
         "recipientTaxpayer": true,
+        "issuerRegime": "normal",
         "facts": {
           "destinationUse": "resale"
         }
@@ -1132,6 +1189,7 @@
         "originState": "35",
         "destinationState": "29",
         "recipientTaxpayer": true,
+        "issuerRegime": "normal",
         "facts": {
           "destinationUse": "resale"
         }
@@ -1157,6 +1215,7 @@
         "originState": "35",
         "destinationState": "33",
         "recipientTaxpayer": true,
+        "issuerRegime": "normal",
         "origin": "1",
         "facts": {
           "destinationUse": "resale"
@@ -1209,6 +1268,7 @@
         "originState": "35",
         "destinationState": "35",
         "recipientTaxpayer": true,
+        "issuerRegime": "normal",
         "facts": {
           "ipiTaxpayer": "true",
           "destinationUse": "resale"
@@ -1235,12 +1295,223 @@
         "originState": "35",
         "destinationState": "35",
         "recipientTaxpayer": true,
+        "issuerRegime": "normal",
         "issuerMunicipality": "3550308"
       },
       "evidence": {
         "kind": "approved-fixture",
         "reference": "fiscal/fixtures/phase85/phase85-f8-nfse-sao-paulo-1-01.json",
         "digest": "5fff93e682b13eeae2dd241c828a8f353cca297d562b277377337f5ff707dbac"
+      }
+    },
+    {
+      "id": "phase86-g1-simples-resale",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "COFINS", "IBS_MUN", "IBS_UF", "ICMS", "PIS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerRegime": "simples-nacional",
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase86/phase86-g1-simples-resale.json",
+        "digest": "5bbdf7f699c719ae89313f25c198a8aff186d897a6590197747f1ab45fa233d2"
+      }
+    },
+    {
+      "id": "phase86-g2-mei-resale",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "COFINS", "IBS_MUN", "IBS_UF", "ICMS", "PIS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerRegime": "mei",
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase86/phase86-g2-mei-resale.json",
+        "digest": "1f9b9f6aa394ab9607e56021f1fd3546567f1bb09c31547f4825b9b14d6c05bd"
+      }
+    },
+    {
+      "id": "phase86-g3-presumido-resale",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["COFINS", "ICMS", "PIS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerRegime": "normal",
+        "incomeTaxRegime": "lucro-presumido",
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase86/phase86-g3-presumido-resale.json",
+        "digest": "2eb4339419e73c4be6b75d946b747630a6ffb13588842792cd8bf303a3f843b6"
+      }
+    },
+    {
+      "id": "phase86-g4-real-resale",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["COFINS", "ICMS", "PIS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerRegime": "normal",
+        "incomeTaxRegime": "lucro-real",
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase86/phase86-g4-real-resale.json",
+        "digest": "8a785e402f3821b42191836b8f7236b30e5f48dcc0f52a39fd07dd76e9981972"
+      }
+    },
+    {
+      "id": "phase86-g5-simples-nfse-sao-paulo",
+      "model": "nfse",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2033-01-01",
+      "taxes": ["ISS"],
+      "dimensions": {
+        "classification": {
+          "kind": "service",
+          "code": "010101"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerRegime": "simples-nacional",
+        "issuerMunicipality": "3550308"
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase86/phase86-g5-simples-nfse-sao-paulo.json",
+        "digest": "63ce47f7786eda95dbc9799615495b0f8c012b13a0ca3ffbb1b75882ff0655bb"
+      }
+    },
+    {
+      "id": "phase86-g6-blend-2030-real-resale",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2030-01-01",
+      "until": "2031-01-01",
+      "taxes": ["ICMS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerRegime": "normal",
+        "incomeTaxRegime": "lucro-real",
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase86/phase86-g6-blend-2030-real-resale.json",
+        "digest": "034e162c24730d9e35eeae35950903dede6a7c1c71387f406e4367a9a7f12500"
+      }
+    },
+    {
+      "id": "phase86-g7a-simples-before-exclusion",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["COFINS", "ICMS", "PIS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerRegime": "simples-nacional",
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase86/phase86-g7a-simples-before-exclusion.json",
+        "digest": "20705cc7fcad0c66e1e4d7c90cb910a933128b547849976e621ba0b3b2abd1b5"
+      }
+    },
+    {
+      "id": "phase86-g7b-presumido-after-exclusion",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["COFINS", "ICMS", "PIS"],
+      "dimensions": {
+        "classification": {
+          "kind": "ncm",
+          "code": "85094010"
+        },
+        "originState": "35",
+        "destinationState": "35",
+        "recipientTaxpayer": true,
+        "issuerRegime": "normal",
+        "incomeTaxRegime": "lucro-presumido",
+        "facts": {
+          "destinationUse": "resale"
+        }
+      },
+      "evidence": {
+        "kind": "approved-fixture",
+        "reference": "fiscal/fixtures/phase86/phase86-g7b-presumido-after-exclusion.json",
+        "digest": "51b3997e43097cbd2184349846c49ecdf9550c98c8dab831d16fed34158bb87e"
       }
     }
   ]

@@ -41,7 +41,11 @@ export function buildSupportMatrix(evidence: {
         from: report.window.effectiveFrom,
         until: report.window.effectiveTo,
         taxes: ['CBS', 'IBS_MUN', 'IBS_UF'],
-        dimensions: { classification: { kind: 'class_trib', code: entry.classTrib } },
+        // The corpus was calculated for a normal issuer; a Simples one is outside it (LC 214 art. 348 III c).
+        dimensions: {
+          classification: { kind: 'class_trib', code: entry.classTrib },
+          issuerRegime: 'normal',
+        },
         evidence: { kind: 'oracle', reference, digest: sha256(bytes) },
       })
   }
@@ -60,7 +64,12 @@ export function buildSupportMatrix(evidence: {
         originState: covers.originState,
         destinationState: covers.destinationState,
         recipientTaxpayer: covers.recipientTaxpayer,
-        ...(covers.issuerRegime ? { issuerRegime: covers.issuerRegime } : {}),
+        // The regime the fixture was calculated for, stated or not: a normal issuer's scenario
+        // says nothing about a Simples one.
+        issuerRegime: covers.issuerRegime ?? fixture.input.issuer.regime,
+        ...(fixture.input.issuer.incomeTaxRegime
+          ? { incomeTaxRegime: fixture.input.issuer.incomeTaxRegime }
+          : {}),
         ...(covers.issuerMunicipality ? { issuerMunicipality: covers.issuerMunicipality } : {}),
         ...(covers.origin ? { origin: covers.origin } : {}),
         ...(Object.keys(covers.facts).length > 0 ? { facts: covers.facts } : {}),
@@ -102,6 +111,9 @@ const admits: Record<
     row.dimensions.recipientTaxpayer === query.recipientTaxpayer,
   issuerRegime: (row, query) =>
     row.dimensions.issuerRegime === undefined || row.dimensions.issuerRegime === query.issuerRegime,
+  incomeTaxRegime: (row, query) =>
+    row.dimensions.incomeTaxRegime === undefined ||
+    row.dimensions.incomeTaxRegime === query.incomeTaxRegime,
   issuerMunicipality: (row, query) =>
     row.dimensions.issuerMunicipality === undefined ||
     row.dimensions.issuerMunicipality === query.issuerMunicipality,
@@ -133,13 +145,22 @@ export function answer(
 /** The evidence the matrix is generated from, with the repository-relative path of each piece. */
 export async function supportEvidence(repository: string) {
   const drills = join(repository, 'docs/drills')
-  const fixtures = join(repository, 'fiscal/fixtures/phase85')
   const reports = (await readdir(drills))
     .filter((name) => /-phase84-oracle-2026\.json$/.test(name))
     .sort()
-  const fixtureNames = existsSync(fixtures)
-    ? (await readdir(fixtures)).filter((name) => name.endsWith('.json')).sort()
-    : []
+  // Every reviewed phase keeps its fixtures in its own directory.
+  const fixtureNames = (
+    await Promise.all(
+      ['phase85', 'phase86'].map(async (phase) => {
+        const directory = join(repository, 'fiscal/fixtures', phase)
+        if (!existsSync(directory)) return []
+        return (await readdir(directory))
+          .filter((name) => name.endsWith('.json'))
+          .sort()
+          .map((name) => `${phase}/${name}`)
+      }),
+    )
+  ).flat()
   return {
     oracleReports: await Promise.all(
       reports.map(async (name) => ({
@@ -149,8 +170,10 @@ export async function supportEvidence(repository: string) {
     ),
     fixtures: await Promise.all(
       fixtureNames.map(async (name) => ({
-        reference: `fiscal/fixtures/phase85/${name}`,
-        fixture: JSON.parse(await readFile(join(fixtures, name), 'utf8')) as Fixture,
+        reference: `fiscal/fixtures/${name}`,
+        fixture: JSON.parse(
+          await readFile(join(repository, 'fiscal/fixtures', name), 'utf8'),
+        ) as Fixture,
       })),
     ),
   }

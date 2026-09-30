@@ -348,7 +348,8 @@ export class FiscalRuleStore {
       precedence, priority, date_basis, purpose, model, environment, operation, issuer_establishment_id,
       issuer_regime, recipient_party_id, recipient_regime, origin_state, destination_state, subject_kind,
       subject_id, classification_kind, classification_code, recipient_taxpayer,
-      issuer_municipality, fact_key, fact_value, effective_from, effective_to,
+      issuer_municipality, fact_key, fact_value, issuer_income_tax_regime, effective_from,
+      effective_to,
       rate_numerator, rate_denominator, formula, expression, source_locator, definition_digest
     ) values (
       ${id}, ${tenantId}, ${packageId}, ${rule.ruleKey}, ${rule.version},
@@ -362,7 +363,7 @@ export class FiscalRuleStore {
       ${rule.classification?.code ?? '*'},
       ${rule.recipientTaxpayer === undefined ? '*' : String(rule.recipientTaxpayer)},
       ${rule.issuerMunicipality ?? '*'}, ${rule.fact?.key ?? '*'}, ${rule.fact?.value ?? '*'},
-      ${rule.effectiveFrom}, ${rule.effectiveTo ?? null},
+      ${rule.issuerIncomeTaxRegime ?? '*'}, ${rule.effectiveFrom}, ${rule.effectiveTo ?? null},
       ${rule.rate.numerator}, ${rule.rate.denominator}, ${rule.formula},
       ${rule.expression ? sql.json(rule.expression as postgres.JSONValue) : null},
       ${rule.sourceLocator}, ${definitionDigest}

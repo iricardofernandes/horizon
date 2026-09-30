@@ -29,6 +29,7 @@ export const fiscalTaxSupportRowSchema = z.object({
     destinationState: stateSchema.optional(),
     recipientTaxpayer: z.boolean().optional(),
     issuerRegime: z.string().min(1).max(80).optional(),
+    incomeTaxRegime: z.enum(['lucro-real', 'lucro-presumido']).optional(),
     issuerMunicipality: z
       .string()
       .regex(/^\d{7}$/)
@@ -59,6 +60,7 @@ export const FISCAL_TAX_SUPPORT_DIMENSIONS = [
   'destinationState',
   'recipientTaxpayer',
   'issuerRegime',
+  'incomeTaxRegime',
   'issuerMunicipality',
   'origin',
   'facts',
@@ -76,6 +78,7 @@ export const fiscalTaxSupportQuerySchema = z.object({
   destinationState: stateSchema.optional(),
   recipientTaxpayer: z.boolean().optional(),
   issuerRegime: z.string().min(1).max(80).optional(),
+  incomeTaxRegime: z.enum(['lucro-real', 'lucro-presumido']).optional(),
   issuerMunicipality: z
     .string()
     .regex(/^\d{7}$/)

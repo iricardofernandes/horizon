@@ -46,6 +46,7 @@ export function taxSupportResponse(
             ? false
             : taxpayer,
     issuerRegime: optional('issuerRegime'),
+    incomeTaxRegime: optional('incomeTaxRegime'),
     issuerMunicipality: optional('issuerMunicipality'),
     origin: optional('origin'),
     facts: Object.fromEntries(

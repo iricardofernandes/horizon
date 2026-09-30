@@ -48,7 +48,7 @@ export type Scenario = {
 
 type Party = { state: string; city: string }
 
-function goodsSale(options: {
+export function goodsSale(options: {
   id: string
   issuerRegime: string
   destination: Party
