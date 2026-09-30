@@ -54,6 +54,9 @@ postings, it is not a certified ledger.
 
 ## `fiscal/` — a versioned multi-regime tax rules engine
 
+> **Planned as Phase O** (phases 82–89) in the [tax rules engine plan](tax-engine-plan.md).
+> Phase 41 built its core for one approved scenario; Phase O generalizes it.
+
 > Sequenced by the [operational ERP expansion plan](erp-expansion-plan.md), phase J. The
 > rules engine described here is the core of that phase; the plan adds the document
 > lifecycle, inbound XML and the sales and purchasing prerequisites it depends on.

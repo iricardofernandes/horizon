@@ -2935,6 +2935,32 @@ A to N left open. The Anthropic adapter's run against the real API stays out.
 
 ---
 
+## Phase O — The tax rules engine (phases 82–89)
+
+**Planned on 2026-09-30** in the [tax rules engine plan](tax-engine-plan.md). It turns
+Phase 41's single approved scenario into the roadmap's engine:
+- tax law as a shared catalogue of versioned packages that workspaces adopt;
+- declarative formulas evaluated by one pure interpreter;
+- IBS, CBS and the Imposto Seletivo from 2026 to 2033, checked against the official
+  calculator;
+- the legacy taxes bounded by reviewed scenarios;
+- taxpayer regimes and the 2029–2032 blend;
+- taxes shown where money is decided;
+- governed adoption.
+
+| Phase | Theme |
+|---|---|
+| 82 | Decisions (ADRs 0070–0073), the reform's source matrix, a shared catalogue |
+| 83 | The formula language and its interpreter |
+| 84 | IBS, CBS and the Imposto Seletivo through the transition, checked by the oracle |
+| 85 | The legacy taxes, bounded by reviewed scenarios |
+| 86 | Regimes and the blend |
+| 87 | Taxes where money is decided |
+| 88 | Governing the rules |
+| 89 | Threat model, service levels, the golden path, closing Phase O |
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.
