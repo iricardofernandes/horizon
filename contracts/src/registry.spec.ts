@@ -39,6 +39,11 @@ const NOT_INDEPENDENTLY_VERSIONED = new Set([
   'fiscalTaxSupportRowSchema', // only ever inside the matrix and the answer
   'fiscalTaxComponentSummarySchema', // only inside the estimate and its digest
   'fiscalTaxEstimateDigestSchema', // only inside Sales, Procurement and their events
+  'fiscalRuleSummarySchema', // only inside the governance lists, diffs and changes
+  'fiscalPackageAdoptionStateSchema', // only inside a catalogue package
+  'fiscalCatalogPackageSchema', // only inside the package list
+  'fiscalWorkspaceRuleSchema', // only inside the workspace rule list
+  'fiscalRuleImpactSchema', // only inside a rule change
   'consistencyCheckSchema', // only ever inside consistencyRunSchema
   'consistencyDifferenceSchema', // likewise
 ])

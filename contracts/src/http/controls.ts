@@ -82,6 +82,14 @@ export const SEGREGATION_OF_DUTIES: readonly DutyConflict[] = [
     approve: 'treasury:transfer:approve',
     description: 'Whoever asked for a transfer between accounts cannot decide it.',
   },
+  {
+    id: 'fiscal.rules',
+    module: 'fiscal',
+    perform: 'fiscal:rules:request',
+    approve: 'fiscal:rules:approve',
+    description:
+      'Whoever asked to adopt, withdraw, add or retire a tax rule cannot decide it (Phase 88).',
+  },
 ]
 
 /** The approvals a module may lend: the deciding side of each of its pairs. */

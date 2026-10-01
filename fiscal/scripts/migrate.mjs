@@ -70,6 +70,7 @@ try {
     '0057_phase85_scope_dimensions.sql',
     '0058_phase86_income_tax_regime.sql',
     '0059_phase87_purchase_estimates.sql',
+    '0060_phase88_rule_governance.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

@@ -121,6 +121,7 @@ one means writing a new ADR that supersedes it.
 | [0071](0071-tax-formulas-are-data-over-a-closed-vocabulary.md) | Tax formulas are data over a closed vocabulary |
 | [0072](0072-a-tax-scenario-is-supported-only-with-evidence.md) | A tax scenario is supported only with evidence |
 | [0073](0073-tax-estimates-outside-fiscal-amounts-inside-it.md) | Tax estimates outside Fiscal, amounts inside it |
+| [0074](0074-a-tax-rule-change-is-requested-and-approved-by-another-person.md) | A tax rule change is requested and approved by another person, with its diff and impact |
 
 ## Frontend
 

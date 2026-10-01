@@ -8,7 +8,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FiscalCalculations } from '../src/calculations'
 import { canonicalJson } from '../src/canonical-json'
-import { CatalogAdoptionClash, type CatalogPublication, FiscalCatalog } from '../src/catalog'
+import { type CatalogPublication, FiscalCatalog } from '../src/catalog'
 import { DECLARED_NCM, goodsPackage, issPackage } from '../src/legacy-packages'
 import { DEMO_WORKSPACE, scenarios } from '../src/legacy-scenarios'
 import {
@@ -20,6 +20,7 @@ import {
 import { blendPackage, pisCofinsNormalPackage, simplesMeiPackage } from '../src/regime-packages'
 import { regimeScenarios } from '../src/regime-scenarios'
 import { buildRtcPackage } from '../src/rtc-package'
+import { FiscalRuleChanges, RuleChangeRefused } from '../src/rule-changes'
 import { FiscalRuleStore } from '../src/rule-store'
 
 /** Phase 82 (ADR 0070): tax law as a catalogue every workspace reads, none writes, and each adopts. */
@@ -30,9 +31,10 @@ let container: StartedPostgreSqlContainer
 let administrator: ReturnType<typeof postgres>
 let app: ReturnType<typeof postgres>
 let publisher: FiscalCatalog
-let catalog: FiscalCatalog
 let store: FiscalRuleStore
 let calculations: FiscalCalculations
+let changes: FiscalRuleChanges
+const MASTER_KEY = randomBytes(32)
 let fixture: { input: FiscalCalculationInput; expectedResult: unknown }
 let packageId: string
 
@@ -60,9 +62,9 @@ beforeAll(async () => {
   })
   app = postgres(appUrl, { max: 2 })
   publisher = new FiscalCatalog(migrationUrl)
-  catalog = new FiscalCatalog(appUrl)
   store = new FiscalRuleStore(appUrl)
-  calculations = new FiscalCalculations(appUrl, randomBytes(32), store)
+  calculations = new FiscalCalculations(appUrl, MASTER_KEY, store)
+  changes = new FiscalRuleChanges(appUrl, MASTER_KEY, store, 'unchecked')
   fixture = JSON.parse(
     await readFile(
       new URL('../fixtures/rtc-v0057-model55-normal-sale-sp-2026-01.json', import.meta.url),
@@ -79,8 +81,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await Promise.allSettled([
     calculations?.close(),
+    changes?.close(),
     store?.close(),
-    catalog?.close(),
     publisher?.close(),
     app?.end(),
     administrator?.end(),
@@ -93,17 +95,44 @@ async function workspace(tenantId: string = randomUUID()): Promise<string> {
   return tenantId
 }
 
-const adopt = (tenantId: string, effectiveFrom = '2026-01-01') =>
-  catalog.adopt({
+/** One person asks, another approves: the only way a workspace adopts or withdraws (Phase 88). */
+async function approved(tenantId: string, body: Record<string, unknown>) {
+  const change = await changes.request({ tenantId, actorId: 'owner:requester', body })
+  return changes.decide({
     tenantId,
+    actorId: 'owner:approver',
+    holdsApproval: true,
+    changeId: change.id,
+    outcome: 'approved',
+  })
+}
+
+const adoptPackage = (
+  tenantId: string,
+  id: string,
+  interpretation: string,
+  effectiveFrom = '2026-01-01',
+) =>
+  approved(tenantId, {
+    kind: 'adopt-package',
+    packageId: id,
+    effectiveFrom,
+    interpretation,
+    reason: 'Adopting a catalogue package in the e2e test',
+  })
+
+const adopt = (tenantId: string, effectiveFrom = '2026-01-01') =>
+  approved(tenantId, {
+    kind: 'adopt-package',
     packageId,
     effectiveFrom,
-    reviewedBy: 'workspace-owner',
     interpretation: 'The pinned RTC V0057 fixture scenario, as approved in Phase 41.',
     fixtureIds: [PHASE41_FIXTURE_ID],
-    actorId: 'owner:test',
     reason: 'Adopting the catalogue version of the approved scenario',
   })
+
+const withdraw = (tenantId: string, reason: string) =>
+  approved(tenantId, { kind: 'withdraw-package', packageId, reason })
 
 /** The fixture's own input, for another workspace. */
 const inputFor = (
@@ -178,12 +207,7 @@ describe('a workspace adopting the catalogue', () => {
     expect(await calculations.preview(inputFor(tenantId))).toMatchObject({ supported: false })
     await adopt(tenantId)
     expect((await calculations.preview(inputFor(tenantId))).supported).toBe(true)
-    await catalog.withdraw({
-      tenantId,
-      packageId,
-      actorId: 'owner:test',
-      reason: 'Withdrawn to test that it stops applying',
-    })
+    await withdraw(tenantId, 'Withdrawn to test that it stops applying')
     expect(await calculations.preview(inputFor(tenantId))).toMatchObject({ supported: false })
   })
 
@@ -208,7 +232,7 @@ describe('a workspace adopting the catalogue', () => {
       calculationInput: inputFor(tenantId),
     })
     expect(locked.supported).toBe(true)
-    await catalog.withdraw({ tenantId, packageId, actorId: 'owner:test', reason: 'Law changed' })
+    await withdraw(tenantId, 'The law changed after the lock')
     expect(await calculations.replay(tenantId, documentId)).toEqual(locked)
   })
 
@@ -234,7 +258,7 @@ describe('a workspace adopting the catalogue', () => {
         actorId: 'owner:test',
         reason: 'Own copy',
       })
-    await expect(adopt(tenantId)).rejects.toBeInstanceOf(CatalogAdoptionClash)
+    await expect(adopt(tenantId)).rejects.toBeInstanceOf(RuleChangeRefused)
     for (const ruleId of imported.ruleIds)
       await store.activateRule({
         tenantId,
@@ -250,14 +274,18 @@ describe('a workspace adopting the catalogue', () => {
   it('records every adoption and withdrawal in the workspace’s audit chain', async () => {
     const tenantId = await workspace()
     await adopt(tenantId)
-    await catalog.withdraw({ tenantId, packageId, actorId: 'owner:test', reason: 'Audit test' })
+    await withdraw(tenantId, 'Withdrawn for the audit test')
     const actions = await administrator<
       { action: string }[]
     >`select action from fiscal_audit_entries
       where tenant_id = ${tenantId} order by sequence`
     expect(actions.map((row) => row.action)).toEqual([
+      'rule-change.requested',
       'catalog.package-adopted',
+      'rule-change.approved',
+      'rule-change.requested',
       'catalog.package-withdrawn',
+      'rule-change.approved',
     ])
   })
 })
@@ -329,15 +357,7 @@ describe('formulas as data (Phase 83, ADR 0071)', () => {
   it('publishes, adopts and calculates tax on tax through the store', async () => {
     const published = await publisher.publish(publication([icms, ipi], 'worked'))
     const tenantId = await workspace()
-    await catalog.adopt({
-      tenantId,
-      packageId: published.packageId,
-      effectiveFrom: '2026-01-01',
-      reviewedBy: 'workspace-owner',
-      interpretation: 'A worked example of tax on tax, not law.',
-      actorId: 'owner:test',
-      reason: 'Phase 83 e2e',
-    })
+    await adoptPackage(tenantId, published.packageId, 'A worked example of tax on tax, not law.')
     const result = await calculations.preview({ ...inputFor(tenantId), operation: OPERATION })
     if (!result.supported) throw new Error(JSON.stringify(result))
     expect(result.explanation.templateVersion).toBe('fiscal-explanation-v2')
@@ -442,15 +462,7 @@ describe('IBS and CBS by tax classification (Phase 84, ADR 0072)', () => {
       rules: built.rules as never,
     })
     const tenantId = await workspace()
-    await catalog.adopt({
-      tenantId,
-      packageId: published.packageId,
-      effectiveFrom: '2026-01-01',
-      reviewedBy: 'workspace-owner',
-      interpretation: 'IBS and CBS 2026 by tax classification.',
-      actorId: 'owner:test',
-      reason: 'Phase 84 e2e',
-    })
+    await adoptPackage(tenantId, published.packageId, 'IBS and CBS 2026 by tax classification.')
     // 60% less: CBS 0,36% and IBS UF 0,04% over 1.000,00, as the official calculator gives.
     expect(components(await calculations.preview(classified(tenantId, '200032', '1000')))).toEqual([
       ['CBS', '360', 'levied', 'half-even'],
@@ -487,15 +499,7 @@ describe('the legacy taxes, bounded by reviewed scenarios (Phase 85, ADR 0072)',
     for (const pack of packs) {
       const { label: _label, ...publication } = pack
       const published = await publisher.publish(publication)
-      await catalog.adopt({
-        tenantId,
-        packageId: published.packageId,
-        effectiveFrom: '2026-01-01',
-        reviewedBy: 'workspace-owner',
-        interpretation: 'The Phase 85 declared scenarios.',
-        actorId: 'owner:test',
-        reason: 'Phase 85 e2e',
-      })
+      await adoptPackage(tenantId, published.packageId, 'The Phase 85 declared scenarios.')
     }
     for (const scenario of scenarios()) {
       const fixture = JSON.parse(
@@ -548,19 +552,13 @@ describe('regimes and the blend (Phase 86)', () => {
       const { label: _label, ...publication } = pack
       const published = await publisher.publish(publication)
       // The Phase 85 packages may already be adopted by the test before this one.
-      await catalog
-        .adopt({
-          tenantId,
-          packageId: published.packageId,
-          effectiveFrom: '2026-01-01',
-          reviewedBy: 'workspace-owner',
-          interpretation: 'The Phase 85 and 86 declared scenarios.',
-          actorId: 'owner:test',
-          reason: 'Phase 86 e2e',
-        })
-        .catch((error: unknown) => {
-          if (!(error instanceof Error && /already adopted/.test(error.message))) throw error
-        })
+      await adoptPackage(
+        tenantId,
+        published.packageId,
+        'The Phase 85 and 86 declared scenarios.',
+      ).catch((error: unknown) => {
+        if (!(error instanceof Error && /already adopted/.test(error.message))) throw error
+      })
     }
     for (const scenario of regimeScenarios()) {
       const fixture = JSON.parse(

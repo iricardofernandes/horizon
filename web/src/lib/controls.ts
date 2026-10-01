@@ -17,9 +17,16 @@ export const DELEGABLE: Readonly<Record<DelegatingModule, readonly string[]>> = 
   inventory: ['inventory:adjustment:approve', 'inventory:count:approve'],
   ledger: ['ledger:entry:approve'],
   treasury: ['treasury:transfer:approve'],
+  fiscal: ['fiscal:rules:approve'],
 }
 
-export type DelegatingModule = 'financial' | 'procurement' | 'inventory' | 'ledger' | 'treasury'
+export type DelegatingModule =
+  | 'financial'
+  | 'procurement'
+  | 'inventory'
+  | 'ledger'
+  | 'treasury'
+  | 'fiscal'
 export const DELEGATING_MODULES = Object.keys(DELEGABLE) as DelegatingModule[]
 
 /** Modules whose approval threshold the screen shows and, for their admins, sets. */
@@ -28,6 +35,11 @@ export type ThresholdModule = (typeof THRESHOLD_MODULES)[number]
 
 /** Roles that read but never decide: they see delegations, and lend nothing. */
 const READ_ONLY_ROLES = new Set(['viewer', 'auditor'])
+
+/** Where only some roles decide: in Fiscal, only an admin approves a rule change (Phase 88). */
+const LENDING_ROLES: Partial<Record<DelegatingModule, ReadonlySet<string>>> = {
+  fiscal: new Set(['admin']),
+}
 
 export type Delegation = {
   id: string
@@ -76,7 +88,9 @@ export function delegationModulesOf(roles: readonly RoleAssignment[]): Delegatin
 /** The modules where the person may lend an approval: a role that decides something. */
 export function lendingModulesOf(roles: readonly RoleAssignment[]): DelegatingModule[] {
   return DELEGATING_MODULES.filter((module) =>
-    rolesIn(roles, module).some((role) => !READ_ONLY_ROLES.has(role)),
+    rolesIn(roles, module).some((role) =>
+      LENDING_ROLES[module] ? LENDING_ROLES[module].has(role) : !READ_ONLY_ROLES.has(role),
+    ),
   )
 }
 

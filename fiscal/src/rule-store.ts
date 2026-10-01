@@ -12,7 +12,7 @@ import {
   taxRuleImportSchema,
   toTaxRule,
 } from './rule-rows'
-import { type RuleResolution, resolveTaxRules } from './rules'
+import { type RuleResolution, resolveTaxRules, type TaxRule } from './rules'
 
 const date = z.iso.date()
 const digest = z.string().regex(/^[0-9a-f]{64}$/)
@@ -112,7 +112,7 @@ export class FiscalRuleStore {
         await this.#insertReference(tx, value.tenantId, packageId, entry)
       const ruleIds: string[] = []
       for (const rule of value.rules)
-        ruleIds.push(await this.#insertRule(tx, value.tenantId, packageId, rule))
+        ruleIds.push(await insertTaxRule(tx, value.tenantId, packageId, rule))
       return { packageId, packageDigest, existing: Boolean(prior), ruleIds }
     })
   }
@@ -253,8 +253,17 @@ export class FiscalRuleStore {
     currencyMinorUnitScale: number,
   ): Promise<RuleResolution> {
     const value = fiscalCalculationInputSchema.parse(input)
-    const { rows, references, adopted } = await this.#db.begin(async (tx) => {
-      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
+    const set = await this.ruleSet(value.tenantId, value.model, value.environment)
+    return resolveAgainst(value, set, currencyMinorUnitScale)
+  }
+
+  /**
+   * Every rule and approved reference a workspace calculates one model and environment with:
+   * its own rows, whatever their state, and the catalogue rules it adopted (ADR 0070).
+   */
+  async ruleSet(tenantId: string, model: string, environment: string): Promise<RuleSet> {
+    return this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
       const rows = await tx`select rule.*, rule.effective_from::text as effective_from,
         rule.effective_to::text as effective_to, package.source_uri, package.package_digest,
         coalesce(review.approved, false) as approved, latest.action
@@ -268,28 +277,23 @@ export class FiscalRuleStore {
           where event.tenant_id = rule.tenant_id and event.rule_id = rule.id
           order by event.sequence desc limit 1
         ) latest on true
-        where rule.tenant_id = ${value.tenantId} and rule.model = ${value.model}
-          and rule.environment = ${value.environment}`
+        where rule.tenant_id = ${tenantId} and rule.model = ${model}
+          and rule.environment = ${environment}`
       const references = await tx`select entry.family, entry.code, entry.model,
-        entry.jurisdiction, entry.effective_from::text, entry.effective_to::text
+        entry.jurisdiction, entry.effective_from::text, entry.effective_to::text,
+        entry.package_id
         from fiscal_reference_entries entry
         join fiscal_package_reviews review on review.tenant_id = entry.tenant_id
           and review.package_id = entry.package_id and review.approved
-        where entry.tenant_id = ${value.tenantId}`
+        where entry.tenant_id = ${tenantId}`
       // The law the workspace adopted from the catalogue, beside its own rows (ADR 0070).
-      const adopted = await adoptedCatalogRules(tx, value.tenantId, value.model, value.environment)
-      const adoptedReferences = await adoptedCatalogReferences(tx, value.tenantId)
-      return { rows, references: [...references, ...adoptedReferences], adopted }
-    })
-    const missing = missingApprovedReference(value, references)
-    if (missing)
+      const adopted = await adoptedCatalogRules(tx, tenantId, model, environment)
+      const adoptedReferences = await adoptedCatalogReferences(tx, tenantId)
       return {
-        supported: false,
-        code: 'MISSING_CLASSIFICATION',
-        detail: 'Classification is absent, expired or has no approved source',
-        missingDimension: missing,
+        rules: [...rows.map(toTaxRule), ...adopted],
+        references: [...references, ...adoptedReferences],
       }
-    return resolveTaxRules(value, [...rows.map(toTaxRule), ...adopted], currencyMinorUnitScale)
+    })
   }
 
   async #insertReference(
@@ -324,52 +328,53 @@ export class FiscalRuleStore {
       if (prior?.row_digest !== rowDigest) throw new Error('Conflicting Fiscal reference entry')
     }
   }
+}
 
-  async #insertRule(
-    sql: postgres.TransactionSql,
-    tenantId: string,
-    packageId: string,
-    rule: z.infer<typeof taxRuleImportSchema>,
-  ): Promise<string> {
-    const definitionDigest = canonicalDigest(rule)
-    await sql`select pg_advisory_xact_lock(hashtextextended(
-      ${tenantId} || ':' || ${rule.ruleKey} || ':' || ${rule.version}::text, 0
-    ))`
-    const [prior] = await sql`select id, package_id, definition_digest from fiscal_tax_rules
-      where tenant_id = ${tenantId} and rule_key = ${rule.ruleKey} and version = ${rule.version}`
-    if (prior) {
-      if (prior.package_id !== packageId || prior.definition_digest !== definitionDigest)
-        throw new Error('Conflicting Fiscal tax rule version')
-      return String(prior.id)
-    }
-    const id = deterministicUuid(tenantId, packageId, rule.ruleKey, String(rule.version))
-    await sql`insert into fiscal_tax_rules (
-      id, tenant_id, package_id, rule_key, version, component_group, component_code,
-      precedence, priority, date_basis, purpose, model, environment, operation, issuer_establishment_id,
-      issuer_regime, recipient_party_id, recipient_regime, origin_state, destination_state, subject_kind,
-      subject_id, classification_kind, classification_code, recipient_taxpayer,
-      issuer_municipality, fact_key, fact_value, issuer_income_tax_regime, effective_from,
-      effective_to,
-      rate_numerator, rate_denominator, formula, expression, source_locator, definition_digest
-    ) values (
-      ${id}, ${tenantId}, ${packageId}, ${rule.ruleKey}, ${rule.version},
-      ${rule.group === 'ibsCbs' ? 'ibs_cbs' : 'legacy'}, ${rule.code}, ${rule.precedence},
-      ${rule.priority}, ${rule.dateBasis}, ${rule.purpose}, ${rule.model}, ${rule.environment},
-      ${rule.operation ?? '*'},
-      ${rule.issuerEstablishmentId ?? '*'}, ${rule.issuerRegime ?? '*'},
-      ${rule.recipientPartyId ?? '*'}, ${rule.recipientRegime ?? '*'}, ${rule.originState ?? '*'},
-      ${rule.destinationState ?? '*'}, ${rule.subject?.kind ?? '*'},
-      ${rule.subject?.id ?? '*'}, ${rule.classification?.kind ?? '*'},
-      ${rule.classification?.code ?? '*'},
-      ${rule.recipientTaxpayer === undefined ? '*' : String(rule.recipientTaxpayer)},
-      ${rule.issuerMunicipality ?? '*'}, ${rule.fact?.key ?? '*'}, ${rule.fact?.value ?? '*'},
-      ${rule.issuerIncomeTaxRegime ?? '*'}, ${rule.effectiveFrom}, ${rule.effectiveTo ?? null},
-      ${rule.rate.numerator}, ${rule.rate.denominator}, ${rule.formula},
-      ${rule.expression ? sql.json(rule.expression as postgres.JSONValue) : null},
-      ${rule.sourceLocator}, ${definitionDigest}
-    )`
-    return id
+/** Stores one rule of a workspace's source package, once per key and version. */
+export async function insertTaxRule(
+  sql: postgres.TransactionSql,
+  tenantId: string,
+  packageId: string,
+  rule: z.infer<typeof taxRuleImportSchema>,
+): Promise<string> {
+  const definitionDigest = canonicalDigest(rule)
+  await sql`select pg_advisory_xact_lock(hashtextextended(
+    ${tenantId} || ':' || ${rule.ruleKey} || ':' || ${rule.version}::text, 0
+  ))`
+  const [prior] = await sql`select id, package_id, definition_digest from fiscal_tax_rules
+    where tenant_id = ${tenantId} and rule_key = ${rule.ruleKey} and version = ${rule.version}`
+  if (prior) {
+    if (prior.package_id !== packageId || prior.definition_digest !== definitionDigest)
+      throw new Error('Conflicting Fiscal tax rule version')
+    return String(prior.id)
   }
+  const id = deterministicUuid(tenantId, packageId, rule.ruleKey, String(rule.version))
+  await sql`insert into fiscal_tax_rules (
+    id, tenant_id, package_id, rule_key, version, component_group, component_code,
+    precedence, priority, date_basis, purpose, model, environment, operation, issuer_establishment_id,
+    issuer_regime, recipient_party_id, recipient_regime, origin_state, destination_state, subject_kind,
+    subject_id, classification_kind, classification_code, recipient_taxpayer,
+    issuer_municipality, fact_key, fact_value, issuer_income_tax_regime, effective_from,
+    effective_to,
+    rate_numerator, rate_denominator, formula, expression, source_locator, definition_digest
+  ) values (
+    ${id}, ${tenantId}, ${packageId}, ${rule.ruleKey}, ${rule.version},
+    ${rule.group === 'ibsCbs' ? 'ibs_cbs' : 'legacy'}, ${rule.code}, ${rule.precedence},
+    ${rule.priority}, ${rule.dateBasis}, ${rule.purpose}, ${rule.model}, ${rule.environment},
+    ${rule.operation ?? '*'},
+    ${rule.issuerEstablishmentId ?? '*'}, ${rule.issuerRegime ?? '*'},
+    ${rule.recipientPartyId ?? '*'}, ${rule.recipientRegime ?? '*'}, ${rule.originState ?? '*'},
+    ${rule.destinationState ?? '*'}, ${rule.subject?.kind ?? '*'},
+    ${rule.subject?.id ?? '*'}, ${rule.classification?.kind ?? '*'},
+    ${rule.classification?.code ?? '*'},
+    ${rule.recipientTaxpayer === undefined ? '*' : String(rule.recipientTaxpayer)},
+    ${rule.issuerMunicipality ?? '*'}, ${rule.fact?.key ?? '*'}, ${rule.fact?.value ?? '*'},
+    ${rule.issuerIncomeTaxRegime ?? '*'}, ${rule.effectiveFrom}, ${rule.effectiveTo ?? null},
+    ${rule.rate.numerator}, ${rule.rate.denominator}, ${rule.formula},
+    ${rule.expression ? sql.json(rule.expression as postgres.JSONValue) : null},
+    ${rule.sourceLocator}, ${definitionDigest}
+  )`
+  return id
 }
 
 function missingApprovedReference(
@@ -403,4 +408,61 @@ function missingApprovedReference(
     }
   }
   return null
+}
+
+/** Rules and approved references, loaded once and resolved against many inputs. */
+export type RuleSet = {
+  rules: readonly TaxRule[]
+  references: readonly postgres.Row[]
+}
+
+/**
+ * A change to a rule set that is not stored: the rules it adds count as approved and active,
+ * and those it takes away are gone with their package's references (Phase 88's impact).
+ */
+export type RuleOverlay = {
+  addRules: readonly TaxRule[]
+  addReferences: readonly postgres.Row[]
+  withoutRuleIds: ReadonlySet<string>
+  withoutPackageIds: ReadonlySet<string>
+}
+
+export function overlaid(
+  set: RuleSet,
+  overlay: RuleOverlay,
+  model: string,
+  environment: string,
+): RuleSet {
+  return {
+    rules: [
+      ...set.rules.filter(
+        (rule) =>
+          !overlay.withoutRuleIds.has(rule.rule.id) &&
+          !overlay.withoutPackageIds.has(rule.source.packageId),
+      ),
+      ...overlay.addRules.filter(
+        (rule) => rule.scope.model === model && rule.scope.environment === environment,
+      ),
+    ],
+    references: [
+      ...set.references.filter((entry) => !overlay.withoutPackageIds.has(String(entry.package_id))),
+      ...overlay.addReferences,
+    ],
+  }
+}
+
+export function resolveAgainst(
+  input: FiscalCalculationInput,
+  set: RuleSet,
+  currencyMinorUnitScale: number,
+): RuleResolution {
+  const missing = missingApprovedReference(input, [...set.references])
+  if (missing)
+    return {
+      supported: false,
+      code: 'MISSING_CLASSIFICATION',
+      detail: 'Classification is absent, expired or has no approved source',
+      missingDimension: missing,
+    }
+  return resolveTaxRules(input, [...set.rules], currencyMinorUnitScale)
 }

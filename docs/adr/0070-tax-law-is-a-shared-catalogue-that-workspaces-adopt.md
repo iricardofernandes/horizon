@@ -1,6 +1,9 @@
 # 70. Tax law is a shared catalogue that workspaces adopt
 
-- Status: accepted. Implemented in Phase 82 ([plan](../tax-phase82-implementation-plan.md)).
+- Status: accepted. Implemented in Phase 82 ([plan](../tax-phase82-implementation-plan.md)); revised in
+  Phase 88 by [ADR 0074](0074-a-tax-rule-change-is-requested-and-approved-by-another-person.md):
+  an adoption or a withdrawal is a request another person approves, and the CLI no longer
+  adopts directly.
 - Date: 2026-09-30
 
 ## Context

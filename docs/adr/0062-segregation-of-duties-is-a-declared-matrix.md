@@ -1,6 +1,6 @@
 # 62. Segregation of duties is a declared matrix, enforced by each module, with delegation
 
-- Status: accepted; implemented in Phase 68 ([plan](../readiness-phase68-implementation-plan.md)), with the revision below.
+- Status: accepted; implemented in Phase 68 ([plan](../readiness-phase68-implementation-plan.md)), with the revision below. Phase 88 adds Fiscal's pair, `fiscal:rules:request` / `fiscal:rules:approve`, with delegation ([ADR 0074](0074-a-tax-rule-change-is-requested-and-approved-by-another-person.md)).
 - Date: 2026-09-27
 
 ## Context

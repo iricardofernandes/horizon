@@ -1,0 +1,93 @@
+{
+  "phase": 88,
+  "kind": "rule-governance-rollout",
+  "ranAt": "2026-10-01T14:09:04.699Z",
+  "stack": "local, make up-apps and make up-fiscal; Fiscal migration 0060_phase88_rule_governance.sql applied; contracts 0.62.0",
+  "actors": "dev tokens minted for two Fiscal admins (requester, approver) and one issuer; their subjects are drill-only identifiers",
+  "goldenPathWorkspace": {
+    "tenantId": "01a0c5f8-798b-721e-912e-9b505406e614",
+    "ownRules": 19,
+    "activeOwnRules": 19,
+    "catalogPackages": 7,
+    "adoptedPackages": 0,
+    "matrixRows": 79,
+    "addRule": {
+      "changeId": "34d7b0ef-0ea7-4aaa-8b5e-955f03b13c0e",
+      "status": "pending",
+      "diff": {
+        "added": 1,
+        "ended": 0,
+        "changed": 0,
+        "unchanged": 0
+      },
+      "impact": {
+        "months": 3,
+        "from": "2026-07-01",
+        "to": "2026-10-01",
+        "examined": 98,
+        "truncated": false,
+        "changed": 12,
+        "unchanged": 86,
+        "unsupported": 0,
+        "digest": "f7f8c22d052fbe46de18ff6458041f8b9b716e51cfcf04fc7d703e630ef064af",
+        "sample": {
+          "issueDate": "2026-10-01",
+          "components": [
+            {
+              "code": "CBS",
+              "before": "23",
+              "after": "30",
+              "difference": "7"
+            }
+          ]
+        }
+      }
+    },
+    "selfApproval": {
+      "status": 403,
+      "code": "segregation-of-duties",
+      "pair": "fiscal.rules"
+    },
+    "rejectedBy": "second admin",
+    "note": "The add-rule request was a hypothetical CBS rate for the drill. The second admin rejected it, so the workspace rules are unchanged."
+  },
+  "newWorkspace": {
+    "issuerRequestStatus": 403,
+    "diffBefore": {
+      "added": 3,
+      "ended": 0,
+      "changed": 0,
+      "unchanged": 0
+    },
+    "selfApproval": {
+      "status": 403,
+      "code": "segregation-of-duties",
+      "pair": "fiscal.rules"
+    },
+    "approval": {
+      "status": "approved",
+      "decidedBySecondAdmin": true,
+      "impactExamined": 0
+    },
+    "adoption": "adopted",
+    "diffAfter": {
+      "added": 0,
+      "ended": 0,
+      "changed": 0,
+      "unchanged": 3
+    },
+    "issuerLendStatus": 403,
+    "delegation": {
+      "permission": "fiscal:rules:approve",
+      "status": "active"
+    },
+    "audit": [
+      "rule-change.requested",
+      "catalog.package-adopted",
+      "rule-change.approved",
+      "delegation.granted"
+    ],
+    "note": "A tenant row created for the drill in horizon_fiscal only; the Phase 41 catalogue package was adopted through request and approval."
+  },
+  "browser": "Chromium, demo user, /app/fiscal/rules: requests, catalogue with adoption state, a package diff (4 unchanged), the matrix; no page or Fiscal API error"
+}

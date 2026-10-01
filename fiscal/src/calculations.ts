@@ -323,12 +323,12 @@ function normalizeInput(input: FiscalCalculationInput): FiscalCalculationInput {
   }
 }
 
-function currencyScale(currency: string): number | null {
+export function currencyScale(currency: string): number | null {
   if (currency === 'BRL' || currency === 'USD' || currency === 'EUR') return 2
   return null
 }
 
-function parseStoredResult(bytes: unknown): FiscalCalculationResult {
+export function parseStoredResult(bytes: unknown): FiscalCalculationResult {
   const result = fiscalCalculationResultSchema.parse(
     JSON.parse(Buffer.from(bytes as Uint8Array).toString()),
   )

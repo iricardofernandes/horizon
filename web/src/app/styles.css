@@ -3837,3 +3837,37 @@ tbody tr.audit-broken td {
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
 }
+
+/* Governing the tax rules (Phase 88): a rule's changed fields, the impact, the definition. */
+.rule-fields {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+.rule-field {
+  display: flex;
+  gap: 6px;
+  font-size: 13px;
+}
+.rule-fields dt {
+  color: var(--color-text-muted);
+}
+.rule-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.rule-impact-unsupported {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.rule-definition {
+  font-family: monospace;
+  font-size: 12px;
+}
+.explanation-steps {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}

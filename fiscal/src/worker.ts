@@ -13,6 +13,7 @@ import { FiscalCancellation } from './cancellation'
 import { FiscalCapabilities } from './capabilities'
 import { FiscalConsumer } from './consumer'
 import { FiscalCorrectionLetters } from './correction-letters'
+import { FiscalDelegations } from './delegations'
 import { FiscalDispatch } from './dispatch'
 import { FiscalDocumentLinksReader } from './document-links'
 import { FiscalDocumentList } from './document-list'
@@ -35,6 +36,7 @@ import { FiscalOutboxRelay } from './outbox'
 import { loadPhase43WorkerRuntime } from './phase43-worker-runtime'
 import { FiscalProjections } from './projections'
 import { FiscalReadiness } from './readiness'
+import { FiscalRuleChanges } from './rule-changes'
 import { FiscalRuleStore } from './rule-store'
 import { FiscalServiceTokens } from './service-tokens'
 import { FiscalSupport } from './support'
@@ -264,6 +266,11 @@ const auditLog = new FiscalAuditLog(config.DATABASE_URL)
 // Gauges sum the tenants this worker serves; no metric names a tenant (ADR 0055).
 const stopSupportGauges = startSupportGauges(support, Object.keys(keys))
 const estimates = new FiscalEstimates(projections, calculations)
+const ruleChanges = new FiscalRuleChanges(
+  config.DATABASE_URL,
+  Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
+  ruleStore,
+)
 const server = createFiscalServer({
   estimates,
   verifier,
@@ -290,6 +297,7 @@ const server = createFiscalServer({
   documentList,
   support,
   audit: auditLog,
+  governance: { changes: ruleChanges, delegations: new FiscalDelegations(ruleChanges.sql) },
 })
 const fixedSimulatorScenario = config.FISCAL_SIMULATOR_SCENARIO
 const simulator = new DeterministicNfe55Simulator(
@@ -372,6 +380,7 @@ async function stop(): Promise<void> {
     documentList.close(),
     support.close(),
     auditLog.close(),
+    ruleChanges.close(),
     denylist.close(),
     phase43Runtime?.close(),
   ])

@@ -349,6 +349,13 @@ export const navigation: readonly NavigationGroup[] = [
         demo: false,
       },
       {
+        href: '/app/fiscal/rules',
+        labelKey: 'fiscalRules',
+        icon: Scales,
+        module: 'fiscal',
+        demo: false,
+      },
+      {
         href: '/app/fiscal/support',
         labelKey: 'fiscalSupport',
         icon: Lifebuoy,

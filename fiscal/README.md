@@ -214,7 +214,8 @@ rows only for what is its own. `npm run phase82:catalog -- <action>`:
 |---|---|---|
 | `publish-phase41 --artifact <calculadora.zip>` | `DATABASE_MIGRATION_URL` | Publishes Phase 41's approved package with its original identifiers |
 | `retire-copy --tenant <id> --actor <who>` | `DATABASE_URL` | Deactivates the workspace's own copy of a published package |
-| `adopt --tenant <id> --effective-from <date> --reviewed-by <who> --actor <who>` | `DATABASE_URL` | Adopts a package; refused while an active own rule would tie with it |
+| `request-adoption --tenant <id> --effective-from <date> --requested-by <who>` | `DATABASE_URL`, `FISCAL_ARTIFACT_KEY_HEX` | Asks to adopt a package, with its diff and impact; refused while an active own rule would tie with it (Phase 88) |
+| `approve --tenant <id> --change <id> --approved-by <who>` | `DATABASE_URL`, `FISCAL_ARTIFACT_KEY_HEX` | Approves a pending rule change someone else asked for, which applies it |
 | `verify --fixture <file>` | `DATABASE_URL` | Previews a fixture and requires its approved result |
 | `verify-lock --tenant <id> --document <id>` | `DATABASE_URL` | Replays a locked calculation and prints its digests |
 
@@ -254,7 +255,7 @@ npm run phase84:oracle -- publish --package <package.json>    # DATABASE_MIGRATI
 ```
 
 The oracle fails on any difference, any refusal and any class of the package without an
-agreeing case. A workspace adopts the package with `phase82:catalog adopt --package <id>`.
+agreeing case. A workspace asks to adopt the package with `phase82:catalog request-adoption --package <id>`, and another person approves it (Phase 88).
 Lines without a classification, and Phase 41's operation, keep their own rules. See the
 [Phase 84 evidence](../docs/tax-phase84-evidence.md).
 
@@ -268,7 +269,8 @@ line's `taxFacts` (`ipiTaxpayer`, `destinationUse`). Formulas gain `difference` 
 npm run phase85:scenarios -- fixtures            # build fixtures; an unchanged one keeps its approval
 npm run phase85:scenarios -- approve --fixture <id> --by <who> --scope <text>   # only on the owner's word
 npm run phase85:scenarios -- publish             # DATABASE_MIGRATION_URL
-npm run phase85:scenarios -- adopt --tenant <id> --actor <who>
+npm run phase85:scenarios -- request-adoption --tenant <id> --requested-by <who>
+npm run phase85:scenarios -- approve-adoption --tenant <id> --approved-by <someone else>
 npm run phase85:scenarios -- verify              # DATABASE_URL, FISCAL_ARTIFACT_KEY_HEX
 npm run phase85:scenarios -- matrix              # regenerate support-matrix.json from the evidence
 ```
@@ -289,7 +291,7 @@ name components it reads from others (`requires`). The reviewed scenarios of bot
 ```bash
 npm run tax:scenarios -- fixtures --phase 86     # phase85:scenarios is the same with --phase 85
 npm run tax:scenarios -- approve --phase 86 --fixture <id> --by <who> --scope <text>
-npm run tax:scenarios -- publish --phase 86      # then adopt, verify; matrix reads every phase
+npm run tax:scenarios -- publish --phase 86      # then request and approve adoption, verify
 ```
 
 See the [Phase 86 evidence](../docs/tax-phase86-evidence.md).
@@ -308,6 +310,34 @@ See the [Phase 86 evidence](../docs/tax-phase86-evidence.md).
 - A purchase order's estimate (`fiscal_purchase_order_estimates`) lets the inbound
   reconciliation compare the supplier's taxes, as information. See the
   [Phase 87 evidence](../docs/tax-phase87-evidence.md).
+
+### Governing the rules (Phase 88)
+
+Every change to the rules a workspace calculates with is a request another person approves
+(ADR 0074): adopting or withdrawing a catalogue package, adding or retiring an own rule.
+
+- **The request.** A Fiscal admin asks (`POST /rule-changes`). The request keeps its diff
+  against the rules in force and its impact: the calculations locked in the last 3 months
+  (`impactMonths`, at most 12), recalculated with the change and never locked.
+- **The decision.** Another admin, or someone holding a delegation of
+  `fiscal:rules:approve`, approves or rejects (`/rule-changes/:id/approve|reject`).
+  - The requester never decides, and is refused with `segregation-of-duties`, pair
+    `fiscal.rules`.
+  - Only the requester cancels.
+  - Approval applies the change in the same transaction.
+- **Reading:** `GET /catalog/packages`, `GET /catalog/packages/:id/diff`, `GET /rules`, and
+  `GET /delegations`.
+- **The CLIs** request and approve with two named actors:
+
+```bash
+npm run phase82:catalog -- request-adoption --tenant <id> --requested-by <who> --effective-from <date>
+npm run phase82:catalog -- approve --tenant <id> --change <id> --approved-by <someone else>
+npm run tax:scenarios -- request-adoption --phase 86 --tenant <id> --requested-by <who>
+npm run tax:scenarios -- approve-adoption --phase 86 --tenant <id> --approved-by <someone else>
+```
+
+Both need `DATABASE_URL` and `FISCAL_ARTIFACT_KEY_HEX`, which the impact uses to open the
+sealed inputs. See the [Phase 88 evidence](../docs/tax-phase88-evidence.md).
 
 ## Audit log (Phase 68)
 

@@ -40,6 +40,9 @@ describe('whom the controls screen asks', () => {
   it('reads delegations wherever the person holds a role, and lends only where they decide', () => {
     expect(delegationModulesOf(roles)).toEqual(['procurement', 'inventory', 'ledger', 'treasury'])
     expect(lendingModulesOf(roles)).toEqual(['procurement', 'treasury'])
+    // Only a Fiscal admin approves a rule change, so only an admin lends it (Phase 88).
+    expect(lendingModulesOf([{ module: 'fiscal', role: 'issuer' }])).toEqual([])
+    expect(lendingModulesOf([{ module: 'fiscal', role: 'admin' }])).toEqual(['fiscal'])
     expect(delegationModulesOf([{ module: 'sales', role: 'admin' }])).toEqual([])
   })
 

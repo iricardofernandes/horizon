@@ -1,6 +1,6 @@
 # Tax rules engine implementation plan — Phase O
 
-Status: **in progress** — Phases 82 to 85 delivered on 2026-09-30 and 86 and 87 on 2026-10-01 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md), [84](tax-phase84-evidence.md), [85](tax-phase85-evidence.md), [86](tax-phase86-evidence.md), [87](tax-phase87-evidence.md)). This is the execution plan for Phase O,
+Status: **in progress** — Phases 82 to 85 delivered on 2026-09-30 and 86 to 88 on 2026-10-01 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md), [84](tax-phase84-evidence.md), [85](tax-phase85-evidence.md), [86](tax-phase86-evidence.md), [87](tax-phase87-evidence.md), [88](tax-phase88-evidence.md)). This is the execution plan for Phase O,
 split into phases 82–89 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to N
 and 79 to 81.
@@ -332,6 +332,13 @@ so:
   balances.
 
 ### 88 — Governing the rules
+
+**Delivered on 2026-10-01** ([plan](tax-phase88-implementation-plan.md),
+[evidence](tax-phase88-evidence.md),
+[ADR 0074](adr/0074-a-tax-rule-change-is-requested-and-approved-by-another-person.md)). Every
+adoption, withdrawal, own rule and retirement is a request another admin approves, with its
+diff and the impact on the locked documents of the last months. Fiscal joined ADR 0062's
+matrix with delegation, and the CLIs request and approve like the screen.
 
 **Work**
 1. **Screens:**

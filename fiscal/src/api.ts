@@ -24,6 +24,7 @@ import { documentListQuerySchema, type FiscalDocumentList } from './document-lis
 import { type FiscalDocuments, FiscalModelConflict } from './documents'
 import type { FiscalEstablishmentCredentials } from './establishment-credentials'
 import type { FiscalEstimates } from './estimates'
+import { type GovernanceDependencies, handleGovernanceRoute } from './governance-api'
 import { handleInboundRoute, type InboundDependencies } from './inbound-api'
 import type { FiscalIssuance } from './issuance'
 import { handleLinkedRoute, type LinkedDependencies } from './linked-api'
@@ -65,6 +66,7 @@ export type FiscalServerDependencies = {
   documentList?: Pick<FiscalDocumentList, 'list'>
   support?: Pick<FiscalSupport, 'overview'>
   audit?: Pick<FiscalAuditLog, 'page'>
+  governance?: GovernanceDependencies
 }
 
 export function createFiscalServer(dependencies: FiscalServerDependencies): Server {
@@ -124,6 +126,11 @@ async function handle(
   if (
     dependencies.service &&
     (await handleServiceRoute(request, response, url, principal, dependencies.service))
+  )
+    return
+  if (
+    dependencies.governance &&
+    (await handleGovernanceRoute(request, response, url, principal, dependencies.governance))
   )
     return
 

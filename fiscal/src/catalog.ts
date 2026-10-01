@@ -84,7 +84,7 @@ export class CatalogAdoptionClash extends Error {
 }
 
 /** The scope columns two rules must share to tie; a window overlap is checked beside them. */
-const TIE_COLUMNS = [
+export const TIE_COLUMNS = [
   'component_group',
   'component_code',
   'precedence',
@@ -112,8 +112,8 @@ const TIE_COLUMNS = [
 
 /**
  * Tax law shared by every workspace (ADR 0070). Publishing needs the migration role, since the
- * application may only read the catalogue; adopting and withdrawing are a workspace's own
- * events, under its RLS.
+ * application may only read the catalogue. Adopting and withdrawing are a workspace's own
+ * events, under its RLS, recorded only when another person approves them (ADR 0074).
  */
 export class FiscalCatalog {
   readonly #db: ReturnType<typeof postgres>
@@ -213,58 +213,63 @@ export class FiscalCatalog {
       return { packageId, packageDigest, existing: Boolean(prior), ruleIds }
     })
   }
+}
 
-  async adopt(input: z.input<typeof adoptionSchema>): Promise<string> {
-    const value = adoptionSchema.parse(input)
-    const id = randomUUID()
-    await this.#db.begin(async (tx) => {
-      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
-      const clashes = await clashesWithWorkspace(tx, value.tenantId, value.packageId)
-      if (clashes.length) throw new CatalogAdoptionClash(clashes)
-      await tx`insert into fiscal_package_adoptions (
-        id, tenant_id, package_id, action, effective_from, reviewed_by, interpretation,
-        fixture_ids, actor_id, reason
-      ) values (
-        ${id}, ${value.tenantId}, ${value.packageId}, 'adopt', ${value.effectiveFrom},
-        ${value.reviewedBy}, ${value.interpretation}, ${value.fixtureIds}, ${value.actorId},
-        ${value.reason}
-      )`
-      await appendAudit(tx, {
-        tenantId: value.tenantId,
-        actorId: value.actorId,
-        action: 'catalog.package-adopted',
-        resourceId: value.packageId,
-        detail: {
-          effectiveFrom: value.effectiveFrom,
-          reviewedBy: value.reviewedBy,
-          fixtureIds: value.fixtureIds,
-          reason: value.reason,
-        },
-      })
-    })
-    return id
-  }
+/**
+ * Records an adoption inside the transaction that approved it (Phase 88, ADR 0074): there is
+ * no other way to adopt. A tie with an active workspace rule is refused (ADR 0070).
+ */
+export async function recordAdoption(
+  tx: postgres.TransactionSql,
+  input: z.input<typeof adoptionSchema>,
+): Promise<string> {
+  const value = adoptionSchema.parse(input)
+  const id = randomUUID()
+  const clashes = await clashesWithWorkspace(tx, value.tenantId, value.packageId)
+  if (clashes.length) throw new CatalogAdoptionClash(clashes)
+  await tx`insert into fiscal_package_adoptions (
+    id, tenant_id, package_id, action, effective_from, reviewed_by, interpretation,
+    fixture_ids, actor_id, reason
+  ) values (
+    ${id}, ${value.tenantId}, ${value.packageId}, 'adopt', ${value.effectiveFrom},
+    ${value.reviewedBy}, ${value.interpretation}, ${value.fixtureIds}, ${value.actorId},
+    ${value.reason}
+  )`
+  await appendAudit(tx, {
+    tenantId: value.tenantId,
+    actorId: value.actorId,
+    action: 'catalog.package-adopted',
+    resourceId: value.packageId,
+    detail: {
+      effectiveFrom: value.effectiveFrom,
+      reviewedBy: value.reviewedBy,
+      fixtureIds: value.fixtureIds,
+      reason: value.reason,
+    },
+  })
+  return id
+}
 
-  async withdraw(input: z.input<typeof withdrawalSchema>): Promise<string> {
-    const value = withdrawalSchema.parse(input)
-    const id = randomUUID()
-    await this.#db.begin(async (tx) => {
-      await tx`select set_config('app.current_tenant', ${value.tenantId}, true)`
-      await tx`insert into fiscal_package_adoptions (
-        id, tenant_id, package_id, action, actor_id, reason
-      ) values (
-        ${id}, ${value.tenantId}, ${value.packageId}, 'withdraw', ${value.actorId}, ${value.reason}
-      )`
-      await appendAudit(tx, {
-        tenantId: value.tenantId,
-        actorId: value.actorId,
-        action: 'catalog.package-withdrawn',
-        resourceId: value.packageId,
-        detail: { reason: value.reason },
-      })
-    })
-    return id
-  }
+/** Records a withdrawal inside the transaction that approved it (Phase 88). */
+export async function recordWithdrawal(
+  tx: postgres.TransactionSql,
+  input: z.input<typeof withdrawalSchema>,
+): Promise<string> {
+  const value = withdrawalSchema.parse(input)
+  const id = randomUUID()
+  await tx`insert into fiscal_package_adoptions (
+    id, tenant_id, package_id, action, actor_id, reason
+  ) values (
+    ${id}, ${value.tenantId}, ${value.packageId}, 'withdraw', ${value.actorId}, ${value.reason}
+  )`
+  await appendAudit(tx, {
+    tenantId: value.tenantId,
+    actorId: value.actorId,
+    action: 'catalog.package-withdrawn',
+    resourceId: value.packageId,
+    detail: { reason: value.reason },
+  })
+  return id
 }
 
 /** The catalogue rules a workspace has adopted, as rules of that workspace, approved and active. */
@@ -296,7 +301,7 @@ export async function adoptedCatalogReferences(
   tenantId: string,
 ): Promise<postgres.Row[]> {
   return tx`select entry.family, entry.code, entry.model, entry.jurisdiction,
-    entry.effective_from::text, entry.effective_to::text
+    entry.effective_from::text, entry.effective_to::text, entry.package_id
     from fiscal_catalog_references entry
     join lateral (
       select event.action from fiscal_package_adoptions event
@@ -306,7 +311,7 @@ export async function adoptedCatalogReferences(
 }
 
 /** Package rules that an active workspace rule would tie with, over an overlapping window. */
-async function clashesWithWorkspace(
+export async function clashesWithWorkspace(
   tx: postgres.TransactionSql,
   tenantId: string,
   packageId: string,

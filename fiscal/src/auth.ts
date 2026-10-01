@@ -20,6 +20,8 @@ export type FiscalPermission =
   | 'evidence:read'
   | 'draft:create'
   | 'rules:manage'
+  /** Deciding a tax rule change someone else asked for (Phase 88, ADR 0074). */
+  | 'rules:approve'
   | 'transmission:submit'
   | 'cancellation:request'
   | 'import:review'
@@ -39,6 +41,7 @@ const permissions: Record<FiscalPrincipal['role'], readonly FiscalPermission[]> 
     'evidence:read',
     'draft:create',
     'rules:manage',
+    'rules:approve',
     'transmission:submit',
     'cancellation:request',
     'import:review',

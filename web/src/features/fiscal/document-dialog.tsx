@@ -11,6 +11,7 @@ import { short } from '@/lib/format'
 import { tracedFetch } from '@/lib/telemetry'
 import { useDateTime } from '@/lib/use-format'
 import { DocumentActions } from './document-actions'
+import { ComponentExplanation, type LockedCalculation } from './explanation-view'
 import { SimulationLabel } from './simulation-label'
 import {
   type Artifact,
@@ -42,6 +43,7 @@ type Detail = {
   document: Record<string, unknown> & { status: DocumentSummary['status'] }
   transitions: Transition[]
   explanation: CalculationExplanation | null
+  calculation: LockedCalculation | null
   artifacts: Artifact[]
   links: Links | null
 }
@@ -54,13 +56,14 @@ async function optional<T>(name: string, url: string): Promise<T | null> {
 
 async function loadDetail(summary: DocumentSummary): Promise<Detail | null> {
   const base = `${FISCAL_API}/documents/${summary.id}`
-  const [document, timeline, explanation, artifacts, links] = await Promise.all([
+  const [document, timeline, explanation, calculation, artifacts, links] = await Promise.all([
     optional<Detail['document']>('fiscal.document.read', documentUrl(summary)),
     optional<{ transitions: Transition[] }>('fiscal.document.timeline', `${base}/transitions`),
     optional<CalculationExplanation>(
       'fiscal.document.explanation',
       `${base}/calculation/explanation`,
     ),
+    optional<LockedCalculation>('fiscal.document.calculation', `${base}/calculation`),
     optional<{ artifacts: Artifact[] }>('fiscal.document.artifacts', `${base}/artifacts`),
     summary.model === 'nfse'
       ? Promise.resolve(null)
@@ -71,6 +74,7 @@ async function loadDetail(summary: DocumentSummary): Promise<Detail | null> {
     document,
     transitions: timeline?.transitions ?? [],
     explanation,
+    calculation,
     artifacts: artifacts?.artifacts ?? [],
     links,
   }
@@ -186,6 +190,7 @@ function DetailTabs({ detail, summary }: { detail: Detail; summary: DocumentSumm
         {!detail.transitions.length ? <Empty copy={t('dialog.noTransitions')} /> : null}
       </Tabs.Panel>
       <Tabs.Panel className="fiscal-tab" value="explanation">
+        {detail.calculation ? <ComponentExplanation calculation={detail.calculation} /> : null}
         {detail.explanation ? (
           <Explanation explanation={detail.explanation} />
         ) : (

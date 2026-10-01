@@ -16,6 +16,7 @@ import {
 } from './legacy-scenarios'
 import { blendPackage, pisCofinsNormalPackage, simplesMeiPackage } from './regime-packages'
 import { regimeScenarios } from './regime-scenarios'
+import { changeSummary, withRuleChanges } from './rule-change-cli'
 import { deterministicUuid } from './rule-rows'
 import { FiscalRuleStore } from './rule-store'
 import { buildSupportMatrix, supportEvidence } from './tax-support'
@@ -194,38 +195,64 @@ async function publish(): Promise<unknown> {
   }
 }
 
-async function adopt(): Promise<unknown> {
+/**
+ * Asks for each package of the phase to be adopted, citing the approved fixtures; another
+ * person approves the requests with `approve` (Phase 88, ADR 0074).
+ */
+async function requestAdoption(): Promise<unknown> {
   const approved = (await readFixtures()).filter((fixture) => fixture.approval)
   if (approved.length === 0) throw new Error('No fixture is approved: nothing to adopt')
-  const catalog = new FiscalCatalog(env('DATABASE_URL'))
-  try {
-    const adoptions = []
-    for (const pack of (await packageSet()).own) {
+  const packages = (await packageSet()).own
+  return withRuleChanges(env('DATABASE_URL'), env('FISCAL_ARTIFACT_KEY_HEX'), async (changes) => {
+    const requests = []
+    for (const pack of packages) {
       const digest = packageDigest(pack)
       const cited = approved
         .filter((fixture) => fixture.packages.some((entry) => entry.packageDigest === digest))
         .map((fixture) => fixture.fixtureId)
-      adoptions.push({
-        label: pack.label,
-        adoptionId: await catalog.adopt({
-          tenantId: required('tenant'),
+      const change = await changes.request({
+        tenantId: required('tenant'),
+        actorId: required('requested-by'),
+        body: {
+          kind: 'adopt-package',
           packageId: deterministicUuid('catalog', pack.authority, digest),
           effectiveFrom: '2026-01-01',
-          reviewedBy: 'workspace-owner',
           interpretation: `${pack.label}, as reviewed in the approved Phase ${PHASE} fixtures.`,
           fixtureIds: cited,
-          actorId: required('actor'),
           reason:
             PHASE === '85'
               ? 'Phase 85: the legacy taxes, bounded by reviewed scenarios'
               : 'Phase 86: regimes and the blend',
-        }),
+        },
       })
+      requests.push({ label: pack.label, ...changeSummary(change) })
     }
-    return adoptions
-  } finally {
-    await catalog.close()
-  }
+    return requests
+  })
+}
+
+/** Approves the pending adoption request of each package of the phase. */
+async function approveAdoption(): Promise<unknown> {
+  const packages = (await packageSet()).own
+  const tenantId = required('tenant')
+  return withRuleChanges(env('DATABASE_URL'), env('FISCAL_ARTIFACT_KEY_HEX'), async (changes) => {
+    const listed = await changes.packages(tenantId)
+    const decisions = []
+    for (const pack of packages) {
+      const packageId = deterministicUuid('catalog', pack.authority, packageDigest(pack))
+      const changeId = listed.find((entry) => entry.id === packageId)?.pendingChangeId
+      if (!changeId) throw new Error(`${pack.label} has no pending adoption request`)
+      const change = await changes.decide({
+        tenantId,
+        actorId: required('approved-by'),
+        holdsApproval: true,
+        changeId,
+        outcome: 'approved',
+      })
+      decisions.push({ label: pack.label, ...changeSummary(change) })
+    }
+    return decisions
+  })
 }
 
 async function verify(): Promise<unknown> {
@@ -272,7 +299,8 @@ const actions: Record<string, () => Promise<unknown>> = {
   fixtures,
   approve,
   publish,
-  adopt,
+  'request-adoption': requestAdoption,
+  'approve-adoption': approveAdoption,
   verify,
   matrix,
 }

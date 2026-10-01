@@ -10,6 +10,7 @@ import {
   PHASE41_FIXTURE_ID,
   PHASE41_SOURCE_SHA256,
 } from './phase41-approved-scenario'
+import { changeSummary, withRuleChanges } from './rule-change-cli'
 import { FiscalRuleStore } from './rule-store'
 
 /**
@@ -86,25 +87,42 @@ async function retireCopy(): Promise<unknown> {
   }
 }
 
-async function adopt(): Promise<unknown> {
-  const catalog = new FiscalCatalog(env('DATABASE_URL'))
-  try {
-    const adoptionId = await catalog.adopt({
-      tenantId: required('tenant'),
-      packageId: option('package') ?? PHASE41_CATALOG_IDENTITY.packageId,
-      effectiveFrom: required('effective-from'),
-      reviewedBy: required('reviewed-by'),
-      interpretation:
-        option('interpretation') ??
-        'The Phase 41 approved RTC V0057 scenario, adopted from the shared catalogue.',
-      fixtureIds: [option('fixture-id') ?? PHASE41_FIXTURE_ID],
-      actorId: required('actor'),
-      reason: option('reason') ?? 'Phase 82: tax law read from the shared catalogue',
-    })
-    return { adoptionId }
-  } finally {
-    await catalog.close()
-  }
+/** Asks for the adoption; another person approves it with `approve` (Phase 88, ADR 0074). */
+async function requestAdoption(): Promise<unknown> {
+  return withRuleChanges(env('DATABASE_URL'), env('FISCAL_ARTIFACT_KEY_HEX'), async (changes) =>
+    changeSummary(
+      await changes.request({
+        tenantId: required('tenant'),
+        actorId: required('requested-by'),
+        body: {
+          kind: 'adopt-package',
+          packageId: option('package') ?? PHASE41_CATALOG_IDENTITY.packageId,
+          effectiveFrom: required('effective-from'),
+          interpretation:
+            option('interpretation') ??
+            'The Phase 41 approved RTC V0057 scenario, adopted from the shared catalogue.',
+          fixtureIds: [option('fixture-id') ?? PHASE41_FIXTURE_ID],
+          reason: option('reason') ?? 'Phase 82: tax law read from the shared catalogue',
+        },
+      }),
+    ),
+  )
+}
+
+/** Approves a pending rule change someone else requested. */
+async function approve(): Promise<unknown> {
+  return withRuleChanges(env('DATABASE_URL'), env('FISCAL_ARTIFACT_KEY_HEX'), async (changes) =>
+    changeSummary(
+      await changes.decide({
+        tenantId: required('tenant'),
+        actorId: required('approved-by'),
+        holdsApproval: true,
+        changeId: required('change'),
+        outcome: 'approved',
+        reason: option('reason'),
+      }),
+    ),
+  )
 }
 
 async function verify(): Promise<unknown> {
@@ -159,7 +177,8 @@ async function verifyLock(): Promise<unknown> {
 const actions: Record<string, () => Promise<unknown>> = {
   'publish-phase41': publishPhase41,
   'retire-copy': retireCopy,
-  adopt,
+  'request-adoption': requestAdoption,
+  approve,
   verify,
   'verify-lock': verifyLock,
 }

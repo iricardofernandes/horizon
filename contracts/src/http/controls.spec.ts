@@ -34,10 +34,11 @@ describe('the segregation of duties matrix', () => {
     expect(new Set(pairs).size).toBe(pairs.length)
   })
 
-  it('covers the five modules that approve, and lends only deciding permissions', () => {
+  it('covers the six modules that approve, and lends only deciding permissions', () => {
     expect(new Set(SEGREGATION_OF_DUTIES.map((pair) => pair.module))).toEqual(
-      new Set(['financial', 'procurement', 'inventory', 'ledger', 'treasury']),
+      new Set(['financial', 'procurement', 'inventory', 'ledger', 'treasury', 'fiscal']),
     )
+    expect(delegablePermissions('fiscal')).toEqual(['fiscal:rules:approve'])
     expect(delegablePermissions('procurement')).toEqual([
       'procurement:requisition:approve',
       'procurement:order:approve',
