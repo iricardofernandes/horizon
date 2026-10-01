@@ -1,7 +1,18 @@
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { dimensionKind, oracleReportSchema, startLockReplaySampler } from './tax-metrics'
+
+/** The oracle's record lives in the repository's docs, absent when Fiscal is checked out alone. */
+const ORACLE_REPORT = join(
+  __dirname,
+  '..',
+  '..',
+  'docs',
+  'drills',
+  '2026-09-30-phase84-oracle-2026.json',
+)
 
 describe('Phase O service levels (Phase 89)', () => {
   it('labels a missing dimension by its kind, never by its value', () => {
@@ -15,13 +26,8 @@ describe('Phase O service levels (Phase 89)', () => {
     expect(dimensionKind(undefined)).toBe('none')
   })
 
-  it('reads the report make tax-oracle writes', async () => {
-    const report = JSON.parse(
-      await readFile(
-        join(__dirname, '..', '..', 'docs', 'drills', '2026-09-30-phase84-oracle-2026.json'),
-        'utf8',
-      ),
-    )
+  it.skipIf(!existsSync(ORACLE_REPORT))('reads the report make tax-oracle writes', async () => {
+    const report = JSON.parse(await readFile(ORACLE_REPORT, 'utf8'))
     expect(oracleReportSchema.parse(report)).toMatchObject({
       kind: 'oracle-2026',
       differ: 0,
