@@ -1,142 +1,134 @@
+<p align="center">
+  <img src="docs/assets/readme/hero.jpg" alt="Horizon — a multi-tenant ERP built as independent services" width="100%">
+</p>
+
+<p align="center">
+  <a href=".github/workflows/ci.yml"><img alt="ci" src="https://github.com/iricardofernandes/horizon/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href=".github/workflows/golden-path.yml"><img alt="golden path" src="https://github.com/iricardofernandes/horizon/actions/workflows/golden-path.yml/badge.svg?branch=main"></a>
+  <a href=".github/workflows/isolation.yml"><img alt="isolation" src="https://github.com/iricardofernandes/horizon/actions/workflows/isolation.yml/badge.svg?branch=main"></a>
+  <a href=".github/workflows/tax-oracle.yml"><img alt="tax oracle" src="https://github.com/iricardofernandes/horizon/actions/workflows/tax-oracle.yml/badge.svg?branch=main"></a>
+  <a href="LICENSE"><img alt="MIT licensed" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+</p>
+
 # Horizon
 
-A general-purpose ERP, built as five independently deployable services with a database
-each, an API gateway, event-driven choreography, and multi-tenant isolation enforced by
-the database rather than by application code.
+A general-purpose ERP for Brazilian companies (sales, purchasing, inventory, finance,
+accounting, fiscal documents and taxes, CRM) built as **16 independent services**,
+each with its own database, communicating through events.
 
-It is positioned like Omie or Conta Azul — general, not vertical — and it exists to
-demonstrate distributed-systems engineering: transactional outbox and inbox, forced
-Row-Level Security, an append-only hash-chained audit log, crypto-shredding for erasure,
-end-to-end tracing across an asynchronous boundary, and contract versioning that CI
-actually enforces.
+<p align="center">
+  <b>16</b> services · <b>74</b> architecture decisions · <b>~370</b> test files · <b>1</b> trace across the whole flow
+</p>
 
-**MIT licensed. Written entirely in English**, except Brazilian fiscal terms that have no
-English equivalent, which are defined in [`docs/glossary.md`](docs/glossary.md).
-
----
-
-> ### Current phase: **11 — live deployment**
->
-> Engineering phases 7–10 and 12–13 are complete; phase 11 remains at its account-linked
-> deployment gate. Inventory and Sales execute the durable RabbitMQ order
-> choreography with forced PostgreSQL RLS and transactional inbox/outbox boundaries.
-> Webhooks now owns tenant-scoped subscriptions, encrypted signing secrets, HMAC delivery,
-> append-only attempt logs, bounded retry, a durable dead-letter state and replay.
->
-> The Next.js portal provides an HttpOnly rotating session, catalog and inventory views,
-> order creation with asynchronous confirmation, and webhook subscription management,
-> across bookmarkable routes whose navigation follows the signed-in user's module roles.
-> Its interface reads in Brazilian Portuguese and English, chosen by the reader and not by
-> the URL. `make test-phase10` completes that path in Chromium at desktop and mobile
-> widths, in both languages, and requires one Jaeger trace across web, gateway, Sales,
-> Inventory and Webhooks.
-> The opt-in MCP debugger now composes that observability plane through ten bounded,
-> audited read-only tools; `make test-phase12` proves its database role cannot read or
-> write business data.
-> The AWS Terraform is also complete and provider-validated for both environments, but
-> has intentionally never been applied. Its estimated cost and exact limits are in
-> [`infra/terraform/README.md`](infra/terraform/README.md).
->
-> `@horizon/contracts@0.3.0` defines that choreography. Consumers remain exact-pinned to
-> the contract version they implement. The platform remains independently runnable with
-> `make up && make smoke`.
->
-> Scope and operational limits: [`inventory/README.md`](inventory/README.md),
-> [`sales/README.md`](sales/README.md) and [`webhooks/README.md`](webhooks/README.md).
-> What arrives next: [`docs/plan.md`](docs/plan.md).
-
----
-
-## The golden path
-
-The highest-priority deliverable in this repository is not module count — it is one flow
-that works end to end and stays working:
-
-**create sales order → reserve stock in `inventory` → confirm order → publish
-`sales.order.confirmed` → `webhooks` delivers an HMAC-signed callback → dispatch the
-delivery, which takes the stock out and makes the money owed.**
-
-It runs with `make demo`, appears as a **single trace** in Jaeger crossing three services
-and RabbitMQ, and executes as a CI job on every push — so the screenshot below cannot
-become a lie. Load-test results with measured throughput and p95 are committed to
-`docs/benchmarks/`.
-
-![Golden-path trace in Jaeger: one trace, three services](docs/assets/golden-path-jaeger.png)
-
-The committed capture is evidence from `make demo`, not a hand-built diagram: Jaeger
-reports 3 services and 12 spans under the same trace. The always-on
-[`golden path` workflow](.github/workflows/golden-path.yml) executes the seed and flow
-twice so both first-run behavior and seed idempotency are gates.
+**MIT licensed. Written entirely in English**, except Brazilian fiscal terms that have
+no English equivalent (NF-e, ICMS, CBS, IBS…), which are defined in
+[`docs/glossary.md`](docs/glossary.md).
 
 ---
 
 ## Architecture
 
-```mermaid
-C4Context
-  title Horizon — system context
+<p align="center">
+  <img src="docs/assets/readme/architecture.png" alt="Architecture: web (Next.js) calls the Kong gateway, which routes to sixteen services, each with its own PostgreSQL database under forced row-level security; services exchange events over RabbitMQ through a transactional outbox and inbox; Redis and MinIO with ClamAV support them; all of them export traces, metrics and logs to the OpenTelemetry Collector, Jaeger, Prometheus, Loki and Grafana" width="100%">
+</p>
 
-  Person(user, "ERP user", "Sales, warehouse and finance staff at a tenant company")
-  Person(developer, "Tenant developer", "Integrates their own systems")
-  Person(operator, "Operator", "Runs and debugs Horizon")
+- **Each service owns its data.** One PostgreSQL database per service, with `tenant_id`
+  on every business table and RLS forced, so a forgotten filter returns nothing instead
+  of another tenant's rows.
+- **Services never call each other to keep state consistent.** They publish facts
+  through a transactional outbox, and consumers apply them once through an inbox. A
+  service that needs another's data keeps its own projection.
+- **The gateway authenticates; services authorize.** Kong validates the EdDSA token,
+  and each service checks its own module-scoped roles.
+- **Everything is observable from one place.** Traces, metrics and logs go through the
+  OpenTelemetry Collector to Jaeger, Prometheus and Loki, with dashboards and alert rules
+  provisioned from files.
 
-  System(horizon, "Horizon", "Multi-tenant ERP")
-
-  System_Ext(consumer, "Tenant systems", "Receive HMAC-signed webhooks")
-  System_Ext(agent, "AI agent", "Claude Code, via a read-only MCP server")
-
-  Rel(user, horizon, "Uses", "HTTPS")
-  Rel(developer, horizon, "Integrates with", "REST + API keys")
-  Rel(horizon, consumer, "Delivers signed events", "HTTPS")
-  Rel(operator, agent, "Investigates through")
-  Rel(agent, horizon, "Reads telemetry from", "MCP, read-only")
-```
-
-```mermaid
-C4Container
-  title Horizon — containers
-
-  Person(user, "ERP user")
-
-  Container(web, "web", "Next.js", "Frontend")
-  Container(kong, "gateway", "Kong DB-less", "JWT validation, rate limiting, CORS, correlation id, tracing")
-
-  Container(identity, "identity", "NestJS", "Tenants, users, tokens, JWKS, API keys, RBAC")
-  Container(catalog, "catalog", "NestJS", "Products, units, price lists, NCM")
-  Container(inventory, "inventory", "NestJS", "Balances, movements, reservations")
-  Container(sales, "sales", "NestJS", "Customers, quotes, orders")
-  Container(webhooks, "webhooks", "NestJS", "Subscriptions, signed delivery, DLQ")
-
-  ContainerDb(dbs, "One PostgreSQL database per service", "PostgreSQL 17", "tenant_id everywhere, RLS forced")
-  ContainerDb(redis, "Redis", "redis:7", "Denylist, idempotency, counters")
-  ContainerQueue(mq, "RabbitMQ", "rabbitmq:4", "Event transport")
-  Container(otel, "Observability", "Collector, Jaeger, Prometheus, Loki, Alloy, Grafana", "One ingestion point, fanned out")
-
-  Rel(user, web, "Uses", "HTTPS")
-  Rel(web, kong, "Calls", "HTTPS")
-  Rel(kong, identity, "Routes to")
-  Rel(kong, catalog, "Routes to")
-  Rel(kong, inventory, "Routes to")
-  Rel(kong, sales, "Routes to")
-  Rel(kong, webhooks, "Routes to")
-
-  Rel(identity, dbs, "Reads/writes")
-  Rel(catalog, dbs, "Reads/writes")
-  Rel(inventory, dbs, "Reads/writes")
-  Rel(sales, dbs, "Reads/writes")
-  Rel(webhooks, dbs, "Reads/writes")
-
-  Rel(sales, mq, "Publishes via outbox")
-  Rel(mq, inventory, "Delivers to inbox")
-  Rel(mq, webhooks, "Delivers to inbox")
-  Rel(identity, redis, "Denylist, refresh families")
-
-  Rel(sales, otel, "Traces, metrics, logs")
-  Rel(kong, otel, "Traces")
-```
-
-Full reasoning, with what each choice costs:
+The reasoning behind each choice, and what it costs, is in
 [`docs/architecture.md`](docs/architecture.md).
+
+---
+
+## Stack
+
+| | |
+|---|---|
+| **Language** | <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white"> <img alt="Node.js 24" src="https://img.shields.io/badge/Node.js-24-5FA04E?logo=nodedotjs&logoColor=white"> |
+| **Services** | <img alt="NestJS" src="https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white"> <img alt="Drizzle" src="https://img.shields.io/badge/Drizzle-C5F74F?logo=drizzle&logoColor=white"> |
+| **Frontend** | <img alt="Next.js" src="https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white"> <img alt="React" src="https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=white"> |
+| **Data** | <img alt="PostgreSQL 17 + pgvector" src="https://img.shields.io/badge/PostgreSQL-17%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white"> <img alt="Redis" src="https://img.shields.io/badge/Redis-FF4438?logo=redis&logoColor=white"> <img alt="MinIO" src="https://img.shields.io/badge/MinIO-C72E49?logo=minio&logoColor=white"> |
+| **Messaging & edge** | <img alt="RabbitMQ" src="https://img.shields.io/badge/RabbitMQ-FF6600?logo=rabbitmq&logoColor=white"> <img alt="Kong DB-less" src="https://img.shields.io/badge/Kong-DB--less-003459?logo=kong&logoColor=white"> |
+| **Observability** | <img alt="OpenTelemetry" src="https://img.shields.io/badge/OpenTelemetry-000000?logo=opentelemetry&logoColor=white"> <img alt="Jaeger" src="https://img.shields.io/badge/Jaeger-66CFE3?logo=jaeger&logoColor=white"> <img alt="Prometheus" src="https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white"> <img alt="Loki" src="https://img.shields.io/badge/Loki-F46800?logo=grafana&logoColor=white"> <img alt="Grafana" src="https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white"> |
+| **Quality** | <img alt="Vitest" src="https://img.shields.io/badge/Vitest-6E9F18?logo=vitest&logoColor=white"> <img alt="Testcontainers" src="https://img.shields.io/badge/Testcontainers-291A3F"> <img alt="Playwright" src="https://img.shields.io/badge/Playwright-2EAD33"> <img alt="Biome" src="https://img.shields.io/badge/Biome-60A5FA?logo=biome&logoColor=white"> |
+| **Delivery** | <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white"> <img alt="GitHub Actions" src="https://img.shields.io/badge/GitHub%20Actions-2088FF?logo=githubactions&logoColor=white"> <img alt="Terraform AWS, tested in CI" src="https://img.shields.io/badge/Terraform-AWS%20%C2%B7%20tested%20in%20CI-844FBA?logo=terraform&logoColor=white"> |
+
+---
+
+## What it does
+
+| Area | What a company can do |
+|---|---|
+| **Sales** | Quotes with tax estimates, orders, picking, partial delivery, returns |
+| **Services** | Service orders, recurring contracts, billing per period |
+| **Purchasing** | Requisitions, supplier quotations and comparison, approval thresholds, purchase orders, receiving |
+| **Inventory** | Warehouses, reservations, transfers, counts, Kardex and valuation, lots, serial numbers, bills of materials, production orders |
+| **Finance** | Receivables and payables with approvals, treasury accounts, bank statement import and reconciliation |
+| **Accounting** | Chart of accounts, double-entry journal posted automatically from business events, periods, trial balance, results, cash flow with drill-down to the source |
+| **Fiscal** | NF-e, NFC-e and NFS-e, inbound supplier XML, and a tax engine covering ICMS, IPI, PIS/Cofins and the 2026–2033 reform (IBS, CBS) |
+| **CRM** | Accounts, contacts, pipelines, activities, conversion of an opportunity into a quote, forecasts |
+| **Reporting** | Cross-module reports reconciled at a cutoff, CSV/XLSX exports and schedules, bulk imports with a preview |
+| **AI, opt-in** | An MCP server for the company's own agents, an in-app assistant, search over attachments with citations; it reads only what the person asking may read, and every change it proposes is a draft a person confirms |
+| **Platform** | Workspaces, MFA and passkeys, API keys, signed webhooks, attachments with a virus scan, segregation of duties, audit trail, a bilingual portal (Brazilian Portuguese and English) |
+
+Fiscal documents are issued against a **simulated** tax authority. Real issuance needs
+each company's digital certificate and the authority's homologation
+([details](docs/fiscal-capabilities.md)). Scope that is planned but not built is in
+[`docs/roadmap.md`](docs/roadmap.md), and how the project was built step by step is in
+[`docs/plan.md`](docs/plan.md).
+
+---
+
+## The golden path
+
+The highest-priority deliverable is not the number of modules. It is one flow that works
+end to end and stays working:
+
+<p align="center">
+  <img src="docs/assets/readme/golden-path.gif" alt="The golden path: sales creates the order, inventory reserves the stock, sales confirms it, RabbitMQ carries sales.order.confirmed, webhooks delivers an HMAC-signed callback, and the dispatch takes the stock out and makes the money owed — all in one Jaeger trace" width="880">
+</p>
+
+`make demo` runs it from an idempotent seed. It appears in Jaeger as **one trace**
+across the services and RabbitMQ, and the [`golden path`](.github/workflows/golden-path.yml)
+workflow runs it twice on every push to `main`, so a broken path or a seed that is not
+idempotent fails the build. Measured throughput and p95 are in
+[`docs/benchmarks/`](docs/benchmarks/golden-path.md).
+
+![Golden-path trace in Jaeger: one trace across the services](docs/assets/golden-path-jaeger.png)
+
+The capture is evidence from `make demo`, not a drawing. Longer flows have recorded
+runs of their own under [`docs/drills/`](docs/drills/):
+- reports reconciled against the modules they came from;
+- the same business flow [with AI on](docs/drills/2026-09-29-phase-n-golden-path-ai-on.json)
+  and [with AI off](docs/drills/2026-09-29-phase-n-golden-path-ai-off.json);
+- a quote's [tax estimate, the tax locked at delivery, and its posting in the ledger](docs/drills/2026-10-01-phase89-golden-path.json).
+
+---
+
+## Start here
+
+If you only have ten minutes for the code, these are the pieces worth opening:
+
+| What | Where |
+|---|---|
+| **Tenant isolation in the database.** RLS is forced on every business table, and each transaction sets its tenant. | [`0001_tenant_isolation.sql`](identity/src/infrastructure/database/drizzle/migrations/0001_tenant_isolation.sql) · [`identity-database.ts`](identity/src/infrastructure/database/drizzle/identity-database.ts) |
+| **The proof that it holds.** A test that tries to bypass RLS, use the wrong role, or leak a tenant across pooled connections. | [`database.e2e-spec.ts`](identity/test/database.e2e-spec.ts) |
+| **Events that are never lost.** The relay publishes what was committed in the same transaction as the change. | [`outbox-relay.ts`](identity/src/infrastructure/messaging/outbox-relay.ts) |
+| **Events applied exactly once.** Redelivery, events arriving out of order, and a consumer that changed. | [`messaging.e2e-spec.ts`](sales/test/messaging.e2e-spec.ts) |
+| **An audit log that cannot be rewritten.** Each entry hashes the one before it, and a verifier checks the chain. | [`chain.ts`](identity/src/domain/audit/chain.ts) · [`verify-audit-chain.ts`](identity/src/application/use-cases/verify-audit-chain.ts) |
+| **Erasure in an append-only world.** Destroying a person's key makes every copy of their data unreadable. | [`erase-data-subject.ts`](identity/src/application/use-cases/erase-data-subject.ts) |
+| **Tax formulas as data.** A small, bounded expression language evaluated with exact fractions, never floats. | [`formula.ts`](fiscal/src/formula.ts) |
+| **Four eyes, enforced by the database.** A trigger refuses a tax-rule change approved by the person who asked for it. | [`0060_phase88_rule_governance.sql`](fiscal/migrations/0060_phase88_rule_governance.sql) |
+| **Boundaries checked mechanically.** No module can import another's source. | [`check-boundaries.mjs`](scripts/check-boundaries.mjs) · [`isolation.yml`](.github/workflows/isolation.yml) |
 
 ---
 
@@ -144,99 +136,83 @@ Full reasoning, with what each choice costs:
 
 Each top-level folder is an **independent project**: its own `package.json`, lockfile,
 `node_modules`, `tsconfig.json`, `biome.json`, tests and README. There is **no workspace
-tooling** — modules behave as if each lived in its own repository that happens to be
-vendored side by side, and a cross-module import cannot resolve.
+tooling**. Modules behave as if each lived in its own repository, and a cross-module
+import cannot resolve.
 
-| Module | Responsibility | Port | Phase |
-|---|---|---|---|
-| [`identity/`](identity/) | Tenants, users, authentication, sessions, API keys, JWKS, RBAC assignment | 3001 | 4 |
-| [`catalog/`](catalog/) | Products, services, units of measure, price lists, NCM classification; bulk import of units, items and prices | 3002 | 6, 64 |
-| [`inventory/`](inventory/) | Stock balances, movements, warehouses, reservations, cost method, transfers, adjustments and counts; bulk import of opening stock | 3003 | 7, 32, 64 |
-| [`sales/`](sales/) | Customer projection, quotes, sales orders, shipments and returns | 3004 | 7, 15 |
-| [`parties/`](parties/) | Organizations and people, their roles, tax identifiers and erasure; bulk import of parties | 3006 | 15, 64 |
-| [`financial/`](financial/) | Receivables and payables with approvals, settlements and reversals; categories, departments and projects, payment methods and terms; bulk import of open titles | 3007 | 16–18, 64 |
-| [`treasury/`](treasury/) | Bank and cash accounts, their append-only journal, balances, transfers, statement import and reconciliation | 3008 | 19, 20 |
-| [`ledger/`](ledger/) | Chart of accounts, balanced double-entry journal, accounting periods, automatic postings from financial and treasury facts, trial balance, result of the period, cash flow and drill-down | 3009 | 22–25 |
-| [`procurement/`](procurement/) | Purchase requisitions, supplier quotations and their comparison, approval thresholds, purchase orders, receiving and returns | 3010 | 26–28 |
-| [`fiscal/`](fiscal/) | Fiscal origin ingress, encrypted projections, durable simulation records and read API; authority issuance remains disabled | 3011 | 39–40 |
-| [`crm/`](crm/) | Accounts projected from parties, contacts sealed per person, owners, pipelines, event-sourced opportunities, activities, tasks, notes and reminders, conversion to a Sales quote, forecast and pipeline metrics rebuilt from history | 3012 | 55–60 |
-| [`reporting/`](reporting/) | An append-only journal of the events of the modules it reports on, sealed by their producers; cash position, order to cash, procure to pay and pipeline to revenue at a settled cutoff, reconciled against the owners' own reports; saved filters; CSV and XLSX exports with signed links and schedules; notifications from events and saved views | 3013 | 61–63, 66 |
-| [`files/`](files/) | Attachments on parties, purchase orders, titles, service orders and opportunities: signed upload and download links, a scan before any file is served, encryption under the owner's key and shredding on erasure, retention per record type | 3014 | 65 |
-| [`agent/`](agent/) | The tenant's own MCP server: a declared catalogue of read tools used through an API key, with no credential of its own; a per-workspace switch and a hash-chained log of every call. Also the opt-in in-app assistant, answering from the same catalogue with the person's own token | 3015 | 72 |
-| [`knowledge/`](knowledge/) | The index of attachments: text extracted, chunked, embedded and sealed into one pgvector partition per tenant, erased with its file; search with citations, and suggestions from each workspace's own history | 3016 | 74 |
-| [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, retry, DLQ, replay | 3005 | 9 |
-| [`web/`](web/) | Next.js frontend, routed and bilingual | 3000 | 10, 14 |
-| [`contracts/`](contracts/) | Published package: versioned Zod event and API schemas | — | 3 |
-| [`gateway/`](gateway/) | Kong declarative configuration | 8000 | 2 |
-| [`infra/`](infra/) | Compose, observability configuration, Terraform | — | 2, 13 |
-| [`tooling/mcp-debugger/`](tooling/mcp-debugger/) | Read-only MCP server over the observability plane | — | 12 |
+| Module | Responsibility | Port |
+|---|---|---|
+| [`identity/`](identity/) | Accounts, workspaces, sessions, MFA and passkeys, API keys, JWKS, roles, segregation of duties | 3001 |
+| [`catalog/`](catalog/) | Products and services, units, price lists, NCM and tax classification, bills of materials | 3002 |
+| [`inventory/`](inventory/) | Warehouses, balances, movements, reservations, transfers, counts, Kardex, valuation, lots, serials, production | 3003 |
+| [`sales/`](sales/) | Quotes, orders, deliveries and returns, service orders, recurring contracts and their billing | 3004 |
+| [`webhooks/`](webhooks/) | Subscriptions, HMAC-signed delivery, bounded retry, dead letters, replay | 3005 |
+| [`parties/`](parties/) | Every organization and person the business deals with, their roles, tax identifiers and erasure | 3006 |
+| [`financial/`](financial/) | Receivables and payables, approvals, settlements and reversals, dimensions | 3007 |
+| [`treasury/`](treasury/) | Bank and cash accounts, an append-only journal, transfers, statement import and reconciliation | 3008 |
+| [`ledger/`](ledger/) | Chart of accounts, double-entry journal, periods, automatic postings, trial balance, results and cash flow | 3009 |
+| [`procurement/`](procurement/) | Requisitions, supplier quotations, approval thresholds, purchase orders, receiving and returns | 3010 |
+| [`fiscal/`](fiscal/) | NF-e, NFC-e and NFS-e in simulation, inbound XML, and the tax engine: a catalogue of versioned tax packages, estimates, locked calculations that replay, four-eyes rule changes | 3011 |
+| [`crm/`](crm/) | Accounts, sealed contacts, pipelines, event-sourced opportunities, activities, conversion to a quote, forecasts | 3012 |
+| [`reporting/`](reporting/) | A sealed journal of other modules' events; reports reconciled at a cutoff; exports and schedules; notifications | 3013 |
+| [`files/`](files/) | Attachments: signed links, a virus scan before serving, encryption under the owner's key, retention | 3014 |
+| [`agent/`](agent/) | The tenant's own MCP server and the opt-in assistant, reading with the person's own permissions; its writes are drafts a person confirms | 3015 |
+| [`knowledge/`](knowledge/) | The document index: one pgvector partition per tenant, search with citations, suggestions from the workspace's own history, erased with its file | 3016 |
+| [`web/`](web/) | Next.js portal, bilingual (Brazilian Portuguese and English), routed by the user's roles | 3000 |
+| [`contracts/`](contracts/) | Published package `@horizon/contracts`: versioned Zod schemas for every event and API | — |
+| [`gateway/`](gateway/) | Kong declarative configuration | 8000 |
+| [`infra/`](infra/) | Compose, observability, backups, Terraform | — |
+| [`tooling/mcp-debugger/`](tooling/mcp-debugger/) | Read-only MCP server over the observability plane, for the operator | — |
 
-Audit is **not** a module: it is a local append-only table inside each service, because a
-central audit service would be a synchronous dependency on every write path in the
-system.
-
-`fiscal/` and the other modules still ahead are declared in
-[`docs/roadmap.md`](docs/roadmap.md) and have **no folder** until their phase begins. Empty directories read as abandonment; a roadmap
-reads as sequencing.
+Audit is **not** a module. It is an append-only table inside each service, because a
+central audit service would be a synchronous dependency on every write path.
 
 ---
 
 ## Quick start
 
-Requires **Node 24+** and, for the e2e suites, a Docker socket.
+Requires **Node 24+** and Docker.
+
+> [!WARNING]
+> **The full stack is heavy.** With every service running, its 33 containers use about
+> **4 GB of RAM**, and the images take about **18 GB of disk**. ClamAV is optional
+> (`--profile scanner`) and adds about 1 GB, twice that while it reloads signatures.
+> Plan for a machine with **16 GB of RAM** and 25 GB free. On less, run the platform
+> (`make up`) and only the modules you are working on.
 
 ```bash
-git clone <this repository> && cd horizon
+git clone https://github.com/iricardofernandes/horizon.git && cd horizon
 
-make install     # npm ci in every project
-make check       # boundaries + lint + typecheck + unit tests, everywhere
-make ci-local    # repo checks, builds and Testcontainers e2e before pushing
-make ci-local-full # plus clean npm installs and all Docker image builds
-make up          # start the platform dependencies
-make demo        # idempotent seed plus signed callback golden path
-make up-apps     # then start all five services and web at http://localhost:3000
-make test-phase10 # repeat the human flow in Chromium and verify its joined trace
-make test-phase12 # prove the MCP debugger's parse and database privilege boundaries
+make install       # npm ci in every project
+make up            # start the platform: Postgres, Redis, RabbitMQ, Kong, observability…
+make smoke         # prove the platform works, not merely that it started
+make demo          # idempotent seed, then the golden path
+make up-apps       # every service, and the portal at http://localhost:3000
 ```
 
-`make ci-local` checks the current working tree, including uncommitted changes. It
-runs all projects because a change to shared CI inputs selects the full matrix. It
-needs Node 24, Docker and installed project dependencies (`make install`). Use
-`make ci-local-full` to repeat CI's clean `npm ci` and Docker image builds too; its
-clean installs need the current contracts package in local Verdaccio. Both commands
-check that regenerating `docs/events.md` and `published-schemas.json` makes no
-changes. GitHub still runs the browser golden path, gateway validation and Terraform
-in separate jobs; run those workflows or their local commands when those areas change.
+Sign in as `demo@horizon.local` with `Horizon-demo-2026!` and pick the `horizon-demo`
+workspace. Grafana is at http://localhost:3300 and Jaeger at http://localhost:16686.
 
-Sign in as `demo@horizon.local` with `Horizon-demo-2026!` after running `make demo`, then
-select the local `horizon-demo` workspace.
+Before pushing:
 
-Or work on one module, which is the normal case:
+```bash
+make check         # boundaries, lint, typecheck and unit tests, everywhere
+make ci-local      # plus builds and the Testcontainers e2e suites
+make ci-local-full # plus clean installs and every Docker image
+make test-alerts   # the Prometheus alert rules and their tests
+make test-phase10  # the portal flow in Chromium, desktop and mobile, both languages
+```
+
+Working on one module is the normal case:
 
 ```bash
 cd sales
-npm install
-cp .env.example .env
-
-npm run typecheck   # tsc --noEmit, strict + noUncheckedIndexedAccess
-                    # + exactOptionalPropertyTypes + verbatimModuleSyntax
-npm run lint        # biome check
-npm test            # unit: no I/O, in-memory fakes
-npm run test:e2e    # integration: real Postgres/Redis/RabbitMQ via Testcontainers
+npm install && cp .env.example .env
+npm run typecheck   # strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes
+npm run lint        # biome
+npm test            # unit: no I/O
+npm run test:e2e    # real Postgres, Redis and RabbitMQ through Testcontainers
 npm run dev         # http://localhost:3004
 ```
-
-Or bring up the platform:
-
-```bash
-make up        # eleven services, all-healthy from cold in ~30s
-make smoke     # 43 assertions that the platform works
-make demo      # idempotent seed + traced Sales/Inventory/callback golden path
-make down
-```
-
-Grafana is on http://localhost:3300 (admin/admin), datasources and dashboard already
-provisioned from files; Jaeger on http://localhost:16686.
 
 ### Verifying the isolation claim
 
@@ -244,48 +220,32 @@ provisioned from files; Jaeger on http://localhost:16686.
 node scripts/check-boundaries.mjs
 ```
 
-It fails on a cross-project import, a `file:` dependency, a `domain/` layer reaching
-outward or importing a framework, a snapshot escaping the boundary, or a package imported
-but absent from that project's own `package.json`.
+It fails on a cross-project import, a `file:` dependency, a `domain/` layer that reaches
+outward or imports a framework, or a package imported without being declared. CI goes
+further: the [`isolation`](.github/workflows/isolation.yml) workflow checks out **one**
+module, with no siblings on disk, and builds and tests it against contracts from a
+registry.
 
 ---
 
 ## Decisions
 
-Sixty-nine records in [`docs/adr/`](docs/adr/), MADR format, each with the alternatives
-that were rejected. The ones a reviewer is most likely to question:
+Every significant choice is recorded in [`docs/adr/`](docs/adr/README.md): 74 decisions,
+each with the alternatives it rejected. That page also explains why each technology in the
+stack was chosen. Five of them shape everything else:
 
-| Decision | Why | ADR |
-|---|---|---|
-| One repository, ten independent projects, **no workspace** | Workspace tooling makes a cross-module import typecheck and pass CI; without it, the mistake cannot resolve | [0001](docs/adr/0001-single-repository-of-independent-projects.md) |
-| Boundaries enforced **four** ways, including CI with a sparse checkout | Conventions erode; the strongest test is that the siblings are not on disk | [0002](docs/adr/0002-mechanical-enforcement-of-module-boundaries.md) |
-| A database per module | A shared schema undoes in persistence the boundary enforced in source | [0016](docs/adr/0016-one-database-per-module.md) |
-| RLS, forced, with an unexported database client | A forgotten `WHERE tenant_id` returns nothing instead of someone else's data | [0017](docs/adr/0017-row-level-security-and-tenant-aware-transaction.md) |
-| Transactional outbox + inbox | Commit-then-publish loses events silently; exactly-once delivery does not exist | [0024](docs/adr/0024-transactional-outbox-and-inbox.md) |
-| Append-only audit with a per-tenant hash chain | An audit log that can be rewritten is not evidence | [0025](docs/adr/0025-append-only-audit-log-with-hash-chain.md) |
-| Crypto-shredding for erasure | Erasure and an immutable chain are contradictory; destroying the key resolves it, and reaches backups | [0026](docs/adr/0026-crypto-shredding-for-erasure.md) |
-| EdDSA (Ed25519), not RS256 | The compatibility RS256 buys has no consumer here; smaller, faster, no padding, no nonce | [0018](docs/adr/0018-eddsa-access-tokens.md) |
-| Argon2id via `@node-rs/argon2` | Memory-hard, and prebuilt for musl so Alpine images need no toolchain | [0019](docs/adr/0019-argon2id-password-hashing.md) |
-| Static, module-scoped roles | Tenant-editable roles make the permission surface unanalysable | [0023](docs/adr/0023-casl-static-module-scoped-roles.md) |
-| Global account before workspace selection | Authentication proves a person first; tenant authority exists only after selecting a verified membership | [0038](docs/adr/0038-global-account-before-workspace-selection.md) |
-| Drizzle, not Prisma | RLS needs `SET LOCAL` on the transaction's own connection | [0007](docs/adr/0007-drizzle-and-postgresql-17.md) |
-| Testcontainers, not a shared database | Roles and `FORCE ROW LEVEL SECURITY` are cluster-scoped; role config is what the tests exercise | [0013](docs/adr/0013-vitest-with-testcontainers.md) |
-| Contracts through a registry, never `file:` | A `file:` dependency has no version, so it cannot express a breaking change | [0029](docs/adr/0029-contracts-distributed-through-a-registry.md) |
-| Terraform written, **never applied** | Stated upfront, with a cost estimate, because an unstated gap discounts everything else | [0034](docs/adr/0034-terraform-written-but-never-applied.md) |
-| The MCP debugger is read-only by construction | The agent gets an SRE's read handles; the reasoning lives outside the runtime | [0035](docs/adr/0035-mcp-debugger-read-only-by-construction.md) |
-
-Two weaknesses are deliberate and documented rather than hidden: revocation **fails open
-for reads** during a Redis outage ([0021](docs/adr/0021-redis-jti-denylist-asymmetric-failure.md)),
-and roles are not editable per tenant ([0023](docs/adr/0023-casl-static-module-scoped-roles.md)).
-
----
-
-## Stack
-
-Node 24 · TypeScript strict (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
-`verbatimModuleSyntax`) · NestJS · Next.js · PostgreSQL 17 · Drizzle · Redis ·
-RabbitMQ · Kong DB-less · Biome · Vitest · Testcontainers · OpenTelemetry → Collector →
-Jaeger / Prometheus / Loki / Grafana · Docker · Terraform (never applied) · GitHub Actions
+- **No workspace tooling.** A cross-module import cannot even resolve
+  ([0001](docs/adr/0001-single-repository-of-independent-projects.md)).
+- **A database per module, with forced RLS.** A forgotten tenant filter returns nothing
+  ([0016](docs/adr/0016-one-database-per-module.md),
+  [0017](docs/adr/0017-row-level-security-and-tenant-aware-transaction.md)).
+- **Transactional outbox and inbox.** No event is lost between a commit and the broker
+  ([0024](docs/adr/0024-transactional-outbox-and-inbox.md)).
+- **Erasure by crypto-shredding.** A person's data is erased by destroying its key, even
+  in backups and an immutable audit chain
+  ([0026](docs/adr/0026-crypto-shredding-for-erasure.md)).
+- **Tax law as versioned packages.** A rate change never rewrites a locked document
+  ([0070](docs/adr/0070-tax-law-is-a-shared-catalogue-that-workspaces-adopt.md)).
 
 ---
 
@@ -293,15 +253,36 @@ Jaeger / Prometheus / Loki / Grafana · Docker · Terraform (never applied) · G
 
 | | |
 |---|---|
-| [`docs/plan.md`](docs/plan.md) | Phases, deliverables, exit criteria, non-goals |
-| [`docs/erp-expansion-plan.md`](docs/erp-expansion-plan.md) | Dependency-ordered plan for finance, purchasing, fiscal, CRM, localization and broader ERP coverage |
-| [`docs/fiscal-implementation-plan.md`](docs/fiscal-implementation-plan.md) | Detailed Phase J sequence, fiscal source register, integration gates and exit evidence |
-| [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece is deferred |
+| [`docs/plan.md`](docs/plan.md) | How the project was built, step by step, with exit criteria and non-goals |
+| [`docs/erp-expansion-plan.md`](docs/erp-expansion-plan.md) | The dependency-ordered plan for the business modules |
+| [`docs/tax-engine-plan.md`](docs/tax-engine-plan.md) | The tax rules engine |
+| [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece waits |
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
-| [`docs/adr/`](docs/adr/) | 69 decision records |
-| [`docs/patterns/`](docs/patterns/) | How to reimplement each cross-cutting pattern (phase 5) |
+| [`docs/adr/`](docs/adr/) | 74 decision records |
 | [`docs/events.md`](docs/events.md) | The event catalogue, generated from the schemas |
+| [`docs/service-levels.md`](docs/service-levels.md) | SLIs, objectives and the alerts that guard them |
+| [`docs/recovery-runbook.md`](docs/recovery-runbook.md) | Backups, restores and the drills that time them |
+| Threat models | [platform](docs/phase-m-threat-model.md) · [AI](docs/phase-n-threat-model.md) · [tax engine](docs/phase-o-threat-model.md) · [fiscal](docs/fiscal-threat-model.md) · [CRM](docs/crm-threat-model.md) · [services](docs/services-threat-model.md) |
+| [`docs/drills/`](docs/drills/) | Recorded golden paths, drills and restore runs |
+| [`docs/patterns/`](docs/patterns/) | How to reimplement each cross-cutting pattern |
 | [`docs/privacy.md`](docs/privacy.md) | Lawful basis, retention, erasure |
-| [`docs/glossary.md`](docs/glossary.md) | Brazilian fiscal terms, in universal language |
-| [`docs/reference-analysis.md`](docs/reference-analysis.md) | Which writing conventions came from the reference project |
+| [`docs/glossary.md`](docs/glossary.md) | Brazilian fiscal terms, in plain English |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Working on this repository |
+
+---
+
+## About
+
+Built by **Ricardo Fernandes de Oliveira** ·
+[LinkedIn](https://www.linkedin.com/in/ricardof-oliveira/)
+
+I built Horizon because most portfolio projects stop where the hard parts begin. A to-do
+app never has to keep two databases consistent, prove that one customer cannot see
+another's data, or explain a tax amount five years later. An ERP has to do all of that.
+Brazil's tax system, with the reform phasing in from 2026 to 2033, is a good test of
+whether a design survives change.
+
+It was also a way to practise building software where every claim has evidence: a test,
+a recorded drill, or a decision record that names what was traded away. When something
+is not done, the documentation says so.
+
