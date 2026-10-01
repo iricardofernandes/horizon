@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   type EventEnvelope,
   financialPayablePosted,
@@ -6,11 +7,12 @@ import {
   financialReceivableReversed,
   financialSettlementRecorded,
   financialSettlementReversed,
+  fiscalCalculationLocked,
   treasuryEntryRecorded,
   treasuryTransferCancelled,
   treasuryTransferPosted,
 } from '@horizon/contracts'
-import type { Fact } from '@/domain/services/posting-rules'
+import { type Fact, POSTED_TAXES } from '@/domain/services/posting-rules'
 import type { EventHandler } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { Clock } from './ports/clock'
 import type { LedgerScope, LedgerUnitOfWork, ReceivedEvent } from './ports/unit-of-work'
@@ -46,7 +48,43 @@ export class LedgerModuleEventHandlers {
       'treasury.transfer.posted': (event) => this.transferPosted(event),
       'treasury.transfer.cancelled': (event) => this.transferCancelled(event),
       'treasury.entry.recorded': (event) => this.entryRecorded(event),
+      'fiscal.calculation.locked': (event) => this.calculationLocked(event),
     }
+  }
+
+  /**
+   * A sale's taxes, as Fiscal locked them (Phase 87, ADR 0073). Only a Sales origin posts: a
+   * manual simulation has no revenue to deduct them from. Homologation is the authority's test
+   * environment and posts nothing. One origin and purpose posts once, so a corrected revision
+   * of the same document never posts its taxes twice.
+   */
+  private async calculationLocked(event: EventEnvelope): Promise<void> {
+    const parsed = fiscalCalculationLocked.envelope.parse(event)
+    const { payload } = parsed
+    const components = payload.components
+      .filter(
+        (component) =>
+          component.group === 'legacy' &&
+          component.outcome === 'levied' &&
+          (POSTED_TAXES as readonly string[]).includes(component.code) &&
+          component.amount !== '0',
+      )
+      .map((component) => ({ code: component.code, amount: BigInt(component.amount) }))
+    const posts =
+      payload.originModule === 'sales' &&
+      payload.environment !== 'homologation' &&
+      components.length > 0
+    await this.handle(parsed, 'fiscal', async (scope) => {
+      if (!posts) return null
+      return this.post.executeInScope(scope, {
+        kind: 'tax-lock',
+        id: originFactId(payload.originId, payload.purpose),
+        reference: `Fiscal ${payload.documentId.slice(0, 8)}`,
+        on: payload.issueDate,
+        currency: payload.currency,
+        components,
+      })
+    })
   }
 
   private async titlePosted(event: EventEnvelope, kind: 'receivable' | 'payable'): Promise<void> {
@@ -206,4 +244,13 @@ async function referenceOf(
 ): Promise<string> {
   const title = await scope.facts.find(direction, titleId)
   return title?.reference ?? `Settlement ${titleId.slice(0, 8)}`
+}
+
+/** One posting per Fiscal origin and purpose: a sale and its return are two facts. */
+function originFactId(originId: string, purpose: string): string {
+  const bytes = createHash('sha256').update(`tax-lock\0${originId}\0${purpose}`).digest()
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x50
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
+  const hex = bytes.subarray(0, 16).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }

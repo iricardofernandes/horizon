@@ -94,6 +94,8 @@ import {
   fiscalServiceSourceKeySchema,
   fiscalServiceSubstitutionRequestSchema,
   fiscalSupportOverviewSchema,
+  fiscalTaxEstimateRequestSchema,
+  fiscalTaxEstimateSchema,
   fiscalTaxSupportAnswerSchema,
   fiscalTaxSupportMatrixSchema,
   fiscalTaxSupportQuerySchema,
@@ -627,6 +629,20 @@ const staticEntries: readonly RegistryEntry[] = [
     kind: 'http',
     description: 'Counts and ages an operator needs to support one tenant Fiscal context.',
     schema: fiscalSupportOverviewSchema,
+  },
+  {
+    id: 'http:fiscal-tax-estimate-request-v1',
+    kind: 'http',
+    description:
+      'A commercial draft Fiscal is asked to estimate the taxes of (Phase 87, ADR 0073).',
+    schema: fiscalTaxEstimateRequestSchema,
+  },
+  {
+    id: 'http:fiscal-tax-estimate-v1',
+    kind: 'http',
+    description:
+      'An estimate: components, totals and digests, or the missing dimension; never locked.',
+    schema: fiscalTaxEstimateSchema,
   },
   {
     id: 'http:fiscal-tax-support-matrix-v1',

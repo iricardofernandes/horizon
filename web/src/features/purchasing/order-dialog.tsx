@@ -13,6 +13,7 @@ import { idempotentJsonHeaders, jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 import { useDate, useMoney } from '@/lib/use-format'
+import { PurchaseEstimate } from './purchase-estimate'
 import {
   type OrderDetail,
   type OrderRow,
@@ -112,6 +113,13 @@ export function OrderDialog({
                 error={error}
                 onCommand={command}
                 receipts={receipts}
+              />
+              <PurchaseEstimate
+                canWrite={abilities.canWrite}
+                detail={detail}
+                onRecorded={async () => {
+                  await Promise.all([load(), onChanged()])
+                }}
               />
               <AttachmentsPanel
                 record={{

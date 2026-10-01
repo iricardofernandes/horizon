@@ -294,6 +294,21 @@ npm run tax:scenarios -- publish --phase 86      # then adopt, verify; matrix re
 
 See the [Phase 86 evidence](../docs/tax-phase86-evidence.md).
 
+### Estimates and the lock (Phase 87)
+
+- `POST /fiscal/estimates` calculates a commercial draft and never locks it.
+  - A sale is derived as readiness derives a shipment.
+  - A purchase needs the supplier's `regime` (and `incomeTaxRegime`) stated by the caller.
+  - The answer is the components, the totals (with what is charged on top) and the
+    digests, or a refusal naming what is missing.
+- Sales and Procurement keep the answer on their documents.
+- The lock refuses a scenario the support matrix does not cover (`UNSUPPORTED_SCENARIO`).
+  The approved scenarios of Phases 41–47 are matrix rows (`approved-scenarios.ts`).
+- Each lock publishes `fiscal.calculation.locked`, which Ledger posts from.
+- A purchase order's estimate (`fiscal_purchase_order_estimates`) lets the inbound
+  reconciliation compare the supplier's taxes, as information. See the
+  [Phase 87 evidence](../docs/tax-phase87-evidence.md).
+
 ## Audit log (Phase 68)
 
 `GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered

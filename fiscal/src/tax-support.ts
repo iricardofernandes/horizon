@@ -4,12 +4,15 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   FISCAL_TAX_SUPPORT_DIMENSIONS,
+  type FiscalCalculationInput,
+  type FiscalCalculationResult,
   type FiscalTaxSupportAnswer,
   type FiscalTaxSupportMatrix,
   type FiscalTaxSupportQuery,
   type FiscalTaxSupportRow,
   fiscalTaxSupportMatrixSchema,
 } from '@horizon/contracts'
+import { approvedScenarioRows } from './approved-scenarios'
 import type { Fixture } from './legacy-scenarios'
 
 /**
@@ -28,8 +31,10 @@ const sha256 = (bytes: Buffer | string) => createHash('sha256').update(bytes).di
 export function buildSupportMatrix(evidence: {
   oracleReports: readonly { reference: string; bytes: Buffer }[]
   fixtures: readonly { reference: string; fixture: Fixture }[]
+  /** The scenarios Phases 41 to 47 approved, read from their reviewed sources (Phase 87). */
+  approvedScenarios?: readonly FiscalTaxSupportRow[]
 }): FiscalTaxSupportMatrix {
-  const rows: FiscalTaxSupportRow[] = []
+  const rows: FiscalTaxSupportRow[] = [...(evidence.approvedScenarios ?? [])]
   for (const { reference, bytes } of evidence.oracleReports) {
     const report = JSON.parse(bytes.toString('utf8')) as OracleReport
     // The corpus put model 55 documents to the calculator, so model 55 is what it proves.
@@ -52,13 +57,19 @@ export function buildSupportMatrix(evidence: {
   for (const { reference, fixture } of evidence.fixtures) {
     if (!fixture.approval || !fixture.expectedResult.supported) continue
     const covers = fixture.covers
+    // The taxes the fixture's own result carries, so a row says exactly what was approved.
+    const calculated = new Set(
+      fixture.expectedResult.lines.flatMap((line) =>
+        [...line.components.legacy, ...line.components.ibsCbs].map((component) => component.code),
+      ),
+    )
     rows.push({
       id: fixture.fixtureId,
       model: covers.model,
       environment: 'simulation',
       from: covers.from,
       until: covers.until,
-      taxes: [...covers.taxes].sort(),
+      taxes: [...calculated].sort(),
       dimensions: {
         classification: covers.classification,
         originState: covers.originState,
@@ -98,9 +109,14 @@ const admits: Record<
   model: (row, query) => row.model === query.model,
   date: (row, query) => row.from <= query.date && query.date < row.until,
   tax: (row, query) => row.taxes.includes(query.tax),
+  operation: (row, query) =>
+    row.dimensions.operation === undefined || row.dimensions.operation === query.operation,
+  purpose: (row, query) =>
+    row.dimensions.purpose === undefined || row.dimensions.purpose === (query.purpose ?? 'normal'),
   classification: (row, query) =>
-    row.dimensions.classification.kind === query.classification.kind &&
-    row.dimensions.classification.code === query.classification.code,
+    row.dimensions.classification === undefined ||
+    (row.dimensions.classification.kind === query.classification.kind &&
+      row.dimensions.classification.code === query.classification.code),
   originState: (row, query) =>
     row.dimensions.originState === undefined || row.dimensions.originState === query.originState,
   destinationState: (row, query) =>
@@ -142,6 +158,93 @@ export function answer(
   return { status: 'supported', rows: remaining }
 }
 
+type Refusal = { supported: false; detail: string; missingDimension: string }
+
+/**
+ * Whether a calculation may be locked (Phase 87, ADR 0072): on every line, each component
+ * calculated is covered by a row that admits the line, and every such row's taxes were all
+ * calculated. A line with a component no evidence covers, or evidence of a tax the
+ * calculation did not give, is refused, naming what is missing.
+ */
+export function scenarioSupport(
+  matrix: FiscalTaxSupportMatrix,
+  input: FiscalCalculationInput,
+  result: FiscalCalculationResult,
+): { supported: true } | Refusal {
+  for (const line of result.lines) {
+    const source = input.lines.find((candidate) => candidate.id === line.lineId)
+    if (!source) continue
+    const computed = new Set(
+      [...line.components.legacy, ...line.components.ibsCbs].map((component) => component.code),
+    )
+    if (computed.size === 0) continue
+    const classifications = (
+      [
+        ['ncm', source.classifications.ncm],
+        ['service', source.classifications.service],
+        ['class_trib', source.classifications.classTrib],
+      ] as const
+    ).flatMap(([kind, code]) => (code ? [{ kind, code }] : []))
+    const query = (tax: string, classification = classifications[0]): FiscalTaxSupportQuery => ({
+      model: input.model,
+      date: input.model === 'nfse' ? (input.competenceDate ?? input.issueDate) : input.issueDate,
+      tax,
+      operation: input.operation,
+      purpose: input.purpose,
+      classification: classification ?? { kind: 'ncm', code: '-' },
+      originState: input.origin.stateCode,
+      destinationState: input.destination.stateCode,
+      recipientTaxpayer: input.recipient.taxpayer,
+      issuerRegime: input.issuer.regime,
+      ...(input.issuer.incomeTaxRegime ? { incomeTaxRegime: input.issuer.incomeTaxRegime } : {}),
+      issuerMunicipality: input.issuer.municipalityCode,
+      ...(source.classifications.origin ? { origin: source.classifications.origin } : {}),
+      facts: source.taxFacts,
+    })
+    const scenario = query('')
+    const admitted = matrix.rows.filter(
+      (row) =>
+        row.environment === input.environment &&
+        FISCAL_TAX_SUPPORT_DIMENSIONS.every(
+          (dimension) =>
+            dimension === 'tax' ||
+            (dimension === 'classification'
+              ? row.dimensions.classification === undefined ||
+                classifications.some((classification) =>
+                  admits.classification(row, { ...scenario, classification }),
+                )
+              : admits[dimension](row, scenario)),
+        ),
+    )
+    const covered = new Set(admitted.flatMap((row) => row.taxes))
+    const uncovered = [...computed].sort().find((code) => !covered.has(code))
+    if (uncovered) {
+      const found = answer(
+        { ...matrix, rows: matrix.rows.filter((row) => row.environment === input.environment) },
+        query(uncovered),
+      )
+      return {
+        supported: false,
+        detail: `No approved evidence covers ${uncovered} in this scenario`,
+        missingDimension:
+          found.status === 'unsupported'
+            ? `${found.missingDimension}:${uncovered}`
+            : `tax:${uncovered}`,
+      }
+    }
+    for (const row of admitted) {
+      const absent = row.taxes.find((tax) => !computed.has(tax))
+      if (absent)
+        return {
+          supported: false,
+          detail: `The approved scenario ${row.id} carries ${absent}, which this calculation did not give`,
+          missingDimension: `component:${absent}`,
+        }
+    }
+  }
+  return { supported: true }
+}
+
 /** The evidence the matrix is generated from, with the repository-relative path of each piece. */
 export async function supportEvidence(repository: string) {
   const drills = join(repository, 'docs/drills')
@@ -161,7 +264,19 @@ export async function supportEvidence(repository: string) {
       }),
     )
   ).flat()
+  const evidenceOf = async (phase: string) => {
+    const reference = `docs/fiscal-phase${phase}-evidence.md`
+    return { reference, digest: sha256(await readFile(join(repository, reference))) }
+  }
+  const approvedScenarios = approvedScenarioRows({
+    '41': await evidenceOf('41'),
+    '43': await evidenceOf('43'),
+    '45': await evidenceOf('45'),
+    '46': await evidenceOf('46'),
+    '47': await evidenceOf('47'),
+  })
   return {
+    approvedScenarios,
     oracleReports: await Promise.all(
       reports.map(async (name) => ({
         reference: `docs/drills/${name}`,

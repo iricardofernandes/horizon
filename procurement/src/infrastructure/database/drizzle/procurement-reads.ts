@@ -274,6 +274,8 @@ export type OrderDetail = OrderRow & {
   readonly approvalDecidedBy: string | null
   readonly approvalReason: string | null
   readonly closureReason: string | null
+  /** Fiscal's estimate of the supplier's taxes (Phase 87), or null. */
+  readonly taxEstimate: Readonly<Record<string, unknown>> | null
   readonly version: number
   readonly data: readonly {
     readonly lineId: string
@@ -296,7 +298,7 @@ export async function orderDetail(tx: Transaction, id: string): Promise<OrderDet
       o.payment_term_days as "paymentTermDays", o.issued_on as "issuedOn",
       o.expected_on as "expectedOn", o.notes, o.status, o.approval_state as "approvalState",
       o.approval_decided_by as "approvalDecidedBy", o.approval_reason as "approvalReason",
-      o.closure_reason as "closureReason", o.version, o.receipts,
+      o.closure_reason as "closureReason", o.tax_estimate as "taxEstimate", o.version, o.receipts,
       (select count(*)::int from order_lines l where l.order_id = o.id) as lines,
       o.updated_at as "updatedAt"
     from orders o where o.id = ${id}::uuid

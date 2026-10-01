@@ -553,7 +553,8 @@ describe('Phase 48 worklist and support commands', () => {
       queue: { pending: 1, leased: 0 },
       imports: { open: 0, blocked: 0, reconciled: 0 },
     })
-    expect(overview.outbox.undelivered).toBe(1)
+    // The authorized outcome, and one `fiscal.calculation.locked` per locked document (Phase 87).
+    expect(overview.outbox.undelivered).toBe(3)
     expect(overview.capabilities).toEqual([
       expect.objectContaining({
         id: tenant.capabilityId,
@@ -565,7 +566,8 @@ describe('Phase 48 worklist and support commands', () => {
     ])
     expect((await support.overview(other.tenantId)).documents).toEqual({ authorized: 1 })
     const totals = await support.totals([tenant.tenantId, other.tenantId])
-    expect(totals).toMatchObject({ unknownOutcomes: 1, queuePending: 1, outboxUndelivered: 2 })
+    // Two outcomes, and three `fiscal.calculation.locked` for the three locked documents.
+    expect(totals).toMatchObject({ unknownOutcomes: 1, queuePending: 1, outboxUndelivered: 5 })
   })
 
   it('brings a delayed retry forward and reconciles a stuck unknown by consultation', async () => {

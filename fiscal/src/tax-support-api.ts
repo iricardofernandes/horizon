@@ -45,6 +45,8 @@ export function taxSupportResponse(
           : taxpayer === 'false'
             ? false
             : taxpayer,
+    operation: optional('operation'),
+    purpose: optional('purpose'),
     issuerRegime: optional('issuerRegime'),
     incomeTaxRegime: optional('incomeTaxRegime'),
     issuerMunicipality: optional('issuerMunicipality'),

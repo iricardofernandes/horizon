@@ -258,6 +258,8 @@ export const fiscalCalculationProblemCodeSchema = z.enum([
   'AMBIGUOUS_RULE',
   'SOURCE_NOT_APPROVED',
   'INVALID_FISCAL_INPUT',
+  /** The calculation holds, but no approved evidence covers the scenario (Phase 87, ADR 0072). */
+  'UNSUPPORTED_SCENARIO',
 ])
 
 export const fiscalUnsupportedCalculationSchema = z.object({

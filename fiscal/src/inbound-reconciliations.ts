@@ -6,7 +6,13 @@ import { appendAudit } from './audit'
 import { canonicalDigest } from './canonical-json'
 import { openInboundSnapshot } from './inbound-crypto'
 import { readReconciliation } from './inbound-imports'
-import { AllocationError, type Comparison, compareAllocations, quantity } from './inbound-matching'
+import {
+  AllocationError,
+  type Comparison,
+  compareAllocations,
+  compareTaxes,
+  quantity,
+} from './inbound-matching'
 import { loadItemMappings, loadOpenReceiptLines } from './inbound-queries'
 import type { InboundVerification } from './nfe55/inbound'
 import type { FiscalProjections } from './projections'
@@ -175,6 +181,29 @@ export class FiscalInboundReconciliations {
         'NO_RECEIPT',
         'A reconciliation must link at least one received line',
       )
+    const orderIds = [...new Set(receipts.map((receipt) => receipt.orderId))]
+    const [estimate] =
+      orderIds.length === 1
+        ? await tx`select order_id, components, result_digest from fiscal_purchase_order_estimates
+            where tenant_id = ${tenantId} and order_id = ${orderIds[0] ?? ''}`
+        : []
+    comparison = {
+      ...comparison,
+      taxes: compareTaxes({
+        totals: document.invoice.totals,
+        orderIds,
+        estimate: estimate
+          ? {
+              orderId: String(estimate.order_id),
+              components: estimate.components as Array<{
+                code: string
+                amount: { amount: string }
+              }>,
+              resultDigest: String(estimate.result_digest),
+            }
+          : null,
+      }),
+    }
     const reason = request.overrideReason?.trim()
     if (!comparison.clean && !reason)
       throw new InboundReconciliationError(

@@ -7,6 +7,7 @@ import {
   RevokeDelegationUseCase,
 } from '@/application/use-cases/delegations'
 import {
+  ApplyOrderTaxEstimateUseCase,
   DecideOrderUseCase,
   DraftOrderFromQuotationUseCase,
   DraftOrderUseCase,
@@ -47,6 +48,7 @@ export class ProcurementRuntime implements OnModuleInit, OnModuleDestroy {
   readonly draftOrder: DraftOrderUseCase
   readonly draftOrderFromQuotation: DraftOrderFromQuotationUseCase
   readonly reviseOrder: ReviseOrderUseCase
+  readonly applyOrderTaxEstimate: ApplyOrderTaxEstimateUseCase
   readonly decideOrder: DecideOrderUseCase
   readonly receiveGoods: ReceiveGoodsUseCase
   readonly returnGoods: ReturnGoodsUseCase
@@ -77,6 +79,7 @@ export class ProcurementRuntime implements OnModuleInit, OnModuleDestroy {
     this.draftOrder = new DraftOrderUseCase(this.database, clock)
     this.draftOrderFromQuotation = new DraftOrderFromQuotationUseCase(this.database, clock)
     this.reviseOrder = new ReviseOrderUseCase(this.database, clock)
+    this.applyOrderTaxEstimate = new ApplyOrderTaxEstimateUseCase(this.database, clock)
     this.decideOrder = new DecideOrderUseCase(this.database, clock)
     this.receiveGoods = new ReceiveGoodsUseCase(this.database, clock)
     this.returnGoods = new ReturnGoodsUseCase(this.database, clock)

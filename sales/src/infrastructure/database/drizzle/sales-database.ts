@@ -346,6 +346,103 @@ export class SalesDatabase extends SalesUnitOfWork {
     })
   }
 
+  /**
+   * Fiscal's estimate of a quote or an order (Phase 87, ADR 0073). A quote takes one while it
+   * can still change hands, an order until it is confirmed: a confirmed order keeps the last.
+   */
+  async recordTaxEstimate(input: {
+    tenantId: string
+    kind: 'quote' | 'order'
+    documentId: string
+    estimate: { inputDigest: string; rulesDigest: string; resultDigest: string } & Record<
+      string,
+      unknown
+    >
+    recordedBy: string
+    /** Only when a converted quote's estimate goes with it to its order. */
+    carried?: boolean
+  }): Promise<'recorded' | 'not-found' | 'frozen'> {
+    return this.inTenant(input.tenantId, async () => {
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('Recording an estimate requires a transaction')
+      const table = input.kind === 'quote' ? schema.quotes : schema.salesOrders
+      const [row] = await current.tx
+        .select({ status: table.status })
+        .from(table)
+        .where(eq(table.id, input.documentId))
+        .limit(1)
+      if (!row) return 'not-found'
+      const open =
+        input.kind === 'quote'
+          ? ['draft', 'pending', 'sent'].includes(row.status)
+          : ['draft', 'placed'].includes(row.status)
+      if (!open && !input.carried) return 'frozen'
+      const values = {
+        estimate: input.estimate,
+        inputDigest: input.estimate.inputDigest,
+        rulesDigest: input.estimate.rulesDigest,
+        resultDigest: input.estimate.resultDigest,
+        recordedBy: input.recordedBy,
+        recordedAt: new Date(),
+      }
+      await current.tx
+        .insert(schema.taxEstimates)
+        .values({
+          tenantId: input.tenantId,
+          documentKind: input.kind,
+          documentId: input.documentId,
+          ...values,
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.taxEstimates.tenantId,
+            schema.taxEstimates.documentKind,
+            schema.taxEstimates.documentId,
+          ],
+          set: values,
+        })
+      return 'recorded'
+    })
+  }
+
+  async findTaxEstimate(tenantId: string, kind: 'quote' | 'order', documentId: string) {
+    return this.inTenant(tenantId, async () => {
+      const current = this.#transactions.getStore()
+      if (!current) throw new Error('Estimate lookup requires a transaction')
+      const [row] = await current.tx
+        .select()
+        .from(schema.taxEstimates)
+        .where(
+          and(
+            eq(schema.taxEstimates.documentKind, kind),
+            eq(schema.taxEstimates.documentId, documentId),
+          ),
+        )
+        .limit(1)
+      return row
+        ? {
+            estimate: row.estimate,
+            recordedBy: row.recordedBy,
+            recordedAt: row.recordedAt.toISOString(),
+          }
+        : null
+    })
+  }
+
+  /** A converted quote's estimate goes with it to the order it became. */
+  async carryTaxEstimate(tenantId: string, quoteId: string, orderId: string, recordedBy: string) {
+    const found = await this.findTaxEstimate(tenantId, 'quote', quoteId)
+    if (!found) return
+    await this.recordTaxEstimate({
+      tenantId,
+      kind: 'order',
+      documentId: orderId,
+      estimate: found.estimate as Parameters<SalesDatabase['recordTaxEstimate']>[0]['estimate'],
+      recordedBy,
+      carried: true,
+    })
+  }
+
   async findOrderSnapshot(tenantId: string, orderId: string) {
     return this.inTenant(tenantId, async () => {
       const current = this.#transactions.getStore()

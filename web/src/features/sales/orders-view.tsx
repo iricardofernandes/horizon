@@ -18,7 +18,8 @@ import { idempotentJsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 import { useDate, useDateTime, useMoney, useQuantity } from '@/lib/use-format'
-import { goodsOnly, type Order, outstandingOf } from './types'
+import { TaxEstimatePanel } from '../fiscal/tax-estimate-panel'
+import { goodsOnly, type Order, outstandingOf, SALES_API } from './types'
 
 export type { Order }
 
@@ -309,6 +310,12 @@ function OrderDetailsDialog({
               )
             })}
           </div>
+          {/* The estimate its quote was given, kept with its digests (Phase 87). */}
+          <TaxEstimatePanel
+            canEstimate={false}
+            recordedPath={`${SALES_API}/orders/${order.id}/tax-estimate`}
+            request={null}
+          />
           <div className="dialog-actions">
             <Dialog.Close className="ui-button ui-button-secondary">{common('close')}</Dialog.Close>
           </div>

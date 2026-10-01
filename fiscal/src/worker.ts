@@ -18,6 +18,7 @@ import { FiscalDocumentLinksReader } from './document-links'
 import { FiscalDocumentList } from './document-list'
 import { FiscalDocuments } from './documents'
 import { FiscalEstablishmentCredentials } from './establishment-credentials'
+import { FiscalEstimates } from './estimates'
 import { FiscalInboundImports } from './inbound-imports'
 import { FiscalInboundReconciliations } from './inbound-reconciliations'
 import { FiscalIngress } from './ingress'
@@ -262,7 +263,9 @@ const support = new FiscalSupport(config.DATABASE_URL)
 const auditLog = new FiscalAuditLog(config.DATABASE_URL)
 // Gauges sum the tenants this worker serves; no metric names a tenant (ADR 0055).
 const stopSupportGauges = startSupportGauges(support, Object.keys(keys))
+const estimates = new FiscalEstimates(projections, calculations)
 const server = createFiscalServer({
+  estimates,
   verifier,
   documents,
   manualOrigins,

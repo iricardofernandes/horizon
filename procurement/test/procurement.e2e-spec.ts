@@ -6,6 +6,7 @@ import { ProcurementModuleEventHandlers } from '@/application/consume-module-eve
 import { DefineApprovalPolicyUseCase } from '@/application/use-cases/define-policies'
 import { GrantDelegationUseCase } from '@/application/use-cases/delegations'
 import {
+  ApplyOrderTaxEstimateUseCase,
   DecideOrderUseCase,
   DraftOrderFromQuotationUseCase,
   DraftOrderUseCase,
@@ -916,5 +917,64 @@ describe('segregation of duties and delegation (Phase 68)', () => {
     })
     const page = await database.auditPage(shop.tenantId, { limit: 50 })
     expect(page.chain).toMatchObject({ status: 'broken', broken: [1] })
+  })
+})
+
+describe("Fiscal's estimate on a purchase order (Phase 87)", () => {
+  it('replaces the typed tax with the taxes charged on top, and carries the estimate on approval', async () => {
+    const shop = await workspace()
+    const order = value<{ id: string }>(
+      await shop.drafting.execute({
+        context: shop.idempotent(),
+        order: {
+          supplierId: shop.supplierId,
+          warehouseId: shop.warehouseId,
+          currency: 'BRL',
+          issuedOn: '2026-09-16',
+          expectedOn: '2026-09-30',
+          paymentTermDays: [30],
+          lines: [{ lineId: randomUUID(), itemId: shop.paper, quantity: '2', unitPrice: '18990' }],
+          charges: { tax: '5000' },
+        },
+      }),
+    )
+    const estimate = {
+      components: [
+        { code: 'ICMS', amount: { amount: '6836', currency: 'BRL' } },
+        { code: 'IPI', amount: { amount: '2469', currency: 'BRL' } },
+      ],
+      chargedOnTop: { amount: '2469', currency: 'BRL' },
+      inputDigest: 'a'.repeat(64),
+      rulesDigest: 'b'.repeat(64),
+      resultDigest: 'c'.repeat(64),
+    }
+    const applied = value<{ total: string; tax: string }>(
+      await new ApplyOrderTaxEstimateUseCase(database, clock).execute({
+        context: shop.context(),
+        orderId: order.id,
+        estimate,
+      }),
+    )
+    // 2 × 189,90 plus the IPI charged on top, the typed 50,00 gone.
+    expect(applied).toEqual({ total: '40449', tax: '2469' })
+    expect((await database.orderDetail(shop.tenantId, order.id))?.taxEstimate).toEqual(estimate)
+
+    value(await shop.decidingOrder.place(shop.context(), order.id))
+    value(await shop.decidingOrder.approve(shop.context(MANAGER), order.id))
+    const events = await administrator`
+      select event_type, payload from outbox where tenant_id = ${shop.tenantId}
+      order by created_at`
+    const approved = events.find((row) => row.event_type === 'procurement.order.approved')
+    expect(
+      findEvent('procurement.order.approved', 1)?.payload.safeParse(approved?.payload).success,
+    ).toBe(true)
+    expect(approved?.payload.taxEstimate).toEqual(estimate)
+    // An order already committed takes no new estimate.
+    const late = await new ApplyOrderTaxEstimateUseCase(database, clock).execute({
+      context: shop.context(),
+      orderId: order.id,
+      estimate,
+    })
+    expect(late.isLeft()).toBe(true)
   })
 })

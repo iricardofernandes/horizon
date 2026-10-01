@@ -37,6 +37,17 @@ export async function projectPurchaseEvent(
           values (${tenantId}, ${order.orderId}, ${line.lineId}, ${order.supplierId},
             ${line.itemId}, ${line.quantity}, ${line.unitPrice.amount}, ${line.unitPrice.currency})
           on conflict do nothing`
+      // Fiscal's own estimate, when the buyer asked for one (Phase 87).
+      if (order.taxEstimate)
+        await tx`insert into fiscal_purchase_order_estimates
+          (tenant_id, order_id, components, charged_on_top_minor, currency, input_digest,
+            rules_digest, result_digest)
+          values (${tenantId}, ${order.orderId},
+            ${tx.json(order.taxEstimate.components as postgres.JSONValue)},
+            ${order.taxEstimate.chargedOnTop.amount}, ${order.taxEstimate.chargedOnTop.currency},
+            ${order.taxEstimate.inputDigest}, ${order.taxEstimate.rulesDigest},
+            ${order.taxEstimate.resultDigest})
+          on conflict do nothing`
       return
     }
     case 'procurement.receipt.recorded': {

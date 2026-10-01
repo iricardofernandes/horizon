@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.59.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.61.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -469,6 +469,27 @@ A recorded settlement was undone — a bounced payment, a wrong installment. The
 
 ## `fiscal`
 
+### `fiscal.calculation.locked` — v1
+
+Fiscal locked the tax calculation of a document (Phase 87, ADR 0073): its components, totals and digests, never its rules. It is the only source of tax amounts for Financial and Ledger; it moves no stock and posts no receivable, which stay the operational facts' (ADR 0048).
+
+**Payload**
+
+| Field | Type | Required | Notes |
+|---|---|:--:|---|
+| `documentId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `originModule` | `sales` \| `fiscal` | yes | — |
+| `originId` | string | yes | pattern `^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`. format `uuid` |
+| `purpose` | `normal` \| `return` \| `complementary` \| `adjustment` | yes | — |
+| `model` | `55` \| `65` \| `nfse` | yes | — |
+| `environment` | `simulation` \| `homologation` \| `production` | yes | — |
+| `issueDate` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
+| `currency` | string | yes | pattern `^[A-Z]{3}$` |
+| `components` | array | yes | — |
+| `totals` | object | yes | — |
+| `inputDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `rulesDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `resultDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
 ### `fiscal.consumer-document.simulation-outcome` — v1
 
 The deterministic simulator decided an NFC-e model 65 for one Sales shipment to a final consumer. The sale keeps one stock and one money effect, both from `sales.shipment.dispatched` (`correlations`); this fact never creates, repeats or reverses one. It carries no access key, QR code, XML or consumer data.
@@ -993,6 +1014,7 @@ The company committed to buy. This is the fact a payable forecast is raised from
 | `expectedOn` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$`. format `date` |
 | `total` | object | yes | — |
 | `lines` | array | yes | — |
+| `taxEstimate` | object | no | — |
 ### `procurement.order.cancelled` — v1
 
 A purchase order was withdrawn. `wasApproved` tells a consumer whether anything had been committed on the strength of it and therefore has to be withdrawn too.

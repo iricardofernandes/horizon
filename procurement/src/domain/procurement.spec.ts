@@ -314,6 +314,58 @@ describe('purchase order', () => {
     expect(placed.status).toBe('approved')
   })
 
+  it("takes Fiscal's estimate as a draft: its taxes on top replace the typed tax, and approval carries it", () => {
+    const drafted = order()
+    const estimate = {
+      components: [
+        { code: 'ICMS', amount: { amount: '4500', currency: 'BRL' } },
+        { code: 'IPI', amount: { amount: '1625', currency: 'BRL' } },
+      ],
+      chargedOnTop: { amount: '1625', currency: 'BRL' },
+      inputDigest: 'a'.repeat(64),
+      rulesDigest: 'b'.repeat(64),
+      resultDigest: 'c'.repeat(64),
+    }
+    const before = drafted.total().amount
+    valid(drafted.applyTaxEstimate(estimate, now))
+    expect(drafted.total().amount).toBe(before + 1625n)
+    valid(drafted.place(BUYER, now, { approvalRequired: false }))
+    const approvedEvent = drafted
+      .pullDomainEvents()
+      .find((event) => event.eventType === 'procurement.order.approved')
+    expect(approvedEvent?.payload).toMatchObject({ taxEstimate: estimate })
+    expect(drafted.applyTaxEstimate(estimate, now).isLeft()).toBe(true)
+  })
+
+  it('forgets an estimate when the draft is revised, since it was of the order as it was', () => {
+    const drafted = order()
+    valid(
+      drafted.applyTaxEstimate(
+        {
+          components: [],
+          chargedOnTop: { amount: '0', currency: 'BRL' },
+          inputDigest: 'a'.repeat(64),
+          rulesDigest: 'b'.repeat(64),
+          resultDigest: 'c'.repeat(64),
+        },
+        now,
+      ),
+    )
+    valid(
+      drafted.revise(
+        {
+          lines: [{ ...line(LINE_A, PAPER, '20'), unitPrice: money(2500) }],
+          charges: noCharges(brl),
+          paymentTerms: valid(PaymentTerms.create([30])),
+          expectedOn: date('2026-09-26'),
+          notes: null,
+        },
+        now,
+      ),
+    )
+    expect(drafted.taxEstimate).toBeNull()
+  })
+
   it('is revised only as a draft', () => {
     const drafted = order()
     valid(drafted.place(BUYER, now, { approvalRequired: true }))

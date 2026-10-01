@@ -963,7 +963,14 @@
     "unitPrice": "Preço unitário",
     "value": "Valor",
     "what": "O quê",
-    "writeOrder": "Escrever o pedido"
+    "writeOrder": "Escrever o pedido",
+    "supplierRegime": "Regime do fornecedor",
+    "regime": {
+      "normal_lucro-real": "Lucro Real",
+      "normal_lucro-presumido": "Lucro Presumido",
+      "simples-nacional": "Simples Nacional",
+      "mei": "MEI"
+    }
   },
   "receivables": {
     "action": {
@@ -2051,6 +2058,26 @@
       "descriptionRequired": "Descreva o serviço como deve sair na NFS-e.",
       "effectiveFromInvalid": "Escolha a data de vigência.",
       "reasonTooShort": "Explique a revisão em pelo menos 10 caracteres."
+    },
+    "estimateTitle": "Estimativa de impostos",
+    "estimateNote": "Uma estimativa do Fiscal para ajudar a decidir; não é o imposto devido, que só o documento fiscal fixa.",
+    "component": "Componente",
+    "amount": "Valor",
+    "estimatedTax": "Impostos estimados",
+    "chargedOnTop": "Cobrados por fora do preço",
+    "estimatedGross": "Total estimado",
+    "estimatedAt": "Estimada em",
+    "estimateDigest": "Resultado {digest}…",
+    "noEstimate": "Nenhuma estimativa ainda.",
+    "estimateTaxes": "Estimar impostos",
+    "estimateFailed": "Não foi possível estimar os impostos.",
+    "estimateUnavailable": "Este documento não tem o que o Fiscal precisa para estimar.",
+    "estimateRefused": "O Fiscal não estima este cenário: {detail} (falta: {dimension}).",
+    "outcome": {
+      "exempt": "isento",
+      "suspended": "suspenso",
+      "deferred": "diferido",
+      "not-levied": "não incide"
     }
   },
   "services": {

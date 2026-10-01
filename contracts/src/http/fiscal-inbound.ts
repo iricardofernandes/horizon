@@ -99,6 +99,28 @@ export const fiscalInboundComparisonSchema = z.strictObject({
       differences: z.array(fiscalInboundDifferenceSchema),
     }),
   ),
+  /**
+   * The supplier's taxes against Fiscal's estimate on the purchase order (Phase 87), one
+   * component at a time. It names differences; the value comparison above still decides.
+   */
+  taxes: z
+    .strictObject({
+      compared: z.boolean(),
+      /** Why the taxes were not compared, when they were not. */
+      reason: z.string().min(1).max(300).optional(),
+      orderId: uuidSchema.optional(),
+      estimateDigest: sha256Schema.optional(),
+      components: z.array(
+        z.strictObject({
+          code: z.enum(['ICMS', 'ICMS_ST', 'IPI', 'PIS', 'COFINS']),
+          invoicedMinor: minorSchema,
+          expectedMinor: minorSchema,
+          differenceMinor: z.string().regex(/^-?\d+$/),
+        }),
+      ),
+      clean: z.boolean(),
+    })
+    .optional(),
 })
 
 export const fiscalInboundReconciliationSchema = z.strictObject({

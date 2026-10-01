@@ -1,0 +1,81 @@
+{
+  "phase": 87,
+  "kind": "estimates-and-lock-rollout",
+  "ranAt": "2026-10-01T13:11:40.259Z",
+  "stack": "local, make up-apps and make up-fiscal; migrations fiscal 0059, sales 0019, procurement 0005, ledger 0006 applied",
+  "steps": [
+    {
+      "command": "scripts/phase45-smoke.mjs (golden path workspace)",
+      "result": "passed: the sale, its return, the purchase return and the value complement were locked and authorized with the support matrix enforced at the lock"
+    },
+    {
+      "command": "fiscal_outbox, fiscal.calculation.locked",
+      "result": "one event per lock: sales/normal and fiscal/return, fiscal/complementary, simulation, components CBS, IBS_MUN, IBS_UF; Ledger posts none of them (only legacy taxes in the price are posted)"
+    },
+    {
+      "command": "POST /fiscal/estimates (sale), PUT /sales/quotes/:id/tax-estimate",
+      "tenantId": "01a0c5f8-798b-721e-912e-9b505406e614",
+      "saleEstimate": {
+        "components": [
+          "CBS 23 levied",
+          "IBS_MUN 0 levied",
+          "IBS_UF 3 levied"
+        ],
+        "totals": {
+          "net": "2500",
+          "tax": "26",
+          "chargedOnTop": "0",
+          "gross": "2500"
+        },
+        "resultDigest": "7bf6782f209c2881f6d92191dddb9dc53ab0d51dd6b0614e885e63d36faf967c"
+      }
+    },
+    {
+      "command": "PUT on the accepted quote",
+      "httpStatus": 409,
+      "result": "refused: an accepted offer keeps its estimate"
+    },
+    {
+      "command": "POST /sales/quotes/:id/order, GET /sales/orders/:id/tax-estimate",
+      "result": "the order keeps the quote estimate digests",
+      "resultDigest": "7bf6782f209c2881f6d92191dddb9dc53ab0d51dd6b0614e885e63d36faf967c"
+    },
+    {
+      "command": "POST /fiscal/estimates (purchase, supplier stated normal + lucro-real), PUT /procurement/orders/:id/tax-estimate",
+      "purchaseEstimate": {
+        "supported": true,
+        "components": [
+          "CBS 90",
+          "IBS_MUN 0",
+          "IBS_UF 10"
+        ],
+        "chargedOnTop": "0"
+      },
+      "purchaseOrder": {
+        "typedTaxBefore": "500",
+        "tax": "0",
+        "total": "10000",
+        "keptDigest": "e3f27a0676d3cd118d06175c0ff2ccb310a469231c03eea420c6027e1b8b5a93"
+      }
+    },
+    {
+      "command": "tax:scenarios verify --phase 85",
+      "result": "7 of 7 fixtures match"
+    },
+    {
+      "command": "tax:scenarios verify --phase 86",
+      "result": "8 of 8 fixtures match"
+    },
+    {
+      "command": "phase82:catalog verify (Phase 41 fixture)",
+      "matches": true,
+      "rulesDigest": "25ade44c1a5fe2b14c3444802dc7903e4691d769390bbc20dab17cd30e2d1c99",
+      "resultDigest": "256201c9c98a25c6aee00622da86b01e1a18eb880a5fe583ca1f68b008232e7f",
+      "result": "unchanged since the Phase 86 drill"
+    }
+  ],
+  "notOnTheStack": [
+    "A sale whose lock carries ICMS, PIS or Cofins from Sales: no workspace on the local stack both issues from Sales and has the Phase 85/86 packages adopted. The posting, its idempotence and the return reversal are proven by ledger/test/postings.e2e-spec.ts.",
+    "A supplier XML with a different ICMS: the local test supplier XML states no legacy tax and the golden path estimate has none. Proven by fiscal/test/phase44-inbound.e2e-spec.ts."
+  ]
+}

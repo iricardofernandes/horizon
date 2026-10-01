@@ -149,6 +149,8 @@ export type OrderLine = {
 
 export type OrderDetail = OrderRow & {
   quotationId: string | null
+  /** Fiscal's estimate of the supplier's taxes, as the order keeps it (Phase 87). */
+  taxEstimate?: Record<string, unknown> | null
   tax: string
   freight: string
   otherCharges: string

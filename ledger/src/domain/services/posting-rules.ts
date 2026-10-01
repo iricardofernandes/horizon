@@ -28,6 +28,15 @@ export type Fact =
       readonly penalty: bigint
     }
   | {
+      readonly kind: 'tax-lock'
+      readonly id: string
+      readonly reference: string
+      readonly on: string
+      readonly currency: string
+      /** Levied components of the posted taxes, signed: a return's are negative. */
+      readonly components: readonly { readonly code: string; readonly amount: bigint }[]
+    }
+  | {
       readonly kind: 'transfer'
       readonly id: string
       readonly reference: string
@@ -49,6 +58,9 @@ export type Fact =
       readonly direction: 'inflow' | 'outflow'
       readonly amount: bigint
     }
+
+/** The taxes a lock says a sale contains in its price, and so are posted (Phase 87). */
+export const POSTED_TAXES = ['ICMS', 'PIS', 'COFINS', 'ISS', 'ICMS_UF_DEST', 'FCP_UF_DEST'] as const
 
 export interface PlannedLine {
   readonly accountId: string
@@ -160,7 +172,34 @@ function linesFor(fact: Fact, accounts: Resolver): PlannedLine[] {
       return transferLines(fact, accounts)
     case 'treasury-entry':
       return treasuryEntryLines(fact, accounts)
+    case 'tax-lock':
+      return taxLockLines(fact, accounts)
   }
+}
+
+/**
+ * A sale's taxes, from the Fiscal lock that fixed them (ADR 0073): deducted from revenue and
+ * owed, per component. A return's lock carries negative amounts, so the same rule reverses it.
+ * The receivable stays the dispatch's; IPI, charged on top, would change it and is not posted.
+ */
+function taxLockLines(
+  fact: Extract<Fact, { kind: 'tax-lock' }>,
+  accounts: Resolver,
+): PlannedLine[] {
+  return fact.components.flatMap((component) => [
+    ...netLeg(
+      accounts.of('sales-taxes', component.code),
+      component.amount,
+      'debit',
+      component.code,
+    ),
+    ...netLeg(
+      accounts.of('taxes-payable', component.code),
+      component.amount,
+      'credit',
+      component.code,
+    ),
+  ])
 }
 
 function settlementLines(

@@ -1,3 +1,4 @@
+import { fiscalTaxEstimateSchema } from '@horizon/contracts'
 import {
   BadRequestException,
   Body,
@@ -8,11 +9,18 @@ import {
   NotFoundException,
   Param,
   Post,
+  Put,
   Req,
 } from '@nestjs/common'
 import { z } from 'zod'
 import { SalesRuntime } from '@/main/sales-runtime'
-import { PublicRoute, RequireSalesAction, type SalesRequest, tenantOf } from './authorization'
+import {
+  actorOf,
+  PublicRoute,
+  RequireSalesAction,
+  type SalesRequest,
+  tenantOf,
+} from './authorization'
 import { context, idempotent } from './command-context'
 
 const placeOrderInput = z.strictObject({
@@ -246,13 +254,90 @@ export class SalesController {
   async convertQuote(@Param('id') id: string, @Body() body: unknown, @Req() request: SalesRequest) {
     const parsed = convertQuoteInput.safeParse(body)
     if (!parsed.success) throw new BadRequestException('Invalid conversion')
-    return this.unwrap(
+    const converted = this.unwrap<{ quoteId: string; orderId: string | null }>(
       await this.runtime.convertQuote.execute({
         context: idempotent(request),
         quoteId: quoteId(id),
         fulfillmentWarehouseId: parsed.data.fulfillmentWarehouseId,
       }),
     )
+    // The order keeps the estimate its quote was given, and its digests (Phase 87).
+    if (converted.orderId)
+      await this.runtime.database.carryTaxEstimate(
+        tenantOf(request),
+        converted.quoteId,
+        converted.orderId,
+        actorOf(request),
+      )
+    return converted
+  }
+
+  /** Fiscal's estimate, as the web asked Fiscal for it; labeled an estimate (ADR 0073). */
+  @Get('quotes/:id/tax-estimate')
+  @RequireSalesAction('read')
+  quoteTaxEstimate(@Param('id') id: string, @Req() request: SalesRequest) {
+    return this.taxEstimate('quotes', id, request)
+  }
+
+  @Get('orders/:id/tax-estimate')
+  @RequireSalesAction('read')
+  orderTaxEstimate(@Param('id') id: string, @Req() request: SalesRequest) {
+    return this.taxEstimate('orders', id, request)
+  }
+
+  @Put('quotes/:id/tax-estimate')
+  @RequireSalesAction('manage')
+  recordQuoteTaxEstimate(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: SalesRequest,
+  ) {
+    return this.recordTaxEstimate('quotes', id, body, request)
+  }
+
+  @Put('orders/:id/tax-estimate')
+  @RequireSalesAction('manage')
+  recordOrderTaxEstimate(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: SalesRequest,
+  ) {
+    return this.recordTaxEstimate('orders', id, body, request)
+  }
+
+  private async taxEstimate(kind: 'quotes' | 'orders', id: string, request: SalesRequest) {
+    const parsed = z.uuid().safeParse(id)
+    if (!parsed.success) throw new BadRequestException('Invalid document id')
+    const found = await this.runtime.database.findTaxEstimate(
+      tenantOf(request),
+      kind === 'quotes' ? 'quote' : 'order',
+      parsed.data,
+    )
+    if (!found) throw new NotFoundException('No tax estimate was recorded')
+    return found
+  }
+
+  private async recordTaxEstimate(
+    kind: 'quotes' | 'orders',
+    id: string,
+    body: unknown,
+    request: SalesRequest,
+  ) {
+    const parsedId = z.uuid().safeParse(id)
+    const estimate = fiscalTaxEstimateSchema.safeParse(body)
+    if (!parsedId.success || !estimate.success || !estimate.data.supported)
+      throw new BadRequestException('A supported Fiscal tax estimate is required')
+    const outcome = await this.runtime.database.recordTaxEstimate({
+      tenantId: tenantOf(request),
+      kind: kind === 'quotes' ? 'quote' : 'order',
+      documentId: parsedId.data,
+      estimate: estimate.data,
+      recordedBy: actorOf(request),
+    })
+    if (outcome === 'not-found') throw new NotFoundException('The document was not found')
+    if (outcome === 'frozen')
+      throw new ConflictException('The document no longer takes a new estimate')
+    return { recorded: true }
   }
 
   @Post('quotes/:id/decline')

@@ -1,4 +1,6 @@
+import { fiscalTaxEstimateSchema } from '@horizon/contracts'
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -324,6 +326,35 @@ export class ProcurementController {
         context: context(request),
         orderId: id(orderId),
         order: parse(orderRevision, body),
+      }),
+    )
+  }
+
+  /** Fiscal's estimate of a draft, as the web asked Fiscal for it (Phase 87, ADR 0073). */
+  @Put('orders/:id/tax-estimate')
+  @RequireProcurementAction('write')
+  async applyOrderTaxEstimate(
+    @Param('id') orderId: string,
+    @Body() body: unknown,
+    @Req() request: ProcurementRequest,
+  ) {
+    const estimate = fiscalTaxEstimateSchema.safeParse(body)
+    if (!estimate.success || !estimate.data.supported)
+      throw new BadRequestException('A supported Fiscal tax estimate is required')
+    return unwrap(
+      await this.runtime.applyOrderTaxEstimate.execute({
+        context: context(request),
+        orderId: id(orderId),
+        estimate: {
+          components: estimate.data.components.map((component) => ({
+            code: component.code,
+            amount: component.amount,
+          })),
+          chargedOnTop: estimate.data.totals.chargedOnTop,
+          inputDigest: estimate.data.inputDigest,
+          rulesDigest: estimate.data.rulesDigest,
+          resultDigest: estimate.data.resultDigest,
+        },
       }),
     )
   }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { dateSchema, moneySchema, quantitySchema, uuidSchema } from '../common'
+import { fiscalTaxEstimateDigestSchema } from '../http/fiscal-estimate'
 import { defineEvent } from './define'
 
 const requisitionId = uuidSchema.describe('Purchase requisition identifier')
@@ -109,6 +110,8 @@ export const procurementOrderApproved = defineEvent({
     approvalRequired: z.boolean(),
     installments: z.array(installmentSchema).min(1),
     ...commercial,
+    /** Fiscal's estimate of the supplier's taxes, when the buyer asked for one (Phase 87). */
+    taxEstimate: fiscalTaxEstimateDigestSchema.optional(),
   }),
 })
 

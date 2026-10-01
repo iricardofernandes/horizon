@@ -1596,6 +1596,9 @@ async function seedLedgerChart(modules, database, tenantId, clock) {
     ['discount-granted', '4.02', 'Descontos concedidos', 'expense'],
     ['financial-expense', '4.03', 'Despesas financeiras', 'expense'],
     ['bank-fees', '4.04', 'Tarifas bancárias', 'expense'],
+    // The taxes a Fiscal lock says a sale contains (Phase 87).
+    ['taxes-payable', '2.02', 'Impostos a recolher', 'liability'],
+    ['sales-taxes', '4.05', 'Impostos sobre vendas', 'expense'],
   ]
   const existing = new Set(
     (await database.chartOfAccounts(tenantId, new Date().toISOString().slice(0, 10))).map(

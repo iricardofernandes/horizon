@@ -3,6 +3,168 @@
   "defaultStatus": "unsupported",
   "rows": [
     {
+      "id": "approved:41:simulation:rtc-v0057-model55-normal-sale:normal:any",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "operation": "rtc-v0057-model55-normal-sale",
+        "purpose": "normal",
+        "originState": "35",
+        "destinationState": "35",
+        "issuerRegime": "normal"
+      },
+      "evidence": {
+        "kind": "approved-scenario",
+        "reference": "docs/fiscal-phase41-evidence.md",
+        "digest": "a3085f85776bce1d340b09261cdec31ac7d0fc489109a59b78f5d66dfd589cce"
+      }
+    },
+    {
+      "id": "approved:43:homologation:rtc-v0057-model55-normal-sale:normal:any",
+      "model": "55",
+      "environment": "homologation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "operation": "rtc-v0057-model55-normal-sale",
+        "purpose": "normal",
+        "issuerRegime": "normal"
+      },
+      "evidence": {
+        "kind": "approved-scenario",
+        "reference": "docs/fiscal-phase43-evidence.md",
+        "digest": "b7937ef7fca4fcf19b05cd9f98319c7b43f66f63e795462d85907d55e110137e"
+      }
+    },
+    {
+      "id": "approved:45:simulation:rtc-v0057-model55-purchase-return:return:any",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "operation": "rtc-v0057-model55-purchase-return",
+        "purpose": "return",
+        "originState": "35",
+        "destinationState": "35",
+        "issuerRegime": "normal"
+      },
+      "evidence": {
+        "kind": "approved-scenario",
+        "reference": "docs/fiscal-phase45-evidence.md",
+        "digest": "d8b257ab68ba8fd0a7a71b85e200ce71a2fe4d2e0f9bfd0697581d1f15ef5ee9"
+      }
+    },
+    {
+      "id": "approved:45:simulation:rtc-v0057-model55-sale-return:return:any",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "operation": "rtc-v0057-model55-sale-return",
+        "purpose": "return",
+        "originState": "35",
+        "destinationState": "35",
+        "issuerRegime": "normal"
+      },
+      "evidence": {
+        "kind": "approved-scenario",
+        "reference": "docs/fiscal-phase45-evidence.md",
+        "digest": "d8b257ab68ba8fd0a7a71b85e200ce71a2fe4d2e0f9bfd0697581d1f15ef5ee9"
+      }
+    },
+    {
+      "id": "approved:45:simulation:rtc-v0057-model55-value-complement:complementary:any",
+      "model": "55",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "operation": "rtc-v0057-model55-value-complement",
+        "purpose": "complementary",
+        "originState": "35",
+        "destinationState": "35",
+        "issuerRegime": "normal"
+      },
+      "evidence": {
+        "kind": "approved-scenario",
+        "reference": "docs/fiscal-phase45-evidence.md",
+        "digest": "d8b257ab68ba8fd0a7a71b85e200ce71a2fe4d2e0f9bfd0697581d1f15ef5ee9"
+      }
+    },
+    {
+      "id": "approved:46:simulation:rtc-v0057-model65-consumer-sale:normal:any",
+      "model": "65",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "operation": "rtc-v0057-model65-consumer-sale",
+        "purpose": "normal",
+        "originState": "35",
+        "destinationState": "35",
+        "issuerRegime": "normal"
+      },
+      "evidence": {
+        "kind": "approved-scenario",
+        "reference": "docs/fiscal-phase46-evidence.md",
+        "digest": "3a6e4d46a352ff99a68d4b4e70741a80ad71f3321c1fe7c26fdce334afaa6bb1"
+      }
+    },
+    {
+      "id": "approved:47:simulation:rtc-v0057-nfse-service-3509502:normal:service-010101",
+      "model": "nfse",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF"],
+      "dimensions": {
+        "classification": {
+          "kind": "service",
+          "code": "010101"
+        },
+        "operation": "rtc-v0057-nfse-service-3509502",
+        "purpose": "normal",
+        "issuerRegime": "normal"
+      },
+      "evidence": {
+        "kind": "approved-scenario",
+        "reference": "docs/fiscal-phase47-evidence.md",
+        "digest": "f9c18354914fd07ba9ac7f5b1af557691725d2967645ce2ac39068dd08e4ae78"
+      }
+    },
+    {
+      "id": "approved:47:simulation:rtc-v0057-nfse-service-3550308:normal:service-010101",
+      "model": "nfse",
+      "environment": "simulation",
+      "from": "2026-01-01",
+      "until": "2027-01-01",
+      "taxes": ["CBS", "IBS_MUN", "IBS_UF", "ISS"],
+      "dimensions": {
+        "classification": {
+          "kind": "service",
+          "code": "010101"
+        },
+        "operation": "rtc-v0057-nfse-service-3550308",
+        "purpose": "normal",
+        "issuerRegime": "normal"
+      },
+      "evidence": {
+        "kind": "approved-scenario",
+        "reference": "docs/fiscal-phase47-evidence.md",
+        "digest": "f9c18354914fd07ba9ac7f5b1af557691725d2967645ce2ac39068dd08e4ae78"
+      }
+    },
+    {
       "id": "oracle:2026-01-01:000001",
       "model": "55",
       "environment": "simulation",
@@ -1467,7 +1629,7 @@
       "environment": "simulation",
       "from": "2026-01-01",
       "until": "2027-01-01",
-      "taxes": ["COFINS", "ICMS", "PIS"],
+      "taxes": ["CBS", "COFINS", "IBS_MUN", "IBS_UF", "ICMS", "PIS"],
       "dimensions": {
         "classification": {
           "kind": "ncm",

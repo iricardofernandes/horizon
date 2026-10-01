@@ -329,3 +329,37 @@ export const fiscalServiceDocumentOutcome = defineEvent({
     }),
   ]),
 })
+
+const componentOnDocument = z.strictObject({
+  group: z.enum(['legacy', 'ibsCbs']),
+  code: z.string().regex(/^[A-Z][A-Z0-9_]{0,39}$/),
+  /** Integer minor units, signed: a return's components are negative. */
+  amount: z.string().regex(/^-?\d+$/),
+  outcome: z.enum(['levied', 'exempt', 'suspended', 'deferred', 'not-levied']),
+})
+
+export const fiscalCalculationLocked = defineEvent({
+  type: 'fiscal.calculation.locked',
+  version: 1,
+  description:
+    "Fiscal locked the tax calculation of a document (Phase 87, ADR 0073): its components, totals and digests, never its rules. It is the only source of tax amounts for Financial and Ledger; it moves no stock and posts no receivable, which stay the operational facts' (ADR 0048).",
+  payload: z.strictObject({
+    documentId: uuidSchema,
+    originModule: z.enum(['sales', 'fiscal']),
+    originId: uuidSchema,
+    purpose: z.enum(['normal', 'return', 'complementary', 'adjustment']),
+    model: z.enum(['55', '65', 'nfse']),
+    environment: z.enum(['simulation', 'homologation', 'production']),
+    issueDate: z.iso.date(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    components: z.array(componentOnDocument).max(1000),
+    totals: z.strictObject({
+      net: z.string().regex(/^-?\d+$/),
+      legacyTax: z.string().regex(/^-?\d+$/),
+      ibsCbsTax: z.string().regex(/^-?\d+$/),
+    }),
+    inputDigest: sha256Schema,
+    rulesDigest: sha256Schema,
+    resultDigest: sha256Schema,
+  }),
+})

@@ -47,6 +47,8 @@ const CHART: readonly (readonly [PostingRole, string, string, string])[] = [
   ['discount-granted', '4.02', 'Descontos concedidos', 'expense'],
   ['financial-expense', '4.03', 'Despesas financeiras', 'expense'],
   ['bank-fees', '4.04', 'Tarifas bancárias', 'expense'],
+  ['taxes-payable', '2.02', 'Impostos a recolher', 'liability'],
+  ['sales-taxes', '4.05', 'Impostos sobre vendas', 'expense'],
 ]
 
 type Workspace = Awaited<ReturnType<typeof workspace>>
@@ -589,5 +591,76 @@ describe('the database itself', () => {
     expect(await journalOf(second)).toHaveLength(0)
     expect((await database.listMappings(second.tenantId)).length).toBe(CHART.length)
     expect((await database.listPendingFacts(second.tenantId, 10)).total).toBe(0)
+  })
+})
+
+describe("a sale's taxes, as Fiscal locked them (Phase 87)", () => {
+  const locked = (over: Record<string, unknown> = {}) => ({
+    documentId: randomUUID(),
+    originModule: 'sales',
+    originId: randomUUID(),
+    purpose: 'normal',
+    model: '55',
+    environment: 'simulation',
+    issueDate: '2026-10-15',
+    currency: 'BRL',
+    components: [
+      { group: 'legacy', code: 'ICMS', amount: '6836', outcome: 'levied' },
+      { group: 'legacy', code: 'PIS', amount: '514', outcome: 'levied' },
+      { group: 'legacy', code: 'IPI', amount: '2469', outcome: 'levied' },
+      { group: 'ibsCbs', code: 'CBS', amount: '342', outcome: 'levied' },
+    ],
+    totals: { net: '37980', legacyTax: '9819', ibsCbsTax: '342' },
+    inputDigest: 'a'.repeat(64),
+    rulesDigest: 'b'.repeat(64),
+    resultDigest: 'c'.repeat(64),
+    ...over,
+  })
+
+  it('posts the taxes in the price per component, once per origin, and reverses a return', async () => {
+    const space = await workspace()
+    const sale = locked()
+    await deliver(space.tenantId, 'fiscal.calculation.locked', sale)
+    // A redelivery, or a corrected revision of the same document, posts nothing more.
+    await deliver(space.tenantId, 'fiscal.calculation.locked', {
+      ...sale,
+      documentId: randomUUID(),
+    })
+    const journal = await journalOf(space)
+    expect(journal).toHaveLength(1)
+    expect(journal[0]?.lines).toEqual([
+      '4.05 debit 6836',
+      '2.02 credit 6836',
+      '4.05 debit 514',
+      '2.02 credit 514',
+    ])
+    await deliver(
+      space.tenantId,
+      'fiscal.calculation.locked',
+      locked({
+        originId: sale.originId,
+        purpose: 'return',
+        components: [{ group: 'legacy', code: 'ICMS', amount: '-6836', outcome: 'levied' }],
+      }),
+    )
+    const trial = await database.trialBalance(space.tenantId, FULL_YEAR)
+    expect(trial.totalDebits).toBe(trial.totalCredits)
+    expect(trial.rows.find((row) => row.code === '2.02')?.closing).toBe('514')
+  })
+
+  it('posts nothing for a manual simulation, a homologation drill or a sale with no tax in its price', async () => {
+    const space = await workspace()
+    await deliver(space.tenantId, 'fiscal.calculation.locked', locked({ originModule: 'fiscal' }))
+    await deliver(
+      space.tenantId,
+      'fiscal.calculation.locked',
+      locked({ environment: 'homologation' }),
+    )
+    await deliver(
+      space.tenantId,
+      'fiscal.calculation.locked',
+      locked({ components: [{ group: 'ibsCbs', code: 'CBS', amount: '342', outcome: 'levied' }] }),
+    )
+    expect(await journalOf(space)).toEqual([])
   })
 })

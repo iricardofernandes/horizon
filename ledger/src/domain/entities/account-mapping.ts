@@ -27,6 +27,9 @@ export const POSTING_ROLES = [
   'suspense',
   // Stock is not posted; the account is kept by manual entries, and checked (Phase 69).
   'inventory',
+  // The taxes a Fiscal lock says a sale contains (Phase 87), each keyed by its component.
+  'sales-taxes',
+  'taxes-payable',
 ] as const
 export type PostingRole = (typeof POSTING_ROLES)[number]
 
@@ -48,6 +51,9 @@ const REQUIRED_TYPE: Readonly<Record<PostingRole, AccountType>> = {
   'opening-balance': 'equity',
   suspense: 'asset',
   inventory: 'asset',
+  // Deducted from gross revenue: an expense-side account, as the deductions are presented.
+  'sales-taxes': 'expense',
+  'taxes-payable': 'liability',
 }
 
 /** Roles that are chosen per source record: a cash account per treasury account, and so on. */
@@ -65,6 +71,8 @@ const KEYED_ROLES: Readonly<Record<PostingRole, boolean>> = {
   'opening-balance': false,
   suspense: false,
   inventory: false,
+  'sales-taxes': true,
+  'taxes-payable': true,
 }
 
 interface MappingProps {

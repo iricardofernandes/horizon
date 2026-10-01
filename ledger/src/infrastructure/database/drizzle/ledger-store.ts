@@ -239,6 +239,12 @@ function revive(stored: Record<string, unknown>): Fact {
     const value = fact[field]
     if (typeof value === 'string') fact[field] = BigInt(value)
   }
+  // A tax lock's components carry their own amounts (Phase 87).
+  if (Array.isArray(fact.components))
+    fact.components = fact.components.map((component: { code: string; amount: string }) => ({
+      code: component.code,
+      amount: BigInt(component.amount),
+    }))
   return fact as unknown as Fact
 }
 

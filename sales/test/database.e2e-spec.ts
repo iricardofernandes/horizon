@@ -1862,3 +1862,79 @@ it('follows the receivable and NFS-e of each delivery, and keeps them apart per 
       expect(await tx`select 1 from ${tx(table)}`).toHaveLength(0)
   })
 })
+
+it("keeps Fiscal's estimate on a quote while it is open, and carries it to its order (Phase 87)", async () => {
+  const tenantId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const good = await projectItem(tenantId, 'product')
+  const customerId = randomUUID()
+  const projected = await database.inTenant(tenantId, (scope) =>
+    new ProjectPartyUseCase(clock).executeInScope(scope, {
+      tenantId,
+      partyId: customerId,
+      legalName: 'Cliente Estimativa',
+      email: 'estimativa@example.com',
+      phone: '+55 11 99999-9999',
+      address: 'Rua Um, 42, São Paulo',
+      roles: ['customer'],
+      active: true,
+    }),
+  )
+  if (projected.isLeft()) throw projected.value
+  const quote = await new WriteQuoteUseCase(database, clock, 15).execute({
+    context: commandOf(tenantId),
+    customerId,
+    quote: { lines: [{ lineId: randomUUID(), itemId: good, quantity: '2' }] },
+  })
+  if (quote.isLeft()) throw quote.value
+  const estimate = {
+    schemaVersion: 1,
+    supported: true,
+    estimatedAt: '2026-10-15T12:00:00.000Z',
+    components: [
+      {
+        group: 'legacy',
+        code: 'ICMS',
+        amount: { amount: '1800', currency: 'BRL' },
+        outcome: 'levied',
+      },
+    ],
+    totals: {
+      net: { amount: '10000', currency: 'BRL' },
+      tax: { amount: '1800', currency: 'BRL' },
+      chargedOnTop: { amount: '0', currency: 'BRL' },
+      gross: { amount: '10000', currency: 'BRL' },
+    },
+    inputDigest: 'a'.repeat(64),
+    rulesDigest: 'b'.repeat(64),
+    resultDigest: 'c'.repeat(64),
+  }
+  const record = (documentId: string) =>
+    database.recordTaxEstimate({ tenantId, kind: 'quote', documentId, estimate, recordedBy: 'ana' })
+  expect(await record(quote.value.quoteId)).toBe('recorded')
+  expect(await record(randomUUID())).toBe('not-found')
+  expect(
+    (await database.findTaxEstimate(tenantId, 'quote', quote.value.quoteId))?.estimate,
+  ).toEqual(estimate)
+
+  const decide = new DecideQuoteUseCase(database, clock)
+  expect((await decide.send(commandOf(tenantId), quote.value.quoteId)).isRight()).toBe(true)
+  expect((await decide.accept(commandOf(tenantId), quote.value.quoteId)).isRight()).toBe(true)
+  // An accepted offer is settled: its estimate stays as it was.
+  expect(await record(quote.value.quoteId)).toBe('frozen')
+
+  const converted = await new ConvertQuoteUseCase(database, clock).execute({
+    context: commandOf(tenantId),
+    quoteId: quote.value.quoteId,
+    fulfillmentWarehouseId: randomUUID(),
+  })
+  if (converted.isLeft()) throw converted.value
+  const orderId = converted.value.orderId
+  if (!orderId) throw new Error('the quote did not become an order')
+  await database.carryTaxEstimate(tenantId, quote.value.quoteId, orderId, 'ana')
+  const kept = await database.findTaxEstimate(tenantId, 'order', orderId)
+  expect(kept?.estimate).toMatchObject({
+    resultDigest: 'c'.repeat(64),
+    inputDigest: 'a'.repeat(64),
+  })
+})

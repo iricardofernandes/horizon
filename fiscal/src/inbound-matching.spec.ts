@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AllocationError,
   compareAllocations,
+  compareTaxes,
   type InvoiceLineInput,
   type OpenReceiptLine,
   proposeAllocations,
@@ -197,5 +198,40 @@ describe('inbound allocation comparison', () => {
     expect(() => compareAllocations({ ...base, allocations: [], unmatchedLines: [1, 5] })).toThrow(
       'unknown invoice line',
     )
+  })
+})
+
+describe('the supplier taxes against the order estimate (Phase 87)', () => {
+  const totals = { icms: '70.00', icmsSt: '0.00', ipi: '24.69', pis: '0.00', cofins: '0.00' }
+  const estimate = {
+    orderId: '018f5d4e-1000-7000-8000-000000000087',
+    components: [
+      { code: 'ICMS', amount: { amount: '6836' } },
+      { code: 'IPI', amount: { amount: '2469' } },
+    ],
+    resultDigest: 'a'.repeat(64),
+  }
+
+  it('names each component that differs', () => {
+    const compared = compareTaxes({ totals, orderIds: [estimate.orderId], estimate })
+    expect(compared).toMatchObject({ compared: true, clean: false, orderId: estimate.orderId })
+    expect(compared.components).toEqual([
+      { code: 'ICMS', invoicedMinor: '7000', expectedMinor: '6836', differenceMinor: '164' },
+      { code: 'IPI', invoicedMinor: '2469', expectedMinor: '2469', differenceMinor: '0' },
+    ])
+  })
+
+  it('says why it did not compare', () => {
+    expect(compareTaxes({ totals, orderIds: [estimate.orderId], estimate: null })).toMatchObject({
+      compared: false,
+      reason: 'The purchase order carries no tax estimate',
+    })
+    expect(
+      compareTaxes({
+        totals,
+        orderIds: [estimate.orderId, estimate.orderId.replace('87', '88')],
+        estimate,
+      }),
+    ).toMatchObject({ compared: false })
   })
 })

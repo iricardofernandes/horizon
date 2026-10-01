@@ -217,7 +217,7 @@ export class FiscalReadiness {
   }
 }
 
-function deriveCalculationInput(input: {
+export function deriveCalculationInput(input: {
   tenantId: string
   establishmentId: string
   issueDate: string

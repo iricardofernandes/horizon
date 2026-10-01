@@ -14,6 +14,7 @@ import {
   ORDER_STATUSES,
   type OrderStatus,
   PurchaseOrder,
+  type TaxEstimateDigest,
 } from '@/domain/entities/purchase-order'
 import {
   PurchaseRequisition,
@@ -195,6 +196,7 @@ function mapOrder(
       currency,
       lines: lineRows.map((line) => pricedLineOf(line, currency)),
       charges: chargesOf(row, currency),
+      taxEstimate: (row.taxEstimate as TaxEstimateDigest | null) ?? null,
       paymentTerms: restored(PaymentTerms.create(row.paymentTermDays)),
       issuedOn: restored(BusinessDate.create(row.issuedOn)),
       expectedOn: restored(BusinessDate.create(row.expectedOn)),
@@ -630,6 +632,7 @@ export function makeScope(tx: Transaction, tenantId: string): ProcurementScope {
           otherCharges: BigInt(row.otherCharges),
           discount: BigInt(row.discount),
           total: BigInt(row.total),
+          taxEstimate: row.taxEstimate,
           paymentTermDays: [...row.paymentTermDays],
           issuedOn: row.issuedOn,
           expectedOn: row.expectedOn,
@@ -666,6 +669,7 @@ export function makeScope(tx: Transaction, tenantId: string): ProcurementScope {
             otherCharges: BigInt(row.otherCharges),
             discount: BigInt(row.discount),
             total: BigInt(row.total),
+            taxEstimate: row.taxEstimate,
             paymentTermDays: [...row.paymentTermDays],
             expectedOn: row.expectedOn,
             notes: row.notes,

@@ -46,7 +46,9 @@ beforeAll(async () => {
   })
   app = postgres(appUrl, { max: 2 })
   store = new FiscalRuleStore(appUrl)
-  calculations = new FiscalCalculations(appUrl, randomBytes(32), store)
+  // These tests exercise the rule machinery with illustrative rules no review approved, so
+  // the support matrix (Phase 87) is not what they check.
+  calculations = new FiscalCalculations(appUrl, randomBytes(32), store, 'unchecked')
   capabilities = new FiscalCapabilities(appUrl)
   dispatch = new FiscalDispatch(appUrl)
 }, 120_000)

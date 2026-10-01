@@ -13,6 +13,7 @@ import { idempotentJsonHeaders, jsonHeaders } from '@/lib/http'
 import { useStatusLabel } from '@/lib/status'
 import { tracedFetch } from '@/lib/telemetry'
 import { useDate, useMoney, useQuantity } from '@/lib/use-format'
+import { fiscalEstablishment, TaxEstimatePanel } from '../fiscal/tax-estimate-panel'
 import { QuoteFields, quoteBody } from './quote-form'
 import type { SalesScreenData } from './sales-page'
 import {
@@ -188,6 +189,12 @@ function Body({
       ) : (
         <Lines detail={detail} />
       )}
+
+      <TaxEstimatePanel
+        canEstimate={abilities.canWrite && ['draft', 'pending', 'sent'].includes(detail.status)}
+        recordedPath={`${base}/tax-estimate`}
+        request={estimateRequest(detail)}
+      />
 
       <h3 className="document-section-title">{t('negotiation')}</h3>
       <History detail={detail} quotes={data.quotes} />
@@ -499,4 +506,28 @@ function Conversion({
       </Button>
     </>
   )
+}
+
+/**
+ * The quote's goods as a draft Fiscal can estimate (Phase 87); its services are invoiced
+ * on an NFS-e, which is estimated with the service order.
+ */
+function estimateRequest(detail: Quote): (() => Promise<unknown | null>) | null {
+  const goods = detail.lines.filter((line) => line.kind !== 'service')
+  if (goods.length === 0) return null
+  return async () => {
+    const establishmentId = await fiscalEstablishment()
+    if (!establishmentId) return null
+    return {
+      direction: 'sale',
+      establishmentId,
+      customerPartyId: detail.customerId,
+      issueDate: new Date().toISOString().slice(0, 10),
+      lines: goods.map((line) => ({
+        itemId: line.itemId,
+        quantity: line.quantity,
+        unitPrice: { amount: line.unitPrice, currency: detail.currency },
+      })),
+    }
+  }
 }

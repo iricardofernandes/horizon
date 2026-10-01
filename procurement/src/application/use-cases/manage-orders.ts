@@ -4,7 +4,11 @@ import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
 import { type ApprovalAuthority, ownAuthority } from '@/domain/controls/approval-delegation'
 import { APPROVE_ORDER } from '@/domain/controls/duties'
-import { type OrderRevision, PurchaseOrder } from '@/domain/entities/purchase-order'
+import {
+  type OrderRevision,
+  PurchaseOrder,
+  type TaxEstimateDigest,
+} from '@/domain/entities/purchase-order'
 import type { PurchaseRequisition } from '@/domain/entities/purchase-requisition'
 import type { Supplier } from '@/domain/entities/supplier'
 import type { SupplierQuotation } from '@/domain/entities/supplier-quotation'
@@ -460,4 +464,46 @@ async function draft(
     id: drafted.value.id.toString(),
     total: drafted.value.total().amount.toString(),
   })
+}
+
+/**
+ * A draft takes Fiscal's estimate of the supplier's taxes (Phase 87, ADR 0073): the taxes
+ * charged on top of the price replace the typed tax, and the approved order carries the
+ * estimate so the supplier's NF-e can be compared with it.
+ */
+export class ApplyOrderTaxEstimateUseCase {
+  constructor(
+    private readonly unitOfWork: ProcurementUnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  execute(request: {
+    context: CommandContext
+    orderId: string
+    estimate: TaxEstimateDigest
+  }): Promise<Either<Failure, { total: string; tax: string }>> {
+    const { context } = request
+    return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
+      const order = await scope.orders.findForUpdate(request.orderId)
+      if (!order) return left(new ResourceNotFoundError('purchase order was not found'))
+      const now = this.clock.now()
+      const applied = order.applyTaxEstimate(request.estimate, now)
+      if (applied.isLeft()) return left(applied.value)
+      await scope.orders.save(order)
+      await audit(scope, context, {
+        action: 'order.tax-estimated',
+        subjectType: 'order',
+        subjectId: request.orderId,
+        occurredAt: now,
+        details: {
+          tax: request.estimate.chargedOnTop.amount,
+          resultDigest: request.estimate.resultDigest,
+        },
+      })
+      return right({
+        total: order.total().amount.toString(),
+        tax: request.estimate.chargedOnTop.amount,
+      })
+    })
+  }
 }

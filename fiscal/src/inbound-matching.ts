@@ -55,12 +55,89 @@ export type LineComparison = {
   differences: Difference[]
 }
 
+export type TaxComparison = {
+  compared: boolean
+  reason?: string
+  orderId?: string
+  estimateDigest?: string
+  components: Array<{
+    code: (typeof COMPARED_TAXES)[number][0]
+    invoicedMinor: string
+    expectedMinor: string
+    differenceMinor: string
+  }>
+  clean: boolean
+}
+
 export type Comparison = {
   currency: 'BRL'
   lines: LineComparison[]
   invoicedValueMinor: string
   expectedValueMinor: string
   clean: boolean
+  taxes?: TaxComparison
+}
+
+/** The supplier NF-e totals compared with Fiscal's estimate, as component and total field. */
+const COMPARED_TAXES = [
+  ['ICMS', 'icms'],
+  ['ICMS_ST', 'icmsSt'],
+  ['IPI', 'ipi'],
+  ['PIS', 'pis'],
+  ['COFINS', 'cofins'],
+] as const
+
+/**
+ * The supplier's taxes against the purchase order's estimate (Phase 87, ADR 0073), one
+ * component at a time, naming each difference. Compared only when the reconciliation is of one
+ * order that carries an estimate; the estimate is of the whole order.
+ */
+export function compareTaxes(input: {
+  totals: Record<(typeof COMPARED_TAXES)[number][1], string>
+  orderIds: readonly string[]
+  estimate: {
+    orderId: string
+    components: ReadonlyArray<{ code: string; amount: { amount: string } }>
+    resultDigest: string
+  } | null
+}): TaxComparison {
+  if (input.orderIds.length !== 1)
+    return {
+      compared: false,
+      reason: 'The NF-e is reconciled against more than one purchase order',
+      components: [],
+      clean: true,
+    }
+  if (!input.estimate)
+    return {
+      compared: false,
+      reason: 'The purchase order carries no tax estimate',
+      components: [],
+      clean: true,
+    }
+  const expected = new Map<string, bigint>()
+  for (const component of input.estimate.components)
+    expected.set(
+      component.code,
+      (expected.get(component.code) ?? 0n) + BigInt(component.amount.amount),
+    )
+  const components = COMPARED_TAXES.map(([code, field]) => {
+    const invoiced = minor(input.totals[field])
+    const estimated = expected.get(code) ?? 0n
+    return {
+      code,
+      invoicedMinor: String(invoiced),
+      expectedMinor: String(estimated),
+      differenceMinor: String(invoiced - estimated),
+    }
+  }).filter((component) => component.invoicedMinor !== '0' || component.expectedMinor !== '0')
+  return {
+    compared: true,
+    orderId: input.estimate.orderId,
+    estimateDigest: input.estimate.resultDigest,
+    components,
+    clean: components.every((component) => component.differenceMinor === '0'),
+  }
 }
 
 export class AllocationError extends Error {

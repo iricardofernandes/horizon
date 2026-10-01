@@ -80,6 +80,17 @@ to a per-tenant hash-chained audit log.
 | Internal transfer | the destination cash account, bank fees | the source cash account |
 | Treasury opening balance | cash | opening balance |
 | Manual treasury entry | cash or suspense | suspense or cash |
+| Fiscal lock of a Sales document (Phase 87) | sales taxes, by component | taxes payable, by component |
+
+A Fiscal lock posts the taxes contained in the price, one pair of lines per component:
+ICMS, PIS, Cofins, ISS, ICMS DIFAL and FCP DIFAL, when levied and non-zero. It posts once
+per origin and purpose, so a corrected revision posts nothing more, and a return's negative
+amounts reverse it. Some locks are not posted:
+- manual simulations and homologation drills;
+- IPI, which is charged on top and belongs to the receivable;
+- the CBS/IBS of 2026, whose payment is waived (LC 214 art. 348 §1º).
+
+Purchase credits are not posted either.
 
 A settlement's receivable or payable leg is the *net* of the cash and the discount less the
 interest and penalty, and takes whichever side that net calls for: a settlement that charges

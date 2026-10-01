@@ -963,7 +963,14 @@
     "unitPrice": "Unit price",
     "value": "Value",
     "what": "What",
-    "writeOrder": "Write the order"
+    "writeOrder": "Write the order",
+    "supplierRegime": "Supplier's regime",
+    "regime": {
+      "normal_lucro-real": "Lucro Real",
+      "normal_lucro-presumido": "Lucro Presumido",
+      "simples-nacional": "Simples Nacional",
+      "mei": "MEI"
+    }
   },
   "receivables": {
     "action": {
@@ -2051,6 +2058,26 @@
       "descriptionRequired": "Describe the service as the NFS-e should.",
       "effectiveFromInvalid": "Choose the effective date.",
       "reasonTooShort": "Explain the revision in at least 10 characters."
+    },
+    "estimateTitle": "Tax estimate",
+    "estimateNote": "Fiscal's estimate to help a decision; it is not the tax owed, which only the fiscal document fixes.",
+    "component": "Component",
+    "amount": "Amount",
+    "estimatedTax": "Estimated taxes",
+    "chargedOnTop": "Charged on top of the price",
+    "estimatedGross": "Estimated total",
+    "estimatedAt": "Estimated at",
+    "estimateDigest": "Result {digest}…",
+    "noEstimate": "No estimate yet.",
+    "estimateTaxes": "Estimate taxes",
+    "estimateFailed": "The taxes could not be estimated.",
+    "estimateUnavailable": "This document lacks what Fiscal needs to estimate it.",
+    "estimateRefused": "Fiscal does not estimate this scenario: {detail} (missing: {dimension}).",
+    "outcome": {
+      "exempt": "exempt",
+      "suspended": "suspended",
+      "deferred": "deferred",
+      "not-levied": "not levied"
     }
   },
   "services": {

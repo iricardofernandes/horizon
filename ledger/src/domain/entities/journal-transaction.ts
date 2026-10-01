@@ -26,6 +26,7 @@ export const TRANSACTION_SOURCES = [
   'settlement',
   'transfer',
   'treasury-entry',
+  'tax-lock',
 ] as const
 export type TransactionSource = (typeof TRANSACTION_SOURCES)[number]
 

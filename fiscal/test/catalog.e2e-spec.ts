@@ -586,3 +586,54 @@ describe('regimes and the blend (Phase 86)', () => {
     expect(await calculations.replay(tenantId, documentId)).toEqual(locked)
   })
 })
+
+describe('the lock answers to the support matrix (Phase 87, ADR 0072)', () => {
+  it('locks an approved scenario and publishes its components, and refuses one no evidence covers', async () => {
+    const tenantId = await workspace(DEMO_WORKSPACE)
+    const [g4] = regimeScenarios().filter((scenario) => scenario.id.includes('g4'))
+    const [f6] = scenarios().filter((scenario) => scenario.id.includes('f6'))
+    const [line] = f6?.input.lines ?? []
+    if (!g4 || !f6 || !line) throw new Error('G4 and F6 are declared')
+
+    const approved = randomUUID()
+    await insertDraft(tenantId, approved, g4.input.issuerEstablishmentId)
+    const locked = await calculations.validateDocument({
+      tenantId,
+      documentId: approved,
+      actorId: 'issuer:test',
+      calculationInput: g4.input,
+    })
+    expect(locked.supported).toBe(true)
+    const [event] = await administrator`select payload from fiscal_outbox
+      where tenant_id = ${tenantId} and event_type = 'fiscal.calculation.locked'
+        and payload->>'documentId' = ${approved}`
+    expect(
+      ((event?.payload.components ?? []) as { code: string; amount: string }[]).map((component) => [
+        component.code,
+        component.amount,
+      ]),
+    ).toEqual([
+      ['ICMS', '6836'],
+      ['COFINS', '2367'],
+      ['PIS', '514'],
+    ])
+
+    // A contributor buying for its own use: only IPI calculates, and nothing approved says so.
+    const outside = randomUUID()
+    await insertDraft(tenantId, outside, f6.input.issuerEstablishmentId)
+    const refused = await calculations.validateDocument({
+      tenantId,
+      documentId: outside,
+      actorId: 'issuer:test',
+      calculationInput: {
+        ...f6.input,
+        lines: [{ ...line, taxFacts: { ipiTaxpayer: 'true', destinationUse: 'consumption' } }],
+      },
+    })
+    expect(refused).toMatchObject({ supported: false, code: 'UNSUPPORTED_SCENARIO' })
+    expect(refused.supported ? '' : refused.missingDimension).toMatch(/IPI/)
+    const [draft] = await administrator`select status from fiscal_documents
+      where tenant_id = ${tenantId} and id = ${outside}`
+    expect(draft?.status).toBe('draft')
+  })
+})

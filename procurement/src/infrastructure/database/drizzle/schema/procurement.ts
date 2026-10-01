@@ -151,6 +151,8 @@ export const orders = pgTable('orders', {
   otherCharges: minorUnits('other_charges').notNull(),
   discount: minorUnits('discount').notNull(),
   total: minorUnits('total').notNull(),
+  /** Fiscal's estimate of the supplier's taxes (Phase 87); null until the buyer asks. */
+  taxEstimate: jsonb('tax_estimate'),
   paymentTermDays: jsonb('payment_term_days').$type<number[]>().notNull(),
   issuedOn: businessDate('issued_on').notNull(),
   expectedOn: businessDate('expected_on').notNull(),

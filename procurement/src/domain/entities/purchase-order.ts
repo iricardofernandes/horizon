@@ -85,6 +85,8 @@ interface OrderProps {
   currency: Currency
   lines: readonly PricedLine[]
   charges: Charges
+  /** Fiscal's estimate of the supplier's taxes, when the buyer asked for one (Phase 87). */
+  taxEstimate?: TaxEstimateDigest | null
   paymentTerms: PaymentTerms
   issuedOn: BusinessDate
   expectedOn: BusinessDate
@@ -136,6 +138,21 @@ export interface OrderRevision {
  * approval, depending on what the workspace decided is worth a second person's attention;
  * from approval onward it is frozen, and a change of mind is a cancellation, not an edit.
  */
+/**
+ * What an order keeps of Fiscal's estimate (ADR 0073): components, amounts and digests,
+ * never rules. Its taxes charged on top of the price are the order's tax.
+ */
+export type TaxEstimateDigest = {
+  readonly components: readonly {
+    readonly code: string
+    readonly amount: { readonly amount: string; readonly currency: string }
+  }[]
+  readonly chargedOnTop: { readonly amount: string; readonly currency: string }
+  readonly inputDigest: string
+  readonly rulesDigest: string
+  readonly resultDigest: string
+}
+
 export class PurchaseOrder extends AggregateRoot<OrderProps> {
   static draft(input: OrderInput, id?: UniqueEntityID): Either<InvalidInputError, PurchaseOrder> {
     if (input.expectedOn.isBefore(input.issuedOn))
@@ -241,11 +258,52 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
     if (lines.isLeft()) return left(lines.value)
     this.props.lines = lines.value
     this.props.charges = change.charges
+    // The estimate was of the order as it was; a revised order asks Fiscal again.
+    this.props.taxEstimate = null
     this.props.paymentTerms = change.paymentTerms
     this.props.expectedOn = change.expectedOn
     this.props.notes = change.notes
     this.advance(now)
     return right(undefined)
+  }
+
+  /**
+   * Take Fiscal's estimate of a draft (Phase 87): the taxes it charges on top of the price
+   * replace the typed tax, and the order keeps the estimate's digests for the reconciliation.
+   */
+  applyTaxEstimate(
+    estimate: TaxEstimateDigest,
+    now: Date,
+  ): Either<InvalidInputError | ConflictError, void> {
+    if (this.props.status !== 'draft')
+      return left(new ConflictError('only a draft order takes a tax estimate'))
+    if (estimate.chargedOnTop.currency !== this.props.currency.value)
+      return left(new InvalidInputError('/chargedOnTop', 'the estimate is in another currency'))
+    const charges = {
+      ...this.props.charges,
+      tax: Money.of(BigInt(estimate.chargedOnTop.amount), this.props.currency),
+    }
+    const lines = priceLines(
+      this.props.lines.map((line) => ({
+        lineId: line.lineId,
+        itemId: line.itemId,
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+      })),
+      charges,
+      this.props.currency,
+    )
+    if (lines.isLeft()) return left(lines.value)
+    this.props.lines = lines.value
+    this.props.charges = charges
+    this.props.taxEstimate = estimate
+    this.advance(now)
+    return right(undefined)
+  }
+
+  get taxEstimate(): TaxEstimateDigest | null {
+    return this.props.taxEstimate ?? null
   }
 
   /**
@@ -560,6 +618,7 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
     otherCharges: string
     discount: string
     total: string
+    taxEstimate: TaxEstimateDigest | null
     paymentTermDays: readonly number[]
     issuedOn: string
     expectedOn: string
@@ -601,6 +660,7 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
       otherCharges: this.props.charges.otherCharges.amount.toString(),
       discount: this.props.charges.discount.amount.toString(),
       total: this.total().amount.toString(),
+      taxEstimate: this.props.taxEstimate ?? null,
       paymentTermDays: this.props.paymentTerms.days,
       issuedOn: this.props.issuedOn.value,
       expectedOn: this.props.expectedOn.value,
@@ -720,6 +780,7 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
         amount: moneyPayload(installment.amount),
       })),
       ...this.commercialPayload(),
+      ...(this.props.taxEstimate ? { taxEstimate: this.props.taxEstimate } : {}),
     })
   }
 

@@ -3,7 +3,9 @@ import {
   type FiscalCalculationInput,
   type FiscalCalculationOutcome,
   type FiscalCalculationResult,
+  type FiscalTaxSupportMatrix,
   fiscalCalculationInputSchema,
+  fiscalCalculationLocked,
   fiscalCalculationResultSchema,
 } from '@horizon/contracts'
 import postgres from 'postgres'
@@ -13,6 +15,8 @@ import { calculateFiscal } from './calculation'
 import { openCalculationInput, sealCalculationInput } from './calculation-crypto'
 import { canonicalDigest, canonicalJson } from './canonical-json'
 import type { FiscalRuleStore } from './rule-store'
+import { scenarioSupport } from './tax-support'
+import { SUPPORT_MATRIX } from './tax-support-api'
 
 export class FiscalCalculations {
   readonly #db: ReturnType<typeof postgres>
@@ -21,6 +25,11 @@ export class FiscalCalculations {
     databaseUrl: string,
     private readonly masterKey: Buffer,
     private readonly rules: Pick<FiscalRuleStore, 'resolve'>,
+    /**
+     * The evidence a lock must be covered by (Phase 87, ADR 0072). `unchecked` is for tests of
+     * the rule machinery itself, whose illustrative rules no review approved.
+     */
+    private readonly supportMatrix: FiscalTaxSupportMatrix | 'unchecked' = SUPPORT_MATRIX,
   ) {
     if (masterKey.length !== 32) throw new Error('Fiscal calculation key must be 32 bytes')
     this.#db = postgres(databaseUrl, { max: 10, connection: { statement_timeout: 10_000 } })
@@ -139,6 +148,18 @@ export class FiscalCalculations {
         return parseStoredResult(binding.result_bytes)
       }
       if (document.status !== 'draft') throw new Error('Fiscal document is not a draft')
+      if (this.supportMatrix !== 'unchecked') {
+        const support = scenarioSupport(this.supportMatrix, calculationInput, result)
+        if (!support.supported)
+          return {
+            schemaVersion: 1 as const,
+            supported: false as const,
+            code: 'UNSUPPORTED_SCENARIO' as const,
+            detail: support.detail,
+            missingDimension: support.missingDimension,
+            inputDigest: result.inputDigest,
+          }
+      }
       if (
         document.model !== calculationInput.model ||
         document.environment !== calculationInput.environment ||
@@ -187,6 +208,7 @@ export class FiscalCalculations {
       await tx`insert into fiscal_transitions (id, tenant_id, document_id, kind, detail)
         values (${randomUUID()}, ${command.tenantId}, ${command.documentId}, 'ready',
           ${JSON.stringify({ calculationId, resultDigest: result.resultDigest })}::jsonb)`
+      await appendLockedEvent(tx, command.tenantId, command.documentId, calculationInput, result)
       await appendAudit(tx, {
         tenantId: command.tenantId,
         actorId: command.actorId,
@@ -314,4 +336,56 @@ function parseStoredResult(bytes: unknown): FiscalCalculationResult {
   if (canonicalDigest(covered) !== resultDigest)
     throw new Error('Fiscal calculation result integrity failure')
   return result
+}
+
+/**
+ * The lock's components, totals and digests for Financial and Ledger (Phase 87, ADR 0073), in
+ * the same transaction as the lock. The origin names the operational fact the document is of.
+ */
+async function appendLockedEvent(
+  tx: postgres.TransactionSql,
+  tenantId: string,
+  documentId: string,
+  input: FiscalCalculationInput,
+  result: FiscalCalculationResult,
+): Promise<void> {
+  const [origin] = await tx`select intent.origin_module, intent.origin_id,
+      coalesce(document.manual_origin_id, document.linked_origin_id, document.service_origin_id)
+        as fiscal_origin_id
+    from fiscal_documents document
+    left join fiscal_intents intent on intent.tenant_id = document.tenant_id
+      and intent.id = document.intent_id
+    where document.tenant_id = ${tenantId} and document.id = ${documentId}`
+  const fromSales = origin?.origin_module === 'sales' && origin.origin_id
+  const payload = fiscalCalculationLocked.payload.parse({
+    documentId,
+    originModule: fromSales ? 'sales' : 'fiscal',
+    originId: String(fromSales ? origin.origin_id : (origin?.fiscal_origin_id ?? documentId)),
+    purpose: input.purpose,
+    model: input.model,
+    environment: input.environment,
+    issueDate: input.issueDate,
+    currency: input.currency,
+    components: result.lines.flatMap((line) =>
+      (['legacy', 'ibsCbs'] as const).flatMap((group) =>
+        line.components[group].map((component) => ({
+          group,
+          code: component.code,
+          amount: component.amount.amount,
+          outcome: component.outcome ?? 'levied',
+        })),
+      ),
+    ),
+    totals: {
+      net: result.totals.net.amount,
+      legacyTax: result.totals.legacyTax.amount,
+      ibsCbsTax: result.totals.ibsCbsTax.amount,
+    },
+    inputDigest: result.inputDigest,
+    rulesDigest: result.rulesDigest,
+    resultDigest: result.resultDigest,
+  })
+  await tx`insert into fiscal_outbox (tenant_id, event_id, event_type, payload)
+    values (${tenantId}, ${randomUUID()}, ${fiscalCalculationLocked.type},
+      ${tx.json(payload as postgres.JSONValue)})`
 }

@@ -21,10 +21,15 @@ export const fiscalTaxSupportRowSchema = z.object({
   taxes: z.array(componentCodeSchema).min(1).max(16),
   /** A dimension that is absent is not constrained by this row. */
   dimensions: z.object({
-    classification: z.object({
-      kind: z.enum(['ncm', 'service', 'class_trib']),
-      code: z.string().min(1).max(40),
-    }),
+    /** Absent for a scenario approved for an operation whatever the item (Phases 41 to 47). */
+    classification: z
+      .object({
+        kind: z.enum(['ncm', 'service', 'class_trib']),
+        code: z.string().min(1).max(40),
+      })
+      .optional(),
+    operation: z.string().min(1).max(80).optional(),
+    purpose: z.enum(['normal', 'return', 'complementary', 'adjustment']).optional(),
     originState: stateSchema.optional(),
     destinationState: stateSchema.optional(),
     recipientTaxpayer: z.boolean().optional(),
@@ -38,7 +43,8 @@ export const fiscalTaxSupportRowSchema = z.object({
     facts: z.record(z.string().min(1).max(40), z.string().min(1).max(80)).optional(),
   }),
   evidence: z.object({
-    kind: z.enum(['oracle', 'approved-fixture']),
+    /** An approved scenario of Phases 41 to 47, recorded in its evidence rather than a fixture file. */
+    kind: z.enum(['oracle', 'approved-fixture', 'approved-scenario']),
     reference: z.string().min(1).max(300),
     digest: digestSchema,
   }),
@@ -55,6 +61,8 @@ export const FISCAL_TAX_SUPPORT_DIMENSIONS = [
   'model',
   'date',
   'tax',
+  'operation',
+  'purpose',
   'classification',
   'originState',
   'destinationState',
@@ -70,6 +78,8 @@ export const fiscalTaxSupportQuerySchema = z.object({
   model: z.enum(['55', '65', 'nfse']),
   date: dateSchema,
   tax: componentCodeSchema,
+  operation: z.string().min(1).max(80).optional(),
+  purpose: z.enum(['normal', 'return', 'complementary', 'adjustment']).optional(),
   classification: z.object({
     kind: z.enum(['ncm', 'service', 'class_trib']),
     code: z.string().min(1).max(40),

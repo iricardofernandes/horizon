@@ -533,6 +533,51 @@ async function seedTenant(buyer: string): Promise<Tenant> {
   return { tenantId, supplierId, grainId, sackId, buyer }
 }
 
+it('compares the taxes the supplier charged with the estimate its order kept (Phase 87)', async () => {
+  const tenant = await seedTenant(BUYER_A)
+  const orderLine = randomUUID()
+  const orderId = randomUUID()
+  const money = (amount: string) => ({ amount, currency: 'BRL' })
+  const resultDigest = 'c'.repeat(64)
+  await approveOrder(
+    tenant,
+    orderId,
+    [{ lineId: orderLine, itemId: tenant.grainId, quantity: '6' }],
+    {
+      components: [
+        { code: 'ICMS', amount: money('720') },
+        { code: 'PIS', amount: money('99') },
+      ],
+      chargedOnTop: money('0'),
+      inputDigest: 'a'.repeat(64),
+      rulesDigest: 'b'.repeat(64),
+      resultDigest,
+    },
+  )
+  const receiptId = randomUUID()
+  await receive(tenant, orderId, receiptId, [
+    { lineId: orderLine, itemId: tenant.grainId, quantity: '6', unitPrice: '1000' },
+  ])
+  // The test supplier's XML states no legacy tax: the difference is the whole estimate.
+  const importId = await importInvoice(tenant, 301, '6', '10.00')
+  const reconciliation = await commit(tenant, importId, [
+    { lineNumber: 1, receiptId, receiptLineId: orderLine, quantity: '6' },
+  ])
+  // The estimate never binds the supplier: the value reconciles, the taxes are shown apart.
+  expect(reconciliation.decision).toBe('matched')
+  expect(reconciliation.comparison.clean).toBe(true)
+  expect(reconciliation.comparison.taxes).toEqual({
+    compared: true,
+    orderId,
+    estimateDigest: resultDigest,
+    components: [
+      { code: 'ICMS', invoicedMinor: '0', expectedMinor: '720', differenceMinor: '-720' },
+      { code: 'PIS', invoicedMinor: '0', expectedMinor: '99', differenceMinor: '-99' },
+    ],
+    clean: false,
+  })
+})
+
 function invoice(tenant: Tenant, number: number, quantity: string, unitPrice: string) {
   return {
     supplierTaxId: SUPPLIER,
@@ -597,9 +642,11 @@ async function approveOrder(
   tenant: Tenant,
   orderId: string,
   lines: Array<{ lineId: string; itemId: string; quantity: string }>,
+  taxEstimate?: Record<string, unknown>,
 ) {
   const money = (amount: string) => ({ amount, currency: 'BRL' })
   const event = envelope(tenant.tenantId, 'procurement.order.approved', {
+    ...(taxEstimate ? { taxEstimate } : {}),
     orderId,
     orderVersion: 1,
     approvedBy: 'user:buyer',

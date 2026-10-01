@@ -43,6 +43,8 @@ const ACCOUNTS: Readonly<Record<PostingRole, LedgerAccount>> = {
   'discount-granted': account('10', 'expense'),
   'financial-expense': account('11', 'expense'),
   'bank-fees': account('12', 'expense'),
+  'sales-taxes': account('13', 'expense'),
+  'taxes-payable': account('14', 'liability'),
 }
 
 const CODES = new Map(
@@ -249,6 +251,50 @@ describe('a treasury movement', () => {
       '2 credit 1000',
       '3 debit 1000',
     ])
+  })
+})
+
+describe("a sale's locked taxes (Phase 87)", () => {
+  const lock = (components: { code: string; amount: bigint }[]): Fact => ({
+    kind: 'tax-lock',
+    id: 't1',
+    reference: 'Fiscal 018f5d4e',
+    on: '2026-10-15',
+    currency: 'BRL',
+    components,
+  })
+
+  it('deducts each tax from revenue and owes it, per component', () => {
+    const planned = valid(
+      plan(
+        lock([
+          { code: 'ICMS', amount: 6836n },
+          { code: 'PIS', amount: 514n },
+        ]),
+      ),
+    )
+    expect(readable(planned.lines)).toEqual([
+      '13 debit 6836',
+      '14 credit 6836',
+      '13 debit 514',
+      '14 credit 514',
+    ])
+    expect(planned.source).toEqual({ type: 'tax-lock', id: 't1' })
+  })
+
+  it('reverses a return, whose lock carries negative amounts', () => {
+    expect(readable(valid(plan(lock([{ code: 'ICMS', amount: -6836n }]))).lines)).toEqual([
+      '13 credit 6836',
+      '14 debit 6836',
+    ])
+  })
+
+  it('holds a tax in suspense while the workspace has not chosen its account', () => {
+    const planned = plan(
+      lock([{ code: 'ICMS', amount: 6836n }]),
+      chartOf(EVERY_ROLE.filter((role) => role !== 'taxes-payable')),
+    )
+    expect(readable(valid(planned).lines)).toEqual(['13 debit 6836', '3 credit 6836'])
   })
 })
 

@@ -23,6 +23,7 @@ import { supportedKind } from './document-kinds'
 import { documentListQuerySchema, type FiscalDocumentList } from './document-list'
 import { type FiscalDocuments, FiscalModelConflict } from './documents'
 import type { FiscalEstablishmentCredentials } from './establishment-credentials'
+import type { FiscalEstimates } from './estimates'
 import { handleInboundRoute, type InboundDependencies } from './inbound-api'
 import type { FiscalIssuance } from './issuance'
 import { handleLinkedRoute, type LinkedDependencies } from './linked-api'
@@ -51,6 +52,7 @@ export type FiscalServerDependencies = {
   dispatch?: Pick<FiscalDispatch, 'queueStatusQuery' | 'queueCancellationQuery'>
   artifacts: Pick<FiscalArtifacts, 'get' | 'getV2' | 'list' | 'listV2'>
   calculations: Pick<FiscalCalculations, 'preview' | 'get'>
+  estimates?: Pick<FiscalEstimates, 'estimate'>
   capabilities: Pick<FiscalCapabilities, 'listActive'>
   readiness: Pick<FiscalReadiness, 'validate'>
   issuance?: Pick<FiscalIssuance, 'issue'>
@@ -232,6 +234,21 @@ async function handle(
       200,
       fiscalCapabilityListV2Schema.parse({ defaultStatus: 'unsupported', supported }),
     )
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/estimates' && dependencies.estimates) {
+    // An estimate never locks and never transmits (ADR 0073); reading is enough to ask for one.
+    if (!requirePermission(principal, 'read', response)) return
+    try {
+      const body = await readJson(request)
+      response.setHeader('cache-control', 'private, no-store')
+      json(response, 200, await dependencies.estimates.estimate(principal.tenantId, body))
+    } catch (error) {
+      if (error instanceof z.ZodError || error instanceof SyntaxError)
+        problem(response, 400, 'Bad Request', 'Invalid tax estimate request')
+      else throw error
+    }
     return
   }
 
