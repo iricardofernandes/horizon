@@ -20,7 +20,7 @@ import { z } from 'zod'
 import type { Either } from '@/core/either'
 import type { UseCaseError } from '@/core/errors/use-case-error'
 import type { PartySnapshot } from '@/domain/entities/party'
-import { TAXPAYER_INDICATORS } from '@/domain/value-objects/fiscal-profile'
+import { GOODS_DESTINATIONS, TAXPAYER_INDICATORS } from '@/domain/value-objects/fiscal-profile'
 import { PARTY_KINDS, PARTY_ROLES } from '@/domain/value-objects/party-values'
 import { PartiesRuntime } from '@/main/parties-runtime'
 import { type PartiesRequest, PublicRoute, RequirePartiesAction, tenantOf } from './authorization'
@@ -67,6 +67,7 @@ const fiscalProfileInput = z.strictObject({
   municipalRegistration: z.string().trim().min(1).max(40).nullable(),
   taxpayerIndicator: z.enum(TAXPAYER_INDICATORS),
   finalConsumer: z.boolean(),
+  goodsDestination: z.enum(GOODS_DESTINATIONS).nullable().optional(),
   address: z.strictObject({
     street: z.string().trim().min(1).max(160),
     number: z.string().trim().min(1).max(160),

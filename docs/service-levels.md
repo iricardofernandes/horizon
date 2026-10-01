@@ -186,3 +186,62 @@ People reject most suggestions of one kind. That is a quality signal, not an out
   a workspace with little classified history sees mostly table candidates.
 - For `payable-category`, a change in how the workspace categorizes makes old payables vote
   for categories no longer used.
+
+## Phase O — the tax engine
+
+Delivered in [Phase 89](tax-phase89-implementation-plan.md).
+- **Rules:** `infra/observability/rules/phase-o.rules.yml`, tested with `make test-alerts`.
+- **Dashboard:** *Horizon — Phase O* in Grafana.
+
+| Service level | SLI (recording rule) | Objective | Alert |
+|---|---|---|---|
+| Preview latency | `sli:tax_previews_under_500ms:ratio_rate10m`: previews answered within half a second (`fiscal_tax_calculation_seconds{operation="preview"}`) | 95% | [TaxPreviewSlow](#taxpreviewslow) |
+| Unsupported answers | `sli:tax_unsupported:ratio_30m`, and `sli:tax_unsupported_by_dimension:increase30m` by refusal code and kind of missing dimension (`fiscal_tax_answers_total`). A label names a kind (`line`, `classification-ncm`, `tax`…), never a value | watched; no objective | [TaxUnsupportedSurge](#taxunsupportedsurge) |
+| Oracle agreement | `sli:tax_oracle_disagreements:max`: lines the engine and the official calculator answered differently, or the calculator refused, in the last recorded run, by kind (`fiscal_tax_oracle_disagreements`, `fiscal_tax_oracle_refusals`) | zero | [TaxOracleDisagrees](#taxoracledisagrees), [TaxOracleStale](#taxoraclestale) |
+| Locks replay | `sli:tax_lock_replays_failed:increase1h`: locked calculations the worker's sampler could not reproduce byte for byte (`fiscal_tax_lock_replays_total`) | zero | [TaxLockReplayFailed](#taxlockreplayfailed) |
+
+The sampler replays up to 10 random locks of the last 30 days, per served workspace, every
+10 minutes. An oracle run is recorded with
+`node scripts/tax-oracle.mjs --record-by <who>` and `DATABASE_URL`, or afterwards with
+`npm run tax:oracle-record -- --by <who> <report.json>…` in `fiscal/`.
+
+### TaxPreviewSlow
+A preview reads the workspace's rules and adopted packages, then calculates.
+1. Compare the preview's p95 with the lock's (`operation="lock"`): if both are slow,
+   Fiscal's database is the cause (`pg_stat_activity`, the connection pool).
+2. A workspace that adopted many packages reads many rules: `GET /fiscal/rules` and
+   `GET /fiscal/catalog/packages` show how many.
+
+### TaxUnsupportedSurge
+More than half of the answers are `unsupported`. It is information: the engine refuses
+what it has no evidence for (ADR 0072).
+1. `sli:tax_unsupported_by_dimension:increase30m` names the code and the kind of what is
+   missing.
+2. `classification-ncm` or `line`: items without an approved classification, or a scenario
+   no rule covers. `tax` with `UNSUPPORTED_SCENARIO`: a calculation outside the support
+   matrix.
+3. Supporting a scenario is a fixture the workspace owner approves and a package adopted
+   through a request (ADR 0074), never a configuration change.
+
+### TaxOracleDisagrees
+The engine and the official calculator answered a line differently: either a published
+package is wrong, or the calculator changed.
+1. Read the report named by the last run (`docs/drills/<date>-phase84-oracle-<kind>.json`):
+   each difference names its class and line.
+2. If the calculator's digest changed, `make tax-oracle` refuses it: review the new version
+   before trusting it.
+3. Hold the support matrix: no new adoption of the affected package until the difference
+   is explained. A locked document never changes.
+
+### TaxOracleStale
+No run was recorded in eight days. Run `make tax-oracle` with `--record-by`, or record the
+CI job's reports with `tax:oracle-record`.
+
+### TaxLockReplayFailed
+A locked calculation did not reproduce its stored result: this should never happen.
+1. `docker logs horizon-fiscal`: the sampler counts, it does not name the document.
+2. `npm run phase82:catalog -- verify-lock --tenant <id> --document <id>` on recent locks
+   names the one that fails, and its digests.
+3. Suspect the master key (`FISCAL_ARTIFACT_KEY_HEX`) after a restore or a rotation, then
+   a change to the interpreter: a lock replays from its own stored rules, never from the
+   catalogue.

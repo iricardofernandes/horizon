@@ -254,4 +254,34 @@ describe('party values', () => {
       'supplier',
     ])
   })
+
+  it('states what a contributor does with the goods, and nobody else (Phase 89)', () => {
+    const profile = (
+      taxpayerIndicator: 'contributor' | 'non-contributor',
+      goodsDestination?: 'resale' | null,
+    ) =>
+      FiscalProfile.create({
+        effectiveFrom: '2026-09-27',
+        stateRegistration: taxpayerIndicator === 'contributor' ? '110042490114' : null,
+        municipalRegistration: null,
+        taxpayerIndicator,
+        finalConsumer: false,
+        ...(goodsDestination === undefined ? {} : { goodsDestination }),
+        address: {
+          street: 'Rua A',
+          number: '1',
+          complement: null,
+          district: 'Centro',
+          city: 'São Paulo',
+          municipalityCode: '3550308',
+          state: 'SP',
+          postalCode: '01001000',
+          country: 'BR',
+        },
+      })
+    expect(valid(profile('contributor', 'resale')).details.goodsDestination).toBe('resale')
+    // A profile described before Phase 89 says nothing, and is read as unstated.
+    expect(valid(profile('contributor')).details.goodsDestination).toBeNull()
+    expect(profile('non-contributor', 'resale').isLeft()).toBe(true)
+  })
 })

@@ -22,7 +22,7 @@
     "db:migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
-    "@horizon/contracts": "0.62.0",
+    "@horizon/contracts": "0.63.0",
     "@nestjs/common": "^12.0.1",
     "@nestjs/core": "^12.0.1",
     "@nestjs/platform-express": "^12.0.1",

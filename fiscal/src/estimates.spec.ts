@@ -81,6 +81,7 @@ const party = (state: string, city: string): PartyFiscalExport => ({
 async function engine(
   fiscalRegime: IssuerFiscalExport['company']['fiscalRegime'],
   customer = party('SP', '3550308'),
+  ipiTaxpayer = false,
 ) {
   const sources = (
     await Promise.all(
@@ -119,6 +120,7 @@ async function engine(
         revision: 1,
         effectiveFrom: '2026-01-01',
         ncm: DECLARED_NCM,
+        ipiTaxpayer,
       }),
     },
     { preview: preview as never },
@@ -203,5 +205,19 @@ describe.skipIf(!hasRepository)('a tax estimate (Phase 87)', () => {
       IBS_UF: '38',
       IBS_MUN: '0',
     })
+  })
+
+  it("states a sale line's facts from the customer's profile and the item's classification (Phase 89)", async () => {
+    const reseller = party('SP', '3550308')
+    const stated = {
+      ...reseller,
+      profile: { ...reseller.profile, goodsDestination: 'resale' as const },
+    }
+    const estimate = await (await engine('lucro-real', stated, true)).estimate(tenantId, sale())
+    if (!estimate.supported) throw new Error(JSON.stringify(estimate))
+    const codes = estimate.components.map((component) => component.code)
+    // Resale to a contributor brings ICMS; an IPI taxpayer for the item brings IPI.
+    expect(codes).toEqual(expect.arrayContaining(['ICMS', 'IPI', 'PIS', 'COFINS']))
+    expect(estimate.totals.chargedOnTop.amount).not.toBe('0')
   })
 })

@@ -1,0 +1,513 @@
+{
+  "phase": 89,
+  "kind": "isolated-2027",
+  "hypothetical": "The 2027 IBS/CBS rates are the nominal rates Phase 84 stated, never published by the Senate; this run used a throwaway database.",
+  "ranAt": "2026-10-01T14:42:05.437Z",
+  "published": [
+    "phase85.goods.sp-rj-ba.2026",
+    "phase85.iss.sao-paulo.2026",
+    "phase86.pis-cofins.normal.2026",
+    "phase86.simples-mei",
+    "phase86.blend.2029-2032",
+    "rtc-v0059-2026",
+    "rtc-v0059-hypothetical-2027"
+  ],
+  "operation": "Phase 86's G4: a Lucro Real issuer's SP → SP resale of NCM 8509.40.10 to a contributor, 2 × 189,90, with cClassTrib 200030",
+  "beforeNextVersion": {
+    "2026-10-15": {
+      "withClassTrib": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6836",
+            "outcome": "levied",
+            "rate": "9/50",
+            "rule": "b813fd92-6c8d-5907-9a90-6d006ca9e854@1",
+            "source": "ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          },
+          {
+            "code": "COFINS",
+            "amount": "2367",
+            "outcome": "levied",
+            "rate": "19/250",
+            "rule": "568cc921-6aae-595c-b23b-8f383a1192f0@1",
+            "source": "lei-10833-2003: art. 2º (7,6%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          },
+          {
+            "code": "PIS",
+            "amount": "514",
+            "outcome": "levied",
+            "rate": "33/2000",
+            "rule": "963dd1f1-06df-5aff-b002-3f3d0ef23a0f@1",
+            "source": "lei-10637-2002: art. 2º (1,65%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          },
+          {
+            "code": "CBS",
+            "amount": "137",
+            "outcome": "levied",
+            "rate": "9/2500",
+            "rule": "a69bda1b-2a30-5f4c-8aeb-84f7ec0b2d4a@1",
+            "source": "calculadora-pro.db:200030:CBS:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          },
+          {
+            "code": "IBS_MUN",
+            "amount": "0",
+            "outcome": "levied",
+            "rate": "0/1",
+            "rule": "c56178fa-2f9b-5c0f-b4c0-983d79b0b830@1",
+            "source": "calculadora-pro.db:200030:IBSMun:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          },
+          {
+            "code": "IBS_UF",
+            "amount": "15",
+            "outcome": "levied",
+            "rate": "1/2500",
+            "rule": "3255c8ed-77cb-5732-b792-fc811a717a20@1",
+            "source": "calculadora-pro.db:200030:IBSUF:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          }
+        ],
+        "resultDigest": "f448234c42b86c22cb828891166a0160e7b61b3ad4db90a96d2e7b550a17b4b4"
+      },
+      "legacyOnly": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6836",
+            "outcome": "levied",
+            "rate": "9/50",
+            "rule": "b813fd92-6c8d-5907-9a90-6d006ca9e854@1",
+            "source": "ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          },
+          {
+            "code": "COFINS",
+            "amount": "2367",
+            "outcome": "levied",
+            "rate": "19/250",
+            "rule": "568cc921-6aae-595c-b23b-8f383a1192f0@1",
+            "source": "lei-10833-2003: art. 2º (7,6%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          },
+          {
+            "code": "PIS",
+            "amount": "514",
+            "outcome": "levied",
+            "rate": "33/2000",
+            "rule": "963dd1f1-06df-5aff-b002-3f3d0ef23a0f@1",
+            "source": "lei-10637-2002: art. 2º (1,65%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          }
+        ],
+        "resultDigest": "584aebe72bb4921d5cf63eff576fc897ec97cc52875171926e4002b2920f897b"
+      }
+    },
+    "2027-03-15": {
+      "withClassTrib": {
+        "supported": false,
+        "code": "MISSING_CLASSIFICATION",
+        "missingDimension": "class_trib:200030"
+      },
+      "legacyOnly": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6836",
+            "outcome": "levied",
+            "rate": "9/50",
+            "rule": "b813fd92-6c8d-5907-9a90-6d006ca9e854@1",
+            "source": "ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          }
+        ],
+        "resultDigest": "79ce888e33c5f7e935772fc1c0192fcf5d5f5dc6046d9451b1bd80131feaba8e"
+      }
+    },
+    "2029-03-15": {
+      "withClassTrib": {
+        "supported": false,
+        "code": "MISSING_CLASSIFICATION",
+        "missingDimension": "class_trib:200030"
+      },
+      "legacyOnly": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6153",
+            "outcome": "levied",
+            "rate": "81/500",
+            "rule": "e6f813da-7bde-5c03-bdc8-0f094261cf0a@1",
+            "source": "ec-132-2023: ADCT art. 128 (9/10 in 2029) of ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          }
+        ],
+        "resultDigest": "512e2ce6d501813660b63f428c06a1c6e82fd88840356d793057cdd5ea3feb7b"
+      }
+    },
+    "2033-03-15": {
+      "withClassTrib": {
+        "supported": false,
+        "code": "MISSING_CLASSIFICATION",
+        "missingDimension": "class_trib:200030"
+      },
+      "legacyOnly": {
+        "supported": false,
+        "code": "UNSUPPORTED_RULE",
+        "missingDimension": "6648178b-7c11-5ecb-acd8-af4b051a98c8"
+      }
+    }
+  },
+  "adoptions": [
+    {
+      "label": "rtc-v0059-2026",
+      "diff": {
+        "added": 285,
+        "ended": 0,
+        "changed": 0,
+        "unchanged": 0
+      },
+      "impact": {
+        "examined": 0,
+        "changed": 0,
+        "unsupported": 0,
+        "unchanged": 0
+      },
+      "decision": "approved"
+    },
+    {
+      "label": "phase85.goods.sp-rj-ba.2026",
+      "diff": {
+        "added": 12,
+        "ended": 0,
+        "changed": 0,
+        "unchanged": 0
+      },
+      "impact": {
+        "examined": 0,
+        "changed": 0,
+        "unsupported": 0,
+        "unchanged": 0
+      },
+      "decision": "approved"
+    },
+    {
+      "label": "phase85.iss.sao-paulo.2026",
+      "diff": {
+        "added": 1,
+        "ended": 0,
+        "changed": 0,
+        "unchanged": 0
+      },
+      "impact": {
+        "examined": 0,
+        "changed": 0,
+        "unsupported": 0,
+        "unchanged": 0
+      },
+      "decision": "approved"
+    },
+    {
+      "label": "phase86.pis-cofins.normal.2026",
+      "diff": {
+        "added": 4,
+        "ended": 0,
+        "changed": 0,
+        "unchanged": 0
+      },
+      "impact": {
+        "examined": 0,
+        "changed": 0,
+        "unsupported": 0,
+        "unchanged": 0
+      },
+      "decision": "approved"
+    },
+    {
+      "label": "phase86.blend.2029-2032",
+      "diff": {
+        "added": 28,
+        "ended": 0,
+        "changed": 0,
+        "unchanged": 0
+      },
+      "impact": {
+        "examined": 0,
+        "changed": 0,
+        "unsupported": 0,
+        "unchanged": 0
+      },
+      "decision": "approved"
+    },
+    {
+      "label": "rtc-v0059-hypothetical-2027",
+      "diff": {
+        "added": 234,
+        "ended": 0,
+        "changed": 0,
+        "unchanged": 0
+      },
+      "impact": {
+        "examined": 1,
+        "changed": 0,
+        "unsupported": 0,
+        "unchanged": 1
+      },
+      "decision": "approved"
+    }
+  ],
+  "afterNextVersion": {
+    "2026-10-15": {
+      "withClassTrib": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6836",
+            "outcome": "levied",
+            "rate": "9/50",
+            "rule": "b813fd92-6c8d-5907-9a90-6d006ca9e854@1",
+            "source": "ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          },
+          {
+            "code": "COFINS",
+            "amount": "2367",
+            "outcome": "levied",
+            "rate": "19/250",
+            "rule": "568cc921-6aae-595c-b23b-8f383a1192f0@1",
+            "source": "lei-10833-2003: art. 2º (7,6%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          },
+          {
+            "code": "PIS",
+            "amount": "514",
+            "outcome": "levied",
+            "rate": "33/2000",
+            "rule": "963dd1f1-06df-5aff-b002-3f3d0ef23a0f@1",
+            "source": "lei-10637-2002: art. 2º (1,65%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          },
+          {
+            "code": "CBS",
+            "amount": "137",
+            "outcome": "levied",
+            "rate": "9/2500",
+            "rule": "a69bda1b-2a30-5f4c-8aeb-84f7ec0b2d4a@1",
+            "source": "calculadora-pro.db:200030:CBS:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          },
+          {
+            "code": "IBS_MUN",
+            "amount": "0",
+            "outcome": "levied",
+            "rate": "0/1",
+            "rule": "c56178fa-2f9b-5c0f-b4c0-983d79b0b830@1",
+            "source": "calculadora-pro.db:200030:IBSMun:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          },
+          {
+            "code": "IBS_UF",
+            "amount": "15",
+            "outcome": "levied",
+            "rate": "1/2500",
+            "rule": "3255c8ed-77cb-5732-b792-fc811a717a20@1",
+            "source": "calculadora-pro.db:200030:IBSUF:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          }
+        ],
+        "resultDigest": "f448234c42b86c22cb828891166a0160e7b61b3ad4db90a96d2e7b550a17b4b4"
+      },
+      "legacyOnly": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6836",
+            "outcome": "levied",
+            "rate": "9/50",
+            "rule": "b813fd92-6c8d-5907-9a90-6d006ca9e854@1",
+            "source": "ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          },
+          {
+            "code": "COFINS",
+            "amount": "2367",
+            "outcome": "levied",
+            "rate": "19/250",
+            "rule": "568cc921-6aae-595c-b23b-8f383a1192f0@1",
+            "source": "lei-10833-2003: art. 2º (7,6%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          },
+          {
+            "code": "PIS",
+            "amount": "514",
+            "outcome": "levied",
+            "rate": "33/2000",
+            "rule": "963dd1f1-06df-5aff-b002-3f3d0ef23a0f@1",
+            "source": "lei-10637-2002: art. 2º (1,65%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          }
+        ],
+        "resultDigest": "584aebe72bb4921d5cf63eff576fc897ec97cc52875171926e4002b2920f897b"
+      }
+    },
+    "2027-03-15": {
+      "withClassTrib": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6836",
+            "outcome": "levied",
+            "rate": "9/50",
+            "rule": "b813fd92-6c8d-5907-9a90-6d006ca9e854@1",
+            "source": "ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          },
+          {
+            "code": "CBS",
+            "amount": "1337",
+            "outcome": "levied",
+            "rate": "22/625",
+            "rule": "6aad80a6-75fa-54f7-b47f-4a145704ef6f@1",
+            "source": "calculadora-pro.db:200030:CBS:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          },
+          {
+            "code": "IBS_MUN",
+            "amount": "8",
+            "outcome": "levied",
+            "rate": "1/5000",
+            "rule": "9d55e8c5-eb36-5dca-8767-31de7e571c5f@1",
+            "source": "calculadora-pro.db:200030:IBSMun:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          },
+          {
+            "code": "IBS_UF",
+            "amount": "8",
+            "outcome": "levied",
+            "rate": "1/5000",
+            "rule": "befd8025-0512-5009-82a8-25ce8fe07413@1",
+            "source": "calculadora-pro.db:200030:IBSUF:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          }
+        ],
+        "resultDigest": "2a509aa8dea83bca5a6aae4d1fa1a673c5bccf2ce820fc53954788626094f17b"
+      },
+      "legacyOnly": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6836",
+            "outcome": "levied",
+            "rate": "9/50",
+            "rule": "b813fd92-6c8d-5907-9a90-6d006ca9e854@1",
+            "source": "ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          }
+        ],
+        "resultDigest": "79ce888e33c5f7e935772fc1c0192fcf5d5f5dc6046d9451b1bd80131feaba8e"
+      }
+    },
+    "2029-03-15": {
+      "withClassTrib": {
+        "supported": false,
+        "code": "MISSING_CLASSIFICATION",
+        "missingDimension": "class_trib:200030"
+      },
+      "legacyOnly": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6153",
+            "outcome": "levied",
+            "rate": "81/500",
+            "rule": "e6f813da-7bde-5c03-bdc8-0f094261cf0a@1",
+            "source": "ec-132-2023: ADCT art. 128 (9/10 in 2029) of ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          }
+        ],
+        "resultDigest": "512e2ce6d501813660b63f428c06a1c6e82fd88840356d793057cdd5ea3feb7b"
+      }
+    },
+    "2033-03-15": {
+      "withClassTrib": {
+        "supported": false,
+        "code": "MISSING_CLASSIFICATION",
+        "missingDimension": "class_trib:200030"
+      },
+      "legacyOnly": {
+        "supported": false,
+        "code": "UNSUPPORTED_RULE",
+        "missingDimension": "6648178b-7c11-5ecb-acd8-af4b051a98c8"
+      }
+    }
+  },
+  "locks": {
+    "locked2026": {
+      "documentId": "9c4c3f38-7436-4c47-99d7-fc2d977c0d05",
+      "date": "2026-12-30",
+      "outcome": {
+        "supported": true,
+        "components": [
+          {
+            "code": "ICMS",
+            "amount": "6836",
+            "outcome": "levied",
+            "rate": "9/50",
+            "rule": "b813fd92-6c8d-5907-9a90-6d006ca9e854@1",
+            "source": "ricms-sp-art-52: art. 52 I (18%); lc-87-1996: art. 13 I, §1º I, §2º (IPI outside the base for resale)"
+          },
+          {
+            "code": "COFINS",
+            "amount": "2367",
+            "outcome": "levied",
+            "rate": "19/250",
+            "rule": "568cc921-6aae-595c-b23b-8f383a1192f0@1",
+            "source": "lei-10833-2003: art. 2º (7,6%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          },
+          {
+            "code": "PIS",
+            "amount": "514",
+            "outcome": "levied",
+            "rate": "33/2000",
+            "rule": "963dd1f1-06df-5aff-b002-3f3d0ef23a0f@1",
+            "source": "lei-10637-2002: art. 2º (1,65%); pgfn-parecer-7698-2021; dl-1598-1977: art. 12 §4º"
+          },
+          {
+            "code": "CBS",
+            "amount": "137",
+            "outcome": "levied",
+            "rate": "9/2500",
+            "rule": "a69bda1b-2a30-5f4c-8aeb-84f7ec0b2d4a@1",
+            "source": "calculadora-pro.db:200030:CBS:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          },
+          {
+            "code": "IBS_MUN",
+            "amount": "0",
+            "outcome": "levied",
+            "rate": "0/1",
+            "rule": "c56178fa-2f9b-5c0f-b4c0-983d79b0b830@1",
+            "source": "calculadora-pro.db:200030:IBSMun:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          },
+          {
+            "code": "IBS_UF",
+            "amount": "15",
+            "outcome": "levied",
+            "rate": "1/2500",
+            "rule": "3255c8ed-77cb-5732-b792-fc811a717a20@1",
+            "source": "calculadora-pro.db:200030:IBSUF:treatment 13 (Alíquota reduzida em 60%):reduction 60%"
+          }
+        ],
+        "resultDigest": "5c4fbcaf089b771a174f4ff745516b2a8ef45fc6e3be01f1dfc817c238863915"
+      }
+    },
+    "lockIn2027BeforeTheNextVersion": {
+      "documentId": "a663c1da-357b-4dc0-a120-d3e580d19b89",
+      "date": "2027-03-15",
+      "outcome": {
+        "supported": false,
+        "code": "MISSING_CLASSIFICATION",
+        "missingDimension": "class_trib:200030"
+      }
+    },
+    "lockIn2027AfterIt": {
+      "documentId": "7950bfc2-e97f-4374-bfdd-ee834e809b36",
+      "date": "2027-03-15",
+      "outcome": {
+        "supported": false,
+        "code": "UNSUPPORTED_SCENARIO",
+        "missingDimension": "destinationState:ICMS"
+      }
+    },
+    "replay2026AfterTheNextVersion": {
+      "reproduced": true,
+      "resultDigest": "5c4fbcaf089b771a174f4ff745516b2a8ef45fc6e3be01f1dfc817c238863915"
+    }
+  }
+}

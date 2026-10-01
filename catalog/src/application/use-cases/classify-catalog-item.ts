@@ -19,6 +19,8 @@ export class ClassifyCatalogItemUseCase {
       itemId: string
       effectiveFrom: string
       ncm: string | null
+      /** Absent keeps what the item's classification said (Phase 89). */
+      ipiTaxpayer?: boolean | undefined
     },
   ): Promise<
     Either<InvalidInputError | ConflictError | ResourceNotFoundError, { revision: number }>
@@ -31,8 +33,13 @@ export class ClassifyCatalogItemUseCase {
     return this.unitOfWork.inTenant(request.tenantId, async (scope) => {
       const item = await scope.items.findById(request.itemId)
       if (!item) return left(new ResourceNotFoundError('catalog item'))
-      const before = item.ncmCode()
-      const result = item.classify(ncm.value, date.value.value, this.clock.now())
+      const before = { ncm: item.ncmCode(), ipiTaxpayer: item.ipiTaxpayer }
+      const result = item.classify(
+        ncm.value,
+        date.value.value,
+        this.clock.now(),
+        request.ipiTaxpayer ?? item.ipiTaxpayer,
+      )
       if (result.isLeft()) return left(result.value)
       await scope.items.save(item)
       await scope.audit.append({
@@ -40,9 +47,10 @@ export class ClassifyCatalogItemUseCase {
         action: 'catalog.item.classification-changed',
         subjectType: 'CatalogItem',
         subjectId: request.itemId,
-        before: { ncm: before },
+        before,
         after: {
           ncm: ncm.value?.value ?? null,
+          ipiTaxpayer: item.ipiTaxpayer,
           revision: result.value,
           effectiveFrom: date.value.value,
         },

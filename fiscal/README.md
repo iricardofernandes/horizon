@@ -339,6 +339,28 @@ npm run tax:scenarios -- approve-adoption --phase 86 --tenant <id> --approved-by
 Both need `DATABASE_URL` and `FISCAL_ARTIFACT_KEY_HEX`, which the impact uses to open the
 sealed inputs. See the [Phase 88 evidence](../docs/tax-phase88-evidence.md).
 
+### Facts, service levels and closing Phase O (Phase 89)
+
+- **A Sales line's facts** come from the revisions readiness binds:
+  - the customer's fiscal profile states `goodsDestination` (a contributor that resells
+    gives `destinationUse = resale`);
+  - the item's classification states `ipiTaxpayer`.
+
+  Nothing unstated is assumed.
+- **Service levels** (`infra/observability/rules/phase-o.rules.yml`):
+  - preview latency;
+  - unsupported answers by kind;
+  - the oracle's last recorded run;
+  - locks that fail to replay, from the worker's sampler.
+
+  Record an oracle run with `npm run tax:oracle-record -- --by <who> <report.json>…`.
+- **End to end:**
+  - `make phase-o-golden-path` and `make phase-o-drill` run on the stack;
+  - `make phase-o-2027` proves each date's regime in a throwaway database.
+
+See the [Phase 89 evidence](../docs/tax-phase89-evidence.md) and the
+[threat model](../docs/phase-o-threat-model.md).
+
 ## Audit log (Phase 68)
 
 `GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered

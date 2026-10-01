@@ -1,0 +1,73 @@
+# Service levels of Phase O (Phase 89): the tax engine. Recording rules name each SLI once;
+# alerts read them. Objectives and runbooks: docs/service-levels.md. Thresholds are local
+# defaults. Tested by `promtool test rules infra/observability/rules/phase-o.rules.test.yml`.
+groups:
+  - name: phase-o-recording
+    rules:
+      # Previews answered within half a second. The exporter writes bounds as floats.
+      - record: sli:tax_previews_under_500ms:ratio_rate10m
+        expr: |
+          sum(rate(fiscal_tax_calculation_seconds_bucket{operation="preview",le="0.5"}[10m]))
+            / sum(rate(fiscal_tax_calculation_seconds_count{operation="preview"}[10m]))
+
+      # Answers over 30 minutes, and the unsupported share by code and kind of missing
+      # dimension: what the engine is most often asked and cannot answer.
+      - record: sli:tax_answers:increase30m
+        expr: sum(increase(fiscal_tax_answers_total[30m]))
+      - record: sli:tax_unsupported:ratio_30m
+        expr: |
+          (sum(increase(fiscal_tax_answers_total{outcome="unsupported"}[30m])) or vector(0))
+            / sum(increase(fiscal_tax_answers_total[30m]))
+      - record: sli:tax_unsupported_by_dimension:increase30m
+        expr: |
+          sum by (code, dimension) (increase(fiscal_tax_answers_total{outcome="unsupported"}[30m]))
+
+      # The official calculator's last recorded run, by kind (2026, hypothetical-2027).
+      - record: sli:tax_oracle_disagreements:max
+        expr: max by (kind) (fiscal_tax_oracle_disagreements + fiscal_tax_oracle_refusals)
+      - record: sli:tax_oracle_age_seconds:min
+        expr: min(fiscal_tax_oracle_age_seconds)
+
+      # Locked calculations the sampler could not reproduce byte for byte; none is 0.
+      - record: sli:tax_lock_replays_failed:increase1h
+        expr: sum(increase(fiscal_tax_lock_replays_total{outcome="failed"}[1h])) or vector(0)
+
+  - name: phase-o-alerts
+    rules:
+      - alert: TaxPreviewSlow
+        expr: sli:tax_previews_under_500ms:ratio_rate10m < 0.95
+        for: 10m
+        labels: { severity: warning, slo: tax-previews }
+        annotations:
+          summary: 'Fewer than 95% of tax previews answered within half a second'
+          runbook: docs/service-levels.md#taxpreviewslow
+
+      - alert: TaxUnsupportedSurge
+        expr: sli:tax_unsupported:ratio_30m > 0.5 and sli:tax_answers:increase30m >= 20
+        for: 30m
+        labels: { severity: info, slo: tax-support }
+        annotations:
+          summary: 'More than half of tax calculations answered unsupported over 30 minutes'
+          runbook: docs/service-levels.md#taxunsupportedsurge
+
+      - alert: TaxOracleDisagrees
+        expr: sli:tax_oracle_disagreements:max > 0
+        labels: { severity: critical, slo: tax-oracle }
+        annotations:
+          summary: 'The engine and the official calculator disagree in the last recorded run'
+          runbook: docs/service-levels.md#taxoracledisagrees
+
+      - alert: TaxOracleStale
+        expr: sli:tax_oracle_age_seconds:min > 8 * 86400
+        for: 1h
+        labels: { severity: info, slo: tax-oracle }
+        annotations:
+          summary: 'No run of the official calculator was recorded in eight days'
+          runbook: docs/service-levels.md#taxoraclestale
+
+      - alert: TaxLockReplayFailed
+        expr: sli:tax_lock_replays_failed:increase1h > 0
+        labels: { severity: critical, slo: tax-lock-replay }
+        annotations:
+          summary: 'A locked tax calculation did not replay byte for byte'
+          runbook: docs/service-levels.md#taxlockreplayfailed

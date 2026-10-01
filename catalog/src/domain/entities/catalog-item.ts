@@ -21,6 +21,8 @@ interface ItemProps {
   ncm: NcmCode | null
   classificationRevision: number
   classificationEffectiveFrom: string | null
+  /** The workspace is an IPI taxpayer for this item, from its classification's date (Phase 89). */
+  ipiTaxpayer: boolean
   /**
    * The family this item is one combination of, and its answers.
    *
@@ -43,6 +45,7 @@ export interface CatalogItemSnapshot {
   readonly ncm: string | null
   readonly classificationRevision: number
   readonly classificationEffectiveFrom: string | null
+  readonly ipiTaxpayer: boolean
   readonly variant: {
     familyId: string
     combination: string
@@ -63,10 +66,12 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
       | 'variant'
       | 'classificationRevision'
       | 'classificationEffectiveFrom'
+      | 'ipiTaxpayer'
     > & {
       variant?: ItemProps['variant']
       classificationRevision?: number
       classificationEffectiveFrom?: string | null
+      ipiTaxpayer?: boolean
       active?: boolean
       createdAt?: Date
       updatedAt?: Date
@@ -80,6 +85,7 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
         variant: props.variant ?? null,
         classificationRevision: props.classificationRevision ?? 0,
         classificationEffectiveFrom: props.classificationEffectiveFrom ?? null,
+        ipiTaxpayer: props.ipiTaxpayer ?? false,
         active: props.active ?? true,
         createdAt: now,
         updatedAt: props.updatedAt ?? now,
@@ -96,6 +102,7 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
       | 'variant'
       | 'classificationRevision'
       | 'classificationEffectiveFrom'
+      | 'ipiTaxpayer'
     > & { now: Date },
   ): CatalogItem {
     const item = CatalogItem.create({ ...props, createdAt: props.now, updatedAt: props.now })
@@ -118,13 +125,19 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
     return right(undefined)
   }
 
-  classify(ncm: NcmCode | null, effectiveFrom: string, now: Date): Either<ConflictError, number> {
+  classify(
+    ncm: NcmCode | null,
+    effectiveFrom: string,
+    now: Date,
+    ipiTaxpayer: boolean = this.props.ipiTaxpayer,
+  ): Either<ConflictError, number> {
     if (!this.props.active)
       return left(new ConflictError('an inactive item cannot be reclassified'))
     const previous = this.props.classificationEffectiveFrom
     if (previous !== null && effectiveFrom < previous)
       return left(new ConflictError('classification cannot predate the current version'))
     this.props.ncm = ncm
+    this.props.ipiTaxpayer = ipiTaxpayer
     this.props.classificationRevision += 1
     this.props.classificationEffectiveFrom = effectiveFrom
     this.props.updatedAt = now
@@ -133,12 +146,17 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
         revision: this.props.classificationRevision,
         effectiveFrom,
         ncm: ncm?.value ?? null,
+        ipiTaxpayer,
       }),
     )
     return right(this.props.classificationRevision)
   }
   isActive(): boolean {
     return this.props.active
+  }
+
+  get ipiTaxpayer(): boolean {
+    return this.props.ipiTaxpayer
   }
 
   ncmCode(): string | null {
@@ -210,6 +228,7 @@ export class CatalogItem extends AggregateRoot<ItemProps> {
       ncm: this.props.ncm?.value ?? null,
       classificationRevision: this.props.classificationRevision,
       classificationEffectiveFrom: this.props.classificationEffectiveFrom,
+      ipiTaxpayer: this.props.ipiTaxpayer,
       variant: variant
         ? {
             familyId: variant.familyId,

@@ -312,9 +312,30 @@ export function deriveCalculationInput(input: {
         discount: { amount: '0', currency: 'BRL' },
         charges: { amount: '0', currency: 'BRL' },
         classifications: { ncm: classification.ncm },
-        taxFacts: {},
+        taxFacts: lineFacts(input.recipient, classification),
       }
     }),
+  }
+}
+
+/**
+ * The facts a line states (Phase 89), from the revisions readiness binds: what a
+ * contributor customer said it does with the goods, and whether the workspace is an IPI
+ * taxpayer for the item. Nothing unstated is assumed.
+ */
+export function lineFacts(
+  recipient: {
+    profile: { taxpayerIndicator: string; goodsDestination?: string | null | undefined }
+  },
+  classification: { ipiTaxpayer: boolean },
+): Record<string, string> {
+  const destination =
+    recipient.profile.taxpayerIndicator === 'contributor'
+      ? (recipient.profile.goodsDestination ?? null)
+      : null
+  return {
+    ...(destination ? { destinationUse: destination } : {}),
+    ...(classification.ipiTaxpayer ? { ipiTaxpayer: 'true' } : {}),
   }
 }
 

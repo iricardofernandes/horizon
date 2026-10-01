@@ -43,6 +43,11 @@ export const catalogItemClassificationChanged = defineEvent({
       .string()
       .regex(/^\d{8}$/)
       .nullable(),
+    /**
+     * The workspace is an IPI taxpayer for the item from this revision (Phase 89). Absent in
+     * revisions published before it, and read as false.
+     */
+    ipiTaxpayer: z.boolean().optional(),
   }),
 })
 

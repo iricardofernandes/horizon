@@ -16,6 +16,7 @@ import { jurisdictionOfAddress } from './nfe55/jurisdiction'
 import { PHASE41_SCENARIO_ID } from './phase41-approved-scenario'
 import type { FiscalProjections } from './projections'
 import { deriveCalculationInput } from './readiness'
+import { measured } from './tax-metrics'
 import { scenarioSupport } from './tax-support'
 import { SUPPORT_MATRIX } from './tax-support-api'
 
@@ -36,7 +37,12 @@ export class FiscalEstimates {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async estimate(tenantId: string, candidate: unknown): Promise<FiscalTaxEstimate> {
+  /** Timed and counted with the other calculations (Phase 89). */
+  estimate(tenantId: string, candidate: unknown): Promise<FiscalTaxEstimate> {
+    return measured('estimate', () => this.estimateOnce(tenantId, candidate))
+  }
+
+  private async estimateOnce(tenantId: string, candidate: unknown): Promise<FiscalTaxEstimate> {
     const request = fiscalTaxEstimateRequestSchema.parse(candidate)
     const estimatedAt = this.now().toISOString()
     const refused = (code: string, detail: string, missingDimension?: string): FiscalTaxEstimate =>
@@ -112,7 +118,8 @@ export class FiscalEstimates {
             ...line.classifications,
             ...(draft?.classTrib ? { classTrib: draft.classTrib } : {}),
           },
-          taxFacts: draft?.facts ?? {},
+          // What the draft states adds to what the parties and items state (Phase 89).
+          taxFacts: { ...line.taxFacts, ...(draft?.facts ?? {}) },
         }
       }),
     })

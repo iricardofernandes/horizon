@@ -40,7 +40,7 @@ export class FiscalOutboxRelay {
       }
       // An audited replay republishes a delivered event under its own id (Phase 48).
       const replays = await tx`select replay.id, outbox.event_id, outbox.event_type,
-          outbox.payload
+          outbox.payload, outbox.created_at
         from fiscal_outbox_replays replay
         join fiscal_outbox outbox on outbox.tenant_id = replay.tenant_id
           and outbox.event_id = replay.event_id
@@ -88,7 +88,7 @@ async function publish(
     eventId: String(row.event_id),
     eventType: String(row.event_type),
     eventVersion: 1,
-    occurredAt: z.iso.datetime().parse((payload as { observedAt: string }).observedAt),
+    occurredAt: occurredAt(payload, row.created_at),
     tenantId,
     traceId: createHash('sha256').update(String(row.event_id)).digest('hex').slice(0, 32),
     payload,
@@ -100,4 +100,15 @@ async function publish(
     headers: { 'x-trace-id': envelope.traceId },
   })
   await channel.waitForConfirms()
+}
+
+/**
+ * When the fact happened: an authority observation says so itself; any other event, such as
+ * `fiscal.calculation.locked` (Phase 87), happened when it was committed. Without this, one
+ * event lacking `observedAt` stopped every later event of its workspace (fixed in Phase 89).
+ */
+export function occurredAt(payload: unknown, createdAt: unknown): string {
+  const observed = (payload as { observedAt?: unknown }).observedAt
+  if (typeof observed === 'string') return z.iso.datetime().parse(observed)
+  return new Date(createdAt as string | Date).toISOString()
 }

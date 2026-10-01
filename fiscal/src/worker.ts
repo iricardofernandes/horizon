@@ -40,6 +40,7 @@ import { FiscalRuleChanges } from './rule-changes'
 import { FiscalRuleStore } from './rule-store'
 import { FiscalServiceTokens } from './service-tokens'
 import { FiscalSupport } from './support'
+import { startLockReplaySampler, startOracleGauges } from './tax-metrics'
 import { stopTelemetry } from './telemetry'
 
 const optionalSetting = (schema: z.ZodString) =>
@@ -299,6 +300,13 @@ const server = createFiscalServer({
   audit: auditLog,
   governance: { changes: ruleChanges, delegations: new FiscalDelegations(ruleChanges.sql) },
 })
+// Phase O's service levels (Phase 89): locks still replay, and the oracle still agrees.
+const stopReplaySampler = startLockReplaySampler({
+  tenantIds: Object.keys(keys),
+  recent: (tenantId, limit) => calculations.recentLocks(tenantId, limit),
+  replay: (tenantId, documentId) => calculations.replay(tenantId, documentId),
+})
+const stopOracleGauges = startOracleGauges(ruleChanges.sql)
 const fixedSimulatorScenario = config.FISCAL_SIMULATOR_SCENARIO
 const simulator = new DeterministicNfe55Simulator(
   fixedSimulatorScenario ? () => fixedSimulatorScenario : undefined,
@@ -355,6 +363,8 @@ const consumer = new FiscalConsumer(
 async function stop(): Promise<void> {
   clearInterval(issueWorkerTimer)
   stopSupportGauges()
+  stopReplaySampler()
+  stopOracleGauges()
   await new Promise<void>((resolve) => server.close(() => resolve()))
   await consumer.close()
   await Promise.all([
@@ -408,6 +418,8 @@ void consumer
       errorType: error instanceof Error ? error.name : 'UnknownError',
     })
     stopSupportGauges()
+    stopReplaySampler()
+    stopOracleGauges()
     await Promise.allSettled([
       ingress.close(),
       projections.close(),

@@ -50,6 +50,7 @@ export class CatalogItemClassificationChangedEvent extends CatalogEvent {
       revision: number
       effectiveFrom: string
       ncm: string | null
+      ipiTaxpayer: boolean
     },
   ) {
     super(id, tenantId, occurredAt)

@@ -16,6 +16,7 @@ import {
 } from './legacy-scenarios'
 import { blendPackage, pisCofinsNormalPackage, simplesMeiPackage } from './regime-packages'
 import { regimeScenarios } from './regime-scenarios'
+import { reviewedPackages } from './reviewed-packages'
 import { changeSummary, withRuleChanges } from './rule-change-cli'
 import { deterministicUuid } from './rule-rows'
 import { FiscalRuleStore } from './rule-store'
@@ -32,10 +33,6 @@ import { buildSupportMatrix, supportEvidence } from './tax-support'
  */
 
 const REPOSITORY = resolve(__dirname, '..', '..')
-const MANIFESTS = ['82', '85', '86'].map((phase) =>
-  join(REPOSITORY, `docs/tax-phase${phase}-source-manifest.json`),
-)
-const LAW_STORE = join(REPOSITORY, '.artifacts/fiscal/law')
 const MATRIX = join(REPOSITORY, 'fiscal/support-matrix.json')
 
 const option = (name: string): string | undefined => {
@@ -58,63 +55,10 @@ const env = (name: string): string => {
   return found
 }
 
-/** NCM → the TIPI's ad valorem rate as it is written, read from the pinned spreadsheet. */
-export function readTipi(path: string): Map<string, string> {
-  const member = (name: string) =>
-    execFileSync('unzip', ['-p', path, name], { maxBuffer: 64 * 1024 * 1024 }).toString('utf8')
-  const decodeXml = (text: string) =>
-    text
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&apos;/g, "'")
-      .replace(/&amp;/g, '&')
-  const shared = [...member('xl/sharedStrings.xml').matchAll(/<si>([\s\S]*?)<\/si>/g)].map(
-    (match) =>
-      decodeXml(
-        [...(match[1] ?? '').matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => t[1]).join(''),
-      ),
-  )
-  const rates = new Map<string, string>()
-  for (const row of member('xl/worksheets/sheet1.xml').matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
-    const cells = new Map<string, string>()
-    for (const cell of (row[1] ?? '').matchAll(
-      /<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>(?:<v>([\s\S]*?)<\/v>)?[\s\S]*?<\/c>)/g,
-    )) {
-      const value = cell[3]
-      if (value === undefined) continue
-      cells.set(cell[1] ?? '', /t="s"/.test(cell[2] ?? '') ? (shared[Number(value)] ?? '') : value)
-    }
-    const ncm = (cells.get('A') ?? '').replace(/\./g, '').trim()
-    // The plain row of an 8-digit code; an "Ex" row is a narrower product with its own rate.
-    if (/^\d{8}$/.test(ncm) && !cells.get('B')) rates.set(ncm, (cells.get('D') ?? '').trim())
-  }
-  return rates
-}
-
 /** Every package a phase's fixtures are calculated with, and the ones the phase publishes. */
 async function packageSet() {
-  const manifest: SourceManifest = {
-    sources: (
-      await Promise.all(
-        MANIFESTS.map(
-          async (path) => (JSON.parse(await readFile(path, 'utf8')) as SourceManifest).sources,
-        ),
-      )
-    ).flat(),
-  }
-  const tipi = manifest.sources.find((source) => source.id === 'tipi-2022')
-  if (!tipi) throw new Error('the manifest pins no TIPI')
-  const tipiPath = join(LAW_STORE, tipi.sha256)
-  if (!existsSync(tipiPath))
-    throw new Error(`${tipiPath} is missing: the pinned TIPI is not stored`)
-  const phase85 = [goodsPackage(manifest, readTipi(tipiPath), [DECLARED_NCM]), issPackage(manifest)]
+  const { phase85, phase86 } = await reviewedPackages(REPOSITORY)
   if (PHASE === '85') return { all: phase85, own: phase85 }
-  const phase86 = [
-    pisCofinsNormalPackage(manifest),
-    simplesMeiPackage(manifest),
-    blendPackage(manifest),
-  ]
   return { all: [...phase85, ...phase86], own: phase86 }
 }
 

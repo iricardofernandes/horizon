@@ -5,6 +5,13 @@ import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
 export const TAXPAYER_INDICATORS = ['contributor', 'exempt', 'non-contributor'] as const
 export type TaxpayerIndicator = (typeof TAXPAYER_INDICATORS)[number]
 
+/**
+ * What a contributor customer does with the goods it buys (Phase 89): resold, or used and
+ * consumed. The tax rules read it as the line's `destinationUse`; nobody infers it.
+ */
+export const GOODS_DESTINATIONS = ['resale', 'consumption'] as const
+export type GoodsDestination = (typeof GOODS_DESTINATIONS)[number]
+
 export interface FiscalAddress {
   readonly street: string
   readonly number: string
@@ -23,11 +30,15 @@ export interface FiscalProfileData {
   readonly municipalRegistration: string | null
   readonly taxpayerIndicator: TaxpayerIndicator
   readonly finalConsumer: boolean
+  /** Stated only for a contributor; null when nobody stated it. */
+  readonly goodsDestination: GoodsDestination | null
   readonly address: FiscalAddress
 }
 
-export type FiscalProfileInput = Omit<FiscalProfileData, 'address'> & {
+export type FiscalProfileInput = Omit<FiscalProfileData, 'address' | 'goodsDestination'> & {
   readonly address: FiscalAddress
+  /** Absent in profiles described before Phase 89. */
+  readonly goodsDestination?: GoodsDestination | null | undefined
 }
 
 /** Optional until an operator verifies a recipient's fiscal details. Never inferred from free text. */
@@ -47,6 +58,7 @@ export class FiscalProfile extends ValueObject<FiscalProfileData> {
         municipalRegistration: input.municipalRegistration?.trim() ?? null,
         taxpayerIndicator: input.taxpayerIndicator,
         finalConsumer: input.finalConsumer,
+        goodsDestination: input.goodsDestination ?? null,
         address: {
           street: address.street.trim(),
           number: address.number.trim(),
@@ -78,6 +90,14 @@ function validateFields(input: FiscalProfileInput): InvalidInputError | null {
     return new InvalidInputError('/taxpayerIndicator', 'is not a known indicator')
   if (typeof input.finalConsumer !== 'boolean')
     return new InvalidInputError('/finalConsumer', 'must be a boolean')
+  const destination = input.goodsDestination ?? null
+  if (destination !== null && !GOODS_DESTINATIONS.includes(destination))
+    return new InvalidInputError('/goodsDestination', 'is not a known destination')
+  if (destination !== null && input.taxpayerIndicator !== 'contributor')
+    return new InvalidInputError(
+      '/goodsDestination',
+      'is stated only by an ICMS contributor, who may resell what it buys',
+    )
   for (const [field, value] of [
     ['stateRegistration', input.stateRegistration],
     ['municipalRegistration', input.municipalRegistration],

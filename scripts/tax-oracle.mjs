@@ -2,6 +2,7 @@
 // Phase 84 (ADR 0072): the official IBS/CBS calculator as the oracle of the tax package.
 //
 //   node scripts/tax-oracle.mjs [--download] [--cases 3000] [--seed 84] [--out-dir docs/drills]
+//     [--record-by <who>]   with DATABASE_URL, records each report in Fiscal (Phase 89)
 //
 // 1. The calculator pinned in Phase 82's source manifest, downloaded with --download when it is
 //    not cached, and refused when its digest is not the pinned one: the oracle changed, so re-run
@@ -141,6 +142,7 @@ const day = new Date().toISOString().slice(0, 10)
 await mkdir(packages, { recursive: true })
 await mkdir(outDir, { recursive: true })
 let failed = false
+const reports = []
 for (const year of ['2026', 'hypothetical-2027']) {
   const pack = join(packages, `rtc-v0059-ibs-cbs-${year}.json`)
   oracle([
@@ -157,6 +159,15 @@ for (const year of ['2026', 'hypothetical-2027']) {
     { cwd: join(root, 'fiscal'), stdio: 'inherit' },
   )
   if (result.status !== 0) failed = true
+  reports.push(join(outDir, `${day}-phase84-oracle-${year}.json`))
+}
+// Phase 89: the run becomes a service level, whether it agreed or not.
+const recordBy = option('record-by', null)
+if (recordBy) {
+  if (!process.env.DATABASE_URL) throw new Error('--record-by needs DATABASE_URL')
+  run('npm', ['run', '-s', 'tax:oracle-record', '--', '--by', recordBy, ...reports.filter((path) => existsSync(path))], {
+    cwd: join(root, 'fiscal'),
+  })
 }
 if (failed) {
   console.error('The engine and the official calculator disagree: see the reports.')

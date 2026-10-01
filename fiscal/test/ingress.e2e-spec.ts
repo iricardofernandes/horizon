@@ -581,6 +581,32 @@ it('keeps issuer and catalog notices versioned and tenant scoped', async () => {
     where tenant_id = ${tenantId} and item_id = ${itemId}`
   expect(profile?.value).toBe(1)
   expect(catalog?.value).toBe(1)
+  // Published before Phase 89, the revision says nothing about IPI, and reads as false.
+  expect(
+    (await projections.resolveClassification(tenantId, itemId, '2026-09-15'))?.ipiTaxpayer,
+  ).toBe(false)
+  const manufactured = {
+    ...classification,
+    eventId: randomUUID(),
+    payload: {
+      ...classification.payload,
+      revision: 2,
+      effectiveFrom: '2026-10-01',
+      ipiTaxpayer: true,
+    },
+  }
+  expect(await ingress.accept(manufactured)).toBe('applied')
+  await expect(
+    ingress.accept({
+      ...manufactured,
+      eventId: randomUUID(),
+      payload: { ...manufactured.payload, ipiTaxpayer: false },
+    }),
+  ).rejects.toThrow('Conflicting catalog classification')
+  expect(await projections.resolveClassification(tenantId, itemId, '2026-10-02')).toMatchObject({
+    revision: 2,
+    ipiTaxpayer: true,
+  })
 })
 
 function origin(tenantId: string, originId: string, purpose: 'original' | 'return' = 'original') {

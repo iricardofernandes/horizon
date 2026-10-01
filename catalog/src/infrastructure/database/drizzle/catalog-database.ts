@@ -154,6 +154,7 @@ export class CatalogDatabase extends UnitOfWork implements TenantSql {
             revision: row.revision,
             effectiveFrom: row.effectiveFrom,
             ncm: row.ncm,
+            ipiTaxpayer: row.ipiTaxpayer,
           }
         : null
     })
@@ -236,6 +237,7 @@ function mapItem(
       ncm: row.ncm === null ? null : restored(NcmCode.create(row.ncm)),
       classificationRevision: row.classificationRevision,
       classificationEffectiveFrom: row.classificationEffectiveFrom,
+      ipiTaxpayer: row.ipiTaxpayer,
       variant: variant
         ? {
             familyId: variant.familyId,
@@ -578,6 +580,7 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
           revision: row.classificationRevision,
           effectiveFrom: row.classificationEffectiveFrom,
           ncm: row.ncm,
+          ipiTaxpayer: row.ipiTaxpayer,
           recordedAt: row.updatedAt,
         })
       }
@@ -589,6 +592,7 @@ function makeScope(tx: Transaction, tenantId: string): TenantScope {
           ncm: row.ncm,
           classificationRevision: row.classificationRevision,
           classificationEffectiveFrom: row.classificationEffectiveFrom,
+          ipiTaxpayer: row.ipiTaxpayer,
           active: row.active ? 1 : 0,
           updatedAt: row.updatedAt,
         })

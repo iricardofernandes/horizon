@@ -2957,7 +2957,7 @@ Phase 41's single approved scenario into the roadmap's engine:
 | 86 | Regimes and the blend — **delivered 2026-10-01** ([evidence](tax-phase86-evidence.md)) |
 | 87 | Taxes where money is decided — **delivered 2026-10-01** ([evidence](tax-phase87-evidence.md)) |
 | 88 | Governing the rules — **delivered 2026-10-01** ([evidence](tax-phase88-evidence.md)) |
-| 89 | Threat model, service levels, the golden path, closing Phase O |
+| 89 | Threat model, service levels, the golden path, closing Phase O — **delivered 2026-10-01; Phase O is closed** ([evidence](tax-phase89-evidence.md)) |
 
 ---
 

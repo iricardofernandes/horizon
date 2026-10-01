@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   bigint,
+  boolean,
   date,
   foreignKey,
   index,
@@ -55,6 +56,7 @@ export const catalogItems = pgTable(
     ncm: text('ncm'),
     classificationRevision: integer('classification_revision').notNull().default(0),
     classificationEffectiveFrom: date('classification_effective_from'),
+    ipiTaxpayer: boolean('ipi_taxpayer').notNull().default(false),
     active: integer('active').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
@@ -81,6 +83,7 @@ export const itemClassifications = pgTable(
     revision: integer('revision').notNull(),
     effectiveFrom: date('effective_from').notNull(),
     ncm: text('ncm'),
+    ipiTaxpayer: boolean('ipi_taxpayer').notNull().default(false),
     recordedAt: timestamp('recorded_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (table) => [

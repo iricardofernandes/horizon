@@ -217,17 +217,23 @@ async function recordClassification(
   tenantId: string,
   payload: ReturnType<typeof catalogItemClassificationChanged.payload.parse>,
 ): Promise<void> {
+  const ipiTaxpayer = payload.ipiTaxpayer ?? false
   const inserted = await tx`
-    insert into catalog_classifications (tenant_id, item_id, revision, effective_from, ncm)
-    values (${tenantId}, ${payload.itemId}, ${payload.revision}, ${payload.effectiveFrom}, ${payload.ncm})
+    insert into catalog_classifications (
+      tenant_id, item_id, revision, effective_from, ncm, ipi_taxpayer
+    ) values (
+      ${tenantId}, ${payload.itemId}, ${payload.revision}, ${payload.effectiveFrom},
+      ${payload.ncm}, ${ipiTaxpayer}
+    )
     on conflict on constraint catalog_classifications_key do nothing returning revision`
   if (inserted.length > 0) return
   const [existing] = await tx`
-    select effective_from, ncm from catalog_classifications where tenant_id = ${tenantId}
-      and item_id = ${payload.itemId} and revision = ${payload.revision}`
+    select effective_from, ncm, ipi_taxpayer from catalog_classifications
+    where tenant_id = ${tenantId} and item_id = ${payload.itemId} and revision = ${payload.revision}`
   if (
     calendarDate(existing?.effective_from) !== payload.effectiveFrom ||
-    existing?.ncm !== payload.ncm
+    existing?.ncm !== payload.ncm ||
+    existing?.ipi_taxpayer !== ipiTaxpayer
   )
     throw new Error('Conflicting catalog classification for an existing revision')
 }

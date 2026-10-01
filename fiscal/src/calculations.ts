@@ -15,6 +15,7 @@ import { calculateFiscal } from './calculation'
 import { openCalculationInput, sealCalculationInput } from './calculation-crypto'
 import { canonicalDigest, canonicalJson } from './canonical-json'
 import type { FiscalRuleStore } from './rule-store'
+import { measured } from './tax-metrics'
 import { scenarioSupport } from './tax-support'
 import { SUPPORT_MATRIX } from './tax-support-api'
 
@@ -39,7 +40,33 @@ export class FiscalCalculations {
     await this.#db.end()
   }
 
-  async preview(candidate: unknown): Promise<FiscalCalculationOutcome> {
+  /** A calculation never locked, timed and counted (Phase 89). */
+  preview(candidate: unknown): Promise<FiscalCalculationOutcome> {
+    return measured('preview', () => this.calculate(candidate))
+  }
+
+  /** Locks a document's calculation, timed and counted (Phase 89). */
+  validateDocument(
+    input: Parameters<FiscalCalculations['lockDocument']>[0],
+  ): Promise<FiscalCalculationOutcome> {
+    return measured('lock', () => this.lockDocument(input))
+  }
+
+  /** The documents a workspace locked in the last 30 days, a random few, for the replay sampler. */
+  async recentLocks(tenantId: string, limit: number): Promise<string[]> {
+    const rows = await this.#db.begin(async (tx) => {
+      await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+      return tx`select binding.document_id from fiscal_document_calculation_bindings binding
+        join fiscal_calculations calculation on calculation.tenant_id = binding.tenant_id
+          and calculation.id = binding.calculation_id
+        where binding.tenant_id = ${tenantId}
+          and calculation.created_at > now() - interval '30 days'
+        order by random() limit ${limit}`
+    })
+    return rows.map((row) => String(row.document_id))
+  }
+
+  private async calculate(candidate: unknown): Promise<FiscalCalculationOutcome> {
     const parsed = fiscalCalculationInputSchema.safeParse(candidate)
     if (!parsed.success)
       return {
@@ -71,7 +98,7 @@ export class FiscalCalculations {
     return calculateFiscal(parsed.data, resolution.rules)
   }
 
-  async validateDocument(input: {
+  async lockDocument(input: {
     tenantId: string
     documentId: string
     actorId: string

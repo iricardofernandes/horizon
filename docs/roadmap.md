@@ -15,6 +15,20 @@ tenant (ADR 0067). Both entries' statements are its acceptance tests, proven by 
 [Phase N golden path](drills/2026-09-29-phase-n-golden-path-ai-on.json) and
 [drill](drills/2026-09-29-phase-n-drill-ai-on.json).
 
+**Built, and moved out:** the versioned multi-regime tax rules engine, in
+[Phase O](tax-engine-plan.md) (Phases 82–89).
+- Tax law is a shared catalogue of immutable packages that workspaces adopt through a
+  request another person approves (ADRs 0070 and 0074).
+- Formulas are data over a closed vocabulary (ADR 0071).
+- A scenario is supported only with evidence, the official calculator's agreement or an
+  approved fixture (ADR 0072).
+- Estimates appear where money is decided, and only the lock reaches the books (ADR 0073).
+- The entry's statements are its acceptance tests, proven by the
+  [Phase O golden path](drills/2026-10-01-phase89-golden-path.json), the
+  [isolated 2027 record](drills/2026-10-01-phase89-isolated-2027.json) and the
+  [drill](drills/2026-10-01-phase89-drill.json).
+- SPED, apuração, guides, split payment and real transmission stay outside it.
+
 ---
 
 ## `financial/` — accounts payable and receivable
@@ -49,60 +63,6 @@ in place, since financial postings are the strongest case for append-only storag
 **Known omissions to declare when built.** Multi-currency consolidation and
 accounting-standard conformance (IFRS/CPC) are out of scope; the module records
 postings, it is not a certified ledger.
-
----
-
-## `fiscal/` — a versioned multi-regime tax rules engine
-
-> **Planned as Phase O** (phases 82–89) in the [tax rules engine plan](tax-engine-plan.md).
-> Phase 41 built its core for one approved scenario; Phase O generalizes it.
-
-> Sequenced by the [operational ERP expansion plan](erp-expansion-plan.md), phase J. The
-> rules engine described here is the core of that phase; the plan adds the document
-> lifecycle, inbound XML and the sales and purchasing prerequisites it depends on.
-
-**Problem it solves.** Tax calculation in Brazil is currently undergoing a
-constitutional reform in which two tax regimes coexist for several years: the
-existing regime and the new IBS/CBS regime, phased in on a published schedule with
-overlapping rates. A document issued on a given date, for a given pair of
-jurisdictions, under a given taxpayer classification, must be calculated under
-whichever regime — or blend of regimes — applies at that moment.
-
-Framed universally, and this is how it will be documented: **a rules engine that
-evaluates versioned, temporally-scoped, jurisdiction-scoped rule sets, where two
-independent rule sets are simultaneously in force during a multi-year transition,
-and where a historical document must be recalculable exactly as it was calculated on
-its original date.** That is a genuinely hard versioning and determinism problem,
-and it is legible to a reviewer who has never heard of the Brazilian tax code.
-
-**Core of the scope.** The calculation engine provides:
-
-- Rules expressed **as data** — versioned rule sets with validity intervals,
-  jurisdiction scope, and taxpayer-classification predicates — never as branching
-  conditionals in code. A rate change is a new rule row, not a deployment.
-- Deterministic recalculation: the same document and the same effective date always
-  produce the same result, including years later, because the engine resolves the
-  rule set version rather than "the current rules".
-- An authority port with a **deterministic mock adapter as the default**, so rules and
-  document state can be tested without an external dependency or certificate.
-- A calculation-explanation output: which rule versions fired, in what order, with
-  what intermediate values. A tax result that cannot be explained is not usable.
-
-**Why deferred.** It is the most domain-heavy module in the system and the least
-transferable: a reviewer cannot judge its correctness without Brazilian tax
-knowledge. Its engineering value depends entirely on the framing above, and that
-framing is only credible once the surrounding architecture is visibly solid. Built
-early, it would be the largest and least legible thing in the repository.
-
-**Preconditions.** `sales/` emitting invoicing triggers (Phase 7); `catalog/` NCM
-classification in place (Phase 6); the contract versioning gate live, since fiscal
-rule schemas will version faster than anything else (Phase 3).
-
-**Phase J expansion.** The [detailed fiscal plan](fiscal-implementation-plan.md) adds
-NF-e, NFC-e and NFS-e document lifecycles, XML import, certificate-backed authority
-adapters and a support matrix. Each real integration is gated by homologation evidence
-for its issuer and jurisdiction. SPED export remains out of scope; simulated documents
-are labeled as such and cannot be mistaken for authorized fiscal documents.
 
 ---
 

@@ -1,0 +1,104 @@
+{
+  "phase": 89,
+  "kind": "phase-o-golden-path",
+  "ranAt": "2026-10-01T14:59:08.133Z",
+  "tenantId": "01a0c5f8-798b-721e-912e-9b505406e614",
+  "adoptions": {
+    "goods": {
+      "alreadyAdopted": true,
+      "since": "2026-01-01",
+      "changeId": "b4cb320d-5af6-4bb4-8907-31082308e112",
+      "diff": {
+        "added": 12,
+        "ended": 0,
+        "changed": 0,
+        "unchanged": 0
+      },
+      "impact": {
+        "changed": 0,
+        "unsupported": 0
+      },
+      "decidedBySecondAdmin": true
+    },
+    "pisCofins": {
+      "alreadyAdopted": true,
+      "since": "2026-01-01",
+      "changeId": "a079e775-d7d3-4181-93aa-9ccb7c5f1fcd",
+      "diff": {
+        "added": 4,
+        "ended": 0,
+        "changed": 0,
+        "unchanged": 0
+      },
+      "impact": {
+        "changed": 0,
+        "unsupported": 0
+      },
+      "decidedBySecondAdmin": true
+    }
+  },
+  "estimate": {
+    "components": [
+      "CBS 342",
+      "IBS_MUN 0",
+      "IBS_UF 38",
+      "COFINS 2367",
+      "ICMS 6836",
+      "PIS 514"
+    ],
+    "totals": {
+      "net": "37980",
+      "tax": "10097",
+      "chargedOnTop": "0",
+      "gross": "37980"
+    },
+    "resultDigest": "97a8f768ea924586ee132e41bb34af4068b534b013a0906539aedc9c014d476f",
+    "keptOnTheOrder": true
+  },
+  "lock": {
+    "documentId": "5942853f-a7f4-4111-9b95-1d60f8b703a6",
+    "components": [
+      "ICMS 6836",
+      "COFINS 2367",
+      "PIS 514",
+      "CBS 342",
+      "IBS_MUN 0",
+      "IBS_UF 38"
+    ],
+    "resultDigest": "aaec962f1b87a82c3931d45a827044ea2cddd258993435eb8ad6a631c6dbf26c",
+    "rulesDigest": "7e2d926040357929128fbbba14f22adcaa827b989a6a923f327d9a095b5263f4",
+    "agreesWithTheEstimate": true
+  },
+  "ledger": {
+    "transactionTotal": "9717",
+    "expectedTotal": "9717",
+    "lines": [
+      "4.05 debit 6836",
+      "2.02 credit 6836",
+      "4.05 debit 2367",
+      "2.02 credit 2367",
+      "4.05 debit 514",
+      "2.02 credit 514"
+    ]
+  },
+  "nextVersion": {
+    "alreadyAdopted": true,
+    "since": "2026-10-01",
+    "changeId": "bb088754-5ae6-4ed8-804a-dac1571010a9",
+    "diff": {
+      "added": 285,
+      "ended": 0,
+      "changed": 0,
+      "unchanged": 0
+    },
+    "impact": {
+      "changed": 0,
+      "unsupported": 0
+    },
+    "decidedBySecondAdmin": true
+  },
+  "replay": {
+    "resultDigest": "aaec962f1b87a82c3931d45a827044ea2cddd258993435eb8ad6a631c6dbf26c",
+    "unchanged": true
+  }
+}

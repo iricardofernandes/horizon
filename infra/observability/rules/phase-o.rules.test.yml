@@ -1,0 +1,125 @@
+# promtool test rules infra/observability/rules/phase-o.rules.test.yml
+rule_files:
+  - phase-o.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: slow previews fire below 95% within half a second
+    interval: 1m
+    input_series:
+      - series: 'fiscal_tax_calculation_seconds_bucket{operation="preview",le="0.5"}'
+        values: '0+90x30'
+      - series: 'fiscal_tax_calculation_seconds_count{operation="preview"}'
+        values: '0+100x30'
+      - series: 'fiscal_tax_calculation_seconds_bucket{operation="lock",le="0.5"}'
+        values: '0+1x30'
+      - series: 'fiscal_tax_calculation_seconds_count{operation="lock"}'
+        values: '0+100x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: TaxPreviewSlow
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: tax-previews }
+            exp_annotations:
+              summary: 'Fewer than 95% of tax previews answered within half a second'
+              runbook: docs/service-levels.md#taxpreviewslow
+
+  - name: the unsupported share is watched, and a few answers never fire
+    interval: 1m
+    input_series:
+      - series: 'fiscal_tax_answers_total{operation="preview",outcome="supported",code="none",dimension="none"}'
+        values: '0+1x80'
+      - series: 'fiscal_tax_answers_total{operation="preview",outcome="unsupported",code="UNSUPPORTED_SCENARIO",dimension="tax"}'
+        values: '0+3x80'
+    promql_expr_test:
+      - expr: sli:tax_unsupported:ratio_30m
+        eval_time: 40m
+        exp_samples:
+          - labels: 'sli:tax_unsupported:ratio_30m'
+            value: 0.75
+      - expr: sli:tax_unsupported_by_dimension:increase30m
+        eval_time: 40m
+        exp_samples:
+          - labels: 'sli:tax_unsupported_by_dimension:increase30m{code="UNSUPPORTED_SCENARIO",dimension="tax"}'
+            value: 90
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: TaxUnsupportedSurge
+        exp_alerts:
+          - exp_labels: { severity: info, slo: tax-support }
+            exp_annotations:
+              summary: 'More than half of tax calculations answered unsupported over 30 minutes'
+              runbook: docs/service-levels.md#taxunsupportedsurge
+
+  - name: answers that all hold are a ratio of 0, not a missing series
+    interval: 1m
+    input_series:
+      - series: 'fiscal_tax_answers_total{operation="lock",outcome="supported",code="none",dimension="none"}'
+        values: '0+5x40'
+    promql_expr_test:
+      - expr: sli:tax_unsupported:ratio_30m
+        eval_time: 35m
+        exp_samples:
+          - labels: 'sli:tax_unsupported:ratio_30m'
+            value: 0
+
+  - name: any oracle disagreement fires at once; a stale oracle only after eight days
+    interval: 1m
+    input_series:
+      - series: 'fiscal_tax_oracle_disagreements{kind="2026"}'
+        values: '0x5 2x5'
+      - series: 'fiscal_tax_oracle_refusals{kind="2026"}'
+        values: '0x10'
+      - series: 'fiscal_tax_oracle_age_seconds{kind="2026"}'
+        values: '3600x10'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: TaxOracleDisagrees
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: TaxOracleDisagrees
+        exp_alerts:
+          - exp_labels: { severity: critical, slo: tax-oracle, kind: '2026' }
+            exp_annotations:
+              summary: 'The engine and the official calculator disagree in the last recorded run'
+              runbook: docs/service-levels.md#taxoracledisagrees
+      - eval_time: 8m
+        alertname: TaxOracleStale
+        exp_alerts: []
+
+  - name: an oracle not run for eight days is stale
+    interval: 1m
+    input_series:
+      - series: 'fiscal_tax_oracle_age_seconds{kind="2026"}'
+        values: '691300+60x120'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: TaxOracleStale
+        exp_alerts:
+          - exp_labels: { severity: info, slo: tax-oracle }
+            exp_annotations:
+              summary: 'No run of the official calculator was recorded in eight days'
+              runbook: docs/service-levels.md#taxoraclestale
+
+  - name: one lock that fails to replay fires; replays that all reproduce are 0
+    interval: 1m
+    input_series:
+      - series: 'fiscal_tax_lock_replays_total{outcome="reproduced"}'
+        values: '0+10x30'
+      - series: 'fiscal_tax_lock_replays_total{outcome="failed"}'
+        values: '0x20 1x10'
+    promql_expr_test:
+      - expr: sli:tax_lock_replays_failed:increase1h
+        eval_time: 15m
+        exp_samples:
+          - labels: 'sli:tax_lock_replays_failed:increase1h'
+            value: 0
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: TaxLockReplayFailed
+        exp_alerts:
+          - exp_labels: { severity: critical, slo: tax-lock-replay }
+            exp_annotations:
+              summary: 'A locked tax calculation did not replay byte for byte'
+              runbook: docs/service-levels.md#taxlockreplayfailed

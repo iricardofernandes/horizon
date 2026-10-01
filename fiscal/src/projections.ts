@@ -31,6 +31,8 @@ export const partyFiscalExportSchema = z.strictObject({
     municipalRegistration: z.string().nullable(),
     taxpayerIndicator: z.enum(['contributor', 'exempt', 'non-contributor']),
     finalConsumer: z.boolean(),
+    /** What a contributor does with the goods it buys (Phase 89); absent before it. */
+    goodsDestination: z.enum(['resale', 'consumption']).nullable().optional(),
     address,
   }),
 })
@@ -72,6 +74,8 @@ export type CatalogClassification = {
   revision: number
   effectiveFrom: string
   ncm: string | null
+  /** The workspace is an IPI taxpayer for the item from this revision (Phase 89). */
+  ipiTaxpayer: boolean
 }
 type Source = 'parties' | 'identity'
 type FiscalExport = PartyFiscalExport | IssuerFiscalExport
@@ -225,7 +229,7 @@ export class FiscalProjections {
     date.parse(issueDate)
     const [row] = await this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
-      return tx`select item_id, revision, effective_from, ncm
+      return tx`select item_id, revision, effective_from, ncm, ipi_taxpayer
         from catalog_classifications where tenant_id = ${tenantId} and item_id = ${itemId}
           and effective_from <= ${issueDate}
         order by effective_from desc, revision desc limit 1`
@@ -236,6 +240,7 @@ export class FiscalProjections {
       revision: Number(row.revision),
       effectiveFrom: calendarDate(row.effective_from) ?? issueDate,
       ncm: row.ncm === null ? null : String(row.ncm),
+      ipiTaxpayer: row.ipi_taxpayer === true,
     }
   }
 
@@ -255,6 +260,7 @@ export class FiscalProjections {
           .string()
           .regex(/^\d{8}$/)
           .nullable(),
+        ipiTaxpayer: z.boolean().optional(),
       })
       .parse(raw)
     if (
@@ -266,17 +272,24 @@ export class FiscalProjections {
     return this.#db.begin(async (tx) => {
       await tx`select set_config('app.current_tenant', ${tenantId}, true)`
       await tx`insert into tenants (id) values (${tenantId}) on conflict do nothing`
+      const ipiTaxpayer = record.ipiTaxpayer ?? false
       const inserted = await tx`
-        insert into catalog_classifications (tenant_id, item_id, revision, effective_from, ncm)
-        values (${tenantId}, ${record.itemId}, ${record.revision}, ${record.effectiveFrom}, ${record.ncm})
+        insert into catalog_classifications (
+          tenant_id, item_id, revision, effective_from, ncm, ipi_taxpayer
+        ) values (
+          ${tenantId}, ${record.itemId}, ${record.revision}, ${record.effectiveFrom},
+          ${record.ncm}, ${ipiTaxpayer}
+        )
         on conflict on constraint catalog_classifications_key do nothing returning revision`
       if (inserted.length > 0) return 'inserted'
       const [existing] = await tx`
-        select effective_from, ncm from catalog_classifications where tenant_id = ${tenantId}
-          and item_id = ${record.itemId} and revision = ${record.revision}`
+        select effective_from, ncm, ipi_taxpayer from catalog_classifications
+        where tenant_id = ${tenantId} and item_id = ${record.itemId}
+          and revision = ${record.revision}`
       if (
         calendarDate(existing?.effective_from) !== record.effectiveFrom ||
-        existing?.ncm !== record.ncm
+        existing?.ncm !== record.ncm ||
+        existing?.ipi_taxpayer !== ipiTaxpayer
       )
         throw new Error('Classification export conflicts with an existing revision')
       return 'existing'

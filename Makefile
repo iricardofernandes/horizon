@@ -165,9 +165,9 @@ up-scanner: infra/.env ## Start ClamAV and point the files module at it (Phase 6
 .PHONY: test-alerts
 test-alerts: ## Check and unit-test the Prometheus alert rules with promtool
 	@docker run --rm -v "$(CURDIR)/infra/observability/rules":/rules -w /rules \
-		--entrypoint promtool prom/prometheus:v3.7.3 check rules fiscal.rules.yml sales.rules.yml slo.rules.yml phase-n.rules.yml
+		--entrypoint promtool prom/prometheus:v3.7.3 check rules fiscal.rules.yml sales.rules.yml slo.rules.yml phase-n.rules.yml phase-o.rules.yml
 	@docker run --rm -v "$(CURDIR)/infra/observability/rules":/rules -w /rules \
-		--entrypoint promtool prom/prometheus:v3.7.3 test rules fiscal.rules.test.yml sales.rules.test.yml slo.rules.test.yml phase-n.rules.test.yml
+		--entrypoint promtool prom/prometheus:v3.7.3 test rules fiscal.rules.test.yml sales.rules.test.yml slo.rules.test.yml phase-n.rules.test.yml phase-o.rules.test.yml
 
 .PHONY: down
 down: ## Stop the platform, keeping data
@@ -200,6 +200,18 @@ retention-now: ## Run one retention pass now and print its log (Phase 69)
 .PHONY: phase-n-drill
 phase-n-drill: ## Attack Phase N through Kong and record what held (Phase 78)
 	@node scripts/phase-n-drill.mjs
+
+.PHONY: phase-o-drill
+phase-o-drill: ## Attack Phase O through Kong and record what held (Phase 89)
+	@node scripts/phase-o-drill.mjs
+
+.PHONY: phase-o-golden-path
+phase-o-golden-path: ## Walk Phase O end to end on the golden path workspace (Phase 89)
+	@node scripts/phase-o-golden-path.mjs
+
+.PHONY: phase-o-2027
+phase-o-2027: ## Prove each date's regime and a lock across versions, in a throwaway database (Phase 89)
+	@node scripts/phase-o-2027.mjs
 
 .PHONY: phase-n-golden-path
 phase-n-golden-path: ## Walk Phase N end to end; AI=on after make up-ai (Phase 78)

@@ -122,6 +122,32 @@ it('retains effective-dated classification revisions and publishes a versioned n
   ).rejects.toThrow('append-only')
 })
 
+it('classifies whether the workspace is an IPI taxpayer for the item, and keeps it (Phase 89)', async () => {
+  const fixture = await seed()
+  const classify = (effectiveFrom: string, ipiTaxpayer?: boolean) =>
+    new ClassifyCatalogItemUseCase(database, clock).execute({
+      actor,
+      tenantId: fixture.tenantId,
+      itemId: fixture.itemId,
+      effectiveFrom,
+      ncm: '85094010',
+      ...(ipiTaxpayer === undefined ? {} : { ipiTaxpayer }),
+    })
+  expect((await classify('2026-09-01', true)).isRight()).toBe(true)
+  // A later revision that does not say keeps what the item's classification said.
+  expect((await classify('2026-10-01')).isRight()).toBe(true)
+  expect(await database.classificationRevision(fixture.tenantId, fixture.itemId, 1)).toMatchObject({
+    ipiTaxpayer: true,
+  })
+  expect(await database.classificationRevision(fixture.tenantId, fixture.itemId, 2)).toMatchObject({
+    ipiTaxpayer: true,
+  })
+  expect((await classify('2026-11-01', false)).isRight()).toBe(true)
+  const events = await owner`select payload from outbox where tenant_id = ${fixture.tenantId}
+      and event_type = 'catalog.item.classification-changed' order by created_at`
+  expect(events.map((row) => row.payload.ipiTaxpayer)).toEqual([true, true, false])
+})
+
 it('enforces cross-tenant isolation for units, items and price lists', async () => {
   const a = await seed()
   const b = await seed()

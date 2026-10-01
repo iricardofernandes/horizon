@@ -9,7 +9,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts src/phase43-issuance-prep-cli.ts src/phase43-exchange-resume-cli.ts src/phase43-cancellation-prep-cli.ts src/phase43-restore-verify-cli.ts src/phase43-reparse-cli.ts src/phase43-activation-cli.ts src/phase43-grant-cli.ts src/phase43-danfe-cli.ts src/phase43-wsdl-cli.ts src/phase43-emulator-cli.ts src/phase44-reindex-parties-cli.ts src/phase44-supplier-invoice-cli.ts src/phase45-rollout-cli.ts src/phase46-rollout-cli.ts src/phase47-rollout-cli.ts src/phase82-catalog-cli.ts src/phase84-oracle-cli.ts src/tax-scenarios-cli.ts src/support-cli.ts --format cjs --platform node --out-dir dist --clean",
+    "build": "tsup src/worker.ts src/backfill-cli.ts src/phase41-rollout-cli.ts src/phase42-capability-cli.ts src/phase42-rollout-prep-cli.ts src/phase43-observations-cli.ts src/phase43-number-range-cli.ts src/phase43-readiness-cli.ts src/phase43-issuance-prep-cli.ts src/phase43-exchange-resume-cli.ts src/phase43-cancellation-prep-cli.ts src/phase43-restore-verify-cli.ts src/phase43-reparse-cli.ts src/phase43-activation-cli.ts src/phase43-grant-cli.ts src/phase43-danfe-cli.ts src/phase43-wsdl-cli.ts src/phase43-emulator-cli.ts src/phase44-reindex-parties-cli.ts src/phase44-supplier-invoice-cli.ts src/phase45-rollout-cli.ts src/phase46-rollout-cli.ts src/phase47-rollout-cli.ts src/phase82-catalog-cli.ts src/phase84-oracle-cli.ts src/tax-scenarios-cli.ts src/support-cli.ts src/tax-oracle-record-cli.ts src/phase89-isolated-cli.ts src/tax-oracle-record-cli.ts src/phase89-isolated-cli.ts --format cjs --platform node --out-dir dist --clean",
     "start": "node dist/worker.js",
     "backfill": "node dist/backfill-cli.js",
     "phase41:rollout": "node dist/phase41-rollout-cli.js",
@@ -50,11 +50,12 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "lint": "biome check .",
     "test": "vitest run",
-    "test:e2e": "vitest run --config vitest.config.e2e.mts"
+    "test:e2e": "vitest run --config vitest.config.e2e.mts",
+    "tax:oracle-record": "node dist/tax-oracle-record-cli.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1137.0",
-    "@horizon/contracts": "0.62.0",
+    "@horizon/contracts": "0.63.0",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/auto-instrumentations-node": "0.80.0",
     "@opentelemetry/exporter-logs-otlp-http": "0.222.0",

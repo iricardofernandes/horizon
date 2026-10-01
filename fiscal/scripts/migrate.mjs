@@ -71,6 +71,8 @@ try {
     '0058_phase86_income_tax_regime.sql',
     '0059_phase87_purchase_estimates.sql',
     '0060_phase88_rule_governance.sql',
+    '0061_phase89_line_facts.sql',
+    '0062_phase89_oracle_runs.sql',
   ]) {
     const [existing] = await client`select name from fiscal_migrations where name = ${name}`
     if (existing) continue

@@ -1,6 +1,6 @@
 # Tax rules engine implementation plan — Phase O
 
-Status: **in progress** — Phases 82 to 85 delivered on 2026-09-30 and 86 to 88 on 2026-10-01 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md), [84](tax-phase84-evidence.md), [85](tax-phase85-evidence.md), [86](tax-phase86-evidence.md), [87](tax-phase87-evidence.md), [88](tax-phase88-evidence.md)). This is the execution plan for Phase O,
+Status: **delivered** — Phases 82 to 85 on 2026-09-30, and 86 to 89 on 2026-10-01 ([82](tax-phase82-evidence.md), [83](tax-phase83-evidence.md), [84](tax-phase84-evidence.md), [85](tax-phase85-evidence.md), [86](tax-phase86-evidence.md), [87](tax-phase87-evidence.md), [88](tax-phase88-evidence.md), [89](tax-phase89-evidence.md)). Phase O is closed. This is the execution plan for Phase O,
 split into phases 82–89 of [plan.md](plan.md). Each numbered phase gets its own detailed
 plan before implementation, one local commit and an evidence record, as in Phases J to N
 and 79 to 81.
@@ -10,7 +10,7 @@ and 79 to 81.
 Phase J built a fiscal context that can explain a calculation and replay it exactly
 (Phase 41), but it approved **one** scenario: an intrastate sale in São Paulo in 2026, with
 CBS at 9/1000 and IBS at 1/1000. Every other scenario answers `unsupported`. Phase O turns
-that core into the engine the [roadmap](roadmap.md#fiscal--a-versioned-multi-regime-tax-rules-engine)
+that core into the engine the [roadmap](roadmap.md) (moved out when Phase O closed)
 describes:
 
 > A rules engine that evaluates versioned, temporally scoped, jurisdiction-scoped rule
@@ -359,6 +359,14 @@ matrix with delegation, and the CLIs request and approve like the screen.
 - The diff shows each rule added, ended or changed.
 
 ### 89 — Threat model, service levels, the golden path, and closing Phase O
+
+**Delivered on 2026-10-01** ([plan](tax-phase89-implementation-plan.md),
+[evidence](tax-phase89-evidence.md), [threat model](phase-o-threat-model.md)).
+- Sales documents now carry the facts the customer's profile and the item's classification
+  state, so a Sales lock carries the legacy taxes and the Ledger posts them on the stack.
+- A Phase 87 defect that stopped Fiscal's outbox was fixed.
+- The 2027 regime is proven only in a throwaway database, because its rates are
+  hypothetical.
 
 **Work**
 1. **The threat model:**

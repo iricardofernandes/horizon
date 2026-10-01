@@ -1,0 +1,73 @@
+{
+  "phase": 89,
+  "kind": "phase-o-drill",
+  "ranAt": "2026-10-01T15:01:27.768Z",
+  "tenantId": "01a0c5f8-798b-721e-912e-9b505406e614",
+  "held": {
+    "ruleChangeWithoutReason": {
+      "status": 400,
+      "held": true
+    },
+    "overrideProposalWithoutReason": {
+      "status": 400,
+      "held": true
+    },
+    "ownRuleAtDefaultPrecedence": {
+      "status": 400,
+      "held": true
+    },
+    "issuerRequests": {
+      "status": 403,
+      "held": true
+    },
+    "requestRecorded": {
+      "status": 201,
+      "held": true
+    },
+    "selfApproval": {
+      "status": 403,
+      "code": "segregation-of-duties",
+      "pair": "fiscal.rules",
+      "held": true
+    },
+    "selfRejection": {
+      "status": 403,
+      "code": "segregation-of-duties",
+      "pair": "fiscal.rules",
+      "held": true
+    },
+    "viewerApproves": {
+      "status": 403,
+      "held": true
+    },
+    "otherAdminCancels": {
+      "status": 403,
+      "held": true
+    },
+    "issuerLendsTheApproval": {
+      "status": 403,
+      "held": true
+    },
+    "crossTenantRead": {
+      "status": 404,
+      "held": true
+    },
+    "crossTenantList": {
+      "held": true
+    },
+    "requesterCancels": {
+      "status": 200,
+      "held": true
+    },
+    "unreviewedScenario": {
+      "status": 422,
+      "code": "UNSUPPORTED_RULE",
+      "held": true
+    },
+    "catalogueWriteByTheApplication": {
+      "outcome": "42501",
+      "held": true
+    }
+  },
+  "allHeld": true
+}

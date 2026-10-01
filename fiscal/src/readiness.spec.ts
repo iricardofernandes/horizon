@@ -308,6 +308,7 @@ function scenario(
           revision: 11,
           effectiveFrom: '2026-01-01',
           ncm: classification.ncm,
+          ipiTaxpayer: false,
         }
       },
     },

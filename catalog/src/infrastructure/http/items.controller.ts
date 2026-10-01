@@ -39,6 +39,8 @@ const classifyItem = z.strictObject({
     .string()
     .regex(/^\d{8}$/)
     .nullable(),
+  /** The workspace manufactures the item, or is equated to an industrial establishment. */
+  ipiTaxpayer: z.boolean().optional(),
 })
 const classificationList = z.strictObject({
   limit: z.coerce.number().int().min(1).max(200).default(100),
