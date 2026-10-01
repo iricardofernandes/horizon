@@ -6,4 +6,6 @@ output "database_endpoints" {
   sensitive = true
 }
 output "mq_console_url" { value = module.mq.console_url }
-output "fiscal_artifact_bucket" { value = aws_s3_bucket.fiscal_artifacts.bucket }
+output "fiscal_artifact_bucket" { value = module.fiscal_documents.bucket }
+output "attachment_bucket" { value = module.attachments.bucket }
+output "export_bucket" { value = module.exports.bucket }

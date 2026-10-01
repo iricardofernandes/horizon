@@ -4,12 +4,26 @@
 > account, and no workflow is allowed to run `terraform apply` (ADR 0034). The public
 > Vercel/Neon demo from phase 11 is a separate, reduced topology; it is not this stack.
 
-The root stack targets ECS Fargate in two Availability Zones: `web` and Kong behind an
-Application Load Balancer; six independently scalable application services discovered
-through Cloud Map; one encrypted RDS PostgreSQL instance per module; ElastiCache Redis;
-Amazon MQ for RabbitMQ; a private, versioned, server-encrypted Fiscal artifact bucket;
-ECR; Secrets Manager; ADOT sidecars and CloudWatch. The eight
-modules under `modules/` are the reviewable infrastructure boundaries.
+The root stack targets ECS Fargate in two Availability Zones:
+- `web` and Kong behind an Application Load Balancer;
+- all sixteen business services, each scaled on its own and discovered through Cloud Map;
+- one encrypted RDS PostgreSQL instance per module;
+- ElastiCache Redis and Amazon MQ for RabbitMQ;
+- a ClamAV daemon that only Files can reach;
+- three private, versioned, server-encrypted buckets, each written only by its owner:
+  fiscal documents (Fiscal), attachments (Files) and exports (Reporting);
+- ECR, Secrets Manager, ADOT sidecars and CloudWatch.
+
+The nine modules under `modules/` are the reviewable infrastructure boundaries.
+
+### Who may call whom
+
+- The ALB reaches only `web` and the gateway.
+- The gateway reaches every business service.
+- Every task carries an `internal-callers` security group. It lets `web`, Reporting,
+  Knowledge and Agent call the gateway, and lets any service read Identity's JWKS. It also
+  lets Fiscal read Parties and Catalog directly. No other service accepts a direct call.
+- Only Files reaches ClamAV, and only the tasks reach the databases, Redis and the broker.
 
 `envs/dev` and `envs/prod` contain values only. Both feed the exact same root module, so
 production is not a separately copied topology. The production values add two tasks per
@@ -43,9 +57,25 @@ to create the `horizon_app` and `horizon_relay` roles with the generated passwor
 run that module's migrations. Identity key material and application encryption keys are
 pre-provisioned by a security bootstrap and passed as Secrets Manager ARNs through
 `service_secret_arns`; secret values never belong in `tfvars` or image layers.
-Fiscal additionally requires `FISCAL_SERVICE_KEYS_JSON` and a 32-byte
-`FISCAL_ARTIFACT_KEY_HEX` as independently managed secrets. Its task role has only
-`GetObject` and `PutObject` on the business-document bucket. The bucket is separate
+The runtime secrets each service expects in `service_secret_arns` are listed below.
+Every service also needs `TENANT_ID_HASH_SALT`.
+
+| Service | Secrets |
+|---|---|
+| identity | the JWT signing key, `BLIND_INDEX_KEY_PATH`, `MFA_SEAL_SECRET`, `SERVICE_CLIENTS`, `SMTP_URL` |
+| catalog | `IDEMPOTENCY_SECRET` |
+| sales | `CUSTOMER_BLIND_INDEX_KEY` |
+| parties | `PARTY_BLIND_INDEX_KEY` |
+| webhooks | `WEBHOOK_SECRET_ENCRYPTION_KEY` |
+| fiscal | `FISCAL_SERVICE_KEYS_JSON`, a 32-byte `FISCAL_ARTIFACT_KEY_HEX` |
+| files | `FILES_MASTER_KEY`, `FILES_LINK_SECRET` |
+| reporting | `EXPORT_LINK_SECRET`, `SERVICE_TOKEN_SECRET` |
+| knowledge | `KNOWLEDGE_MASTER_KEY`, `KNOWLEDGE_LEXEME_KEY`, `SERVICE_TOKEN_SECRET` |
+| agent | `ASSISTANT_MASTER_KEY`, and `ANTHROPIC_API_KEY` only when generation is opted in |
+
+Fiscal's task role has only `GetObject` and `PutObject` on the business-document
+bucket. Files and Reporting may also delete in their own buckets, because Files shreds
+erased attachments and Reporting expires old exports. The bucket is separate
 from Terraform state, blocks public access, enables versioning and server encryption.
 
 For artifact recovery, preserve the bucket and application encryption key together.
@@ -54,35 +84,55 @@ plaintext SHA-256 to `fiscal_artifacts.digest` under a tenant-scoped operator to
 the service rechecks the digest on every read. Test this procedure in a temporary
 environment before a production cutover. Bucket deletion is disabled in Terraform.
 
+## Before a first deployment
+
+Kong's upstreams are named the way Compose names services (`http://sales:3004`). The
+gateway image built for AWS rewrites them to Cloud Map's `sales.horizon.local`
+([`gateway/Dockerfile`](../../gateway/Dockerfile)), so the committed `kong.yml` stays the
+same for both.
+
+These gaps are known, and this stack does not close them:
+- **pgvector.** Knowledge's migration creates the `vector` extension. RDS for PostgreSQL 17
+  ships it, and the owner role can create it.
+- **S3 addressing.** Files and Reporting use path-style requests to the regional S3
+  endpoint, with credentials from the task role. Path-style requests still work, but AWS
+  plans to retire them; moving those clients to virtual-hosted style is a one-line
+  change in each.
+- **The local model.** Knowledge embeds with a deterministic hash unless `TEI_URL` names
+  an embedding server. That server is not part of this stack.
+
 No migration task is launched from Terraform. That is a release action with database
 effects, while these modules only describe infrastructure. The release workflow builds
 immutable images and can create a speculative plan, but has no apply step.
 
 ## Cost estimate
 
-The estimate below predates the Phase 40 Fiscal task, its sixth module database and
-the artifact bucket. Recalculate it for the current topology before using it for a
-budget decision.
-
-Estimate date: **2026-09-14**, `us-east-1`, 730 hours/month, on-demand pricing, low
+Estimate date: **2026-10-01**, `us-east-1`, 730 hours/month, on-demand pricing, low
 traffic, no free-tier credits, support, tax, heavy log ingestion or internet egress.
-These are planning ranges, not a quote; use AWS Pricing Calculator before any real use.
+These are planning ranges from published unit prices, not a quote. Use the AWS Pricing
+Calculator before any real use.
 
 | Component | Dev values | Estimated USD/month |
 |---|---:|---:|
-| 7 Fargate tasks, 0.25 vCPU / 0.5 GB | always on | $60–75 |
-| 5 RDS PostgreSQL `db.t4g.micro` + 100 GB gp3 | Single-AZ | $75–110 |
+| 18 Fargate tasks, 0.25 vCPU / 0.5 GB | always on | $160–175 |
+| ClamAV, 1 vCPU / 3 GB | always on | about $40 |
+| 16 RDS PostgreSQL `db.t4g.micro` + 20 GB gp3 each | Single-AZ | $220–260 |
 | ElastiCache `cache.t4g.micro` | 1 node | $12–25 |
 | Amazon MQ RabbitMQ `mq.m7g.medium` | single instance + EBS | $85–140 |
 | 1 NAT gateway | before traffic | about $33 |
-| ALB, CloudWatch, Secrets Manager, ECR | low traffic | $30–70 |
-| **Dev total** | | **roughly $295–453/month** |
+| ALB, CloudWatch, about 50 secrets, ECR, three buckets | low traffic | $60–110 |
+| **Dev total** | | **roughly $610–780/month** |
 
-The production variable set roughly doubles Fargate, database and NAT capacity, adds
-Redis failover, and changes RabbitMQ to a three-node cluster. A reasonable idle/low-load
-planning range is **$1,100–1,800/month**, before meaningful traffic and telemetry volume.
-Amazon MQ and five separate RDS instances dominate; that is the real monetary cost of
-the architecture's broker and database-per-module boundaries.
+The production values double the tasks at 0.5 vCPU / 1 GB, make the sixteen databases
+`db.t4g.small` Multi-AZ, add Redis failover, a three-node RabbitMQ cluster and one NAT
+gateway per AZ. A reasonable idle or low-load range is **$2,500–3,300/month**, before
+meaningful traffic and telemetry volume.
+
+Sixteen RDS instances and Amazon MQ dominate the bill. That is the real monetary cost of
+the broker and of database-per-module. The cheapest lever is one instance holding
+sixteen databases, which is how the local stack runs. ADR 0016 keeps one instance per
+module here because a shared cluster shares connection limits, autovacuum pressure and
+its failure domain. Changing that would take a new ADR, not a variable.
 
 The estimate intentionally does not claim a calculator export because the stack has not
 been planned against an account. AWS bills Fargate by requested vCPU/memory duration,

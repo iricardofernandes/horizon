@@ -26,3 +26,17 @@ variable "service_secret_arns" {
   type        = map(map(string))
   default     = {}
 }
+variable "clamav_image" {
+  description = "The ClamAV daemon image, pinned by tag or digest."
+  type        = string
+  default     = "clamav/clamav:1.4"
+}
+variable "clamav_cpu" {
+  type    = number
+  default = 1024
+}
+variable "clamav_memory" {
+  description = "ClamAV holds its signatures in memory: about 1 GB loaded, twice that while reloading."
+  type        = number
+  default     = 3072
+}
