@@ -44,7 +44,7 @@ export class RabbitMqEventConsumer {
 
   async start(): Promise<void> {
     const exchange = this.options.exchange ?? 'horizon.events'
-    const deadLetterExchange = this.options.deadLetterExchange ?? 'horizon.events.dlx'
+    const deadLetterExchange = this.options.deadLetterExchange ?? `${this.options.queue}.dlx`
     const connection = await connect(this.options.url, {
       timeout: this.options.connectTimeoutMs ?? 5000,
     })
@@ -54,18 +54,12 @@ export class RabbitMqEventConsumer {
     this.channel = channel
     channel.on('error', () => undefined)
     await channel.assertExchange(exchange, 'topic', { durable: true })
-    await channel.assertExchange(deadLetterExchange, 'topic', { durable: true })
+    // Each queue dead-letters into an exchange of its own (Phase 90). The module's broker
+    // user may write only to its own names, and a shared exchange would let any module place
+    // a message in another module's dead-letter queue.
+    await channel.assertExchange(deadLetterExchange, 'fanout', { durable: true })
     await channel.assertQueue(`${this.options.queue}.dlq`, { durable: true })
-    // Each queue's dead letters reach its own DLQ only (Phase 79). RabbitMQ stamps a dead
-    // letter with the queue it died in, and a headers exchange routes on that stamp; the old
-    // catch-all binding copied every module's dead letters into every DLQ.
-    await channel.assertExchange('horizon.dead-letters', 'headers', { durable: true })
-    await channel.bindExchange('horizon.dead-letters', deadLetterExchange, '#')
-    await channel.unbindQueue(`${this.options.queue}.dlq`, deadLetterExchange, '#')
-    await channel.bindQueue(`${this.options.queue}.dlq`, 'horizon.dead-letters', '', {
-      'x-match': 'all-with-x',
-      'x-first-death-queue': this.options.queue,
-    })
+    await channel.bindQueue(`${this.options.queue}.dlq`, deadLetterExchange, '')
     await channel.assertQueue(this.options.queue, { durable: true, deadLetterExchange })
     for (const eventType of Object.keys(this.options.handlers))
       await channel.bindQueue(this.options.queue, exchange, eventType)
@@ -83,8 +77,8 @@ export class RabbitMqEventConsumer {
       .startActiveSpan('inbox.consume', { kind: SpanKind.CONSUMER }, parent, async (span) => {
         try {
           const event = this.parse(message)
-          if (!event) {
-            deadLettered.add(1, { reason: 'undeliverable' })
+          if (!event || !routedAs(message, event.eventType)) {
+            deadLettered.add(1, { reason: event ? 'misrouted' : 'undeliverable' })
             span.setStatus({ code: SpanStatusCode.ERROR })
             channel.nack(message, false, false)
             return
@@ -152,4 +146,14 @@ export class RabbitMqEventConsumer {
   onModuleDestroy(): Promise<void> {
     return this.close()
   }
+}
+
+/**
+ * A message is the event it was published as (Phase 90). Each module's broker user may
+ * publish only its own routing keys, so a module that sends another module's event under a
+ * key of its own is refused here. A message from the default exchange was put back by an
+ * operator: no module may write there.
+ */
+function routedAs(message: ConsumeMessage, eventType: string): boolean {
+  return message.fields.exchange === '' || message.fields.routingKey === eventType
 }

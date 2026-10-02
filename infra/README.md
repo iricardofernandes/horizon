@@ -42,12 +42,18 @@ and waits for health. Optional profiles add what most work does not need:
 | Grafana | http://localhost:3300 | admin / admin |
 | Jaeger | http://localhost:16686 | — |
 | Prometheus | http://localhost:9090 | — |
-| RabbitMQ management | http://localhost:15672 | horizon / horizon |
+| RabbitMQ management | http://localhost:15672 | horizon / horizon, the operator |
 | Mailpit | http://localhost:8025 | — |
 | Verdaccio | http://localhost:4873 | — |
 
 Every published port can be overridden in `infra/.env` (copy `.env.example`), for example
 `HORIZON_POSTGRES_PORT=5433`. Containers always reach each other by service name.
+
+Each service connects to RabbitMQ as a user of its own, `<module>` with the password
+`<module>-local` unless `infra/.env` sets `HORIZON_RABBITMQ_PASSWORD_<MODULE>`, and may
+publish only its own events ([ADR 0075](../docs/adr/0075-one-broker-identity-per-module.md)).
+`make broker-config`, which `make up` runs, renders those users into the definitions the
+broker imports at boot.
 
 ---
 

@@ -58,7 +58,10 @@ export class AppModule {
           new QueueConsumer({
             url: config.RABBITMQ_URL,
             queue: REPORTING_REPLAY_QUEUE,
-            bindings: [],
+            // Producers resend and seal through their own exchange (Phase 90), each under
+            // routing keys of its own, so the broker refuses one module sealing another's.
+            exchange: 'horizon.journal',
+            bindings: ['#'],
             handle: async (body) => {
               const outcome = await runtime.intake.replay(body)
               return typeof outcome === 'string' ? outcome : `seal-${outcome.outcome}`

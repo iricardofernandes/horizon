@@ -45,19 +45,21 @@ async function run() {
   // 1. Bindings.
   const bindings = await management('/bindings/%2F')
   const dlqs = (await management('/queues/%2F')).filter((queue) => queue.name.endsWith('.dlq'))
+  // Since Phase 90 each queue dead-letters into an exchange of its own, `<queue>.dlx`, bound
+  // to its DLQ alone; nothing may still route through the shared exchanges of Phase 79.
   const catchAll = bindings.filter(
     (binding) =>
-      binding.source === 'horizon.events.dlx' && binding.destination_type === 'queue' && binding.destination.endsWith('.dlq'),
+      ['horizon.events.dlx', 'horizon.dead-letters'].includes(binding.source) &&
+      binding.destination_type === 'queue' &&
+      binding.destination.endsWith('.dlq'),
   )
-  const unrouted = dlqs.filter(
-    (queue) =>
-      !bindings.some(
-        (binding) =>
-          binding.source === 'horizon.dead-letters' &&
-          binding.destination === queue.name &&
-          binding.arguments?.['x-first-death-queue'] === queue.name.slice(0, -'.dlq'.length),
-      ),
-  )
+  const unrouted = dlqs.filter((queue) => {
+    const owner = queue.name.slice(0, -'.dlq'.length)
+    const fed = bindings.filter(
+      (binding) => binding.destination === queue.name && binding.source !== '',
+    )
+    return fed.length !== 1 || fed[0].source !== `${owner}.dlx`
+  })
   k.check(
     'every DLQ receives only its own queue’s dead letters, and no catch-all binding is left',
     catchAll.length === 0 && unrouted.length === 0 && dlqs.length > 0,

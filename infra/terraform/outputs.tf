@@ -6,6 +6,7 @@ output "database_endpoints" {
   sensitive = true
 }
 output "mq_console_url" { value = module.mq.console_url }
+output "mq_bootstrap_secret_arn" { value = module.mq.bootstrap_secret_arn }
 output "fiscal_artifact_bucket" { value = module.fiscal_documents.bucket }
 output "attachment_bucket" { value = module.attachments.bucket }
 output "export_bucket" { value = module.exports.bucket }

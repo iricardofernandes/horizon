@@ -38,6 +38,9 @@ is listed as open.
    - Each module maps its own roles to actions. The web only hides what a role cannot use.
 2. **Module → broker → Reporting, Files and the notification intake.**
    - Producers publish; consumers deduplicate by event id.
+   - Since Phase 90 each module is a broker user of its own: it publishes only its own
+     events and seals, and a consumer refuses a message whose routing key is not the event
+     it names ([ADR 0075](adr/0075-one-broker-identity-per-module.md)).
    - Seals prove completeness; an arrival proves only itself.
 3. **Reporting → owners, with the caller's token.**
    - Reconciliation and consistency checks ask each owner's own report as the person who

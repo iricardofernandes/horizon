@@ -11,6 +11,7 @@ import {
   Req,
 } from '@nestjs/common'
 import { z } from 'zod'
+import { EndpointRefusedError } from '@/domain/endpoint'
 import { WebhookRuntime } from '@/main/webhook-runtime'
 import { RequireWebhookAction, tenantOf, type WebhookRequest } from './authorization'
 
@@ -58,9 +59,18 @@ export class WebhookSubscriptionsController {
 
   @Post()
   @RequireWebhookAction('manage')
-  create(@Body() body: unknown, @Req() request: WebhookRequest) {
+  async create(@Body() body: unknown, @Req() request: WebhookRequest) {
     const input = bodyOf(subscriptionInput, body)
-    return this.runtime.createSubscription.execute({ ...input, tenantId: tenantOf(request) })
+    try {
+      return await this.runtime.createSubscription.execute({
+        ...input,
+        tenantId: tenantOf(request),
+      })
+    } catch (error) {
+      // An endpoint outside the public internet is the caller's to fix (Phase 90).
+      if (error instanceof EndpointRefusedError) throw new BadRequestException(error.message)
+      throw error
+    }
   }
 
   @Delete(':id')

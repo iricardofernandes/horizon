@@ -178,6 +178,7 @@ module "mq" {
   allowed_security_group_ids = [aws_security_group.data_access.id]
   instance_type              = var.mq_instance_type
   deployment_mode            = var.mq_deployment_mode
+  module_users               = toset(keys(local.business_services))
   tags                       = local.tags
 }
 
@@ -270,7 +271,7 @@ module "service" {
     {
       DATABASE_URL = module.rds.application_database_url_secret_arns[each.key]
       REDIS_URL    = module.elasticache.url_secret_arn
-      RABBITMQ_URL = module.mq.url_secret_arn
+      RABBITMQ_URL = module.mq.module_url_secret_arns[each.key]
     },
     each.value.relay ? { DATABASE_RELAY_URL = module.rds.relay_database_url_secret_arns[each.key] } : {},
   )

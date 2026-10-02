@@ -2969,7 +2969,7 @@ checked and found sound.
 
 | Phase | Theme |
 |---|---|
-| 90 | A broker identity per module, webhook egress to public addresses only, dependency advisories |
+| 90 | A broker identity per module, webhook egress to public addresses only, dependency advisories. **Delivered on 2026-10-02** ([evidence](security-phase90-evidence.md)) |
 | 91 | Tax postings that follow the authority's answer, estimates Fiscal vouches for, one rule decision at a time |
 | 92 | The workspace's day, a local stack that listens only locally, the AWS path, password guessing, Kong's token checks |
 

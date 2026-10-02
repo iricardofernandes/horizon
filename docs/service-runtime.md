@@ -56,7 +56,13 @@ test/              Testcontainers e2e suites
 - **No double effects.** Delivery is at least once, so every consumer records each event
   in an `inbox` in the same transaction as its effect.
 - **A dead letter is never silent.** An event a consumer cannot handle goes to that
-  consumer's own dead-letter queue, where it can be inspected and replayed.
+  consumer's own dead-letter queue, through a dead-letter exchange no other queue uses,
+  where it can be inspected and replayed.
+- **A module speaks only for itself on the bus.** Each module connects to RabbitMQ as a
+  user of its own. It may publish only its own events, declare and read only its own
+  queues, and never write to the default exchange. A consumer dead-letters a message whose
+  routing key is not the event its body names
+  ([ADR 0075](adr/0075-one-broker-identity-per-module.md)).
 - **Idempotent writes.** A command that creates something takes an `Idempotency-Key` and
   runs at most once under it ([ADR 0028](adr/0028-idempotency-key-on-public-writes.md)).
 - **Every token is verified twice.** Kong validates it, and the service verifies it again
@@ -83,7 +89,7 @@ process instead of failing on first use. Defaults are in each module's `.env.exa
 | `DATABASE_RELAY_URL` | The relay role; when set, the service runs its outbox relay |
 | `DATABASE_POOL_MAX`, `DATABASE_STATEMENT_TIMEOUT_MS` | Pool size and query timeout |
 | `REDIS_URL` | Token denylist, idempotency records, rate counters |
-| `RABBITMQ_URL`, `AMQP_PREFETCH` | The broker, and how many messages are in flight |
+| `RABBITMQ_URL`, `AMQP_PREFETCH` | The broker, as this module's own user, and how many messages are in flight |
 | `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE` | How often and how much the relay publishes |
 | `INBOX_RETENTION_DAYS` | How long deduplication records are kept |
 | `IDEMPOTENCY_TTL_SECONDS` | How long an `Idempotency-Key` is remembered |

@@ -17,7 +17,7 @@ accounting, fiscal documents and taxes, CRM) built as **16 independent services*
 each with its own database, communicating through events.
 
 <p align="center">
-  <b>16</b> services · <b>74</b> architecture decisions · <b>~370</b> test files · <b>1</b> trace across the whole flow
+  <b>16</b> services · <b>75</b> architecture decisions · <b>~370</b> test files · <b>1</b> trace across the whole flow
 </p>
 
 **MIT licensed. Written entirely in English**, except Brazilian fiscal terms that have
@@ -230,7 +230,7 @@ registry.
 
 ## Decisions
 
-Every significant choice is recorded in [`docs/adr/`](docs/adr/README.md): 74 decisions,
+Every significant choice is recorded in [`docs/adr/`](docs/adr/README.md): 75 decisions,
 each with the alternatives it rejected. That page also explains why each technology in the
 stack was chosen. Five of them shape everything else:
 
@@ -258,7 +258,7 @@ stack was chosen. Five of them shape everything else:
 | [`docs/tax-engine-plan.md`](docs/tax-engine-plan.md) | The tax rules engine |
 | [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece waits |
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
-| [`docs/adr/`](docs/adr/) | 74 decision records |
+| [`docs/adr/`](docs/adr/) | 75 decision records |
 | [`docs/events.md`](docs/events.md) | The event catalogue, generated from the schemas |
 | [`docs/service-levels.md`](docs/service-levels.md) | SLIs, objectives and the alerts that guard them |
 | [`docs/recovery-runbook.md`](docs/recovery-runbook.md) | Backups, restores and the drills that time them |

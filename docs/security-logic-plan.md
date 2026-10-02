@@ -1,6 +1,7 @@
 # Security and logic review — Phases 90 to 92
 
-Status: **proposed on 2026-10-02, not started.** A review of the whole repository for
+Status: **Phase 90 delivered on 2026-10-02** ([evidence](security-phase90-evidence.md));
+Phases 91 and 92 not started. A review of the whole repository for
 security flaws and logic errors, after Phase O closed. It lists only what was confirmed
 against the code or the running stack on 2026-10-02, each with its evidence. It also lists
 what was checked and found sound, so the next review can start where this one stopped.
@@ -54,6 +55,14 @@ Severity is the impact if exploited, weighed by what an attacker needs first.
   governance) and at Kong (8 MB, 11 MB for uploads).
 
 ## Phase 90 — Who may speak on the bus, and where webhooks may go
+
+**Delivered on 2026-10-02** ([evidence](security-phase90-evidence.md),
+[ADR 0075](adr/0075-one-broker-identity-per-module.md)). Two things differ from this plan:
+- Journal resends and seals moved to an exchange of their own, `horizon.journal`, so no
+  module needs the default exchange.
+- The broker's refusals are proven by a smoke against the running stack, since the
+  Testcontainers broker has only its default user. The e2e tests prove the consumer's own
+  refusal of a misrouted message.
 
 1. **A broker identity per module** (findings 1, 11), recorded in a new ADR.
    - **Locally:** one RabbitMQ user per module, created by the platform bootstrap.

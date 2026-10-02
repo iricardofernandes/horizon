@@ -123,12 +123,27 @@ export async function replayJournal(
   return { sent, seal }
 }
 
-/** Publishes to the reporting replay queue through the default exchange, confirmed. */
+/**
+ * The exchange reporting's replay queue is bound to (Phase 90). A module's broker user may
+ * publish there only under routing keys of its own, and no module may write to the default
+ * exchange, which reaches any queue by name.
+ */
+export const JOURNAL_EXCHANGE = 'horizon.journal'
+
+/** An event under its own type, a seal under `<source>.seal`: what reporting checks. */
+export function journalRoutingKey(message: ReplayMessage): string {
+  return 'kind' in message && message.kind === 'seal'
+    ? `${message.source}.seal`
+    : (message as EventEnvelope).eventType
+}
+
+/** Publishes to the reporting replay queue through the journal exchange, confirmed. */
 export async function openReplayQueue(
   url: string,
 ): Promise<{ deliver: Deliver; close: () => Promise<void> }> {
   const connection = await connect(url, { timeout: CONFIRM_TIMEOUT_MS })
   const channel = await connection.createConfirmChannel()
+  await channel.assertExchange(JOURNAL_EXCHANGE, 'topic', { durable: true })
   return {
     deliver: (messageId, message) => confirm(channel, messageId, message),
     close: () => connection.close(),
@@ -153,8 +168,8 @@ function confirm(channel: ConfirmChannel, messageId: string, body: ReplayMessage
     )
     channel.on('return', returned)
     channel.publish(
-      '',
-      REPORTING_REPLAY_QUEUE,
+      JOURNAL_EXCHANGE,
+      journalRoutingKey(body),
       Buffer.from(JSON.stringify(body)),
       { mandatory: true, persistent: true, contentType: 'application/json', messageId },
       finish,

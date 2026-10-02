@@ -32,6 +32,14 @@ run "topology_plans" {
   }
 
   assert {
+    condition = (
+      length(module.mq.module_url_secret_arns) == length(module.service) &&
+      alltrue([for name in keys(module.service) : contains(keys(module.mq.module_url_secret_arns), name)])
+    )
+    error_message = "Each service connects to the broker as a user of its own (ADR 0075)."
+  }
+
+  assert {
     condition     = alltrue([for name in ["parties", "catalog", "identity"] : contains(keys(module.service), name)])
     error_message = "Fiscal calls Parties and Catalog directly, and every service reads Identity's JWKS."
   }

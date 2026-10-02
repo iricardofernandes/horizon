@@ -22,26 +22,15 @@ export class FiscalConsumer {
     this.connection = await connect(this.brokerUrl, { timeout: 5000 })
     const channel = await this.connection.createChannel()
     this.channel = channel
+    const deadLetterExchange = `${this.queue}.dlx`
     await channel.assertExchange('horizon.events', 'topic', { durable: true })
-    await channel.assertExchange('horizon.events.dlx', 'topic', { durable: true })
+    // The queue dead-letters into an exchange of its own (Phase 90). Fiscal's broker user may
+    // write only to its own names, and a shared exchange would let any module place a message
+    // in another module's dead-letter queue.
+    await channel.assertExchange(deadLetterExchange, 'fanout', { durable: true })
     await channel.assertQueue(`${this.queue}.dlq`, { durable: true })
-    // Each queue's dead letters reach its own DLQ only (Phase 79). RabbitMQ stamps a dead
-    // letter with the queue it died in, and a headers exchange routes on that stamp. The
-    // earlier bindings (first '#', then one per event type) also caught other modules'
-    // dead letters of the same types, so both are removed.
-    await channel.assertExchange('horizon.dead-letters', 'headers', { durable: true })
-    await channel.bindExchange('horizon.dead-letters', 'horizon.events.dlx', '#')
-    await channel.unbindQueue(`${this.queue}.dlq`, 'horizon.events.dlx', '#')
-    for (const type of FISCAL_EVENT_TYPES)
-      await channel.unbindQueue(`${this.queue}.dlq`, 'horizon.events.dlx', type)
-    await channel.bindQueue(`${this.queue}.dlq`, 'horizon.dead-letters', '', {
-      'x-match': 'all-with-x',
-      'x-first-death-queue': this.queue,
-    })
-    await channel.assertQueue(this.queue, {
-      durable: true,
-      deadLetterExchange: 'horizon.events.dlx',
-    })
+    await channel.bindQueue(`${this.queue}.dlq`, deadLetterExchange, '')
+    await channel.assertQueue(this.queue, { durable: true, deadLetterExchange })
     for (const type of FISCAL_EVENT_TYPES)
       await channel.bindQueue(this.queue, 'horizon.events', type)
     await channel.prefetch(20)
@@ -59,7 +48,7 @@ export class FiscalConsumer {
 
   private async dispatch(channel: Channel, message: ConsumeMessage): Promise<void> {
     const event = this.parse(message)
-    if (!event) {
+    if (!event || !routedAs(message, event.eventType)) {
       channel.nack(message, false, false)
       return
     }
@@ -102,4 +91,14 @@ export class FiscalConsumer {
       return null
     }
   }
+}
+
+/**
+ * A message is the event it was published as (Phase 90). Each module's broker user may
+ * publish only its own routing keys, so a module that sends another module's event under a
+ * key of its own is refused here. A message from the default exchange was put back by an
+ * operator: no module may write there.
+ */
+function routedAs(message: ConsumeMessage, eventType: string): boolean {
+  return message.fields.exchange === '' || message.fields.routingKey === eventType
 }

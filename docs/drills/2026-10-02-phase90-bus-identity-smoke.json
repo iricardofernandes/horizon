@@ -1,0 +1,147 @@
+{
+  "phase": 90,
+  "kind": "bus-identity-smoke",
+  "baseUrl": "http://localhost:8000",
+  "startedAt": "2026-10-02T23:33:59.954Z",
+  "finishedAt": "2026-10-02T23:34:00.559Z",
+  "passed": true,
+  "tenantId": "01a0fef7-afba-7888-aa66-85167754e8b3",
+  "checks": [
+    {
+      "name": "the broker holds exactly the rendered users: one per module, the operator and the monitor",
+      "passed": true,
+      "detail": {
+        "users": [
+          "agent",
+          "catalog",
+          "crm",
+          "files",
+          "financial",
+          "fiscal",
+          "horizon",
+          "identity",
+          "inventory",
+          "knowledge",
+          "ledger",
+          "mcp-debugger",
+          "parties",
+          "procurement",
+          "reporting",
+          "sales",
+          "treasury",
+          "webhooks"
+        ]
+      }
+    },
+    {
+      "name": "every user holds the permissions and topic permissions rendered for it, and no others",
+      "passed": true,
+      "detail": {
+        "drift": [],
+        "topicDrift": []
+      }
+    },
+    {
+      "name": "every service is connected to the broker as its own module, and none as the operator",
+      "passed": true,
+      "detail": {
+        "absent": [],
+        "connectionsAsOperator": 0
+      }
+    },
+    {
+      "name": "the broker refuses sales publishing Financial's event",
+      "passed": true,
+      "detail": {
+        "refused": true,
+        "reason": "write access to topic 'financial.settlement.recorded' in exchange 'horizon.events' in vhost '/' refused for user 'sales'"
+      }
+    },
+    {
+      "name": "the broker refuses sales writing to the default exchange",
+      "passed": true,
+      "detail": {
+        "refused": true,
+        "reason": "write access to exchange 'amq.default' in vhost '/' refused for user 'sales'"
+      }
+    },
+    {
+      "name": "the broker refuses sales publishing a Financial seal to the journal",
+      "passed": true,
+      "detail": {
+        "refused": true,
+        "reason": "write access to topic 'financial.seal' in exchange 'horizon.journal' in vhost '/' refused for user 'sales'"
+      }
+    },
+    {
+      "name": "the broker refuses sales writing to Ledger's dead-letter exchange",
+      "passed": true,
+      "detail": {
+        "refused": true,
+        "reason": "write access to exchange 'ledger.events.dlx' in vhost '/' refused for user 'sales'"
+      }
+    },
+    {
+      "name": "the broker refuses sales declaring a Financial queue",
+      "passed": true,
+      "detail": {
+        "refused": true,
+        "reason": "configure access to queue 'financial.phase90-cbf1d4' in vhost '/' refused for user 'sales'"
+      }
+    },
+    {
+      "name": "the broker refuses sales reading Financial's queue",
+      "passed": true,
+      "detail": {
+        "refused": true,
+        "reason": "read access to queue 'financial.events' in vhost '/' refused for user 'sales'"
+      }
+    },
+    {
+      "name": "the broker refuses webhooks publishing anything",
+      "passed": true,
+      "detail": {
+        "refused": true,
+        "reason": "write access to exchange 'horizon.events' in vhost '/' refused for user 'webhooks'"
+      }
+    },
+    {
+      "name": "the MCP debugger lists queues, and may neither read nor publish a message",
+      "passed": true,
+      "detail": {
+        "list": 200,
+        "get": 401,
+        "publish": 400
+      }
+    },
+    {
+      "name": "every queue dead-letters into an exchange of its own, bound to its DLQ alone, and no shared one is left",
+      "passed": true,
+      "detail": {
+        "queues": 16,
+        "wrong": [],
+        "legacy": []
+      }
+    },
+    {
+      "name": "a webhook inside the network is refused with 400, by address and by name; a public one is taken",
+      "passed": true,
+      "detail": {
+        "refused": {
+          "https://169.254.169.254/latest/meta-data": 400,
+          "https://10.0.0.5/hooks": 400,
+          "https://localhost/hooks": 400,
+          "http://example.com/hooks": 400,
+          "https://rabbitmq/hooks": 400,
+          "https://postgres:5432/hooks": 400
+        },
+        "public": 201
+      }
+    },
+    {
+      "name": "no dead-letter queue grew during the run",
+      "passed": true,
+      "detail": {}
+    }
+  ]
+}

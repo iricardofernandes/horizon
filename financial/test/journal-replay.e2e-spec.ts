@@ -4,6 +4,7 @@ import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   JOURNAL_SOURCE,
+  journalRoutingKey,
   type ReplayMessage,
   replayJournal,
   sealAllTenants,
@@ -78,6 +79,11 @@ describe('republish:journal', () => {
     expect(events.every((event) => event.tenantId === tenantId)).toBe(true)
     expect(seal).toMatchObject({ kind: 'seal', source: JOURNAL_SOURCE, tenantId, count: 3 })
     expect(result.sent).toBe(3)
+    // Each goes out under a routing key of this module's own (Phase 90).
+    expect(sink.messages.map(journalRoutingKey)).toEqual([
+      ...events.map((event) => event.eventType),
+      `${JOURNAL_SOURCE}.seal`,
+    ])
   })
 
   it('resends a range and seals only when asked to', async () => {

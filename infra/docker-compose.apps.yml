@@ -31,7 +31,8 @@ x-env: &env
   NODE_ENV: production
   LOG_LEVEL: info
   REDIS_URL: redis://redis:6379
-  RABBITMQ_URL: amqp://horizon:horizon@rabbitmq:5672
+  # No RABBITMQ_URL here: each service connects as its own broker user (Phase 90), so one
+  # left without its own address fails at boot instead of running as anybody.
   AMQP_PREFETCH: '20'
   OUTBOX_POLL_INTERVAL_MS: '1000'
   OUTBOX_BATCH_SIZE: '100'
@@ -82,6 +83,7 @@ services:
         condition: service_started
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://identity:${HORIZON_RABBITMQ_PASSWORD_IDENTITY:-identity-local}@rabbitmq:5672
       PORT: '3001'
       OTEL_SERVICE_NAME: identity
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_identity
@@ -142,6 +144,7 @@ services:
         condition: service_started
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://catalog:${HORIZON_RABBITMQ_PASSWORD_CATALOG:-catalog-local}@rabbitmq:5672
       PORT: '3002'
       OTEL_SERVICE_NAME: catalog
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_catalog
@@ -173,6 +176,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://inventory:${HORIZON_RABBITMQ_PASSWORD_INVENTORY:-inventory-local}@rabbitmq:5672
       PORT: '3003'
       OTEL_SERVICE_NAME: inventory
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_inventory
@@ -205,6 +209,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://sales:${HORIZON_RABBITMQ_PASSWORD_SALES:-sales-local}@rabbitmq:5672
       PORT: '3004'
       OTEL_SERVICE_NAME: sales
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_sales
@@ -238,6 +243,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://parties:${HORIZON_RABBITMQ_PASSWORD_PARTIES:-parties-local}@rabbitmq:5672
       PORT: '3006'
       OTEL_SERVICE_NAME: parties
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_parties
@@ -268,6 +274,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://financial:${HORIZON_RABBITMQ_PASSWORD_FINANCIAL:-financial-local}@rabbitmq:5672
       PORT: '3007'
       OTEL_SERVICE_NAME: financial
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_financial
@@ -297,6 +304,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://treasury:${HORIZON_RABBITMQ_PASSWORD_TREASURY:-treasury-local}@rabbitmq:5672
       PORT: '3008'
       OTEL_SERVICE_NAME: treasury
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_treasury
@@ -326,6 +334,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://ledger:${HORIZON_RABBITMQ_PASSWORD_LEDGER:-ledger-local}@rabbitmq:5672
       PORT: '3009'
       OTEL_SERVICE_NAME: ledger
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_ledger
@@ -355,6 +364,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://procurement:${HORIZON_RABBITMQ_PASSWORD_PROCUREMENT:-procurement-local}@rabbitmq:5672
       PORT: '3010'
       OTEL_SERVICE_NAME: procurement
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_procurement
@@ -384,6 +394,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://crm:${HORIZON_RABBITMQ_PASSWORD_CRM:-crm-local}@rabbitmq:5672
       PORT: '3012'
       OTEL_SERVICE_NAME: crm
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_crm
@@ -415,6 +426,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://reporting:${HORIZON_RABBITMQ_PASSWORD_REPORTING:-reporting-local}@rabbitmq:5672
       PORT: '3013'
       OTEL_SERVICE_NAME: reporting
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_reporting
@@ -459,6 +471,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://files:${HORIZON_RABBITMQ_PASSWORD_FILES:-files-local}@rabbitmq:5672
       PORT: '3014'
       OTEL_SERVICE_NAME: files
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_files
@@ -501,6 +514,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://agent:${HORIZON_RABBITMQ_PASSWORD_AGENT:-agent-local}@rabbitmq:5672
       PORT: '3015'
       OTEL_SERVICE_NAME: agent
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_agent
@@ -541,6 +555,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://knowledge:${HORIZON_RABBITMQ_PASSWORD_KNOWLEDGE:-knowledge-local}@rabbitmq:5672
       PORT: '3016'
       OTEL_SERVICE_NAME: knowledge
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_knowledge
@@ -607,6 +622,7 @@ services:
       - ./keys/fiscal:/run/fiscal-keys:ro
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://fiscal:${HORIZON_RABBITMQ_PASSWORD_FISCAL:-fiscal-local}@rabbitmq:5672
       OTEL_SERVICE_NAME: fiscal
       PORT: '3011'
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_fiscal
@@ -655,6 +671,7 @@ services:
         condition: service_healthy
     environment:
       <<: *env
+      RABBITMQ_URL: amqp://webhooks:${HORIZON_RABBITMQ_PASSWORD_WEBHOOKS:-webhooks-local}@rabbitmq:5672
       PORT: '3005'
       OTEL_SERVICE_NAME: webhooks
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_webhooks

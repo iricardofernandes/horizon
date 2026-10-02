@@ -198,6 +198,41 @@ it('projects an item of a workspace whose creation event has not arrived yet', a
   expect(await administrator`select id from tenants where id = ${tenantId}`).toHaveLength(1)
 })
 
+it('dead-letters an event sent under another event’s routing key, and applies nothing', async () => {
+  // A module may publish only routing keys of its own (Phase 90). Under one Sales reads, the
+  // body claims a different event: the consumer believes the key, not the body.
+  const tenantId = randomUUID()
+  const itemId = randomUUID()
+  await database.provisionTenant(tenantId)
+  const forged = envelope(tenantId, 'catalog.item.created', {
+    itemId,
+    kind: 'product',
+    sku: 'FORGED-1',
+    name: 'Forged item',
+    unitId: randomUUID(),
+    ncm: '09012100',
+  })
+  publisher.publish(
+    'horizon.events',
+    'catalog.price.changed',
+    Buffer.from(JSON.stringify(forged)),
+    {
+      persistent: true,
+      contentType: 'application/json',
+      messageId: forged.eventId,
+    },
+  )
+  const dead = await waitFor(async () => {
+    const message = await publisher.get(`${queue}.dlq`, { noAck: true })
+    return message === false ? null : message
+  })
+  expect(JSON.parse(dead.content.toString()).eventId).toBe(forged.eventId)
+  expect(
+    await administrator`select item_id from catalog_items where tenant_id = ${tenantId}`,
+  ).toHaveLength(0)
+  expect(await administrator`select * from inbox where tenant_id = ${tenantId}`).toHaveLength(0)
+})
+
 it('drops a type it no longer reads and removes its binding, instead of dead-lettering it', async () => {
   // A binding left by an older version, as Financial's to `sales.invoicing.requested` was.
   // Sales publishes this type and never reads it; only this binding routes it here.

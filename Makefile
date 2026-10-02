@@ -99,8 +99,12 @@ infra/keys/public:
 kong-config: infra/keys/public ## Render Kong's config from the template plus the dev keys
 	@bash infra/scripts/render-kong-config.sh
 
+.PHONY: broker-config
+broker-config: infra/.env ## Render RabbitMQ's users: one per module, publishing only its own events (Phase 90)
+	@node infra/scripts/broker-definitions.mjs --write infra/generated/rabbitmq-definitions.json
+
 .PHONY: up
-up: infra/.env infra/keys/public kong-config ## Start the local platform and wait for health
+up: infra/.env infra/keys/public kong-config broker-config ## Start the local platform and wait for health
 	@# `--wait` fails on a container that exits, even with 0, when nothing depends on it, so
 	@# the bucket setup runs on its own and must succeed.
 	@$(COMPOSE) up -d --wait $$($(COMPOSE) config --services | grep -vx minio-init)
@@ -127,7 +131,7 @@ build-apps: infra/.env ## Build Horizon's images, HORIZON_BUILD_BATCH at a time
 			xargs -n $(HORIZON_BUILD_BATCH) $(COMPOSE) -f infra/docker-compose.apps.yml build
 
 .PHONY: up-apps
-up-apps: infra/.env infra/keys/public kong-config build-apps ## Start the platform plus Horizon's own services
+up-apps: infra/.env infra/keys/public kong-config broker-config build-apps ## Start the platform plus Horizon's own services
 	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
 		$(COMPOSE) -f infra/docker-compose.apps.yml up -d --wait
 	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
@@ -138,7 +142,7 @@ up-apps: infra/.env infra/keys/public kong-config build-apps ## Start the platfo
 	done; exit 1
 
 .PHONY: up-fiscal
-up-fiscal: infra/.env infra/keys/public kong-config ## Start the optional Fiscal API, worker and artifact store
+up-fiscal: infra/.env infra/keys/public kong-config broker-config ## Start the optional Fiscal API, worker and artifact store
 	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
 		$(COMPOSE) -f infra/docker-compose.apps.yml --profile fiscal up -d --build --wait fiscal
 	@$(COMPOSE) -f infra/docker-compose.apps.yml restart kong

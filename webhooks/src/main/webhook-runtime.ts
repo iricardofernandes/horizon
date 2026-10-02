@@ -7,7 +7,10 @@ import {
 } from '@/application/webhook-service'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { WebhookDatabase } from '@/infrastructure/database/webhook-database'
-import { FetchWebhookClient } from '@/infrastructure/http/fetch-webhook-client'
+import {
+  GuardedWebhookClient,
+  SystemEndpointResolver,
+} from '@/infrastructure/http/guarded-webhook-client'
 import type { WebhookEnvironment } from './environment'
 
 export class WebhookRuntime implements OnModuleInit, OnModuleDestroy {
@@ -29,12 +32,16 @@ export class WebhookRuntime implements OnModuleInit, OnModuleDestroy {
       config.JWKS_URL,
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
     )
-    this.createSubscription = new CreateSubscriptionUseCase(this.database, clock)
+    // Webhooks reach the public internet only (Phase 90).
+    this.createSubscription = new CreateSubscriptionUseCase(this.database, clock, {
+      allowLoopback: config.WEBHOOK_ALLOW_LOOPBACK,
+      resolver: new SystemEndpointResolver(),
+    })
     this.deactivateSubscription = new DeactivateSubscriptionUseCase(this.database, clock)
     this.replayDelivery = new ReplayDeliveryUseCase(this.database, clock)
     this.dispatcher = new WebhookDispatcher(
       this.database,
-      new FetchWebhookClient(),
+      new GuardedWebhookClient({ allowLoopback: config.WEBHOOK_ALLOW_LOOPBACK }),
       clock,
       {
         maxAttempts: config.WEBHOOK_MAX_ATTEMPTS,

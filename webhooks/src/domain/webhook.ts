@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { checkEndpoint } from './endpoint'
 
 export type WebhookEvent = Readonly<{
   eventId: string
@@ -29,13 +30,10 @@ export class WebhookSubscription {
     endpointUrl: string
     eventTypes: readonly string[]
     now: Date
+    /** Plain HTTP to the machine's own loopback: a development stack only (Phase 90). */
+    allowLoopback?: boolean
   }): WebhookSubscription {
-    const url = new URL(input.endpointUrl)
-    if (!['http:', 'https:'].includes(url.protocol))
-      throw new Error('Unsupported endpoint protocol')
-    if (url.username || url.password) throw new Error('Endpoint credentials are not allowed')
-    if (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '::1'].includes(url.hostname))
-      throw new Error('Webhook endpoints must use HTTPS')
+    const url = checkEndpoint(input.endpointUrl, input.allowLoopback ?? false)
     const eventTypes = [...new Set(input.eventTypes.map((value) => value.trim()))].sort()
     if (eventTypes.length === 0 || eventTypes.some((value) => !/^[a-z][a-z0-9.-]+$/.test(value)))
       throw new Error('At least one valid event type is required')

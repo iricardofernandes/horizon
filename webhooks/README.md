@@ -58,8 +58,12 @@ replay.
 }
 ```
 
-Plain HTTP is refused except for loopback endpoints during development, and so are
-credentials in the URL. Redirects are not followed.
+An endpoint must be HTTPS, without credentials in the URL, on the public internet. An
+address that is private, loopback, link-local (cloud metadata included), carrier-grade NAT,
+multicast or reserved is refused when subscribing, by address and by the name's current
+resolution, and again at each delivery, on the very address the connection uses, so a
+name that later resolves inside the network is refused then. Redirects are not followed.
+A development stack may allow plain HTTP to its own loopback with `WEBHOOK_ALLOW_LOOPBACK`.
 
 ---
 
@@ -88,7 +92,9 @@ export function verify(secret, rawBody, signature, now = Math.floor(Date.now() /
 ```
 
 Any `2xx` acknowledges the delivery. Anything else, a network error or a timeout is a
-failure and is retried.
+failure and is retried. Each attempt records the status, or only a category of the error
+(`timeout`, `dns`, `tls`, `connection failed`, `refused: not a public address`), never its
+text.
 
 ---
 
@@ -124,6 +130,7 @@ code layout are the same in every service: [how every service runs](../docs/serv
 | `WEBHOOK_BACKOFF_BASE_MS`, `WEBHOOK_BACKOFF_MAX_MS`, `WEBHOOK_BACKOFF_JITTER_RATIO` | The retry schedule |
 | `WEBHOOK_SIGNATURE_TOLERANCE_SECONDS` | The timestamp skew a receiver should accept |
 | `WEBHOOK_QUEUE_DEPTH_ALERT` | The backlog that raises an alert |
+| `WEBHOOK_ALLOW_LOOPBACK` | Plain HTTP to this machine's own loopback, for a development stack only |
 
 The variables every service shares are in
 [the shared configuration](../docs/service-runtime.md#configuration-every-service-shares).

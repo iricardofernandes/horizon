@@ -4,6 +4,10 @@ variable "subnet_ids" { type = list(string) }
 variable "allowed_security_group_ids" { type = list(string) }
 variable "instance_type" { type = string }
 variable "deployment_mode" { type = string }
+variable "module_users" {
+  description = "One broker user per module, publishing only its own events (ADR 0075)."
+  type        = set(string)
+}
 variable "tags" {
   type    = map(string)
   default = {}
@@ -54,19 +58,49 @@ resource "aws_mq_broker" "this" {
   tags = var.tags
 }
 
-resource "aws_secretsmanager_secret" "url" {
-  name                    = "${var.name}/amqp-url"
+# Each module connects as a user of its own (ADR 0075); no task holds the administrator.
+resource "random_password" "module" {
+  for_each = var.module_users
+  length   = 32
+  special  = false
+}
+
+resource "aws_secretsmanager_secret" "module_url" {
+  for_each                = var.module_users
+  name                    = "${var.name}/amqp-url/${each.key}"
   recovery_window_in_days = 7
   tags                    = var.tags
 }
 
-resource "aws_secretsmanager_secret_version" "url" {
-  secret_id     = aws_secretsmanager_secret.url.id
-  secret_string = replace(aws_mq_broker.this.instances[0].endpoints[0], "amqps://", "amqps://horizon:${urlencode(random_password.password.result)}@")
+resource "aws_secretsmanager_secret_version" "module_url" {
+  for_each      = var.module_users
+  secret_id     = aws_secretsmanager_secret.module_url[each.key].id
+  secret_string = replace(aws_mq_broker.this.instances[0].endpoints[0], "amqps://", "amqps://${each.key}:${urlencode(random_password.module[each.key].result)}@")
+}
+
+# Amazon MQ creates one RabbitMQ user, the administrator; the module users are created
+# through the management API by `infra/scripts/broker-definitions.mjs --apply`, which reads
+# this secret on its standard input. No task may read it.
+resource "aws_secretsmanager_secret" "bootstrap" {
+  name                    = "${var.name}/amqp-bootstrap"
+  recovery_window_in_days = 7
+  tags                    = var.tags
+}
+
+resource "aws_secretsmanager_secret_version" "bootstrap" {
+  secret_id = aws_secretsmanager_secret.bootstrap.id
+  secret_string = jsonencode(merge(
+    { RABBITMQ_ADMIN_USER = "horizon", RABBITMQ_ADMIN_PASSWORD = random_password.password.result },
+    {
+      for module in var.module_users :
+      "HORIZON_RABBITMQ_PASSWORD_${upper(replace(module, "-", "_"))}" => random_password.module[module].result
+    },
+  ))
 }
 
 output "security_group_id" { value = aws_security_group.this.id }
-output "url_secret_arn" {
-  value = aws_secretsmanager_secret.url.arn
+output "module_url_secret_arns" {
+  value = { for module, secret in aws_secretsmanager_secret.module_url : module => secret.arn }
 }
+output "bootstrap_secret_arn" { value = aws_secretsmanager_secret.bootstrap.arn }
 output "console_url" { value = aws_mq_broker.this.instances[0].console_url }

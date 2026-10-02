@@ -99,6 +99,7 @@ editable per tenant ([0023](0023-casl-static-module-scoped-roles.md)).
 | [0023](0023-casl-static-module-scoped-roles.md) | CASL, with static, module-scoped roles |
 | [0037](0037-tenant-directory-before-authentication.md) | Minimal tenant directory before authentication (superseded for interactive login) |
 | [0038](0038-global-account-before-workspace-selection.md) | Global account before workspace selection |
+| [0075](0075-one-broker-identity-per-module.md) | Each module has a broker identity of its own, and publishes only its own events |
 
 ### Integrity, resilience and privacy
 

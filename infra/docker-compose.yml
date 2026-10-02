@@ -223,15 +223,19 @@ services:
     <<: *restart
     image: rabbitmq:4-management-alpine
     container_name: horizon-rabbitmq
+    # RabbitMQ keeps its state under its node name, `rabbit@<hostname>`: a fixed hostname is
+    # what lets a recreated broker find its queues and dead letters again.
+    hostname: rabbitmq
     networks: [horizon]
     ports:
       - '${HORIZON_RABBITMQ_PORT:-5672}:5672'
       - '${HORIZON_RABBITMQ_UI_PORT:-15672}:15672'
-    environment:
-      RABBITMQ_DEFAULT_USER: horizon
-      RABBITMQ_DEFAULT_PASS: horizon
+    # The users are not RabbitMQ's defaults: one per module, each publishing only its own
+    # events (Phase 90). `make broker-config` renders them before the broker starts.
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+      - ./rabbitmq/90-horizon.conf:/etc/rabbitmq/conf.d/90-horizon.conf:ro
+      - ./generated/rabbitmq-definitions.json:/etc/rabbitmq/definitions.json:ro
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_running']
       interval: 10s
@@ -408,8 +412,9 @@ services:
       JAEGER_URL: http://jaeger:16686
       PROMETHEUS_URL: http://prometheus:9090
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
-      RABBITMQ_MANAGEMENT_USER: horizon
-      RABBITMQ_MANAGEMENT_PASSWORD: horizon
+      # A monitoring user: it lists queues and holds no right on any of them (Phase 90).
+      RABBITMQ_MANAGEMENT_USER: mcp-debugger
+      RABBITMQ_MANAGEMENT_PASSWORD: ${HORIZON_RABBITMQ_PASSWORD_MCP_DEBUGGER:-mcp-debugger-local}
       DEBUG_DATABASE_URLS: identity=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_identity,catalog=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_catalog,inventory=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_inventory,sales=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_sales,webhooks=postgres://horizon_debug:${HORIZON_DEBUG_PASSWORD:-horizon}@postgres:5432/horizon_webhooks
       TENANT_ID_HASH_SALT: '${HORIZON_TENANT_HASH_SALT:-horizon-local-tenant-hash-salt}'
       PII_MASK_FIELDS: email,cpf,cnpj,phone,address,name,ip

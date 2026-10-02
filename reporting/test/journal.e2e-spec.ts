@@ -184,7 +184,8 @@ describe('the queues', () => {
     replay = new QueueConsumer({
       url,
       queue: REPORTING_REPLAY_QUEUE,
-      bindings: [],
+      exchange: 'horizon.journal',
+      bindings: ['#'],
       handle: async (body) => {
         const outcome = await intake.replay(body)
         return typeof outcome === 'string' ? outcome : `seal-${outcome.outcome}`
@@ -198,7 +199,7 @@ describe('the queues', () => {
     await Promise.allSettled([live?.close(), replay?.close()])
   })
 
-  it('journals the live flow, a replay through the default exchange, and its seal', async () => {
+  it('journals the live flow, a replay through the journal exchange, and its seal', async () => {
     const connection = await connect(process.env.RABBITMQ_URL ?? '')
     try {
       const channel = await connection.createConfirmChannel()
@@ -213,16 +214,25 @@ describe('the queues', () => {
         (state) => state.events === 1,
       )
 
-      // The producer resends its history, the live event included, then seals it.
+      // The producer resends its history, the live event included, then seals it: each under
+      // a routing key of its own module (Phase 90).
       const older = event(tenantId, minutesAgo(30))
-      await publish('', REPORTING_REPLAY_QUEUE, older)
-      await publish('', REPORTING_REPLAY_QUEUE, liveEvent)
-      await publish('', REPORTING_REPLAY_QUEUE, seal(tenantId, minutesAgo(10), 2))
+      await publish('horizon.journal', older.eventType, older)
+      await publish('horizon.journal', liveEvent.eventType, liveEvent)
+      await publish('horizon.journal', 'catalog.seal', seal(tenantId, minutesAgo(10), 2))
       const state = await eventually(
         () => catalogState(tenantId),
         (candidate) => candidate.watermark !== null,
       )
       expect(state).toMatchObject({ events: 2, lastSeal: { outcome: 'matched' } })
+
+      // A seal under another module's key is refused, whatever its body says (Phase 90).
+      await publish('horizon.journal', 'sales.seal', seal(tenantId, minutesAgo(5), 2))
+      await eventually(
+        async () => (await channel.checkQueue(`${REPORTING_REPLAY_QUEUE}.dlq`)).messageCount,
+        (count) => count === 1,
+      )
+      expect((await catalogState(tenantId)).watermark).toEqual(state.watermark)
 
       // What no retry can fix goes to the dead-letter queue at once.
       await publish('horizon.events', 'catalog.item.deactivated', { not: 'an envelope' })

@@ -1,4 +1,10 @@
 import {
+  EndpointRefusedError,
+  isLoopbackHost,
+  isPublicAddress,
+  literalAddress,
+} from '@/domain/endpoint'
+import {
   type DeliverySnapshot,
   type RetryPolicy,
   type SubscriptionSnapshot,
@@ -56,17 +62,48 @@ export interface WebhookHttpClient {
   }): Promise<{ status: number }>
 }
 
+/** Resolves a host name to its addresses; empty when it does not resolve. */
+export interface EndpointResolver {
+  addressesOf(hostname: string): Promise<readonly string[]>
+}
+
+/** Where webhooks may go (Phase 90). Without a resolver, only the URL itself is checked. */
+export interface EgressPolicy {
+  readonly allowLoopback: boolean
+  readonly resolver?: EndpointResolver
+}
+
 export class CreateSubscriptionUseCase {
   constructor(
     private readonly repository: WebhookRepository,
     private readonly clock: { now(): Date },
+    private readonly egress: EgressPolicy = { allowLoopback: false },
   ) {}
 
   async execute(input: { tenantId: string; endpointUrl: string; eventTypes: readonly string[] }) {
-    const subscription = WebhookSubscription.create({ ...input, now: this.clock.now() })
+    const subscription = WebhookSubscription.create({
+      ...input,
+      now: this.clock.now(),
+      allowLoopback: this.egress.allowLoopback,
+    })
+    await this.refusePrivateResolution(subscription.snapshot().endpointUrl)
     await this.repository.createSubscription(subscription)
     const snapshot = subscription.snapshot()
     return { subscriptionId: snapshot.id, secret: snapshot.secret }
+  }
+
+  /**
+   * A host that resolves to an address outside the public internet is refused now, so the
+   * tenant hears of it at once. One that does not resolve yet is kept: delivery resolves it
+   * again, and refuses it then, connection by connection.
+   */
+  private async refusePrivateResolution(endpointUrl: string): Promise<void> {
+    const url = new URL(endpointUrl)
+    if (!this.egress.resolver || literalAddress(url.hostname) !== null) return
+    if (this.egress.allowLoopback && isLoopbackHost(url.hostname)) return
+    const addresses = await this.egress.resolver.addressesOf(url.hostname)
+    if (addresses.some((address) => !isPublicAddress(address)))
+      throw new EndpointRefusedError('The endpoint must be a public address')
   }
 }
 
@@ -156,7 +193,7 @@ export class WebhookDispatcher {
         throw new Error(`Endpoint returned HTTP ${response.status}`)
       delivery.succeed(this.clock.now(), response.status)
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Webhook delivery failed'
+      error = failureOf(cause, responseStatus)
       delivery.fail({
         now: this.clock.now(),
         responseStatus,
@@ -174,4 +211,19 @@ export class WebhookDispatcher {
       error,
     })
   }
+}
+
+/**
+ * What the attempt log keeps of a failure: a category, never the error's own text (Phase
+ * 90). The tenant reads the log, and a network error's text describes the network.
+ */
+export function failureOf(cause: unknown, responseStatus: number | null): string {
+  if (responseStatus !== null) return `HTTP ${responseStatus}`
+  if (cause instanceof EndpointRefusedError) return 'refused: not a public address'
+  const name = cause instanceof Error ? cause.name : ''
+  if (name === 'TimeoutError' || name === 'AbortError') return 'timeout'
+  const code = String((cause as { code?: unknown } | null)?.code ?? '')
+  if (/CERT|TLS|SSL|SELF_SIGNED/.test(code)) return 'tls'
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'dns'
+  return 'connection failed'
 }

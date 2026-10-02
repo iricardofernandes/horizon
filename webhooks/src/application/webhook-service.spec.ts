@@ -1,3 +1,4 @@
+import { EndpointRefusedError } from '@/domain/endpoint'
 import {
   type DeliverySnapshot,
   type SubscriptionSnapshot,
@@ -10,6 +11,7 @@ import {
   type ClaimedDelivery,
   CreateSubscriptionUseCase,
   type DeliveryAttemptSnapshot,
+  failureOf,
   ReplayDeliveryUseCase,
   WebhookDispatcher,
   type WebhookHttpClient,
@@ -183,5 +185,52 @@ describe('webhook reliability', () => {
         event.eventType,
       ),
     ).toBe(true)
+  })
+
+  it('refuses a name that resolves outside the public internet, and keeps one not resolved yet (Phase 90)', async () => {
+    const repository = new MemoryRepository()
+    const answers: Record<string, readonly string[]> = {
+      'internal.example.com': ['93.184.215.14', '10.0.0.5'],
+      'metadata.example.com': ['169.254.169.254'],
+      'hooks.example.com': ['93.184.215.14', '2606:4700:4700::1111'],
+    }
+    const create = new CreateSubscriptionUseCase(
+      repository,
+      { now: () => new Date('2026-10-02T12:00:00.000Z') },
+      { allowLoopback: false, resolver: { addressesOf: async (host) => answers[host] ?? [] } },
+    )
+    const subscribe = (endpointUrl: string) =>
+      create.execute({ tenantId: event.tenantId, endpointUrl, eventTypes: [event.eventType] })
+
+    await expect(subscribe('https://internal.example.com/hooks')).rejects.toThrow(
+      EndpointRefusedError,
+    )
+    await expect(subscribe('https://metadata.example.com/hooks')).rejects.toThrow(
+      EndpointRefusedError,
+    )
+    await expect(subscribe('https://10.0.0.5/hooks')).rejects.toThrow(EndpointRefusedError)
+    await expect(subscribe('http://hooks.example.com/hooks')).rejects.toThrow(EndpointRefusedError)
+    await subscribe('https://hooks.example.com/hooks')
+    await subscribe('https://not-yet.example.com/hooks')
+    expect(repository.subscriptions.size).toBe(2)
+  })
+
+  it('keeps a failure as a category, never the text of the error (Phase 90)', () => {
+    const refused = Object.assign(new Error('connect ECONNREFUSED 10.0.0.5:5432'), {
+      code: 'ECONNREFUSED',
+    })
+    expect(failureOf(refused, null)).toBe('connection failed')
+    expect(failureOf(new Error('Endpoint returned HTTP 404'), 404)).toBe('HTTP 404')
+    expect(failureOf(new EndpointRefusedError('The endpoint must be a public address'), null)).toBe(
+      'refused: not a public address',
+    )
+    expect(failureOf(new DOMException('The operation timed out.', 'TimeoutError'), null)).toBe(
+      'timeout',
+    )
+    expect(failureOf(Object.assign(new Error('x'), { code: 'ENOTFOUND' }), null)).toBe('dns')
+    expect(
+      failureOf(Object.assign(new Error('x'), { code: 'DEPTH_ZERO_SELF_SIGNED_CERT' }), null),
+    ).toBe('tls')
+    expect(failureOf('not an error', null)).toBe('connection failed')
   })
 })

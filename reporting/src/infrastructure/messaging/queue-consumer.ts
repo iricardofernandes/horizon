@@ -13,7 +13,7 @@ import { Undeliverable } from '@/application/journal-intake'
 export interface QueueConsumerOptions {
   readonly url: string
   readonly queue: string
-  /** Event types bound on the topic exchange; none for a queue fed through the default exchange. */
+  /** Routing keys bound on the topic exchange. */
   readonly bindings: readonly string[]
   readonly handle: (body: unknown) => Promise<string>
   readonly prefetch: number
@@ -43,7 +43,7 @@ export class QueueConsumer {
 
   async start(): Promise<void> {
     const exchange = this.options.exchange ?? 'horizon.events'
-    const deadLetterExchange = this.options.deadLetterExchange ?? 'horizon.events.dlx'
+    const deadLetterExchange = this.options.deadLetterExchange ?? `${this.options.queue}.dlx`
     const connection = await connect(this.options.url, {
       timeout: this.options.connectTimeoutMs ?? 5000,
     })
@@ -53,18 +53,12 @@ export class QueueConsumer {
     this.channel = channel
     channel.on('error', () => undefined)
     await channel.assertExchange(exchange, 'topic', { durable: true })
-    await channel.assertExchange(deadLetterExchange, 'topic', { durable: true })
+    // Each queue dead-letters into an exchange of its own (Phase 90). Reporting's broker user
+    // may write only to its own names, and a shared exchange would let any module place a
+    // message in another module's dead-letter queue.
+    await channel.assertExchange(deadLetterExchange, 'fanout', { durable: true })
     await channel.assertQueue(`${this.options.queue}.dlq`, { durable: true })
-    // Each queue's dead letters reach its own DLQ only (Phase 79). RabbitMQ stamps a dead
-    // letter with the queue it died in, and a headers exchange routes on that stamp; the old
-    // catch-all binding copied every module's dead letters into every DLQ.
-    await channel.assertExchange('horizon.dead-letters', 'headers', { durable: true })
-    await channel.bindExchange('horizon.dead-letters', deadLetterExchange, '#')
-    await channel.unbindQueue(`${this.options.queue}.dlq`, deadLetterExchange, '#')
-    await channel.bindQueue(`${this.options.queue}.dlq`, 'horizon.dead-letters', '', {
-      'x-match': 'all-with-x',
-      'x-first-death-queue': this.options.queue,
-    })
+    await channel.bindQueue(`${this.options.queue}.dlq`, deadLetterExchange, '')
     await channel.assertQueue(this.options.queue, { durable: true, deadLetterExchange })
     for (const eventType of this.options.bindings)
       await channel.bindQueue(this.options.queue, exchange, eventType)
@@ -81,7 +75,9 @@ export class QueueConsumer {
       .getTracer('reporting.consumer')
       .startActiveSpan('journal.consume', { kind: SpanKind.CONSUMER }, parent, async (span) => {
         try {
-          const outcome = await this.options.handle(this.parse(message))
+          const body = this.parse(message)
+          if (!publishedAs(message, body)) throw new Undeliverable('misrouted')
+          const outcome = await this.options.handle(body)
           consumed.add(1, { queue: this.options.queue, outcome })
           span.setStatus({ code: SpanStatusCode.OK })
           channel.ack(message)
@@ -124,4 +120,22 @@ export class QueueConsumer {
   onModuleDestroy(): Promise<void> {
     return this.close()
   }
+}
+
+/**
+ * A message is what it was published as (Phase 90). Each module's broker user may publish
+ * only routing keys of its own: an event under its type, a journal seal under
+ * `<source>.seal`. So a module cannot seal or resend another module's journal, or send
+ * another module's event under a key of its own. A message from the default exchange was
+ * put back by an operator: no module may write there.
+ */
+export function publishedAs(message: Pick<ConsumeMessage, 'fields'>, body: unknown): boolean {
+  if (message.fields.exchange === '') return true
+  if (!body || typeof body !== 'object') return false
+  const record = body as { kind?: unknown; source?: unknown; eventType?: unknown }
+  if (record.kind === 'seal')
+    return (
+      typeof record.source === 'string' && message.fields.routingKey === `${record.source}.seal`
+    )
+  return typeof record.eventType === 'string' && message.fields.routingKey === record.eventType
 }

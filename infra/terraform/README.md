@@ -84,6 +84,31 @@ plaintext SHA-256 to `fiscal_artifacts.digest` under a tenant-scoped operator to
 the service rechecks the digest on every read. Test this procedure in a temporary
 environment before a production cutover. Bucket deletion is disabled in Terraform.
 
+### Broker users
+
+Each service connects to Amazon MQ as a user of its own, which may publish only its own
+module's events and read only its own queues
+([ADR 0075](../../docs/adr/0075-one-broker-identity-per-module.md)). Amazon MQ creates
+one RabbitMQ user, the administrator, so the module users are created through the
+management API once the broker is up, from a host that can reach it, before the first
+service starts. The administrator and every module password are in one secret, which
+no task may read, and go to the script on its standard input:
+
+```sh
+aws secretsmanager get-secret-value \
+  --secret-id "$(terraform -chdir=infra/terraform output -raw mq_bootstrap_secret_arn)" \
+  --query SecretString --output text \
+  | node infra/scripts/broker-definitions.mjs \
+      --apply "$(terraform -chdir=infra/terraform output -raw mq_console_url)" \
+      --environment-json -
+```
+
+It declares `horizon.events` and `horizon.journal`, then each module's user, permissions
+and topic permissions, and refuses to run while any module lacks a password of at least
+16 characters; `--check` lists the users the broker still lacks. To rotate one module's
+password, replace its `random_password` (`-replace='module.mq.random_password.module["sales"]'`),
+run the same command, and restart that service.
+
 ## Before a first deployment
 
 Kong's upstreams are named the way Compose names services (`http://sales:3004`). The
@@ -120,7 +145,7 @@ Calculator before any real use.
 | ElastiCache `cache.t4g.micro` | 1 node | $12–25 |
 | Amazon MQ RabbitMQ `mq.m7g.medium` | single instance + EBS | $85–140 |
 | 1 NAT gateway | before traffic | about $33 |
-| ALB, CloudWatch, about 50 secrets, ECR, three buckets | low traffic | $60–110 |
+| ALB, CloudWatch, about 65 secrets, ECR, three buckets | low traffic | $60–110 |
 | **Dev total** | | **roughly $610–780/month** |
 
 The production values double the tasks at 0.5 vCPU / 1 GB, make the sixteen databases

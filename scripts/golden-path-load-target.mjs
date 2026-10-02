@@ -175,7 +175,7 @@ try {
   )
   const subscription = existingSubscription
     ? { subscriptionId: existingSubscription.id, secret: existingSubscription.secret }
-    : await new modules.CreateSubscriptionUseCase(webhooksDb, clock).execute({
+    : await new modules.CreateSubscriptionUseCase(webhooksDb, clock, { allowLoopback: true }).execute({
         tenantId: fixture.tenantId,
         endpointUrl: callback.url,
         eventTypes: ['sales.order.confirmed'],
@@ -183,7 +183,8 @@ try {
   callback.setSecret(subscription.secret)
   const webhookDispatcher = new modules.WebhookDispatcher(
     webhooksDb,
-    new modules.FetchWebhookClient(),
+    // The stub receiver listens on this machine's loopback: a development exception (Phase 90).
+    new modules.GuardedWebhookClient({ allowLoopback: true }),
     clock,
     { maxAttempts: 3, baseMs: 50, maxMs: 1000, jitterRatio: 0 },
     { timeoutMs: 5000, batchSize: 100, queueDepthAlert: 10_000 },
@@ -291,7 +292,7 @@ function loadModules() {
   const webhooks = {
     ...from(webhooksRequire, 'webhooks/dist/infrastructure/database/webhook-database.js'),
     ...from(webhooksRequire, 'webhooks/dist/application/webhook-service.js'),
-    ...from(webhooksRequire, 'webhooks/dist/infrastructure/http/fetch-webhook-client.js'),
+    ...from(webhooksRequire, 'webhooks/dist/infrastructure/http/guarded-webhook-client.js'),
     ...from(webhooksRequire, 'webhooks/dist/infrastructure/messaging/event-consumer.js'),
   }
   return {
@@ -310,7 +311,7 @@ function loadModules() {
     WebhookDatabase: webhooks.WebhookDatabase,
     CreateSubscriptionUseCase: webhooks.CreateSubscriptionUseCase,
     WebhookDispatcher: webhooks.WebhookDispatcher,
-    FetchWebhookClient: webhooks.FetchWebhookClient,
+    GuardedWebhookClient: webhooks.GuardedWebhookClient,
     WebhookEventConsumer: webhooks.WebhookEventConsumer,
   }
 }

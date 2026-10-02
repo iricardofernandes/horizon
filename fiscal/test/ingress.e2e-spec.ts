@@ -449,7 +449,10 @@ it('consumes duplicate broker deliveries into one fiscal intent', async () => {
       taxId: '00000000E08G12',
       revision: 1,
     })
-    channel.publish('horizon.events.dlx', 'catalog.price.changed', Buffer.from('other-module'))
+    // Another module's dead letters never reach Fiscal's (Phase 90): each queue dead-letters
+    // into an exchange of its own.
+    await channel.assertExchange('catalog.events.dlx', 'fanout', { durable: true })
+    channel.publish('catalog.events.dlx', '', Buffer.from('other-module'))
     await channel.waitForConfirms()
     expect((await channel.checkQueue('fiscal.events.dlq')).messageCount).toBe(0)
   } finally {

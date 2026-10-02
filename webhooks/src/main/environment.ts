@@ -19,6 +19,11 @@ export const environmentSchema = z.object({
   WEBHOOK_QUEUE_DEPTH_ALERT: integer(1).default(10_000),
   OUTBOX_BATCH_SIZE: integer(1).max(1000).default(100),
   OUTBOX_POLL_INTERVAL_MS: integer(100).default(250),
+  /** Plain HTTP to this machine's loopback, for a development stack only (Phase 90). */
+  WEBHOOK_ALLOW_LOOPBACK: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
 })
 
 export type WebhookEnvironment = z.infer<typeof environmentSchema>
