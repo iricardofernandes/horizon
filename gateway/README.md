@@ -1,18 +1,25 @@
-# `gateway/`
+# Gateway
 
-Kong's declarative configuration — the single public entry point to Horizon.
+Kong, in DB-less mode: the single public entry point to Horizon. One declarative file
+routes to every service and applies token validation, rate limits, size limits, CORS,
+correlation ids and tracing once, for all of them.
 
-**Status: phase 2 — running.** Services, routes and the plugin set are declared and the
-gateway validates EdDSA access tokens. `make smoke` proves it rejects a token signed by a
-key it has never seen.
+| | |
+|---|---|
+| **Port** | 8000 |
+| **Routes to** | All sixteen services |
+| **Stack** | Kong 3.9 OSS, DB-less · decK |
+
+<p align="center">
+  <img src="../docs/assets/modules/gateway.png" alt="Every request from the portal or an integrator enters through Kong, which validates the EdDSA token, applies rate limits, size limits, CORS and a correlation id, emits a trace span, and routes to one of the sixteen services; each service verifies the token again." width="100%">
+</p>
 
 ---
 
 ## What this project owns
 
 - **Routing.** Which path reaches which service, and on which upstream.
-- **Cross-cutting request policy**, applied once here instead of five times in the
-  services: JWT validation against `identity/`'s JWKS, rate limiting (global,
+- **Cross-cutting request policy**, applied once here instead of in every service: JWT validation against `identity/`'s JWKS, rate limiting (global,
   per-consumer, per-API-key), request size limiting, correlation ids, CORS, and
   OpenTelemetry span emission.
 - **Consumer and rate-limit tiers**, declared statically.
@@ -48,6 +55,13 @@ make kong-config   # re-render after a key change
 
 `identity/` still publishes `/.well-known/jwks.json` — it is the source of truth for
 every other verifier, and the render script is a Kong-shaped adapter over the same keys.
+
+## The image for AWS
+
+The gateway image in [`Dockerfile`](Dockerfile) is what the AWS stack runs. It rewrites
+two things Compose and ECS name differently: the OpenTelemetry endpoint becomes the
+sidecar on `127.0.0.1`, and each upstream `http://<service>:<port>` becomes Cloud Map's
+`http://<service>.horizon.local:<port>`. The committed `kong.yml` stays the same for both.
 
 ## The `/gateway/verify` route
 

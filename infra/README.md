@@ -1,127 +1,91 @@
-# `infra/`
+# Infra
 
-Local orchestration, observability configuration, and the Terraform that describes the
-AWS deployment.
+The platform every service runs on: local orchestration with Docker Compose, the
+observability stack and its alert rules, database bootstrap, backups and restore drills,
+and the Terraform that describes the AWS deployment.
 
-**Status: phase 2 — the platform runs.** `make up && make smoke` brings up eleven
-services from cold and asserts 43 things about them. Terraform is still phase 13.
+| | |
+|---|---|
+| **Runs** | PostgreSQL 17 with pgvector, Redis 7, RabbitMQ 4, Kong, MinIO, ClamAV, Mailpit, Verdaccio, and the observability stack |
+| **Observability** | OpenTelemetry Collector → Jaeger, Prometheus, Loki; Grafana Alloy; Grafana |
+| **Stack** | Docker Compose · Terraform for AWS (ECS Fargate, RDS, ElastiCache, Amazon MQ) |
+
+<p align="center">
+  <img src="../docs/assets/modules/infra.png" alt="The local platform: one PostgreSQL holding sixteen databases, Redis, RabbitMQ, Kong, MinIO and ClamAV, with every service sending traces, metrics and logs to the OpenTelemetry Collector, which fans out to Jaeger, Prometheus and Loki, all read in Grafana. Backups archive the WAL and take base backups; a restore drill rebuilds the stack beside the live one." width="100%">
+</p>
 
 ---
 
 ## Quick start
 
 ```bash
-make up          # start everything and wait for health
+make up          # start the platform and wait for every healthcheck
 make smoke       # prove it works, not merely that it started
+make up-apps     # add Horizon's own services and the portal
 make down        # stop, keeping data
 make clean       # stop and delete the volumes
 ```
 
-`make up` generates development keys if they are missing, renders the Kong
-configuration, and waits for every healthcheck. Cold start is around 30 seconds.
+`make up` generates development keys if they are missing, renders the Kong configuration,
+and waits for health. Optional profiles add what most work does not need:
 
-### Phase 40 Fiscal service
-
-The optional `fiscal` Compose profile runs the Fiscal inbox, API and versioned MinIO
-artifact store. Run `make up-fiscal` after setting `HORIZON_FISCAL_ARTIFACT_KEY_HEX`
-to a persistent random 32-byte key in `infra/.env`. Set
-`HORIZON_FISCAL_SERVICE_KEYS_JSON` to a secret JSON map of tenant IDs to
-rotatable Identity API keys. Each key needs the owner read scopes and its issuer needs
-the dedicated `identity:fiscal-reader` and `parties:fiscal-reader` roles plus
-`catalog:viewer`. The worker exchanges these
-keys for short tokens and refreshes them before expiry. Then run:
-
-```bash
-make up-fiscal
-```
-
-A fresh PostgreSQL volume creates `horizon_fiscal` automatically. For a volume created
-before Phase 39, run `docker exec horizon-postgres createdb -U postgres -O horizon_owner horizon_fiscal`
-once before starting the profile. The `fiscal-migrate` job applies its own schema.
-Fiscal transmission remains disabled for every capability tuple.
-
-### Phase 65 files and ClamAV
-
-The `files` service stores attachments in the `horizon-attachments` bucket. That bucket is
-not versioned, so a removed file really goes. By default it scans with the deterministic
-EICAR adapter, as CI does. To scan with ClamAV:
-
-```bash
-make up-scanner   # starts clamav (profile `scanner`) and restarts files with FILES_SCANNER=clamav
-```
-
-- **Signatures.** ClamAV keeps them in the `clamav-signatures` volume and refreshes them
-  itself.
-- **Older volumes.** A PostgreSQL volume created before Phase 65 needs `horizon_files`
-  created once, with the grants of `postgres/init/01-roles-and-databases.sh`.
-- **Secrets.** Set `HORIZON_FILES_MASTER_KEY` (64 hex characters) and
-  `HORIZON_FILES_LINK_SECRET` in `infra/.env` for anything but local use.
+| Command | Adds |
+|---|---|
+| `make up-fiscal` | The Fiscal API, worker and document bucket |
+| `make up-scanner` | ClamAV, and points Files at it |
+| `make up-ai` | The local embedding model for document search |
 
 | Service | URL | Credentials |
 |---|---|---|
 | Gateway (Kong) | http://localhost:8000 | — |
-| Kong admin (read-only, DB-less) | http://localhost:8001 | — |
+| Portal | http://localhost:3000 | `demo@horizon.local` / `Horizon-demo-2026!` after `make demo` |
 | Grafana | http://localhost:3300 | admin / admin |
 | Jaeger | http://localhost:16686 | — |
 | Prometheus | http://localhost:9090 | — |
-| Loki | http://localhost:3100 | — |
 | RabbitMQ management | http://localhost:15672 | horizon / horizon |
+| Mailpit | http://localhost:8025 | — |
 | Verdaccio | http://localhost:4873 | — |
-| PostgreSQL | localhost:5432 | see below |
-| Redis | localhost:6379 | — |
 
-### Port conflicts
-
-Every published port is overridable. If something already listens on one of them, copy
-`.env.example` to `.env` and change the line rather than stopping your other work:
-
-```bash
-cp infra/.env.example infra/.env
-echo 'HORIZON_POSTGRES_PORT=5433' >> infra/.env
-```
-
-Container-to-container addressing is unaffected — services always reach each other by
-service name and container port.
+Every published port can be overridden in `infra/.env` (copy `.env.example`), for example
+`HORIZON_POSTGRES_PORT=5433`. Containers always reach each other by service name.
 
 ---
 
-## What this project owns
+## What it provides
 
-- **The local platform** — `docker-compose.yml`: PostgreSQL 17, Redis 7, RabbitMQ 4,
-  Verdaccio, Kong, the OTel Collector, Jaeger, Prometheus, Loki, Grafana Alloy and
-  Grafana.
-- **The application overlay** — `docker-compose.apps.yml`, adding Horizon's own services.
-  Separate so the platform can run alone while a service is worked on from source, which
-  is the normal development loop.
-- **Observability configuration** — the Collector pipeline, Prometheus scrape config and
-  alert rules (`observability/rules/*.rules.yml`, tested by `make test-alerts`), Loki,
-  Alloy, and Grafana's provisioned datasources and dashboards.
-- **Database bootstrap** — `postgres/init/`: five databases and three roles.
-- **Operational scripts** — key generation, Kong config rendering, token minting, smoke.
-- **Terraform** *(phase 13)*.
+- **`docker-compose.yml`, the platform.** It runs alone, so a service can be worked on
+  from source against it, which is the normal development loop.
+- **`docker-compose.apps.yml`, the application overlay.** Every service, its migration
+  job, the portal, the synthetic probe and the retention job.
+- **Database bootstrap.** One PostgreSQL holding sixteen databases, one per module
+  ([ADR 0016](../docs/adr/0016-one-database-per-module.md)).
+- **Observability.** The Collector pipeline, Prometheus scraping and alert rules, Loki,
+  Alloy, and Grafana with its datasources and dashboards provisioned from files: the
+  service overview, service levels, AI, and the tax engine.
+- **Backups, retention and restore drills.**
+- **Terraform** for AWS, in [`terraform/`](terraform/).
 
-## What it explicitly does not own
+## What it leaves to others
 
-- **Anything that runs in production.** See "Terraform is written and never applied".
-- **Application configuration.** Each module owns its own `.env.example` and validates
-  its own configuration at boot.
-- **Secrets.** It generates development keys into a gitignored path and reads nothing
-  real.
+- **Application configuration.** Each module owns its `.env.example` and validates its own
+  configuration at boot.
+- **Secrets.** Development keys are generated into a gitignored path; nothing real is read.
 
 ---
 
-## The three PostgreSQL roles
+## The database roles
 
-One container hosting five databases (ADR 0016). The role separation is what makes the
-tenant isolation claim real rather than aspirational (ADR 0017):
+The role separation is what makes tenant isolation real rather than aspirational
+([ADR 0017](../docs/adr/0017-row-level-security-and-tenant-aware-transaction.md)):
 
 | Role | Purpose | Notably |
 |---|---|---|
-| `horizon_owner` | Owns the schema, runs migrations | The application never connects as this |
-| `horizon_app` | What the services connect as | `NOSUPERUSER`, `NOBYPASSRLS` — RLS applies to it |
-| `horizon_debug` | The MCP debugger (ADR 0035) | No privileges on business tables; `pg_read_all_stats` only |
+| `horizon_owner` | Owns the schemas, runs migrations | The services never connect as this |
+| `horizon_app` | What the services connect as | `NOSUPERUSER`, `NOBYPASSRLS`, so RLS applies to it |
+| `horizon_relay` | The outbox relays and workers | Only the grants each module's migrations give it |
+| `horizon_debug` | The MCP debugger | No privilege on any business table |
 
-`make smoke` asserts that `horizon_app` is not superuser, cannot bypass RLS and cannot
+`make smoke` asserts that `horizon_app` is not a superuser, cannot bypass RLS and cannot
 create roles. If it could, every tenant-isolation test in the repository would pass
 without proving anything.
 
@@ -129,107 +93,83 @@ without proving anything.
 
 ## The observability pipeline
 
-```
+```text
 services ──OTLP──▶ Collector ──┬──▶ Jaeger      (traces)
-                               ├──▶ Prometheus  (metrics, scraped from :8889)
+                               ├──▶ Prometheus  (metrics)
                                └──▶ Loki        (logs)
 container stdout ──▶ Alloy ────────▶ Loki
                                       ▲
-                              Grafana ┘ (also Prometheus, Jaeger)
+                              Grafana ┘ (also Prometheus and Jaeger)
 ```
 
-Nothing talks to a backend directly (ADR 0033). Services know the Collector's endpoint
-and nothing else, so a backend can be swapped in one file, and a backend outage loses
-visibility rather than backpressuring the application.
+Nothing talks to a backend directly
+([ADR 0033](../docs/adr/0033-opentelemetry-with-collector-fanout.md)). A backend can be
+swapped in one file, and a backend outage loses visibility instead of slowing the
+application.
 
-`make smoke` pushes one trace, one log and one metric through the Collector and then
-asserts each arrived: the trace queryable in Jaeger by id, the log in Loki **carrying the
-same trace id**, and the metric scraped into Prometheus. That correlation is the thing
-that makes an investigation possible, so it is tested rather than assumed.
+`make smoke` pushes one trace, one log and one metric through the Collector and checks
+each arrived: the trace in Jaeger, the log in Loki **with the same trace id**, the metric in
+Prometheus. That correlation is what makes an investigation possible, so it is tested.
 
-Grafana starts with its datasources and the `Horizon — service overview` dashboard
-already provisioned from files. Nobody clicks anything to set the stack up.
+**Alert rules** live in `observability/rules/`, each file with its own promtool tests:
+service levels, Sales, Fiscal, AI and the tax engine. `make test-alerts` runs them. The
+objectives are in [`docs/service-levels.md`](../docs/service-levels.md).
 
-### A note on healthchecks
+---
 
-Nine of the eleven services have container healthchecks. The OTel Collector and Alloy are
-distroless — no shell, no health subcommand — so no healthcheck is expressible in the
-compose file, and their readiness is asserted from the host by `scripts/smoke.sh`
-instead. This is stated rather than silently skipped.
+## Backups and restore
 
-Healthchecks address `127.0.0.1`, not `localhost`. Inside the Verdaccio image `localhost`
-resolves to `::1` first while Verdaccio binds IPv4 only, so a `localhost` healthcheck
-fails against a perfectly healthy service. Using the literal address everywhere avoids
-the whole class of problem.
+- **PostgreSQL archives its WAL** at least every 5 minutes.
+- **Base backups** every 6 hours, keeping 7, each with a manifest. `make backup-now` takes
+  one.
+- **Every MinIO bucket is versioned**: fiscal documents, exports and attachments.
+- **Retention** removes old delivery bookkeeping daily. `make retention-now` runs a pass.
+- **`make restore-drill`** restores everything beside the live stack, verifies it, and
+  stores the evidence ([ADR 0063](../docs/adr/0063-recovery-is-measured-by-drills.md)).
+
+See the [recovery runbook](../docs/recovery-runbook.md).
 
 ---
 
 ## The gateway configuration is rendered
 
-`gateway/kong.yml` is a **template**. Kong OSS verifies EdDSA but has no plugin that
-fetches a JWKS document, so the public keys have to be present in the declarative
-configuration. `scripts/render-kong-config.sh` injects them into
-`generated/kong.generated.yml` (gitignored), which is what the container mounts.
+`gateway/kong.yml` is a template. Kong OSS verifies EdDSA tokens but cannot fetch a JWKS
+document, so the public keys must be in the configuration.
+`scripts/render-kong-config.sh` injects them into `generated/kong.generated.yml`
+(gitignored), which the container mounts
+([ADR 0036](../docs/adr/0036-kong-oss-has-no-jwks-so-the-gateway-config-is-rendered.md)).
 
 ```bash
-make keys           # generate an Ed25519 keypair (gitignored)
-make keys ARGS=dev-2 # a second kid, to practise rotation
-make kong-config    # re-render after a key change
+make keys             # an Ed25519 key pair (gitignored)
+make keys ARGS=dev-2  # a second key id, to practise rotation
+make kong-config      # render again after a key change
 ```
 
-The full reasoning, and what was rejected, is in
-[ADR 0036](../docs/adr/0036-kong-oss-has-no-jwks-so-the-gateway-config-is-rendered.md).
-
-`make smoke` mints a token with the dev key and calls `/gateway/verify` — a route with no
-upstream, answered directly by `request-termination` — expecting 200. It then calls with
-a token signed by a freshly generated key the gateway has never seen, expecting 401. That
-second check is the one that matters.
-
----
-
-## Scripts
+`make smoke` checks that a token signed by a key the gateway has never seen is refused.
 
 | Script | Purpose |
 |---|---|
-| `scripts/generate-keys.sh` | Ed25519 keypair plus a blind-index key, into a gitignored path |
-| `scripts/render-kong-config.sh` | Kong template + public keys → runnable declarative config |
-| `scripts/mint-dev-token.mjs` | Mint an EdDSA token; `--bogus` signs with an unknown key |
-| `scripts/smoke.sh` | 43 assertions about a running platform |
-
-`mint-dev-token.mjs` uses `node:crypto` and no dependencies, because the repository root
-has no `package.json` (ADR 0001).
+| `scripts/generate-keys.sh` | Ed25519 key pair and a blind-index key, into a gitignored path |
+| `scripts/render-kong-config.sh` | Kong template plus public keys into a runnable configuration |
+| `scripts/mint-dev-token.mjs` | Mint a development token; `--bogus` signs with an unknown key |
+| `scripts/smoke.sh` | Assertions about a running platform |
 
 ---
 
-## Terraform is written and never applied
+## Terraform
 
-Stated here, in `terraform/README.md` when that phase lands, and in
-[ADR 0034](../docs/adr/0034-terraform-written-but-never-applied.md), because a reader who
-discovers an unstated gap discounts everything else in the repository.
+[`terraform/`](terraform/) describes all sixteen services on AWS: ECS Fargate, one RDS
+instance per module, ElastiCache, Amazon MQ, a load balancer, private buckets and
+CloudWatch. Every push runs `terraform fmt`, `validate` and `terraform test` for both
+environments. It is not deployed to a paid account, and no workflow is allowed to apply
+it ([ADR 0034](../docs/adr/0034-terraform-written-but-never-applied.md)). Its README has
+the topology, the secrets each service needs, and a cost estimate.
 
-Modules for network, ECS services, RDS, ElastiCache, Amazon MQ, ALB, ECR and
-observability; `envs/dev` and `envs/prod` differing only in variables; an S3 and DynamoDB
-state backend defined but not initialized. CI runs `terraform fmt -check` and
-`terraform validate`, and `scripts/assert-no-terraform-apply.mjs` fails the build if any
-workflow could apply it.
+---
 
-It has never been applied and there is no AWS account behind it. `validate` proves the
-configuration is coherent, not that it would provision. The estimated monthly cost of
-running it is published alongside the code when that phase lands.
+## Healthchecks
 
-Something *is* reachable: phase 11 deploys `web/` plus a minimal backend to a free tier,
-with a note saying exactly which parts of the architecture are running there.
-
-## Backups, retention and the restore drill (Phase 69)
-
-- **PostgreSQL archives its WAL** to the `postgres-wal` volume, a segment at least every 5
-  minutes.
-- **`postgres-backup` takes base backups:** every 6 hours, keeping 7, into `postgres-base`,
-  with a manifest each. `make backup-now` takes one.
-- **Every MinIO bucket is versioned.**
-- **`horizon-retention`** removes old delivery bookkeeping daily. `make retention-now` runs
-  one pass.
-- **`make restore-drill`** restores everything beside the live stack (gateway on 18000),
-  verifies it, and stores the evidence.
-
-See the [recovery runbook](../docs/recovery-runbook.md).
+Healthchecks use `127.0.0.1`, not `localhost`: inside some images `localhost` resolves to
+`::1` first while the service binds IPv4 only. The OpenTelemetry Collector and Alloy are
+distroless, with no shell for a healthcheck, so `scripts/smoke.sh` checks them from the host
+instead.

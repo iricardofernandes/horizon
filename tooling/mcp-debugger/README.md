@@ -1,10 +1,22 @@
-# `tooling/mcp-debugger/`
+# MCP debugger
 
-A read-only MCP server exposing the Horizon observability plane to an AI agent.
+A read-only MCP server that gives an operator's AI agent, such as Claude Code, the
+observability plane: logs, traces, metrics, queue depths and query plans, with tenant ids
+hashed and personal data masked. It cannot change anything.
 
-**Status: phase 12 — complete.** The server has stdio and authenticated streamable-HTTP
-transports, ten bounded read-only tools, redaction, an audit trail, and a database role
-whose denied privileges are exercised by `make test-phase12`.
+| | |
+|---|---|
+| **Transports** | stdio, and authenticated streamable HTTP |
+| **Reads** | Loki, Jaeger, Prometheus, the RabbitMQ management API, PostgreSQL catalogs and statistics |
+| **Stack** | Node.js · TypeScript · Model Context Protocol |
+
+<p align="center">
+  <img src="../../docs/assets/modules/mcp-debugger.png" alt="An operator's AI agent connects to the MCP debugger, which offers ten read-only tools over Loki, Jaeger, Prometheus, RabbitMQ's management API and PostgreSQL's catalogs and statistics. Tenant ids are hashed and personal data masked before anything leaves, every call is audited, and its database role cannot read a business table." width="100%">
+</p>
+
+`make test-phase12` proves its database role cannot read or write business data
+([ADR 0035](../../docs/adr/0035-mcp-debugger-read-only-by-construction.md)). It is not the
+tenant's own MCP server, which is the [Agent](../../agent/) module.
 
 ---
 

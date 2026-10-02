@@ -1,129 +1,161 @@
-# `reporting/`
+# Reporting
 
-Numbers that cross modules, as of a declared cutoff, and proven to agree with the modules
-they came from.
+Numbers that cross modules, as of a declared cutoff, and proven to agree with the
+modules they came from. Also exports, scheduled exports, saved filters and views,
+notifications, and the daily consistency checks.
 
-An independently deployable NestJS service with its own database, its own container and
-its own lifecycle. It is reached through Kong at `/reporting`, never directly, and it
-shares no source with any other module (ADR 0001).
+| | |
+|---|---|
+| **Port** | 3013 |
+| **Database** | `horizon_reporting`, its own, with forced row-level security |
+| **Talks to** | Hears the events of every business module; reads their own reports only to reconcile |
+| **Stack** | NestJS · Drizzle · PostgreSQL · RabbitMQ · S3-compatible storage |
 
-**Status: Phase 66.**
-- The event journal, the producers' seals and the per-source watermarks.
-- Four reports read from the journal at a cutoff, reconciled against the owners' own
-  reports.
-- Saved filters.
-- Exports to CSV and XLSX, signed download links, and scheduled exports.
-- Notifications from events, once per event, and saved views of list screens (Phase 66).
-
-See the [production readiness plan](../docs/production-readiness-implementation-plan.md),
-the [API reference](../docs/reporting-api.md) and
-[ADR 0058](../docs/adr/0058-reporting-keeps-a-sealed-event-journal.md).
+<p align="center">
+  <img src="../docs/assets/modules/reporting.png" alt="Reporting keeps a sealed journal of the events of Sales, Financial, Treasury, Inventory, Procurement, Ledger, Catalog, CRM and Fiscal. From it, it answers cash position, order to cash, procure to pay and pipeline to revenue at a cutoff, reconciled against the owners' own reports, and writes CSV and XLSX exports." width="100%">
+</p>
 
 ---
 
-## What this context owns
+## What it does
 
-- **The event journal:**
-  - an append-only copy of every event of Sales, Financial, Treasury, Inventory,
-    Procurement, Ledger, Catalog, CRM and Fiscal;
-  - kept once per event id, with how it arrived (`live` or `replay`);
-  - nothing of `parties.*` or `identity.*`, and procurement's `supplierName` removed
-    before it is stored. A report holds ids, and names come from their owners.
-- **Seals:** every count a producer sent of a tenant's events up to an instant, compared
-  with the journal's own count: `matched`, `mismatched`, or `refused` when inside the
-  two-minute margin.
-- **Watermarks:** per tenant and source, how far the journal is proven complete. Only a
-  matched seal moves it, and never backwards.
-- **Reports** are queries over the journal at a cutoff, so there is no projection to drift
-  or rebuild:
-  - cash position;
-  - order to cash;
-  - procure to pay;
-  - pipeline to revenue.
-- **Reconciliation runs:** every check against an owner's own report, kept with its
-  differences.
-- **Saved filters:** private, or shared by an administrator.
-- **Export jobs and schedules:**
-  - reports written to CSV or XLSX in object storage by a worker, downloaded through
-    links signed for 15 minutes, and removed after their retention;
-  - schedules that run daily, weekly or monthly and catch up every missed run.
+- **A sealed event journal.** An append-only copy of every event of Sales, Financial,
+  Treasury, Inventory, Procurement, Ledger, Catalog, CRM and Fiscal, kept once per event.
+  Producers periodically send a seal (how many events they sent up to an instant), and the
+  journal compares it with its own count. A source is proven complete up to its last
+  matched seal ([ADR 0058](../docs/adr/0058-reporting-keeps-a-sealed-event-journal.md)).
+- **Reports at a cutoff.** Cash position, order to cash, procure to pay and pipeline to
+  revenue are queries over the journal, so there is no projection to drift or rebuild.
+- **Reconciliation.** At a settled cutoff, each report is checked against the owner's own
+  report, and the differences are kept.
+- **Consistency checks.** Every day, and on demand, the owners' figures (receivables,
+  payables, cash, stock) are compared with their ledger control accounts, and every
+  module's audit chain is verified.
+- **Exports.** CSV or XLSX, written by a worker to object storage, downloaded through
+  links signed for 15 minutes, and removed after their retention. Schedules run daily,
+  weekly or monthly and catch up on missed runs.
+- **Saved filters and views**, private or shared by an administrator.
+- **Notifications** from events, once per event.
 
-It never writes to another module (ADR 0047). It reads the owners' reports only for a
-reconciliation, through the gateway, with the token of the person who asked.
+## What it leaves to others
 
-## How events arrive
+- **Every number's meaning** belongs to the module that owns it. Reporting never writes
+  to another module ([ADR 0047](../docs/adr/0047-reporting-projections-never-write-back.md)).
+- **Names.** The journal holds ids, never names: nothing of `parties.*` or `identity.*` is
+  kept, and supplier names are removed before storage.
 
-| Queue | Fed by | Prefetch |
-|---|---|---|
-| `reporting.events` | `horizon.events`, bound to every event type of the journaled modules | `AMQP_PREFETCH` |
-| `reporting.notifications` | `horizon.events`, bound to the events that notify someone (Phase 66) | `AMQP_PREFETCH` |
-| `reporting.replay` | a producer's `republish:journal`, through the default exchange | 1, so a seal is read after the events sent before it |
-
-A message that cannot be parsed, or whose payload does not match its contract, goes to
-the queue's `.dlq` at once. A failing write is retried once, then dead-lettered.
+---
 
 ## API
 
-| Method | Path | Roles | What it answers |
-|---|---|---|---|
-| `GET` | `/sources?cutoff=` | `admin`, `analyst`, `viewer` | Per source: events held, the latest one, the watermark, the last seal and whether the cutoff is settled; and whether it is settled for every source |
-| `GET` | `/reports`, `/reports/{name}`, `/dashboard` | every role | The reports at a cutoff ([API reference](../docs/reporting-api.md)) |
-| `POST` | `/reports/{name}/reconciliations` | `admin`, `analyst` | A reconciliation run at a settled cutoff |
-| `POST`, `GET` | `/exports`, `/exports/{id}`, `/exports/{id}/link` | every role | Export jobs; `/exports/{id}/file` is public and checks the link's signature |
-| `POST`, `GET`, `PATCH`, `DELETE` | `/export-schedules` | `admin`, `analyst` | Scheduled exports |
-| `GET`, `POST`, `PATCH`, `DELETE` | `/saved-filters` | `admin`, `analyst` (sharing: `admin`) | Saved filters |
-| `GET`, `POST` | `/notifications`, `/notifications/unread-count`, `/notifications/{id}/read`, `/notifications/read-all` | any signed-in user | Their notifications (Phase 66) |
-| `GET`, `POST`, `PATCH`, `DELETE` | `/views` | any signed-in user | Saved views; only the owner changes one |
-| `GET` | `/health/live`, `/health/ready` | public | Liveness, and readiness with a database ping |
+<details>
+<summary><b>Reports and reconciliation</b></summary>
 
-## Filling the journal from a producer's history
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/sources` | Per source: events held, the watermark, the last seal, and whether a cutoff is settled |
+| `GET` | `/reports`, `/reports/:name`, `/dashboard` | The reports at a cutoff |
+| `POST`, `GET` | `/reports/:name/reconciliations` | Reconcile a report at a settled cutoff, and past runs |
+| `POST`, `GET` | `/consistency-checks` | Compare owners' figures with the ledger, and verify every audit chain |
 
-In `sales/`, `financial/`, `treasury/`, `inventory/`, `procurement/`, `ledger/` or `crm/`:
+</details>
+
+<details>
+<summary><b>Exports</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST`, `GET` | `/exports` | Start an export, or list them |
+| `GET` | `/exports/:id` | One export |
+| `GET` | `/exports/:id/link` | A download link signed for 15 minutes |
+| `GET` | `/exports/:id/file` | The file; public, but checks the link's signature |
+| `POST`, `GET` | `/export-schedules` | Scheduled exports |
+| `PATCH`, `DELETE` | `/export-schedules/:id` | Change or remove a schedule |
+
+</details>
+
+<details>
+<summary><b>Filters, views, notifications and operations</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`, `POST` | `/saved-filters` | Saved filters |
+| `PATCH`, `DELETE` | `/saved-filters/:id` | Change or remove one |
+| `GET`, `POST` | `/views` | Saved views of list screens |
+| `PATCH`, `DELETE` | `/views/:id` | Only the owner changes one |
+| `GET` | `/notifications`, `/notifications/unread-count` | My notifications |
+| `POST` | `/notifications/:id/read`, `/notifications/read-all` | Mark them read |
+| `GET` | `/audit` | The hash-chained audit log, with the chain's verdict |
+| `GET` | `/health/live`, `/health/ready` | Liveness and readiness |
+
+</details>
+
+**Roles.** `viewer` reads reports. `analyst` also reconciles, saves filters and schedules
+exports. `admin` also shares filters.
+
+---
+
+## Events
+
+Reporting publishes no events. It hears every event of the journaled modules, and the
+events that should notify someone, on separate queues. A message that does not match its
+contract goes to the queue's dead letters at once; a failing write is retried once.
+
+A producer can refill the journal from its own history, and seal it, at any time:
 
 ```bash
+# in sales/, financial/, treasury/, inventory/, procurement/, ledger/ or crm/
 npm run republish:journal -- --tenant <uuid> [--since <iso>] [--until <iso>] [--seal-only]
 ```
 
-The command:
-- reads the tenant's outbox as the relay role;
-- resends each row unchanged to `reporting.replay`;
-- then seals the count up to `--until`, which defaults to two minutes ago.
+Running it again changes nothing.
 
-Running it again changes nothing. Each of those producers also seals every tenant by
-itself every `JOURNAL_SEAL_INTERVAL_MS` (five minutes by default).
+---
 
-## Running it
+## Guarantees
+
+Besides what [every service guarantees](../docs/service-runtime.md#guarantees-every-service-gives):
+
+- **A settled cutoff gives the same answer forever.** Only a matched seal moves a source's
+  watermark, and never backwards.
+- **Reconciliations use the asker's own access.** Reporting reads an owner's report through
+  the gateway with the token of the person who asked, never with a privileged one.
+- **Scheduled work has the least access.** The daily checks run with a service token whose
+  roles are fixed in code: read where it reads figures, audit where it reads chains.
+
+---
+
+## Run it
 
 ```bash
-cp .env.example .env
-npm ci
-npm run db:migrate   # as horizon_owner
-npm run dev
-npm test             # unit tests, coverage gate on domain/ and application/
-npm run test:e2e     # PostgreSQL and RabbitMQ in Testcontainers
+npm install && cp .env.example .env
+npm run db:migrate
+npm run dev            # http://localhost:3013
 ```
 
-## Audit log (Phase 68)
+Tests, the build and the code layout are the same in every service:
+[how every service runs](../docs/service-runtime.md).
 
-`GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered
-by actor, action, record and period. Every page carries the chain's verdict: each row is
-recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
-admins; the web's audit screen asks it alongside every other module.
+<details>
+<summary><b>Configuration specific to Reporting</b></summary>
 
-## Consistency checks and scheduled controls (Phase 69)
+| Variable | Purpose |
+|---|---|
+| `GATEWAY_URL` | Where owners' reports are read for a reconciliation |
+| `EXPORT_STORE`, `EXPORT_BUCKET`, `EXPORT_FILE_ROOT` | Where export files are written: S3-compatible storage or a directory |
+| `EXPORT_LINK_SECRET` | Signs download links |
+| `EXPORT_RETENTION_HOURS`, `EXPORT_SETTLE_GRACE_MS`, `EXPORT_POLL_INTERVAL_MS`, `EXPORT_LEASE_MS` | How exports are processed and kept |
+| `SERVICE_TOKEN_SECRET`, `CONTROLS_INTERVAL_SECONDS`, `CONTROLS_FIRST_DELAY_SECONDS` | The daily consistency checks |
 
-- `POST /consistency-checks` compares, now and per currency, the owners' figures with
-  their ledger control accounts:
-  - receivables and payables (Financial);
-  - cash (Treasury);
-  - stock valuation (Inventory), where an `inventory` account is mapped.
+The variables every service shares are in
+[the shared configuration](../docs/service-runtime.md#configuration-every-service-shares).
 
-  It also judges every module's audit chain, page by page. It uses the caller's own access.
-- `GET /consistency-checks` lists the runs, which are kept append-only with their audit
-  links.
-- **With `SERVICE_TOKEN_SECRET` and the relay URL set,** a worker runs these checks daily
-  (`CONTROLS_INTERVAL_SECONDS`) for every tenant. It then reconciles each report at its
-  latest settled cutoff.
-  - It uses a read-only service token from Identity (`service:reporting`), never a
-    person's.
-  - One log line per tenant says what it found.
+</details>
+
+---
+
+## Read more
+
+- [How every service runs](../docs/service-runtime.md)
+- [The Reporting API](../docs/reporting-api.md)
+- [Architecture](../docs/architecture.md) and the [decision records](../docs/adr/README.md)

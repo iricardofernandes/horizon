@@ -1,98 +1,113 @@
-# `files/`
+# Files
 
-Attachments on the records of other modules: scanned before they are served, encrypted
-under their owner's key, and shredded with it.
+Attachments on the records of other modules: scanned for viruses before they are ever
+served, encrypted under their owner's key, kept as long as their record type requires,
+and shredded with their owner.
 
-An independently deployable NestJS service with its own database, its own bucket, its own
-container and its own lifecycle. It is reached through Kong at `/files`, never directly,
-and it shares no source with any other module (ADR 0001).
+| | |
+|---|---|
+| **Port** | 3014 |
+| **Database** | `horizon_files`, its own, with forced row-level security, and its own bucket |
+| **Talks to** | Parties and Identity (erasure); Knowledge indexes what it makes available |
+| **Stack** | NestJS · Drizzle · PostgreSQL · RabbitMQ · S3-compatible storage · ClamAV |
 
-**Status: Phase 65.** See the [Phase 65 plan](../docs/readiness-phase65-implementation-plan.md),
-the [API reference](../docs/files-api.md) and
-[ADR 0060](../docs/adr/0060-attachments-are-a-files-module.md).
+<p align="center">
+  <img src="../docs/assets/modules/files.png" alt="Files listens to Parties (party erased) and Identity (person erased). Uploads are scanned by ClamAV before they are served and stored encrypted in object storage. It publishes attachments available, quarantined and deleted to Knowledge, and quarantines to Reporting." width="100%">
+</p>
 
 ---
 
-## What this context owns
+## What it does
 
-- **Attachments.** Each one names a record as `(module, recordType, recordId)` and follows
-  the lifecycle `uploading → scanning → available | quarantined → deleted`:
+- **Attachments on records.** Each one names a record, such as a party, purchase order,
+  receivable, payable, service order or opportunity. Its life is
+  `uploading → scanning → available | quarantined → deleted`.
+- **Scanned before served.** Nothing is downloadable until ClamAV says it is clean. An
+  infected file is quarantined for 30 days, then removed. A scan with no answer is retried.
+- **Signed links.** Uploads and downloads go through short-lived signed links.
+- **Encryption per owner.** Each file has its own data key, wrapped by its owner's key,
+  which is wrapped by a master key. Erasing the owner destroys their key, and a database
+  trigger never lets it come back
+  ([ADR 0026](../docs/adr/0026-crypto-shredding-for-erasure.md)).
+- **Retention per record type.** Purchase orders, titles and service orders five years,
+  opportunities two, a party's files until the party is erased.
+- **A record of every removal**: who, why, how many bytes and when, append-only.
 
-  | Module | Record types | Kept after it is available |
-  |---|---|---|
-  | `parties` | `party` | until the party is erased |
-  | `procurement` | `purchase-order` | 5 years |
-  | `financial` | `receivable`, `payable` | 5 years |
-  | `sales` | `service-order` | 5 years |
-  | `crm` | `opportunity` | 2 years |
-- **Owner keys.** One per party or user, wrapped by `FILES_MASTER_KEY`. Each file has its
-  own data key, wrapped by its owner's key. Erasing the owner sets the key to null, and a
-  trigger never lets it come back.
-- **Removals.** Every removal of stored bytes: who, why, how many bytes, and when. The
-  table is append-only.
-- **The audit log.** A hash chain of who asked for a slot, took a download link, or
-  deleted a file (ADR 0025).
+## What it leaves to others
 
-It holds no roles of its own (ADR 0060). The owning module's role, read from the token,
-says who reads or attaches:
+- **Who may read or attach.** Files has no roles of its own. The owning module's role,
+  read from the token, decides: a Financial operator may attach to a receivable, a viewer
+  may only read it ([ADR 0060](../docs/adr/0060-attachments-are-a-files-module.md)).
 
-| Module | Reads | Writes |
+---
+
+## API
+
+| Method | Path | Purpose |
 |---|---|---|
-| `parties` | admin, editor, viewer | admin, editor |
-| `procurement` | admin, buyer, approver, viewer | admin, buyer |
-| `financial` | admin, operator, viewer | admin, operator |
-| `sales` | admin, representative, viewer | admin, representative |
-| `crm` | admin, manager, representative, viewer | admin, manager, representative |
+| `GET` | `/record-types` | Which records accept attachments, and how long they are kept |
+| `POST` | `/attachments` | Ask for an upload slot on a record |
+| `PUT` | `/uploads/:id` | Upload the bytes through the signed link |
+| `GET` | `/attachments` | A record's attachments |
+| `GET` | `/attachments/:id` | One attachment and its state |
+| `GET` | `/attachments/:id/link` | A signed download link, once it is available |
+| `GET` | `/attachments/:id/content` | The file, through that link |
+| `DELETE` | `/attachments/:id` | Delete it |
+| `GET` | `/audit` | Who asked for a slot, took a link or deleted a file |
+| `GET` | `/health/live`, `/health/ready` | Liveness and readiness |
+
+---
 
 ## Events
 
-- **Consumed** on `files.erasures`: `parties.party.erased` and
-  `identity.data-subject.erased`. Each one destroys the owner's key and ends that owner's
-  files, in the same transaction as its inbox row.
-- **Published** through the outbox:
-  - `files.attachment.available`;
-  - `files.attachment.quarantined`;
-  - `files.attachment.deleted`.
+| Published | Meaning |
+|---|---|
+| `files.attachment.available` | A file passed the scan and can be read |
+| `files.attachment.quarantined` | A file was infected |
+| `files.attachment.deleted` | A file was deleted or expired |
 
-  They carry the record and never the file name.
+None of them carries the file's name.
 
-## Scanning
+| Consumed | Reaction |
+|---|---|
+| `parties.party.erased`, `identity.data-subject.erased` | Destroys the owner's key and ends their files, in the same transaction |
 
-`FILES_SCANNER` chooses the port's adapter:
-- **`eicar`** (the default, and CI): it flags the EICAR test string, and nothing else.
-- **`clamav`:** `clamd` over TCP (`INSTREAM`). Locally it runs with `make up-scanner`.
+---
 
-A scan with no answer leaves the file `scanning`, and the worker tries again every
-`FILES_SCAN_RETRY_MS`.
-
-## The worker
-
-It runs when `DATABASE_RELAY_URL` is set.
-- It asks, as the relay role, which tenants have rows whose `due_at` has passed. That role
-  reads only `tenant_id` and `due_at`.
-- For each due row, it:
-  - abandons an unused slot;
-  - scans again;
-  - expires by retention;
-  - removes stored bytes and logs the removal;
-  - ends a quarantine after 30 days.
-
-## Local development
+## Run it
 
 ```bash
-cp .env.example .env
-npm ci
+npm install && cp .env.example .env
 npm run db:migrate
-npm run dev
+npm run dev            # http://localhost:3014
+make up-scanner        # at the repository root: ClamAV, for real scanning
 ```
 
-Tests:
-- `npm test` runs the unit tests, with in-memory fakes;
-- `npm run test:e2e` runs the e2e suite against PostgreSQL and RabbitMQ in Testcontainers.
+The worker (scanning again, retention, removals) runs when `DATABASE_RELAY_URL` is set.
+Tests, the build and the code layout are the same in every service:
+[how every service runs](../docs/service-runtime.md).
 
-## Audit log (Phase 68)
+<details>
+<summary><b>Configuration specific to Files</b></summary>
 
-`GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered
-by actor, action, record and period. Every page carries the chain's verdict: each row is
-recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
-Identity owners and admins, since Files holds no roles; the web's audit screen asks it alongside every other module.
+| Variable | Purpose |
+|---|---|
+| `FILES_STORE`, `FILES_BUCKET`, `FILES_S3_ENDPOINT`, `FILES_S3_REGION`, `FILES_FILE_ROOT` | Where the encrypted bytes are kept |
+| `FILES_MASTER_KEY` | Wraps every owner's key |
+| `FILES_LINK_SECRET` | Signs upload and download links |
+| `FILES_SCANNER` | `eicar` (deterministic, for tests) or `clamav` |
+| `CLAMD_HOST`, `CLAMD_PORT`, `CLAMD_TIMEOUT_MS` | The ClamAV daemon |
+| `FILES_SCAN_RETRY_MS`, `FILES_POLL_INTERVAL_MS`, `FILES_CLAIM_MS` | The worker's pace |
+
+The variables every service shares are in
+[the shared configuration](../docs/service-runtime.md#configuration-every-service-shares).
+
+</details>
+
+---
+
+## Read more
+
+- [How every service runs](../docs/service-runtime.md)
+- [The Files API](../docs/files-api.md)
+- [Architecture](../docs/architecture.md) and the [decision records](../docs/adr/README.md)

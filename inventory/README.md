@@ -1,270 +1,209 @@
-# `inventory/`
+# Inventory
 
-Warehouses, stock balances, movements, reservations and cost method.
+How much of everything there is, where, and what it is worth: warehouses, reservations,
+movements, transfers, counts, lots and serial numbers, and production.
 
-An independently deployable NestJS service with its own database, its own container
-and its own lifecycle. It is reached through Kong, never directly, and it shares no
-source with any other module (ADR 0001).
+| | |
+|---|---|
+| **Port** | 3003 |
+| **Database** | `horizon_inventory`, its own, with forced row-level security |
+| **Talks to** | Sales (reservations and deliveries), Procurement (receipts), Catalog (items and recipes) |
+| **Stack** | NestJS · Drizzle · PostgreSQL · RabbitMQ · Redis |
 
-**Status: phase 32 — complete.** Stock moves because somebody decided it should, and not
-only because an order did: it is transferred between warehouses, written off with a reason
-and an allowance behind it, and counted against what the shelf actually holds.
-
-The versioned choreography with Sales is defined in `@horizon/contracts@0.19.0`. Forced-RLS PostgreSQL persistence locks every requested
-balance and either holds all lines or publishes one complete rejection; confirmation
-atomically converts holds into append-only shipment movements. Its inbox, outbox relay,
-RabbitMQ consumer, bounded retry, circuit breaker, metrics and trace propagation are
-exercised both independently and by `make test-phase7`.
+<p align="center">
+  <img src="../docs/assets/modules/inventory.png" alt="Inventory listens to Sales (order placed, confirmed, cancelled, delivery dispatched, returned), Procurement (goods received, returned), Catalog (recipes) and Identity (workspace created). It publishes stock reserved or rejected to Sales, and import finished to Reporting." width="100%">
+</p>
 
 ---
 
-## What this context owns
+## What it does
 
-- **Warehouses** and their locations.
-- **Stock balances** — on-hand and reserved quantity per item per warehouse.
-- **Stock movements** — the append-only ledger from which balances are derived; a balance is never edited directly.
-- **Reservations** — a hold placed against available stock, with expiry.
-- **Cost method** — moving average cost, maintained per item per warehouse.
-- **Transfers** — goods moving between the company's own warehouses, at the cost they left at.
-- **Adjustments** — a deliberate change to how much stock there is, with a reason, and past an allowance a second person's decision.
-- **Counts** — a sheet of what the system expected, what somebody found, and the difference posted between them.
-- **The adjustment allowance** — the value at or above which an adjustment or a count's differences wait for somebody else.
+- **Reservations.** When Sales places an order, Inventory locks every requested balance
+  and either holds all the lines or rejects the order with the shortfall per line.
+  Nothing is held halfway.
+- **A movement ledger.** Every change is an append-only movement. A balance is derived
+  from movements and never edited directly.
+- **Moving average cost**, per item and warehouse. Each movement records the quantity
+  the shelf reached and what a unit was worth, so valuing a past day is a lookup, not a
+  replay.
+- **Transfers** between the company's warehouses, at the cost the goods left at.
+- **Adjustments** with a reason. Above an allowance, a second person must approve them.
+- **Counts.** A sheet freezes what the system expects, records what was found, and
+  posts the differences, which past the allowance also wait for approval.
+- **Lots and serial numbers.** Lots leave earliest-expiry first, and expired stock is
+  never shipped. Named units keep their name for good and can be traced from arrival to
+  delivery, return or scrap.
+- **Production orders.** Releasing an order freezes the recipe in force. Material is
+  drawn and scrap is recorded. The finished goods are worth exactly what went into them:
+  issued plus conversion equals produced plus scrapped, always.
+- **Reports.** The Kardex of an item, the stock position with alerts against minimum and
+  maximum levels, valuation at any instant, cost of goods sold, and ABC ranking.
+- **Bulk import** of opening stock from a spreadsheet.
 
-## What it explicitly does not own
+## What it leaves to others
 
-This list matters more than the one above — a bounded context is defined by its
-refusals.
+- **What an item is** belongs to Catalog. Inventory keeps a projection of what it needs,
+  including recipes, so production works while Catalog is down.
+- **What an order means** belongs to Sales. Inventory answers reserve, release and ship.
+- **Purchasing** belongs to Procurement. Inventory receives what Procurement says arrived.
+- **Accounting** belongs to the Ledger.
 
-- **Product definitions.** `catalog/` owns what an item is; inventory holds a reference and its own projection of the few attributes it needs.
-- **Order lifecycle.** `sales/` decides what an order means. Inventory answers reserve/release and nothing more.
-- **Financial valuation postings.** Inventory computes cost; posting it to a ledger is `financial/` (roadmap).
-- **Purchasing and receiving workflows.** Movements can be recorded; the approval process around them is out of scope.
+---
+
+## API
+
+Order reservation and shipping happen through events. The API is for the people who run
+the warehouse.
+
+<details>
+<summary><b>Warehouses and movements</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`, `POST` | `/warehouses` | Warehouses and their balances, or a new one |
+| `PATCH` | `/warehouses/:id/deactivate` | Take a warehouse out of new work |
+| `POST` | `/stock-receipts` | Receive stock and recalculate its average cost |
+| `GET`, `POST` | `/stock-transfers` | Transfers between warehouses |
+| `GET`, `POST` | `/stock-adjustments` | Adjustments, or a new one with a reason |
+| `PATCH` | `/stock-adjustments/:id/approve`, `/reject` | Decide somebody else's adjustment |
+| `GET`, `PUT` | `/adjustment-policies` | The allowance above which a second person decides |
+
+</details>
+
+<details>
+<summary><b>Counts</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`, `POST` | `/stock-counts` | Count sheets, or open one over a warehouse |
+| `GET` | `/stock-counts/:id` | Expected, counted and the difference |
+| `PATCH` | `/stock-counts/:id/figures` | Record what was found |
+| `PATCH` | `/stock-counts/:id/close` | Settle the sheet and post its differences |
+| `PATCH` | `/stock-counts/:id/approve`, `/reject` | Decide somebody else's count |
+| `PATCH` | `/stock-counts/:id/cancel` | Abandon a sheet; it posts nothing |
+
+</details>
+
+<details>
+<summary><b>Lots, serial numbers and production</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`, `PUT` | `/item-tracking` | Which items are tracked by lot or by serial number |
+| `GET` | `/stock-lots`, `/stock-lots/:code/trace` | Stock by lot, and where a lot came from and went |
+| `GET` | `/stock-serials`, `/stock-serials/:serial/trace` | Every named unit, and the life of one |
+| `GET`, `POST` | `/production-orders` | Production orders, or a new one |
+| `GET` | `/production-orders/:id` | What it expected, took, ruined and made |
+| `PATCH` | `/production-orders/:id/release` | Freeze the recipe and allow material to be drawn |
+| `POST` | `/production-orders/:id/material` | Draw material |
+| `POST` | `/production-orders/:id/scrap` | Record what was ruined |
+| `PUT` | `/production-orders/:id/charge` | What the work cost |
+| `PATCH` | `/production-orders/:id/finish`, `/cancel` | Receive the goods, or abandon an order that took nothing |
+
+</details>
+
+<details>
+<summary><b>Reports</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/stock-ledger` | The Kardex of one item in one warehouse |
+| `GET` | `/stock-position` | What every shelf holds now, with its level and alerts |
+| `GET`, `PUT` | `/stock-levels` | Minimum and maximum per item and warehouse |
+| `GET` | `/stock-alerts` | The shelves to look at, worst first |
+| `GET` | `/stock-valuation` | What was held, and its worth, at an instant |
+| `GET` | `/cost-of-goods-sold` | What the goods that left for customers had cost |
+| `GET` | `/stock-abc` | Items ranked A, B and C by what leaving them cost |
+
+</details>
+
+<details>
+<summary><b>Imports, approvals and operations</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/imports/kinds` | What can be imported |
+| `POST` | `/imports/:kind` | Upload a spreadsheet |
+| `PUT` | `/imports/:id/mapping` | Map its columns |
+| `POST` | `/imports/:id/preview`, `/confirm`, `/cancel` | Preview, apply or drop it |
+| `GET` | `/imports`, `/imports/:id`, `/imports/:id/failures` | Imports and their failed rows |
+| `GET`, `POST` | `/delegations` | Lend an approval to another member for up to 90 days |
+| `POST` | `/delegations/:id/revoke` | End a delegation |
+| `GET` | `/audit` | The hash-chained audit log, with the chain's verdict |
+| `GET` | `/health/live`, `/health/ready` | Liveness and readiness |
+
+</details>
 
 ---
 
 ## Events
 
-### Published
-
-| Event | Meaning |
+| Published | Meaning |
 |---|---|
-| `inventory.stock.reserved` | The requested quantity is held for the referenced order. |
-| `inventory.stock.reservation-rejected` | Insufficient available stock. Carries the shortfall per line so `sales/` can explain the failure. |
-| `inventory.stock.released` | A reservation was released, by cancellation or by expiry. |
-| `inventory.stock.moved` | A movement was recorded; balances and moving-average cost changed. |
+| `inventory.stock.reserved` | Every line of an order is held |
+| `inventory.stock.reservation-rejected` | Not enough stock, with the shortfall per line |
+| `inventory.stock.released` | A hold was released, by cancellation or expiry |
+| `inventory.stock.moved` | A movement was recorded |
+| `inventory.import.finished` | A bulk import ended |
 
-### Consumed
-
-| Event | Reaction |
+| Consumed | Reaction |
 |---|---|
-| `catalog.item.created` | Projects products as stockable; services are deliberately ignored. |
-| `catalog.item.deactivated` | Blocks new reservations for the item. |
-| `sales.order.placed` | Attempts one atomic reservation for every order line and publishes either reserved or rejected. |
-| `sales.order.confirmed` | Commits the reservation. The goods stay on the shelf, held for that customer. |
-| `sales.shipment.dispatched` | The goods left: takes exactly what left out of its hold, in part or in full. |
-| `sales.shipment.returned` | The delivery came back: returns the goods at the cost they left at, and to their hold. |
-| `sales.order.cancelled` | Releases the order's reservation. |
-
-Every published event is written to the `outbox` table inside the same transaction as
-the state change it describes, and relayed by a poller using `FOR UPDATE SKIP LOCKED`
-(ADR 0024). Delivery is at-least-once, so every consumer deduplicates against an
-`inbox` table keyed on `(source_module, event_id)`.
-
-Schemas live in `@horizon/contracts` and are versioned there (ADR 0030); this module
-does not define its own wire shapes.
-
-Every order event carries a monotonic `orderVersion`, echoed by reservation outcomes.
-Inventory may receive messages out of order and must ignore an older version rather than
-assuming RabbitMQ preserves aggregate ordering across retries and consumers.
+| `sales.order.placed` | One atomic reservation for every line, then reserved or rejected |
+| `sales.order.confirmed` | Commits the hold; the goods stay on the shelf for that customer |
+| `sales.order.cancelled` | Releases the hold |
+| `sales.shipment.dispatched` | Takes exactly what left out of the hold |
+| `sales.shipment.returned` | Returns the goods, at the cost they left at |
+| `procurement.receipt.recorded`, `receipt.returned` | Receives goods from a supplier, or sends them back |
+| `catalog.composition.defined` | Keeps its own copy of each recipe |
+| `identity.tenant.created` | Provisions the workspace |
 
 ---
 
-## Segregation of duties, delegation and audit (Phase 68)
+## Guarantees
 
-- **Pairs** (ADR 0062): the `inventory.adjustment` and `inventory.count` pairs: whoever asked for an adjustment, or closed a count, never decides it. A refusal is `403` with the code `segregation-of-duties`.
-- **Delegation:** an approver (admin) lends `inventory:adjustment:approve` and `inventory:count:approve` to a member of the module for up to 90
-  days, through `POST /delegations`; `GET /delegations` lists them and
-  `POST /delegations/{id}/revoke` ends one. A decision through a delegation records both
-  names, and is refused when either did the work.
-- **Audit:** `GET /audit` reads the log a page at a time, filtered by actor, action, record
-  and period, with the hash chain judged on the page. Admins only.
+Besides what [every service guarantees](../docs/service-runtime.md#guarantees-every-service-gives):
 
-## Endpoints
-
-Order reservation and shipment remain event-driven. Operator commands use the HTTP
-surface below and require a workspace-scoped Inventory role.
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/warehouses` | List warehouse balances for the workspace. |
-| `POST` | `/warehouses` | Create an active warehouse. |
-| `PATCH` | `/warehouses/:id/deactivate` | Remove a warehouse from new operational work. |
-| `POST` | `/stock-receipts` | Receive stock and recalculate weighted average cost. |
-| `GET` | `/stock-transfers` | List what moved between warehouses. |
-| `POST` | `/stock-transfers` | Move goods between two warehouses, at the cost they left at. |
-| `GET` | `/stock-adjustments` | List adjustments, filtered by status or warehouse. |
-| `POST` | `/stock-adjustments` | Write stock off or on, with a reason. |
-| `PATCH` | `/stock-adjustments/:id/approve` | Allow somebody else's adjustment. |
-| `PATCH` | `/stock-adjustments/:id/reject` | Refuse it, with a reason. |
-| `GET` | `/stock-counts` | List count sheets. |
-| `GET` | `/stock-counts/:id` | One sheet: expected, counted and the difference between them. |
-| `POST` | `/stock-counts` | Open a sheet over a warehouse, freezing what the system expects. |
-| `PATCH` | `/stock-counts/:id/figures` | Record what the counter found. |
-| `PATCH` | `/stock-counts/:id/close` | Settle the sheet and post its differences. |
-| `PATCH` | `/stock-counts/:id/approve` | Allow the differences of somebody else's count. |
-| `PATCH` | `/stock-counts/:id/reject` | Refuse them, with a reason. |
-| `PATCH` | `/stock-counts/:id/cancel` | Abandon a sheet; it posts nothing. |
-| `GET` | `/adjustment-policies` | The allowance per currency. |
-| `PUT` | `/adjustment-policies` | Set it. |
-| `GET` | `/stock-levels` | The minimum and maximum each warehouse should keep. |
-| `PUT` | `/stock-levels` | Set them for one item in one warehouse. |
-| `GET` | `/stock-ledger` | The Kardex of one item on one shelf: opening, movements, closing. |
-| `GET` | `/stock-position` | What every shelf holds now, with its level and any alert. |
-| `GET` | `/stock-valuation` | What the company held, and what it was worth, at an instant. |
-| `GET` | `/stock-alerts` | The shelves somebody should look at, worst first. |
-| `GET` | `/cost-of-goods-sold` | What the goods that left for customers had cost. |
-| `GET` | `/stock-abc` | Items ranked by what leaving them cost, cut into A, B and C. |
-| `GET` | `/item-tracking` | Which items the workspace identifies, and how. |
-| `PUT` | `/item-tracking` | Decide it, while none of the item is in stock. |
-| `GET` | `/stock-lots` | What is held by lot, soonest to go off first. |
-| `GET` | `/stock-lots/:code/trace` | Where a lot came from and where it went. |
-| `GET` | `/stock-serials` | Every unit the workspace has named, and where each is now. |
-| `GET` | `/stock-serials/:serial/trace` | The life of one unit, from the day it arrived. |
-| `GET` | `/production-orders` | The orders on the floor, filtered by status or warehouse. |
-| `GET` | `/production-orders/:id` | One order: what it expected, took, ruined and made. |
-| `POST` | `/production-orders` | Open an order to make something. |
-| `PATCH` | `/production-orders/:id/release` | Freeze the recipe in force and let material be drawn. |
-| `POST` | `/production-orders/:id/material` | Take material off the shelf for the order. |
-| `POST` | `/production-orders/:id/scrap` | Record that part of what was issued was ruined. |
-| `PUT` | `/production-orders/:id/charge` | What the work cost, and who did it. |
-| `PATCH` | `/production-orders/:id/finish` | Receive the goods, worth what went into them. |
-| `PATCH` | `/production-orders/:id/cancel` | Abandon an order that has taken nothing. |
-
-The reports are read from `stock_movements` alone, never from the balance table they are
-checked against: every movement records the quantity the shelf reached **and** what a unit
-was then worth, which is what lets a valuation of a past day be a lookup rather than a
-replay. `from` and `to` are UTC days, bounded to a year; `asOf` defaults to now rather
-than to the end of today, so a valuation never disagrees with a shelf somebody just looked
-at. A stock level refuses nothing — it is read by the alert report and by nobody else, and
-a minimum of zero is how a workspace turns one off without deleting the decision.
-
-An item the workspace identifies must say which goods are arriving — which lot, or which
-units by name — and an item it does not must name neither. A lot may say when it expires;
-a unit may not, because what goes off is a batch of something. An item is tracked one way
-or the other, never both. Goods leave earliest-date
-first unless the caller names the lots, expired stock is on hand but available to nobody,
-and a shipment never sends it. A transfer carries the same codes and dates to the far end,
-a customer return goes back into the lots it went out in, and a tracked item is counted lot
-by lot. What a shelf's lots add up to is what its balance holds — in the aggregate and in a
-deferred constraint trigger.
-
-A named unit keeps its name for good, is in stock in at most one place by construction, and
-is followed through shipping, return and scrapping rather than deleted. Units leave
-longest-here-first unless somebody scans them, a count of a unit-tracked item looks for
-each one in turn, and goods arriving from outside cannot claim a name some shelf is already
-holding.
-
-A production order freezes the catalogue's recipe when it is released — the copy this
-module keeps, fed by `catalog.composition.defined`, so an order is releasable when the
-catalogue is down. It conserves value: everything issued became product or was ruined, so
-`issued + conversion = produced + scrapped`, always, in the aggregate and in a deferred
-trigger. The finished unit cost is derived from that and cannot be stated by anybody.
-
-Every command that moves stock takes an `Idempotency-Key` header and runs at most once
-(ADR 0028); every decision is a line in the tenant's hash-chained audit log (ADR 0025).
-Approving or refusing somebody's write-off takes the Inventory **admin** role, and the
-person who asked for one can never be the person who allows it — in the aggregate and in
-a table constraint.
+- **A late message cannot undo a newer one.** Every order event carries the order's
+  version, and an older version is ignored.
+- **Lots add up.** What a shelf's lots hold equals its balance, checked in the aggregate
+  and by a deferred database trigger.
+- **Production conserves value.** Issued plus conversion equals produced plus scrapped,
+  in the aggregate and in a trigger. Nobody can state a finished unit cost by hand.
+- **Four eyes on write-offs.** Whoever asked for an adjustment, or closed a count, can
+  never approve it. A decision made through a delegation records both names and is
+  refused if either did the work
+  ([ADR 0062](../docs/adr/0062-segregation-of-duties-is-a-declared-matrix.md)).
 
 ---
 
-## Running it locally
-
-The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) is a phase 2
-deliverable. Until then this module runs standalone and serves 404s, which is enough to
-verify the toolchain.
+## Run it
 
 ```bash
-npm install          # or npm ci
-cp .env.example .env # fill in; the process refuses to start on invalid config
-
-npm run typecheck    # tsc --noEmit, strict plus the three extra flags
-npm run lint         # biome check
-npm test             # unit tests: no I/O, in-memory fakes
-npm run dev          # http://localhost:3003
+npm install && cp .env.example .env
+npm run dev            # http://localhost:3003
 ```
 
-Integration and e2e tests need a Docker socket — they start their own PostgreSQL,
-Redis and RabbitMQ via Testcontainers rather than using a shared instance (ADR 0013):
+Tests, migrations, the build and the code layout are the same in every service:
+[how every service runs](../docs/service-runtime.md).
 
-```bash
-npm run test:e2e
-```
+<details>
+<summary><b>Configuration specific to Inventory</b></summary>
 
-Migrations:
+| Variable | Purpose |
+|---|---|
+| `RESERVATION_TTL_SECONDS` | How long a reservation holds before it expires |
+| `JOURNAL_SEAL_INTERVAL_MS` | How often the relay seals each workspace's history for Reporting |
+| `IMPORT_BATCH_SIZE`, `IMPORT_LEASE_MS`, `IMPORT_POLL_INTERVAL_MS`, `IMPORT_RETENTION_HOURS` | How imports are processed and kept |
 
-```bash
-npm run db:generate  # emit SQL from the Drizzle schema
-npm run db:migrate   # apply, using DATABASE_MIGRATION_URL (owner role)
-```
+The variables every service shares are in
+[the shared configuration](../docs/service-runtime.md#configuration-every-service-shares).
 
-### Build
-
-```bash
-npm run build        # SWC → dist/, rewriting the @/* alias
-npm start
-```
-
-`tsc` typechecks but does not emit; SWC emits but does not typecheck. Both run in CI,
-and the Dockerfile runs both.
+</details>
 
 ---
 
-## Environment
+## Read more
 
-Every variable is required unless a default is shown in `.env.example`. Configuration
-is validated with Zod at boot, so a missing or malformed value stops the process
-immediately rather than surfacing as a failure on first use.
-
-| `NODE_ENV` | — |
-| `PORT` | HTTP port. Behind Kong in every environment; exposed directly only in local development. |
-| `LOG_LEVEL` | pino level. `info` in production. |
-| `DATABASE_URL` | Application role. Holds neither SUPERUSER nor BYPASSRLS, so RLS applies to it (ADR 0017). |
-| `DATABASE_MIGRATION_URL` | Owner role, used only by `db:migrate`. The application never connects with it. |
-| `DATABASE_RELAY_URL` | Optional relay-only role. When present, the service runs its embedded outbox worker. |
-| `DATABASE_POOL_MAX` | Bulkhead: the pool this service may consume (ADR 0027). |
-| `DATABASE_STATEMENT_TIMEOUT_MS` | No query waits without a bound. |
-| `REDIS_URL` | Denylist, idempotency records, rate counters. |
-| `RABBITMQ_URL` | — |
-| `AMQP_PREFETCH` | Bounded consumer concurrency (ADR 0027). |
-| `OUTBOX_POLL_INTERVAL_MS` | Relay poll interval; the floor on publish latency (ADR 0024). |
-| `OUTBOX_BATCH_SIZE` | Rows claimed per poll with FOR UPDATE SKIP LOCKED. |
-| `INBOX_RETENTION_DAYS` | Must exceed the maximum possible redelivery window. |
-| `IDEMPOTENCY_TTL_SECONDS` | 24 hours (ADR 0028). |
-| `HTTP_CLIENT_TIMEOUT_MS` | Every outbound HTTP call. There is no unbounded wait anywhere. |
-| `CIRCUIT_BREAKER_ERROR_THRESHOLD_PERCENT` | — |
-| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | How long the breaker stays open before half-open probing. |
-| `JWKS_URL` | Identity's public keys, for local token re-verification. |
-| `TRUST_GATEWAY_JWT` | When false the service re-verifies every token itself, so reaching its port directly grants nothing (ADR 0008). |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | The Collector. Nothing talks to a backend directly (ADR 0033). |
-| `OTEL_SERVICE_NAME` | — |
-| `OTEL_TRACES_SAMPLER_ARG` | Full sampling locally; errors are always sampled. |
-| `TENANT_ID_HASH_SALT` | Tenant ids are hashed before appearing in logs and metrics (ADR 0033). |
-| `RESERVATION_TTL_SECONDS` | A reservation not confirmed within this window is released automatically. |
-| `COST_METHOD` | The only implemented method. FIFO and standard cost are not in scope. |
-| `IDEMPOTENCY_TTL_SECONDS` | 24 hours (ADR 0028). |
-
----
-
-## Conventions this module follows
-
-- **Layering** — `src/domain/`, `src/application/`, `src/infrastructure/`, `src/main/`,
-  dependencies pointing inward only. `domain/` imports no framework, no ORM and no Zod;
-  `scripts/check-boundaries.mjs` enforces it (ADR 0031, ADR 0002).
-- **Tenancy** — every business table carries `tenant_id` with forced RLS, and every
-  query runs inside a `TenantAwareTransaction` that issues `SET LOCAL
-  app.current_tenant` first. No repository can obtain a raw connection (ADR 0017).
-- **Errors** — use cases return `Either<Error, Value>` for expected failures; a global
-  filter maps error classes to RFC 9457 `application/problem+json` (ADR 0032).
-- **Tests** — every test creates its own tenant, and every aggregate has a test that
-  writes under tenant A and asserts tenant B cannot read it (ADR 0014).
+- [How every service runs](../docs/service-runtime.md)
+- [Architecture](../docs/architecture.md) and the [decision records](../docs/adr/README.md)
+- [The event catalogue](../docs/events.md)

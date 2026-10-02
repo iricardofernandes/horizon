@@ -1,369 +1,229 @@
-# Fiscal — Phase 40 independent service and durable records
+# Fiscal
 
-This module owns fiscal intents and its own encrypted copies of issuer and recipient
-profiles. It listens only to `sales.fiscal-origin.recorded`, the dedicated owner profile
-notices, catalog classification notices and party erasure. A Sales delivery or return
-creates one intent keyed by `(tenant, module, document type, document id, purpose)`.
-The intent remains `blocked_profile` until its owner profiles are reconciled. Fiscal
-stores the exact Sales origin payload encrypted, creates immutable simulation drafts
-from that payload, and reserves numbers concurrently within a tenant and series. The
-read API exposes document status and artifacts only to the owning tenant. The worker
-does not calculate tax, contact an external authority or create a stock or financial
-effect. Every authority capability remains `unsupported`; public validation, issuance
-and cancellation requests return a conflict. A reserved number is never silently
-reused after a timeout or restart.
+Brazilian fiscal documents and the taxes on them: NF-e, NFC-e and the national NFS-e,
+supplier XML, returns and complements, and a versioned tax engine that estimates taxes
+where money is decided and locks them on the document. Documents are issued against a
+**simulated** tax authority.
 
-## Run locally
+| | |
+|---|---|
+| **Port** | 3011 |
+| **Database** | `horizon_fiscal`, its own, with forced row-level security; documents in a private bucket |
+| **Talks to** | Sales and Procurement (what to document), Parties, Identity and Catalog (profiles), Ledger (taxes to post) |
+| **Stack** | Node.js HTTP · postgres.js · PostgreSQL · RabbitMQ · S3-compatible storage · XML signing |
 
-The database needs separate `horizon_owner` migration and `horizon_app` runtime roles.
-The application role has no `BYPASSRLS`; the migration grants only the required tables.
+<p align="center">
+  <img src="../docs/assets/modules/fiscal.png" alt="Fiscal listens to Sales (deliveries, returns, service deliveries and billed contract periods), Procurement (orders and receipts), Parties, Identity and Catalog (fiscal profiles and classifications) and Financial (payables). It publishes document outcomes to Sales and locked tax calculations to the Ledger." width="100%">
+</p>
 
-1. Install the pinned contracts package and other dependencies with `npm ci`.
-2. Set `DATABASE_MIGRATION_URL` and run `npm run db:migrate`.
-3. Set the variables in `.env.example`, including a 32-byte artifact encryption key and
-   an S3-compatible artifact bucket, then run `npm run build` and `npm start`.
-4. Create tenant-scoped Identity API keys with `parties:read`, `identity:read` and
-   `catalog:read` scopes. Their issuer needs `parties:fiscal-reader`,
-   `identity:fiscal-reader` and `catalog:viewer`. Supply the worker a secret
-   `FISCAL_SERVICE_KEYS_JSON` map before processing that tenant's profile notices. The
-   service can start with an empty map for onboarding, but cannot project profiles for
-   that tenant until its key is provisioned. It exchanges each key for a short token through
-   Identity and refreshes it before expiry. Tokens and keys never enter events or logs.
-5. For a tenant, set `TENANT_ID` and `FISCAL_SERVICE_API_KEY`, then run
-   `npm run backfill`. The command outputs only
-   source counts, committed checkpoint and projection counts, and rolling SHA-256
-   digests of IDs and revision numbers. It fails on a missing or inconsistent checkpoint.
+---
 
-The owner APIs page IDs and revisions, then return exact historical versions only to
-the restricted token. The backfill checkpoints after each page and may be rerun; a
-failed page is fetched again without duplicating a revision. A changed revision under
-the same ID raises a conflict for review. Existing Parties or Catalog rows at revision
-zero remain incomplete until their owners verify and classify them. No city name,
-address or tax code is guessed from legacy free text.
+## What it does
 
-The RabbitMQ queue is durable and binds only the event types Fiscal consumes: the five Phase 39 types plus the Phase 44 Procurement order, receipt and return events and the Financial payable posted and reversed events. Parsing
-failures are dead-lettered; handler failures get one broker redelivery. The inbox and
-origin constraint protect separate retry paths. A missing or stale owner profile cannot
-authorize an intent. Party erasure destroys Fiscal's subject key, including when the
-erasure arrives before a delayed projection. The retained ciphertext is then unreadable.
+### Fiscal documents
 
-The API listens on port 3011. It verifies Identity JWTs and revocation, applies Fiscal
-`admin`, `issuer`, `reviewer` and `viewer` permissions, and provides `/health`,
-`/capabilities`, `POST /documents`, `GET /documents/:id` and tenant-scoped artifact
-reads. Creating a draft requires an `Idempotency-Key` and a captured Sales origin.
-Old Phase 39 intents without an encrypted origin payload need the owner event replayed
-with a new event ID before draft creation. The request cannot supply replacement
-commercial facts. Simulation submission and cancellation are internal persistence
-operations used to prove crash recovery; they are not public authority operations.
+- **NF-e (model 55)** for a delivery or a return from Sales, built from a frozen copy of
+  the origin, signed, validated against the official schemas, and sent to the authority
+  of the issuer's state ([ADR 0050](../docs/adr/0050-fiscal-authorizer-follows-issuer-jurisdiction.md)).
+- **NFC-e (model 65)** for a sale to a final consumer, with its QR code and the 80 mm
+  receipt ([ADR 0053](../docs/adr/0053-nfce-is-a-separate-model-over-the-sales-shipment.md)).
+- **The national NFS-e** for services, one per delivered line or billed contract period,
+  keyed by municipality ([ADR 0054](../docs/adr/0054-national-nfse-is-keyed-by-municipality-and-reconciled-by-dps.md)).
+- **Returns, complements and correction letters**, as documents linked to the original
+  ([ADR 0052](../docs/adr/0052-returns-and-complements-are-linked-documents.md)).
+- **Supplier NF-e imports.** The XML is verified, kept encrypted, and matched against
+  Procurement's receipts. It is evidence, never a stock or money effect on its own
+  ([ADR 0051](../docs/adr/0051-supplier-xml-is-evidence-not-an-operational-fact.md)).
+- **Numbers are never reused.** Numbers are reserved concurrently per series, and a
+  reserved number survives timeouts and restarts.
 
-### Supplier NF-e imports (Phase 44)
+### The tax engine
 
-Set `FISCAL_INBOUND_SCHEMA_PATH` to the pinned PL 010f zip to enable `/imports`
-(the local compose file mounts it). A `reviewer` or `admin` posts the raw XML. Fiscal
-verifies it, keeps the bytes encrypted, and proposes the Procurement receipt lines it
-covers. One reconciliation per import is committed with an `Idempotency-Key`. Imports
-never create stock or payables ([ADR 0051](../docs/adr/0051-supplier-xml-is-evidence-not-an-operational-fact.md)).
-For parties projected before Phase 44, run `npm run phase44:reindex-parties` with
-`DATABASE_URL`, `FISCAL_ARTIFACT_KEY_HEX` and `TENANT_ID` to build the supplier tax-id
-index. For simulation drills, `npm run phase44:supplier-invoice` writes a signed
-homologation supplier NF-e with a throwaway certificate; it requires
-`FISCAL_ALLOW_SUPPLIER_FIXTURE=true`. `scripts/phase44-smoke.mjs` runs the local-stack
-smoke through Kong.
+- **Tax law as a shared catalogue.** Rules come in immutable, versioned packages built
+  from official sources. A workspace adopts a package from a date; nothing changes under
+  it on its own ([ADR 0070](../docs/adr/0070-tax-law-is-a-shared-catalogue-that-workspaces-adopt.md)).
+- **Formulas are data.** A small, bounded expression language over a closed vocabulary,
+  evaluated with exact fractions, never floats
+  ([ADR 0071](../docs/adr/0071-tax-formulas-are-data-over-a-closed-vocabulary.md)).
+- **Taxes covered.** IBS and CBS through the 2026–2033 reform, checked against the
+  government's official calculator; ICMS, IPI, PIS, Cofins and ISS in reviewed scenarios;
+  the issuer's regime at the issue date, and the 2029–2032 blend. The Imposto Seletivo has
+  no published rates yet, so it answers `unsupported`.
+- **Supported only with evidence.** A scenario is calculated only if the official
+  calculator agreed with it or a reviewed fixture approves it. Anything else answers
+  `unsupported` with the missing dimension, never a guess
+  ([ADR 0072](../docs/adr/0072-a-tax-scenario-is-supported-only-with-evidence.md)).
+- **Estimates where money is decided, amounts at the lock.** Quotes and orders show an
+  estimate. The amount that reaches the books is the one locked on the document, which
+  replays byte for byte later ([ADR 0073](../docs/adr/0073-tax-estimates-outside-fiscal-amounts-inside-it.md)).
+- **Every amount explained.** Each tax component names the rule, its version and the
+  legal source it came from.
+- **Four eyes on rule changes.** Adopting or withdrawing a package, or adding an own rule,
+  is a request another admin approves, after seeing its diff and its impact on the
+  documents already locked ([ADR 0074](../docs/adr/0074-a-tax-rule-change-is-requested-and-approved-by-another-person.md)).
 
-### Returns, complements and correction letters (Phase 45)
+## What it leaves to others
 
-`POST /linked-origins` freezes a sale return (`shipmentId`), a purchase return
-(`receiptId`, `establishmentId`) or a reviewed value complement, and conserves the
-returned quantities against the original lines. The draft is created with
-`POST /documents` and `origin.kind = 'linked'` and then follows the usual validate and
-issue commands. `GET /documents/:id/links` shows references, linked documents and the
-ids Inventory and Financial key their effects by. `GET /document-kinds` lists every kind
-and why the unsupported ones are refused. `POST /documents/:id/correction-letters` queues
-a model 55 correction letter; it needs the Phase 42 event schema path and credential.
-Linked documents never create stock or money effects
-([ADR 0052](../docs/adr/0052-returns-and-complements-are-linked-documents.md)).
-`npm run phase45:rollout -- --tenant <id> --establishment <id> [--evidence-digest <sha256>]`
-imports and reviews the Phase 45 rules and registers one capability per kind next to the
-establishment's active sale. It prints the `linked` map for
-`FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase45-smoke.mjs` runs the local-stack smoke
-through Kong.
+- **The business facts.** Sales says what was delivered, Procurement what was received.
+  Fiscal never creates stock or money effects.
+- **Posting the taxes** is the Ledger's, from the locked calculation.
+- **Real transmission.** Issuing for real needs each company's digital certificate and
+  the authority's homologation. What is and is not supported is listed in
+  [the fiscal capabilities](../docs/fiscal-capabilities.md).
 
-### NFC-e model 65 (Phase 46)
+---
 
-`POST /documents` with `model: '65'` (request version 2) turns a Sales intent into an
-NFC-e draft. The first document of an intent fixes its model (`MODEL_CONFLICT`
-otherwise). Readiness requires a final, non-contributor recipient in the issuer's UF and
-an active `consumer-sale` capability. `src/nfce65/` builds the model 65 XML, the version 3
-QR code, the signature placed after `infNFeSupl` and the 80 mm DANFE NFC-e. The worker
-routes model 65 commands to `DeterministicNfce65Simulator`. Cancellation needs the
-profile's `consumer.cancellationWindowMinutes`
-([ADR 0053](../docs/adr/0053-nfce-is-a-separate-model-over-the-sales-shipment.md)).
-`npm run phase46:rollout -- --tenant <id> --establishment <id> [--evidence-digest <sha256>]`
-imports and reviews the model 65 rules and registers its capability next to the
-establishment's active sale. It prints the `consumer` block for
-`FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase46-smoke.mjs` runs the local-stack smoke
-through Kong.
+## API
 
-### National NFS-e (Phase 47)
+<details>
+<summary><b>Documents</b></summary>
 
-A reviewer creates a service fiscal profile (`POST /service-profiles`: national tax
-code, NBS, ISS treatment) for a Catalog service item. The municipal registry
-(`POST /nfse-registry/versions`, then `/review`) records the reviewed rows of the official
-adhesion list. `GET /nfse-registry/municipalities/{code}` says whether the national system
-issues there. `POST /service-origins` freezes a service with its competence date; an
-optional `sourceKey` maps one owner fact to one origin. `POST /service-documents` creates
-the NFS-e draft, which follows `/service-documents/{id}/validate`, `/issue`,
-`/status-queries`, `/cancellation-requests` (event 101101) and `/substitutions`
-(event 105102). `src/nfse/` builds and signs the DPS, validates it against
-`FISCAL_NFSE_SCHEMA_PATH` (the pinned XSD 1.01 ZIP), and routes `nfse` commands to
-`DeterministicNfseSimulator`, which consults a DPS before any resend
-([ADR 0054](../docs/adr/0054-national-nfse-is-keyed-by-municipality-and-reconciled-by-dps.md)).
-`npm run phase47:rollout -- --tenant <id> --establishment <id> [--evidence-digest <sha256>]`
-imports and reviews the registry version and the ISS and IBS/CBS rules of the issuer's
-municipality and registers its capability. It prints the `service` block for
-`FISCAL_SIMULATION_PROFILE_JSON`. `scripts/phase47-smoke.mjs` runs the local-stack smoke
-through Kong.
-
-### Services delivered in Sales (Phase 50)
-
-The ingress records one intake per line of `sales.service.delivered`, keyed by its
-`entryId`. The worker cycle then turns each intake into a service origin with `sourceKey`
-`sales` / `service-delivery` / entry id / competence month, and a draft. It resolves the
-issuer and recipient revisions in force today and the service profile in force at the
-competence date, and picks the one establishment with an active NFS-e capability in the
-issuer's municipality. Each establishment's policy (`GET`/`PUT
-/service-issuance-policies/{establishmentId}`: `review`, the default, or `automatic`, and
-the DPS series) decides whether the draft waits for a person or is validated and issued.
-An intake that cannot proceed is `blocked` with its reason and retried with backoff;
-`POST /service-intakes/{id}/retry` asks for it now, and `GET /service-intakes?status=`
-lists them. `sales.service.delivery-cancelled` withdraws the intake:
-- an authorized NFS-e gets event 101101 with reason 2;
-- outside the window the intake is `cancellation-refused`;
-- a draft is withdrawn, and issuance refuses it from then on.
-
-`scripts/phase50-smoke.mjs` runs the services smoke through Kong.
-
-### Contract periods billed in Sales (Phase 52)
-
-`sales.contract-period.billed` is worked exactly like a delivery. Each billed line is one
-intake, with `sourceKey` `sales` / `contract-period` / entry id / competence month and the
-first day of the period as the competence date. The intake names `billedPeriodId` and
-`contractId` instead of `deliveryId` and `serviceOrderId`.
-
-`sales.contract-period.credited` withdraws the intakes of the period. The cancellation
-takes reason 2 when the service was not provided and reason 1 when it was billed in error.
-
-`GET /service-intakes` filters by `documentType` (`service-delivery` or `contract-period`)
-and `period`, so the intakes of one billing month can be listed. The gauges
-`fiscal_service_intakes_blocked` and `fiscal_service_intakes_cancellation_refused` feed the
-alerts `FiscalServiceIntakesBlocked` and `FiscalServiceCancellationRefused`.
-
-`scripts/phase52-smoke.mjs` runs the billing smoke through Kong.
-
-### Operator reads, metrics and support (Phase 48)
-
-- `GET /documents` is the operator worklist:
-  - every model, newest first;
-  - filters `status` and `model`, and a keyset `cursor`;
-  - the pending command and the last rejection code of each document.
-- `GET /support/overview` is the tenant's support snapshot:
-  - queue, statuses and unknown outcomes;
-  - rejection codes, certificates and imports;
-  - undelivered events;
-  - active capabilities of every model;
-  - source-package age.
-- `src/metrics.ts` exports gauges from those snapshots, summed over the tenants the
-  worker serves. It also records authority outcomes, authorization latency, XML
-  validation failures and object-store failures. No label names a tenant, document, key
-  or party ([ADR 0055](../docs/adr/0055-fiscal-support-reads-metrics-and-bounded-replay.md)).
-- The alert rules are in `infra/observability/rules/fiscal.rules.yml`; `make test-alerts`
-  tests them.
-- `npm run support -- <command>` (`dist/support-cli.js`) runs the bounded, audited
-  support commands:
-  - `overview`;
-  - `reconcile-unknown`;
-  - `retry-due`;
-  - `replay-outbox`, which goes through `fiscal_outbox_replays`, so a delivered event is
-    republished under its own id.
-
-  See the [operations runbook](../docs/fiscal-operations-runbook.md).
-
-## Verification
-
-`npm run test:e2e` starts PostgreSQL, RabbitMQ and MinIO with Testcontainers. It runs the
-real migration under a non-superuser owner role, checks broker duplicate delivery,
-origin uniqueness, encrypted revisions, erasure, owner-API backfill resume and tenant
-isolation. It also checks duplicate drafts, audit integrity, cross-tenant draft and
-artifact rejection, concurrent number reservation, uncertain authority outcomes,
-process restart, encrypted artifact recovery and object version restore. The package
-also passes `npm run typecheck`, `npm run lint` and `npm run build`.
-
-Issuance remains unavailable for every tuple in
-[the capability matrix](../docs/fiscal-capabilities.md). The
-[Phase 40 evidence record](../docs/fiscal-phase40-evidence.md) maps implementation and
-verification to the phase exit criteria.
-
-## The tax rule catalogue (Phase 82)
-
-Tax law lives in a catalogue that every workspace reads and none writes (ADR 0070). The
-tables are `fiscal_catalog_packages`, `fiscal_catalog_references` and
-`fiscal_catalog_rules`. A workspace adopts a package version from a date, and keeps its own
-rows only for what is its own. `npm run phase82:catalog -- <action>`:
-
-| Action | Role | What it does |
+| Method | Path | Purpose |
 |---|---|---|
-| `publish-phase41 --artifact <calculadora.zip>` | `DATABASE_MIGRATION_URL` | Publishes Phase 41's approved package with its original identifiers |
-| `retire-copy --tenant <id> --actor <who>` | `DATABASE_URL` | Deactivates the workspace's own copy of a published package |
-| `request-adoption --tenant <id> --effective-from <date> --requested-by <who>` | `DATABASE_URL`, `FISCAL_ARTIFACT_KEY_HEX` | Asks to adopt a package, with its diff and impact; refused while an active own rule would tie with it (Phase 88) |
-| `approve --tenant <id> --change <id> --approved-by <who>` | `DATABASE_URL`, `FISCAL_ARTIFACT_KEY_HEX` | Approves a pending rule change someone else asked for, which applies it |
-| `verify --fixture <file>` | `DATABASE_URL` | Previews a fixture and requires its approved result |
-| `verify-lock --tenant <id> --document <id>` | `DATABASE_URL` | Replays a locked calculation and prints its digests |
+| `GET`, `POST` | `/documents` | Documents, or a draft from an origin |
+| `GET` | `/documents/:id`, `/documents/:id/v2` | One document and its state |
+| `GET` | `/documents/:id/transitions` | Its timeline |
+| `POST` | `/documents/:id/validate` | Check readiness and lock the tax calculation |
+| `POST` | `/documents/:id/issue` | Send it to the (simulated) authority |
+| `POST` | `/documents/:id/status-queries` | Ask the authority for its status |
+| `POST` | `/documents/:id/cancellation-requests`, `/cancellation-queries` | Cancel it, and follow the cancellation |
+| `POST` | `/documents/:id/corrections`, `/correction-letters` | Correct a draft, or send a correction letter |
+| `GET` | `/documents/:id/links` | Linked documents, and the ids other modules keyed their effects by |
+| `GET` | `/documents/:id/artifacts`, `/documents/:id/artifacts/:kind` | The XML, protocols and the DANFE |
+| `GET` | `/documents/:id/calculation`, `/calculation/explanation` | The locked taxes, and where each came from |
+| `GET` | `/document-kinds` | Every document kind, and why unsupported ones are refused |
+| `POST` | `/linked-origins`, `/manual-origins` | A return, complement or manual origin |
+| `GET`, `POST` | `/imports`, `/imports/:id`, `/imports/:id/xml`, `/reconciliation`, `/conflict-dismissals` | Supplier XML and its match against receipts |
+| `GET`, `POST` | `/service-profiles`, `/service-origins`, `/service-documents`, `/service-intakes`, `/nfse-registry/…` | The national NFS-e |
+| `GET`, `PUT` | `/service-issuance-policies/:establishmentId` | Issue service documents automatically, or after review |
+| `GET`, `POST` | `/establishment-credentials` | Certificates per establishment |
 
-`verify` and `verify-lock` also need `FISCAL_ARTIFACT_KEY_HEX`. See the
-[Phase 82 evidence](../docs/tax-phase82-evidence.md).
+</details>
 
-### Formulas (Phase 83)
+<details>
+<summary><b>Taxes and their rules</b></summary>
 
-A rule with `formula: "EXPRESSION"` carries
-`expression: { "version": "formula-v1", "base": <node>, "outcome": "levied" }`. The amount
-is `round(round(base) × rate)`, with the rule's rate. The nodes are:
-- `{ "line": "gross" | "discount" | "charges" | "net" | "quantity" }`;
-- `{ "component": "<CODE>" }`;
-- `{ "rate": { numerator, denominator } }`;
-- `sum`, `product`, `min` and `max` (2 to 8 operands);
-- `{ "grossUp": { base, rate } }` and `{ "reduce": { base, by } }`.
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/estimates` | Estimate the taxes of a quote or an order |
+| `POST` | `/calculations/preview` | Calculate a scenario without locking anything |
+| `GET` | `/capabilities`, `/capabilities/v2` | What the workspace can issue, and which tax scenarios are supported |
+| `GET` | `/catalog/packages` | The tax packages in the shared catalogue |
+| `GET` | `/catalog/packages/:id/diff` | What adopting a package would change |
+| `GET` | `/rules` | The rules the workspace calculates with |
+| `GET`, `POST` | `/rule-changes` | Requested rule changes, or a new request with its impact |
+| `GET` | `/rule-changes/:id` | One request, its diff and its impact |
+| `POST` | `/rule-changes/:id/approve`, `/reject`, `/cancel` | Decide it (another admin), or withdraw it |
+| `POST` | `/rule-overrides` | Propose an override of a rule, with a reason |
+| `GET`, `POST` | `/delegations` | Lend the approval to another member for up to 90 days |
+| `POST` | `/delegations/:id/revoke` | End a delegation |
 
-Outcomes are `levied`, `exempt`, `suspended`, `deferred` and `not-levied`. Cycles, unknown
-components and trees deeper than 8 or larger than 64 nodes are refused when a package is
-imported or published (ADR 0071).
+</details>
 
-A formula may name its rounding: `"rounding": "half-even"` rounds the base and the amount half
-to even, as the official IBS/CBS calculator does. Without it, rounding is half away from zero,
-as Phase 41's rules are.
+<details>
+<summary><b>Operations</b></summary>
 
-### IBS and CBS by tax classification (Phase 84)
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/support`, `/support/overview` | Support reads: metrics without tenant data, bounded replay |
+| `GET` | `/audit` | The hash-chained audit log, with the chain's verdict |
+| `GET` | `/health` | Health |
 
-A calculation line may carry `classifications.classTrib`, the six-digit `cClassTrib`, and a
-rule may be scoped by it (`class_trib`). The 2026 package is built from the official
-calculator's own database and checked against the calculator itself (ADR 0072):
+</details>
 
-```bash
-make tax-oracle             # DOWNLOAD=1 fetches the calculator; refused unless its digest is pinned
-npm run phase84:oracle -- build --database <calculadora-pro.db> --artifact <calculadora.zip> --out <package.json> [--hypothetical-2027]
-npm run phase84:oracle -- oracle --package <package.json> --database <db> --url http://127.0.0.1:18080 --out <report.json> [--cases 3000] [--seed 84]
-npm run phase84:oracle -- publish --package <package.json>    # DATABASE_MIGRATION_URL; never a hypothetical one
-```
+---
 
-The oracle fails on any difference, any refusal and any class of the package without an
-agreeing case. A workspace asks to adopt the package with `phase82:catalog request-adoption --package <id>`, and another person approves it (Phase 88).
-Lines without a classification, and Phase 41's operation, keep their own rules. See the
-[Phase 84 evidence](../docs/tax-phase84-evidence.md).
+## Events
 
-### The legacy taxes and the support matrix (Phase 85)
+<details>
+<summary><b>Published</b></summary>
 
-Rules can also be scoped by `recipientTaxpayer`, `issuerMunicipality` and one `fact` of the
-line's `taxFacts` (`ipiTaxpayer`, `destinationUse`). Formulas gain `difference` and
-`deduct`. The declared scenarios, and the steps that take them from package to adoption:
+| Event | Meaning |
+|---|---|
+| `fiscal.calculation.locked` | The taxes of a document were locked; the Ledger posts them |
+| `fiscal.document.simulation-authorized`, `simulation-rejected`, `simulation-cancelled` | An NF-e's outcome at the simulated authority |
+| `fiscal.document.production-outcome`, `document.homologation-observed` | What a real authority answered, in production or homologation |
+| `fiscal.consumer-document.simulation-outcome` | An NFC-e's outcome |
+| `fiscal.service-document.simulation-outcome` | An NFS-e's outcome |
+| `fiscal.linked-document.simulation-outcome` | A return's or complement's outcome |
+| `fiscal.inbound.matched` | A supplier XML was matched to a receipt |
 
-```bash
-npm run phase85:scenarios -- fixtures            # build fixtures; an unchanged one keeps its approval
-npm run phase85:scenarios -- approve --fixture <id> --by <who> --scope <text>   # only on the owner's word
-npm run phase85:scenarios -- publish             # DATABASE_MIGRATION_URL
-npm run phase85:scenarios -- request-adoption --tenant <id> --requested-by <who>
-npm run phase85:scenarios -- approve-adoption --tenant <id> --approved-by <someone else>
-npm run phase85:scenarios -- verify              # DATABASE_URL, FISCAL_ARTIFACT_KEY_HEX
-npm run phase85:scenarios -- matrix              # regenerate support-matrix.json from the evidence
-```
+</details>
 
-`GET /fiscal/support` returns the matrix. Given `model`, `date`, `tax`, one of `ncm`,
-`service` or `classTrib`, and optionally the states, `recipientTaxpayer`,
-`issuerRegime`, `issuerMunicipality`, `origin` and `fact.<key>=<value>`, it answers
-`supported` with the rows that cover the scenario, or `unsupported` with the missing
-dimension. See the [Phase 85 evidence](../docs/tax-phase85-evidence.md).
+<details>
+<summary><b>Consumed</b></summary>
 
-### Regimes and the blend (Phase 86)
+| Event | Reaction |
+|---|---|
+| `sales.fiscal-origin.recorded` | A delivery or return to document |
+| `sales.shipment.dispatched`, `shipment.returned` | Follows the goods that left or came back |
+| `sales.service.delivered`, `service.delivery-cancelled` | An NFS-e per delivered line, or its cancellation |
+| `sales.contract-period.billed`, `contract-period.credited` | An NFS-e per billed period, or its cancellation |
+| `procurement.order.approved`, `receipt.recorded`, `receipt.returned` | What supplier XML is matched against |
+| `financial.payable.posted`, `payable.reversed` | Links supplier documents to their payables |
+| `identity.company.fiscal-profile-changed` | The issuer's profile, in dated revisions |
+| `parties.party.fiscal-profile-changed`, `party.erased` | Recipients' profiles, and their erasure |
+| `catalog.item.classification-changed` | Items' NCM and IPI facts |
 
-`issuer.regime` is the NF-e's CRT (`normal`, `simples-nacional`, `mei`), and
-`issuer.incomeTaxRegime` (`lucro-real`, `lucro-presumido`) decides PIS/Cofins. Both come from
-the issuer profile revision in force on the issue date (`issuer-regime.ts`). A package may
-name components it reads from others (`requires`). The reviewed scenarios of both phases:
+</details>
 
-```bash
-npm run tax:scenarios -- fixtures --phase 86     # phase85:scenarios is the same with --phase 85
-npm run tax:scenarios -- approve --phase 86 --fixture <id> --by <who> --scope <text>
-npm run tax:scenarios -- publish --phase 86      # then request and approve adoption, verify
-```
+---
 
-See the [Phase 86 evidence](../docs/tax-phase86-evidence.md).
+## Guarantees
 
-### Estimates and the lock (Phase 87)
+Besides what [every service guarantees](../docs/service-runtime.md#guarantees-every-service-gives):
 
-- `POST /fiscal/estimates` calculates a commercial draft and never locks it.
-  - A sale is derived as readiness derives a shipment.
-  - A purchase needs the supplier's `regime` (and `incomeTaxRegime`) stated by the caller.
-  - The answer is the components, the totals (with what is charged on top) and the
-    digests, or a refusal naming what is missing.
-- Sales and Procurement keep the answer on their documents.
-- The lock refuses a scenario the support matrix does not cover (`UNSUPPORTED_SCENARIO`).
-  The approved scenarios of Phases 41–47 are matrix rows (`approved-scenarios.ts`).
-- Each lock publishes `fiscal.calculation.locked`, which Ledger posts from.
-- A purchase order's estimate (`fiscal_purchase_order_estimates`) lets the inbound
-  reconciliation compare the supplier's taxes, as information. See the
-  [Phase 87 evidence](../docs/tax-phase87-evidence.md).
+- **A locked document replays byte for byte.** It is calculated again from its own stored
+  rules, never from the catalogue, and a worker replays a sample every ten minutes.
+- **The catalogue cannot be tampered with.** A package is named by its source's digest,
+  rules are immutable, and the application's database role cannot write the catalogue.
+- **Self-approval is refused twice:** by the service and by a database trigger.
+- **Sensitive data is sealed.** Origins, profiles and calculation inputs are encrypted
+  under a per-tenant key, and documents are stored encrypted with their digest checked on
+  every read.
+- **Measured.** Preview latency, unsupported answers, the official calculator's agreement
+  and replay failures each have a service level and an alert
+  ([service levels](../docs/service-levels.md)).
 
-### Governing the rules (Phase 88)
+---
 
-Every change to the rules a workspace calculates with is a request another person approves
-(ADR 0074): adopting or withdrawing a catalogue package, adding or retiring an own rule.
-
-- **The request.** A Fiscal admin asks (`POST /rule-changes`). The request keeps its diff
-  against the rules in force and its impact: the calculations locked in the last 3 months
-  (`impactMonths`, at most 12), recalculated with the change and never locked.
-- **The decision.** Another admin, or someone holding a delegation of
-  `fiscal:rules:approve`, approves or rejects (`/rule-changes/:id/approve|reject`).
-  - The requester never decides, and is refused with `segregation-of-duties`, pair
-    `fiscal.rules`.
-  - Only the requester cancels.
-  - Approval applies the change in the same transaction.
-- **Reading:** `GET /catalog/packages`, `GET /catalog/packages/:id/diff`, `GET /rules`, and
-  `GET /delegations`.
-- **The CLIs** request and approve with two named actors:
+## Run it
 
 ```bash
-npm run phase82:catalog -- request-adoption --tenant <id> --requested-by <who> --effective-from <date>
-npm run phase82:catalog -- approve --tenant <id> --change <id> --approved-by <someone else>
-npm run tax:scenarios -- request-adoption --phase 86 --tenant <id> --requested-by <who>
-npm run tax:scenarios -- approve-adoption --phase 86 --tenant <id> --approved-by <someone else>
+npm ci && cp .env.example .env
+npm run db:migrate
+npm run build && npm start       # one process: the API on :3011, and the worker
+make up-fiscal                   # at the repository root: the API, the worker and the bucket
 ```
 
-Both need `DATABASE_URL` and `FISCAL_ARTIFACT_KEY_HEX`, which the impact uses to open the
-sealed inputs. See the [Phase 88 evidence](../docs/tax-phase88-evidence.md).
+Tests: `npm test` and `npm run test:e2e`, as in [every service](../docs/service-runtime.md).
+`make tax-oracle` checks the IBS/CBS packages against the official calculator, and
+`make phase-o-golden-path` runs a quote to a ledger posting on the stack.
 
-### Facts, service levels and closing Phase O (Phase 89)
+<details>
+<summary><b>Configuration specific to Fiscal</b></summary>
 
-- **A Sales line's facts** come from the revisions readiness binds:
-  - the customer's fiscal profile states `goodsDestination` (a contributor that resells
-    gives `destinationUse = resale`);
-  - the item's classification states `ipiTaxpayer`.
+| Variable | Purpose |
+|---|---|
+| `FISCAL_ARTIFACT_KEY_HEX` | The 32-byte key that seals origins, profiles, inputs and documents |
+| `FISCAL_ARTIFACT_BUCKET`, `FISCAL_ARTIFACT_ENDPOINT`, `FISCAL_ARTIFACT_REGION` | Where documents are stored |
+| `FISCAL_SERVICE_KEYS_JSON` | Per-workspace API keys the worker exchanges to read owner profiles |
+| `PARTIES_URL`, `IDENTITY_URL`, `CATALOG_URL` | Where those profiles are read |
+| `FISCAL_PHASE42_SCHEMA_PATH`, `FISCAL_PHASE42_EVENT_SCHEMA_PATH`, `FISCAL_INBOUND_SCHEMA_PATH`, `FISCAL_NFSE_SCHEMA_PATH` | The pinned official schemas |
+| `FISCAL_SIMULATION_PROFILE_JSON`, `FISCAL_SIMULATION_CERTIFICATE_PATH`, `FISCAL_SIMULATION_PRIVATE_KEY_PATH`, `FISCAL_SIMULATOR_SCENARIO` | The simulated authority |
 
-  Nothing unstated is assumed.
-- **Service levels** (`infra/observability/rules/phase-o.rules.yml`):
-  - preview latency;
-  - unsupported answers by kind;
-  - the oracle's last recorded run;
-  - locks that fail to replay, from the worker's sampler.
+The variables every service shares are in
+[the shared configuration](../docs/service-runtime.md#configuration-every-service-shares).
 
-  Record an oracle run with `npm run tax:oracle-record -- --by <who> <report.json>…`.
-- **End to end:**
-  - `make phase-o-golden-path` and `make phase-o-drill` run on the stack;
-  - `make phase-o-2027` proves each date's regime in a throwaway database.
+</details>
 
-See the [Phase 89 evidence](../docs/tax-phase89-evidence.md) and the
-[threat model](../docs/phase-o-threat-model.md).
+---
 
-## Audit log (Phase 68)
+## Read more
 
-`GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered
-by actor, action, record and period. Every page carries the chain's verdict: each row is
-recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
-admins; the web's audit screen asks it alongside every other module.
+- [The module reference](../docs/fiscal-module-reference.md): how each document kind and
+  the tax engine are set up, rolled out and verified
+- [Fiscal capabilities](../docs/fiscal-capabilities.md), [the operations runbook](../docs/fiscal-operations-runbook.md)
+  and the [glossary](../docs/glossary.md)
+- [The tax engine plan](../docs/tax-engine-plan.md) and its [threat model](../docs/phase-o-threat-model.md)
+- [Architecture](../docs/architecture.md) and the [decision records](../docs/adr/README.md)

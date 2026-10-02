@@ -1,15 +1,21 @@
-# `contracts/`
+# Contracts
 
-Versioned Zod schemas for every published event and every cross-module HTTP payload,
-plus the per-module role and permission name maps.
+`@horizon/contracts`: the versioned Zod schemas of every event and every cross-module
+HTTP payload, and the role names of every module. It is the **only** thing modules are
+allowed to share ([ADR 0002](../docs/adr/0002-mechanical-enforcement-of-module-boundaries.md)).
 
-This is the **only** thing modules are permitted to share (ADR 0002). Patterns are
-copied between modules; contracts are versioned, because a wire contract has exactly
-two sides and they must be able to disagree about which version they are on.
+| | |
+|---|---|
+| **Version** | 0.63.0, published to a registry and pinned exactly by every consumer |
+| **Events** | 101 event types, catalogued in [`docs/events.md`](../docs/events.md), generated from these schemas |
+| **Stack** | TypeScript · Zod |
 
-**Status: phase 3 — v0.1.0 published.** The envelope, the shared primitives, the RFC 9457
-and pagination shapes, the role names for all five modules, and one event. Consumed by
-`identity/` at an exact pin.
+<p align="center">
+  <img src="../docs/assets/modules/contracts.png" alt="Each module publishes events and calls other modules through payloads defined in the contracts package. The package is published to a registry, every module pins an exact version, and CI fails a change whose severity is larger than the version bump." width="100%">
+</p>
+
+Patterns are copied between modules; contracts are versioned, because a wire contract has
+exactly two sides, and they must be able to disagree about which version they are on.
 
 ---
 

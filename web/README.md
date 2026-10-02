@@ -1,143 +1,141 @@
-# `web/`
+# Web
 
-The Next.js frontend (App Router).
+The portal: a Next.js app in Brazilian Portuguese and English, where navigation follows
+the signed-in person's roles, talking to Horizon only through its own backend-for-frontend
+and Kong.
 
-**Status: phase 10 — complete.** The portal authenticates against Identity and exposes
-the operational golden path through a server-side BFF. A free-tier deployment is phase 11.
-
----
-
-## What this project owns
-
-- **Presentation.** Screens, navigation, forms, and the client-side session.
-- **Its own view models.** Data arrives as API payloads and is shaped for display here.
-
-## What it explicitly does not own
-
-- **Business rules.** Every invariant is enforced server-side. The frontend may
-  duplicate a validation for a better experience, never as the only check.
-- **Direct access to any service.** Everything goes through Kong, so the frontend
-  inherits authentication, rate limiting, CORS and trace propagation from the gateway
-  rather than reimplementing them (ADR 0008).
-- **Token minting or verification.** It holds a session and refreshes it; `identity/`
-  decides.
-- **Tenant authority.** Login first receives an allowlisted workspace projection. The
-  selected tenant is validated server-side before Identity puts it in a token; browser
-  headers never establish tenant authority.
-
----
-
-## Surface and endpoints
-
-| Screen | Kong routes consumed |
+| | |
 |---|---|
-| Session | `POST /auth/login`, `POST /auth/workspaces`, `POST /auth/workspace`, `POST /auth/refresh`, `POST /auth/logout`, `GET /identity/me` |
-| Overview/catalog | `GET /catalog/items`, `GET /catalog/price-lists`, `GET /inventory/warehouses` |
-| Customers | `GET/POST/DELETE /sales/customers` |
-| Quotes and approvals | `GET/POST /sales/quotes`, `GET /sales/quotes/:id`, `POST /sales/quotes/:id/{revise,send,approve,refuse,accept,decline,expire,order}` |
-| Orders | `GET/POST /sales/orders`, `GET /sales/orders/:id`, `GET /sales/customers` |
-| Deliveries | `GET/POST /sales/shipments`, `GET /sales/shipments/:id`, `POST /sales/shipments/:id/{pack,dispatch,return,abandon}` |
-| Inventory | `GET/POST/PATCH /inventory/warehouses`, `POST /inventory/stock-receipts` |
-| Access | `GET/POST/PATCH /identity/users`, `POST /identity/users/:id/roles` |
-| Webhooks | `GET/POST/DELETE /webhooks/webhook-subscriptions`, `GET /webhooks/webhook-deliveries` |
+| **Port** | 3000 |
+| **Talks to** | Kong only, through its own server-side routes |
+| **Stack** | Next.js (App Router) · React · TypeScript · Base UI · Radix Colors · Phosphor icons · OpenTelemetry |
 
-The browser calls only `/api/session` and the allowlisted `/api/horizon/*` BFF. Access,
-refresh, family and tenant values stay in `HttpOnly`, `SameSite=Lax` cookies; the BFF
-rotates an expired access token before retrying once. The tenant id is derived from the
-Identity token and is never accepted from a browser-controlled header.
+<p align="center">
+  <img src="../docs/assets/modules/web.png" alt="The browser talks only to the portal's own server routes, which keep the session in HttpOnly cookies and call Kong, which routes to every service. Browser spans go to the OpenTelemetry Collector, so one trace runs from the click to the database." width="100%">
+</p>
 
 ---
 
-## Local development
+## What it does
+
+- **Every area of the ERP**, each a bookmarkable route under `/app`:
+
+  | Area | Screens |
+  |---|---|
+  | Sales | customers, quotes, approvals, orders, deliveries, service orders, contracts, billing |
+  | Purchasing | requisitions, orders, approvals |
+  | Inventory | balances, operations, reports, lot and serial tracking, production, item structure |
+  | Finance | receivables, payables, treasury, reconciliation, ledger |
+  | Fiscal | documents, preview, supplier XML, service profiles, tax rules, support |
+  | CRM | pipeline, accounts, agenda, forecast, settings |
+  | Catalog and registrations | items, parties |
+  | Reports and jobs | cross-module reports, exports, imports and their progress |
+  | Administration | people, workspace, classifications, imports, audit, the assistant |
+  | Developers | API keys, webhooks and deliveries, the agent |
+  | Settings | security (second factors, sessions), controls (delegations) |
+
+- **Navigation by role.** A screen appears only when the person holds a role that can use
+  it, so nobody is offered an action they cannot perform
+  ([ADR 0045](../docs/adr/0045-routed-shell-with-permission-navigation-registry.md)).
+- **Two languages, chosen by the reader**, not by the URL. Translation stops at the
+  presentation layer; services speak codes
+  ([ADR 0044](../docs/adr/0044-localization-stops-at-the-presentation-boundary.md)).
+- **A search and command palette**, notifications, saved views and the in-app assistant.
+- **Accessible.** WCAG 2.2 AA for the delivered screens: landmarks, labels, keyboard
+  operation, visible focus, announced status, and no page-level horizontal scroll from
+  390 px up.
+
+## What it leaves to others
+
+- **Business rules.** Every invariant is enforced by a service. The portal may repeat a
+  validation for a better experience, never as the only check.
+- **Tokens and tenant authority.** Identity issues tokens and decides the workspace. A
+  browser header never establishes which tenant a request is for.
+
+---
+
+## How a request travels
+
+1. The browser calls only the portal's own routes: `/api/session` and an allowlisted
+   `/api/horizon/*`.
+2. Those routes keep the access and refresh tokens in `HttpOnly`, `SameSite=Lax` cookies,
+   rotate an expired token once, and call Kong.
+3. Kong routes to the service, which verifies the token again.
+4. Browser spans go to the OpenTelemetry Collector, and the `traceparent` is forwarded, so
+   one Jaeger trace runs from the click through Kong, the services and RabbitMQ.
+
+---
+
+## Run it
 
 ```bash
-npm install
-cp .env.example .env.local
-
-npm run typecheck
-npm run lint
-npm test
-npm run dev          # http://localhost:3000
+npm install && cp .env.example .env.local
+npm run typecheck && npm run lint && npm test
+npm run dev            # http://localhost:3000
 ```
 
-From the repository root, the fully integrated path is:
+The whole stack, from the repository root:
 
 ```bash
-make up
-make demo
-make up-apps
-make test-phase10
+make up && make demo && make up-apps
+make test-phase10      # the portal in Chromium, desktop and mobile, both languages, one trace
 ```
 
-Sign in as `demo@horizon.local` with the local-only password `Horizon-demo-2026!`, then
-select the `horizon-demo` workspace.
+Sign in as `demo@horizon.local` with `Horizon-demo-2026!` and pick `horizon-demo`.
 
-`make test-phase10` drives the production build in the system Chromium: it signs in,
-selects and switches workspace, exercises Catalog, Customers, Quotes, Inventory, Orders,
-Webhooks, Access and Settings, places an order, waits for Inventory confirmation, creates
-and removes a temporary webhook subscription, checks every screen for document overflow
-at 390 px, and requires one Jaeger trace containing `web`, `gateway`, `sales`, `inventory`
-and `webhooks`.
+| Browser suite | What it works through |
+|---|---|
+| `npm run test:browser` | Sign-in, workspaces, catalog, customers, quotes, an order confirmed by Inventory, webhooks, access, at 390 px and in both languages |
+| `npm run test:browser:fiscal` | The fiscal operator's worklist, an authorized NF-e with its calculation sources and artifacts, and supplier XML, in both languages |
+| `npm run test:browser:services` | A service order, a contract, a billing run and a credit, with their receivables and service invoices |
+| `npm run test:browser:crm` | Pipeline settings, accounts, opportunities, the agenda and the forecast |
 
-`npm run test:browser:services` (Phase 53) signs in to the fiscal validation workspace and
-works a service order, a contract, a billing run and a credit through the screens. It
-checks each delivery's and billed period's receivable and NFS-e, follows the NFS-e link
-into the Fiscal documents, and reads the service screens again in English. The receivables
-screen opens `?open=<titleId>` and searches `?search=<text>`; the Fiscal documents screen
-opens `?open=<documentId>`.
-
-## Accessibility baseline
-
-The phase 10 baseline is WCAG 2.2 AA for the delivered screens: semantic landmarks and
-headings, programmatic form labels, keyboard-operable navigation/forms, visible focus,
-status/error announcements, no motion-dependent interaction, and no document-level
-horizontal overflow from 390 px upward. Tables retain their own bounded horizontal scroll
-when their columns cannot fit. The browser golden-path test continuously asserts the
-mobile overflow and the accessible labels used for its interactions.
-
-## Design system foundation
-
-All interface typography uses the self-hosted variable Inter font with `Inter,
-sans-serif` fallbacks. Phosphor is the only interface icon set. Interactive primitives
-are composed from Base UI in `src/components/ui`; feature screens should consume those
-components instead of styling raw buttons, inputs, selects, dialogs, menus, or overlays.
-
-Colors come from Radix Colors. Sage supplies the neutral scale, Jade the accent and
-positive scale, Amber warnings, and Red errors or destructive states. Screens use the
-semantic aliases declared in `src/app/styles.css`, not literal palette values. The
-rationale and extension rules are recorded in
-[ADR 0039](../docs/adr/0039-frontend-design-system-foundation.md).
-
-## Environment
+<details>
+<summary><b>Configuration</b></summary>
 
 | Variable | Purpose |
 |---|---|
-| `HORIZON_API_URL` | Kong's address, used from server components and route handlers |
-| `HORIZON_COOKIE_SECURE` | Enables `Secure` on session cookies; required behind HTTPS |
-| `NEXT_PUBLIC_HORIZON_API_URL` | Kong's address as seen by the browser. Carries no secret |
-| `NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT` | Collector endpoint for browser spans |
-| `OTEL_SERVICE_NAME` | Service name in traces |
+| `HORIZON_API_URL` | Kong's address, used by the server routes |
+| `HORIZON_COOKIE_SECURE` | `Secure` session cookies; required behind HTTPS |
+| `HORIZON_WEB_TRUSTED_HOPS` | How many proxies in front may set the client's address |
+| `NEXT_PUBLIC_HORIZON_API_URL` | Kong's address as the browser sees it; carries no secret |
+| `NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME` | Browser and server telemetry |
 
-Anything prefixed `NEXT_PUBLIC_` is compiled into the client bundle and is therefore
-public. No secret may ever carry that prefix.
+Anything prefixed `NEXT_PUBLIC_` is compiled into the browser bundle, so it is public. No
+secret may carry that prefix.
 
-Browser spans are sent straight to the Collector and their W3C `traceparent` is forwarded
-by the BFF. Kong extracts and reinjects that context; backend HTTP and RabbitMQ spans then
-remain in the same trace.
+</details>
 
-## Public deployment profile
+<details>
+<summary><b>Design system</b></summary>
 
-Phase 11 includes an explicitly reduced Vercel + Neon profile. With
-`HORIZON_HOSTED_DEMO=true`, the route handlers provide a signed HttpOnly demo session and
-read the seeded Catalog from Neon; Orders and Webhooks are hidden because the public
-profile does not run their services or RabbitMQ. The full provisioning and disclosure are
-in [`docs/deployments/vercel-neon.md`](../docs/deployments/vercel-neon.md).
+- **Type:** the self-hosted variable Inter font.
+- **Icons:** Phosphor, and no other set.
+- **Components:** primitives composed from Base UI in `src/components/ui`. Screens use
+  those components, never raw styled buttons, inputs, dialogs or menus.
+- **Colour:** Radix Colors through semantic aliases in `src/app/styles.css`: Sage
+  neutrals, Jade for accent and success, Amber for warnings, Red for errors.
+
+The rationale is [ADR 0039](../docs/adr/0039-frontend-design-system-foundation.md).
+
+</details>
+
+<details>
+<summary><b>The hosted demo profile</b></summary>
+
+With `HORIZON_HOSTED_DEMO=true`, the portal runs a reduced profile for Vercel and Neon: a
+signed demo session and the seeded catalogue, with the screens whose services are not
+deployed hidden. What it does and does not run is disclosed in
+[`docs/deployments/vercel-neon.md`](../docs/deployments/vercel-neon.md).
+
+</details>
+
+`tsconfig.json` is excluded from Biome, because `next build` rewrites it.
 
 ---
 
-## A note on `tsconfig.json`
+## Read more
 
-`next build` rewrites this file — it adds path entries and reformats it. It is therefore
-**excluded from Biome** in `biome.json`, because otherwise every build would leave the
-lint check failing on formatting Next had just applied. Next owns that file; we own the
-rest.
+- [Architecture](../docs/architecture.md) and the [decision records](../docs/adr/README.md)
+- [Service levels](../docs/service-levels.md), including the synthetic probe that signs
+  in, drafts a purchase order and signs out every minute

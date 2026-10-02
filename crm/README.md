@@ -1,150 +1,187 @@
-# `crm/`
+# CRM
 
-The accounts the business is trying to win or keep, the people it talks to there, and
-who looks after each account.
+The customers the company is trying to win or keep: accounts, the people it talks to
+there, pipelines and opportunities, activities, tasks and reminders, the handover to a
+Sales quote, and forecasts rebuilt from history.
 
-An independently deployable NestJS service with its own database, its own container and
-its own lifecycle. It is reached through Kong at `/crm`, never directly, and it shares no
-source with any other module (ADR 0001).
+| | |
+|---|---|
+| **Port** | 3012 |
+| **Database** | `horizon_crm`, its own, with forced row-level security |
+| **Talks to** | Parties (accounts), Identity (owners), Sales (quotes made for an opportunity) |
+| **Stack** | NestJS · Drizzle · PostgreSQL · RabbitMQ |
 
-**Status: Phase L closed (phases 54 to 60).** Accounts, contacts, owners, pipelines,
-opportunities, activities, tasks, notes, reminders, the conversion to a Sales quote, and
-the forecast and pipeline metrics, with their screens in `web/` under `/app/crm/`.
-See the [CRM plan](../docs/crm-implementation-plan.md), the
-[API reference](../docs/crm-api.md) and the [threat model](../docs/crm-threat-model.md).
+<p align="center">
+  <img src="../docs/assets/modules/crm.png" alt="CRM listens to Parties (accounts registered, updated and erased), Identity (users registered and disabled) and Sales (quotes sent, accepted and rejected). It publishes opportunities to Sales, and opportunities and tasks due to Reporting." width="100%">
+</p>
 
 ---
 
-## What this context owns
+## What it does
 
-- **Accounts** — a projection of every party holding `prospect`, `customer` or `partner`
-  (ADR 0057), keyed by the party id. The registry owns the name, document and roles; CRM
-  owns the **owner**, the **segment** and the **tags**. An account that loses its CRM
-  role stays, inactive; one whose party is erased keeps its row with the names blanked.
-- **Contacts** — people at an account: name, job title, email, phone and the lawful
-  basis for holding them. The personal fields are sealed under a key per contact;
-  erasing the contact, or its account's party, destroys that key (ADR 0026).
-- **Owners** — the workspace's users as ids and an active flag, fed by
-  `identity.user.registered` and `identity.user.disabled`. No name or email is kept.
-- **Pipelines** — ordered open stages with a win probability in basis points; stages and
-  pipelines are archived, never deleted. Won and lost are outcomes, not stages.
-- **Sources and loss reasons** — workspace lists, archived rather than deleted; an
-  account and an opportunity carry a source.
-- **Opportunities** — an account, contacts, owner, source, expected value and close date,
-  pipeline and stage; moved, revised, reassigned, won, lost with a reason and reopened.
-  The append-only history (`opportunity_events`) is the source of truth, and the record is
-  its fold.
-- **Activities, tasks and notes** — attached to an account, a contact or an opportunity,
-  always stored with their account. An activity (call, meeting, email, visit) is corrected,
-  not deleted; a task has an assignee, a due instant and an optional reminder, and is
-  completed or cancelled; a note is corrected by appending a revision. Their free text is
-  sealed under a key of the account, destroyed with its party; erasing the party also
-  cancels its open tasks.
-- **Quotes and conversion** — CRM follows the Sales quotes made for an opportunity from
-  `sales.quote.*` and keeps the latest version of each offer. An accepted quote converts
-  the opportunity once: won at the quote's total, with the quote recorded, even if it was
-  lost or won by hand. A converted opportunity is never reopened. CRM never calls or writes
-  Sales.
-- **Forecast and pipeline metrics** — read as of a cutoff instant from projections that
-  are a function of each opportunity's history (`metric_states`, `metric_stage_visits`,
-  `metric_closures`), replaced with it in the same transaction. The history refuses a fact
-  recorded more than two minutes from the database clock, so a cutoff older than ten
-  minutes is *settled*: its numbers can be reproduced later.
-- **Reminders** — a scheduler in this service sends each armed reminder once as
-  `crm.task.due`, even across restarts or with several instances; rescheduling a task
-  arms it again.
-- **Audit** — every command appends to the tenant's hash chain (ADR 0025), with field
-  names and never contact values.
+- **Accounts** are the parties that are prospects, customers or partners
+  ([ADR 0057](../docs/adr/0057-crm-accounts-are-parties-with-typed-documents.md)). Parties
+  owns their name and document; CRM adds the owner, segment and tags.
+- **Contacts.** People at an account, with the lawful basis for holding them. Their
+  personal fields are sealed under a key per contact, destroyed on erasure.
+- **Pipelines.** Ordered stages with a win probability. Won and lost are outcomes, not
+  stages. Stages, pipelines, sources and loss reasons are archived, never deleted.
+- **Event-sourced opportunities.** An account, contacts, owner, source, expected value and
+  close date. Each change is appended to the opportunity's history, which is the source of
+  truth; the record is computed from it.
+- **Activities, tasks and notes.** Calls, meetings, emails and visits; tasks with an
+  assignee, a due time and an optional reminder; notes corrected by revisions. Their free
+  text is sealed under the account's key.
+- **Reminders**, sent exactly once even across restarts or with several instances.
+- **The handover to Sales.** A quote made for an opportunity is followed here. When the
+  customer accepts it, the opportunity is won at the quote's total, once. CRM never calls
+  or writes to Sales.
+- **Forecasts and pipeline metrics** at a cutoff: open, weighted and won value per month,
+  and entries, exits, conversion and time per stage. A cutoff older than ten minutes is
+  settled, so its numbers can be reproduced later.
 
-## What it explicitly does not own
+## What it leaves to others
 
-- Parties, their documents and contacts: `parties/` is authoritative, and CRM never
-  registers an organization itself.
-- Quotes and orders: Sales owns them; CRM will hand off to a quote in phase 58 without
-  writing to Sales.
+- **Organizations and their documents** belong to Parties; CRM never registers one.
+- **Quotes and orders** belong to Sales.
+
+---
+
+## API
+
+<details>
+<summary><b>Accounts and contacts</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/accounts` | Accounts, filtered by search, role, owner and status |
+| `GET`, `PATCH` | `/accounts/:id` | One account with its contacts, or set its owner, segment and tags |
+| `POST` | `/accounts/:id/contacts` | Add a contact |
+| `GET`, `PUT` | `/contacts/:id` | One contact, or update it |
+| `PATCH` | `/contacts/:id/status` | Activate or deactivate |
+| `DELETE` | `/contacts/:id` | Erase a contact by destroying its key |
+| `GET` | `/owners` | The workspace's users who can own accounts |
+| `GET` | `/accounts/:id/timeline` | Everything that happened with an account |
+
+</details>
+
+<details>
+<summary><b>Pipelines and opportunities</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`, `POST` | `/pipelines` | Pipelines, or a new one |
+| `GET`, `PUT` | `/pipelines/:id` | One pipeline, or rename it |
+| `PATCH` | `/pipelines/:id/status` | Archive or restore |
+| `POST` | `/pipelines/:id/stages` | Add a stage |
+| `PATCH` | `/pipelines/:id/stages/:stageId` | Change a stage |
+| `PUT` | `/pipelines/:id/stage-order` | Reorder the stages |
+| `GET`, `POST` | `/sources`, `/loss-reasons` | Workspace lists |
+| `PATCH` | `/sources/:id`, `/loss-reasons/:id` | Change or archive an entry |
+| `GET`, `POST` | `/opportunities` | Opportunities, or a new one |
+| `GET`, `PUT` | `/opportunities/:id` | One opportunity with its history and quotes, or revise it |
+| `POST` | `/opportunities/:id/stage` | Move it to another stage |
+| `POST` | `/opportunities/:id/owner` | Reassign it |
+| `POST` | `/opportunities/:id/win`, `/lose`, `/reopen` | Close it, with a reason when lost, or reopen it |
+| `GET` | `/opportunities/:id/timeline` | Its timeline |
+
+</details>
+
+<details>
+<summary><b>Activities, tasks and notes</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/activities` | Record a call, meeting, email or visit |
+| `GET`, `PUT` | `/activities/:id` | One activity, or correct it |
+| `GET`, `POST` | `/tasks` | Tasks, or a new one |
+| `GET`, `PUT` | `/tasks/:id` | One task, or change it |
+| `POST` | `/tasks/:id/assignee` | Reassign it |
+| `POST` | `/tasks/:id/complete`, `/cancel` | Finish or drop it |
+| `GET` | `/agenda` | My open tasks due soon |
+| `POST` | `/notes` | Write a note |
+| `GET` | `/notes/:id` | A note and its revisions |
+| `POST` | `/notes/:id/revisions` | Correct a note |
+
+</details>
+
+<details>
+<summary><b>Metrics and operations</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/forecast` | Open, weighted and won value per month, by pipeline, owner or source |
+| `GET` | `/pipelines/:id/metrics` | Entries, exits, conversion and time per stage, win rate, loss reasons |
+| `GET` | `/audit` | The hash-chained audit log, with field names and never contact values |
+| `GET` | `/health/live`, `/health/ready` | Liveness and readiness |
+
+</details>
+
+**Roles.** `viewer` reads. `representative` also writes. `manager` also assigns owners and
+configures pipelines and lists. `admin` also erases contacts.
+
+---
 
 ## Events
 
-Consumed: `parties.party.registered` and `updated` (v1 and v2), `parties.party.erased`,
-`identity.user.registered` and `identity.user.disabled`, and `sales.quote.sent`,
-`accepted` and `rejected` when they carry an attribution. Published: `crm.opportunity.created`,
-`revised`, `stage-changed`, `owner-changed`, `won`, `lost` and `reopened` (v1) — with the
-stage probability, owner, source and value at that moment, never the title or contacts.
-A revision that changed only the title or contacts is kept in the history, not published.
-`crm.opportunity.converted` (v1) names the accepted quote, its total, the owner and the
-source; `crm.opportunity.won` is sent with it when the opportunity was not won already.
-`crm.task.due` (v1) names the task, its account and subject, the assignee and the due and
-reminder instants — never the title.
-
-## HTTP API
-
-| Method and path | CRM action |
+| Published | Meaning |
 |---|---|
-| `GET /accounts?search=&role=&ownerId=&status=&limit=&offset=` | read |
-| `GET /accounts/{id}` (with its contacts) | read |
-| `PATCH /accounts/{id}` `{ ownerId?, segment?, tags? }` | write; `assign` too when `ownerId` is sent |
-| `POST /accounts/{id}/contacts` (requires `Idempotency-Key`) | write |
-| `GET /contacts/{id}`, `PUT /contacts/{id}`, `PATCH /contacts/{id}/status` | read / write |
-| `DELETE /contacts/{id}` — crypto-shredding | erase |
-| `GET /owners` | read |
-| `GET /pipelines`, `GET /pipelines/{id}`, `GET /sources`, `GET /loss-reasons` (`?archived=include`) | read |
-| `POST /pipelines`, `PUT /pipelines/{id}`, `PATCH /pipelines/{id}/status`, `POST /pipelines/{id}/stages`, `PATCH /pipelines/{id}/stages/{stageId}`, `PUT /pipelines/{id}/stage-order` | configure |
-| `POST /sources`, `PATCH /sources/{id}`, `POST /loss-reasons`, `PATCH /loss-reasons/{id}` | configure |
-| `GET /opportunities?pipelineId=&stageId=&status=&ownerId=&accountId=`, `GET /opportunities/{id}` (with its history, its quotes and its conversion) | read |
-| `POST /opportunities` (requires `Idempotency-Key`), `PUT /opportunities/{id}`, `POST /opportunities/{id}/stage`, `…/win`, `…/lose`, `…/reopen` | write |
-| `POST /opportunities/{id}/owner` | assign |
-| `POST /activities` (requires `Idempotency-Key`), `PUT /activities/{id}` | write |
-| `GET /activities/{id}`, `GET /tasks?assigneeId=&accountId=&status=&dueBefore=`, `GET /tasks/{id}`, `GET /notes/{id}` (with its revisions) | read |
-| `POST /tasks` (requires `Idempotency-Key`), `PUT /tasks/{id}`, `POST /tasks/{id}/complete`, `…/cancel` | write |
-| `POST /tasks/{id}/assignee` | write; `assign` too when the assignee is someone else (also on `POST /tasks`) |
-| `POST /notes` (requires `Idempotency-Key`), `POST /notes/{id}/revisions` | write |
-| `GET /agenda?until=` — the caller's open tasks due by `until` (default: 24 hours) | read |
-| `GET /accounts/{id}/timeline`, `GET /opportunities/{id}/timeline` (`limit`, `offset`) | read |
-| `GET /forecast?cutoff=&groupBy=pipeline\|owner\|source&pipelineId=&ownerId=&sourceId=` — open, weighted and won value per month and currency | read |
-| `GET /pipelines/{id}/metrics?cutoff=&from=&to=` — entries, exits, conversion and time per stage, win rate, loss reasons | read |
+| `crm.opportunity.created`, `revised`, `stage-changed`, `owner-changed` | An opportunity's life, with its probability, owner, source and value, never its title or contacts |
+| `crm.opportunity.won`, `lost`, `reopened` | It was closed or reopened |
+| `crm.opportunity.converted` | An accepted quote won it, at the quote's total |
+| `crm.task.due` | A task's reminder is due |
 
-## Authorization
+| Consumed | Reaction |
+|---|---|
+| `parties.party.registered`, `updated`, `erased` | Keeps the accounts; erasure blanks the names, destroys the keys and cancels open tasks |
+| `identity.user.registered`, `user.disabled` | Keeps the owners, as ids only |
+| `sales.quote.sent`, `accepted`, `rejected` | Follows the quotes made for an opportunity, and converts it on acceptance |
+| `identity.tenant.created` | Provisions the workspace |
 
-`crm:admin` reads, writes, assigns owners, configures pipelines and lists, and erases
-contacts; `crm:manager` does all of that but erase; `crm:representative` reads and writes;
-`crm:viewer` reads.
-Visibility is tenant-wide: roles are module-scoped (ADR 0023).
+---
 
-## Running it
+## Guarantees
 
-```sh
-cp .env.example .env
-npm install
+Besides what [every service guarantees](../docs/service-runtime.md#guarantees-every-service-gives):
+
+- **History is the truth.** An opportunity's record is computed from its append-only
+  history, and the metrics are rebuilt from it in the same transaction.
+- **Reproducible numbers.** The history refuses a fact more than two minutes from the
+  database clock, so a cutoff older than ten minutes always gives the same answer.
+- **Personal data stays sealed.** Contact fields and free text are encrypted, and the audit
+  log records field names, never values.
+
+---
+
+## Run it
+
+```bash
+npm install && cp .env.example .env
 npm run db:migrate
-npm run dev
+npm run dev            # http://localhost:3012
 ```
 
-`npm test` runs the domain and application tests; `npm run test:e2e` starts PostgreSQL
-with Testcontainers and proves sealed contacts and record text, crypto-shredding, party
-erasure, idempotency, the audit chain, reminders sent once by concurrent schedulers, the
-timelines and cross-tenant isolation.
+Tests, the build and the code layout are the same in every service:
+[how every service runs](../docs/service-runtime.md).
 
-With `DATABASE_RELAY_URL` set, the service also runs the outbox relay and the reminder
-scheduler (`REMINDER_POLL_INTERVAL_MS`, default 15 s; `REMINDER_BATCH_SIZE`, default 100).
-The scheduler reads, as `horizon_relay`, only which tenants have a reminder due; it sends
-them per tenant as `horizon_app`, under RLS.
+<details>
+<summary><b>Configuration specific to CRM</b></summary>
 
-`npm run rebuild:metrics -- --tenant <uuid> [--batch 200] [--verify-only]` rebuilds the
-metric rows from the history in batches, printing progress and any drift, and compares
-every number at one cutoff before and after. It fails if the numbers changed without
-drift, or if drift remains after the rebuild. Run it once after the Phase 59 migration to
-fill the rows of older opportunities.
+| Variable | Purpose |
+|---|---|
+| `REMINDER_POLL_INTERVAL_MS`, `REMINDER_BATCH_SIZE` | How often and how many reminders the scheduler sends |
+| `JOURNAL_SEAL_INTERVAL_MS` | How often the relay seals each workspace's history for Reporting |
 
-Two one-off commands bring an existing workspace into CRM:
+The variables every service shares are in
+[the shared configuration](../docs/service-runtime.md#configuration-every-service-shares).
 
-- `npm run republish:parties -- --tenant <uuid>` in `parties/` republishes every live
-  party, so the ones that already hold a CRM role become accounts;
-- `npm run backfill:owners -- --tenant <uuid>` here loads the workspace's users as
-  owners (`IDENTITY_URL`, `IDENTITY_TOKEN`).
+</details>
 
-## Audit log (Phase 68)
+---
 
-`GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered
-by actor, action, record and period. Every page carries the chain's verdict: each row is
-recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
-admins; the web's audit screen asks it alongside every other module.
+## Read more
+
+- [How every service runs](../docs/service-runtime.md)
+- [The CRM API](../docs/crm-api.md) and its [threat model](../docs/crm-threat-model.md)
+- [Architecture](../docs/architecture.md) and the [decision records](../docs/adr/README.md)
+- [The event catalogue](../docs/events.md)

@@ -1,44 +1,55 @@
-# `webhooks/`
+# Webhooks
 
-Developer-facing subscriptions, HMAC-signed delivery, bounded retry, dead-letter and
-replay. This is an independently deployable NestJS service with its own PostgreSQL
-database and lifecycle.
+Lets a company's own systems follow what happens in Horizon: subscriptions to any
+published event, delivered as HMAC-signed HTTP callbacks, with retries, dead letters and
+replay.
 
-**Status: phase 9 complete.** The domain, persistence, RabbitMQ consumer, delivery worker,
-authenticated HTTP surface and end-to-end tests are implemented. See
-[`docs/plan.md`](../docs/plan.md).
+| | |
+|---|---|
+| **Port** | 3005 |
+| **Database** | `horizon_webhooks`, its own, with forced row-level security |
+| **Talks to** | Hears every event Horizon publishes; calls the company's own endpoints |
+| **Stack** | NestJS · Drizzle · PostgreSQL · RabbitMQ |
 
-## Ownership and guarantees
+<p align="center">
+  <img src="../docs/assets/modules/webhooks.png" alt="Webhooks listens to every event published by every module, keeps the ones a subscription asked for, and delivers each one as an HMAC-signed HTTPS callback to the company's own systems, with retries, a dead-letter state and replay." width="100%">
+</p>
 
-The module owns subscriptions, encrypted signing secrets, the durable delivery queue and
-append-only attempt history. It consumes versioned contracts from `@horizon/contracts`;
-currently only `sales.order.confirmed` is bound. It does not own source events or identity.
+---
 
-Delivery is at least once. Receivers must deduplicate on `X-Horizon-Event-Id`. A malformed
-or unsupported broker message is retried once and then routed to the RabbitMQ consumer
-DLQ. A callback that exhausts its configured attempts enters the database-backed
-`dead-letter` state and remains available for operator replay.
+## What it does
 
-All business rows carry `tenant_id` and use forced PostgreSQL RLS. API calls derive the
-tenant exclusively from a locally verified Identity access token. `viewer` can read;
-`admin` can read, manage subscriptions and replay work.
+- **Subscriptions.** A company registers an HTTPS endpoint and the event types it wants.
+  Its signing secret is shown once and stored encrypted with AES-256-GCM.
+- **Signed delivery.** Every callback carries the exact event envelope and a signature
+  the receiver can check.
+- **Retries with backoff.** A failed callback is retried with exponential backoff and
+  jitter, up to a limit. Every attempt is kept in an append-only log: when, how long, the
+  status, and the error.
+- **Dead letters and replay.** A callback that exhausts its attempts is kept as a dead
+  letter. An admin can replay it, and its history stays.
+- **Backpressure without loss.** Once accepted, delivery work is durable in PostgreSQL.
+  When the backlog passes a threshold, an alert fires and the worker keeps draining.
 
-## HTTP API
+## What it leaves to others
 
-Paths are service-relative and are intended to be reached through Kong.
+- **The events themselves** belong to the modules that publish them.
+- **Who may subscribe** is decided by Identity's roles: `viewer` reads, `admin` manages
+  subscriptions and replays.
+
+---
+
+## API
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health/live` | Process liveness. |
-| `GET` | `/health/ready` | Database-backed readiness. |
-| `GET` | `/webhook-subscriptions` | List the tenant's subscriptions without secrets. |
-| `POST` | `/webhook-subscriptions` | Create a subscription; returns its secret once. |
-| `DELETE` | `/webhook-subscriptions/:id` | Deactivate a subscription. |
-| `GET` | `/webhook-deliveries` | List recent delivery state and last outcome. |
-| `GET` | `/webhook-deliveries/:id/attempts` | Read the append-only attempt log. |
-| `POST` | `/webhook-deliveries/:id/replay` | Reset a dead letter for delivery. |
-
-Creation accepts:
+| `GET` | `/webhook-subscriptions` | The workspace's subscriptions, without secrets |
+| `POST` | `/webhook-subscriptions` | Subscribe; the secret is returned once |
+| `DELETE` | `/webhook-subscriptions/:id` | Deactivate a subscription |
+| `GET` | `/webhook-deliveries` | Recent deliveries and their last outcome |
+| `GET` | `/webhook-deliveries/:id/attempts` | Every attempt of one delivery |
+| `POST` | `/webhook-deliveries/:id/replay` | Replay a dead letter |
+| `GET` | `/health/live`, `/health/ready` | Liveness and readiness |
 
 ```json
 {
@@ -47,20 +58,21 @@ Creation accepts:
 }
 ```
 
-Plain HTTP is rejected except for loopback development endpoints. Userinfo in endpoint
-URLs is rejected. Subscription secrets are random 32-byte values and are encrypted with
-AES-256-GCM before storage.
+Plain HTTP is refused except for loopback endpoints during development, and so are
+credentials in the URL. Redirects are not followed.
 
-## Signature verification
+---
 
-Each request contains the exact event envelope as JSON plus:
+## Verifying a callback
 
-- `X-Horizon-Event-Id`: stable idempotency key;
-- `X-Horizon-Signature`: `t=<unix-seconds>,v1=<lowercase-hex-hmac>`.
+Each request carries:
+- `X-Horizon-Event-Id`, a stable key to deduplicate on, because delivery is at least
+  once;
+- `X-Horizon-Signature: t=<unix-seconds>,v1=<hex-hmac>`, the HMAC-SHA256 of
+  `timestamp + "." + rawBody`.
 
-The signed bytes are `timestamp + "." + rawRequestBody`. Do not parse and reserialize the
-body before verification. Reject timestamps outside your allowed skew and compare the
-digest in constant time. A minimal Node.js verifier is:
+Verify the raw bytes before parsing them, reject old timestamps, and compare in constant
+time:
 
 ```js
 import { createHmac, timingSafeEqual } from 'node:crypto'
@@ -75,40 +87,53 @@ export function verify(secret, rawBody, signature, now = Math.floor(Date.now() /
 }
 ```
 
-Return any `2xx` response to acknowledge delivery. Redirects are not followed. Other
-statuses, network errors and timeouts are failures.
+Any `2xx` acknowledges the delivery. Anything else, a network error or a timeout is a
+failure and is retried.
 
-## Retry and backpressure policy
+---
 
-Failed attempts use exponential backoff capped by `WEBHOOK_BACKOFF_MAX_MS`, with bounded
-jitter and at most `WEBHOOK_MAX_ATTEMPTS`. Each attempt records its number, timestamp,
-duration, response status and bounded error text in an append-only table. Replay is only
-valid from `dead-letter` and resets the attempt counter without deleting history.
+## Events
 
-Backpressure never silently drops a valid event. The RabbitMQ consumer is bounded by
-`AMQP_PREFETCH`; once accepted, delivery work is durable in PostgreSQL. Each worker poll
-claims at most `OUTBOX_BATCH_SIZE` due rows using `FOR UPDATE SKIP LOCKED`. When pending
-plus delivering rows exceed `WEBHOOK_QUEUE_DEPTH_ALERT`, the worker emits the explicit
-`webhook.queue-depth-exceeded` error signal and continues draining bounded batches. The
-E2E suite forces the threshold crossing and asserts this behavior.
+Webhooks publishes no events. It listens to every event on the bus, validates it
+against its contract in [`@horizon/contracts`](../contracts/), and queues it for each
+subscription that asked for its type. A message it cannot read is retried once, then
+sent to its own dead-letter queue.
 
-## Local development
+---
+
+## Run it
 
 ```bash
-npm ci
-cp .env.example .env
+npm install && cp .env.example .env
 npm run db:migrate
-npm run typecheck
-npm run lint
-npm test
-npm run test:e2e
-npm run build
-npm start
+npm run dev            # http://localhost:3005
 ```
 
-The E2E suite starts isolated PostgreSQL 17 and RabbitMQ 4 containers. `make demo` at the
-repository root proves the real Sales → Inventory → Webhooks path and a signed callback.
+`make demo` at the repository root proves the whole path: an order confirmed in Sales,
+reserved in Inventory, and delivered here as a signed callback. Tests, the build and the
+code layout are the same in every service: [how every service runs](../docs/service-runtime.md).
 
-Important runtime controls are documented inline in [`.env.example`](.env.example):
-database application/worker URLs, the 32-byte hex encryption key, JWKS URL, AMQP prefetch,
-delivery timeout, retry/backoff values, claim batch, poll interval and queue-depth alert.
+<details>
+<summary><b>Configuration specific to Webhooks</b></summary>
+
+| Variable | Purpose |
+|---|---|
+| `WEBHOOK_SECRET_ENCRYPTION_KEY` | The 32-byte key subscription secrets are encrypted with |
+| `WEBHOOK_DELIVERY_TIMEOUT_MS` | How long a callback may take |
+| `WEBHOOK_MAX_ATTEMPTS` | Attempts before a delivery becomes a dead letter |
+| `WEBHOOK_BACKOFF_BASE_MS`, `WEBHOOK_BACKOFF_MAX_MS`, `WEBHOOK_BACKOFF_JITTER_RATIO` | The retry schedule |
+| `WEBHOOK_SIGNATURE_TOLERANCE_SECONDS` | The timestamp skew a receiver should accept |
+| `WEBHOOK_QUEUE_DEPTH_ALERT` | The backlog that raises an alert |
+
+The variables every service shares are in
+[the shared configuration](../docs/service-runtime.md#configuration-every-service-shares).
+
+</details>
+
+---
+
+## Read more
+
+- [How every service runs](../docs/service-runtime.md)
+- [The event catalogue](../docs/events.md): every event a subscription can ask for
+- [Architecture](../docs/architecture.md) and the [decision records](../docs/adr/README.md)

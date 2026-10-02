@@ -1,92 +1,159 @@
-# `treasury/`
+# Treasury
 
-Bank, cash, card-clearing and virtual accounts, their append-only journal, balances and
-internal transfers.
+Where the money actually is: bank, cash, card-clearing and virtual accounts, their
+append-only journal and balances, transfers between them, bank statement import and
+reconciliation.
 
-An independently deployable NestJS service with its own database, its own container and
-its own lifecycle. It is reached through Kong at `/treasury`, never directly, and it shares
-no source with any other module (ADR 0001). Its boundary against `financial/` and `ledger/`
-is ADR 0041.
+| | |
+|---|---|
+| **Port** | 3008 |
+| **Database** | `horizon_treasury`, its own, with forced row-level security |
+| **Talks to** | Financial's settlements become its entries; the Ledger posts what it records |
+| **Stack** | NestJS · Drizzle · PostgreSQL · RabbitMQ |
 
-**Status: phase 20 — accounts, journal, balances, transfers, statement import and
-reconciliation complete.**
+<p align="center">
+  <img src="../docs/assets/modules/treasury.png" alt="Treasury listens to Financial (settlements recorded and reversed) and Identity (workspace created). It publishes entries and transfers to the Ledger, and accounts, entries and reconciliations to Reporting." width="100%">
+</p>
 
 ---
 
-## What this context owns
+## What it does
 
-- **Accounts** — bank (with bank code, branch and account number), cash, card clearing and
-  virtual, each in one currency and tracked from a calendar date. Deactivated, never deleted.
-- **The journal** — one append-only line per movement, with a direction instead of a sign,
-  a value date and a source: opening balance, manual entry, transfer leg, transfer fee or
-  reversal. A manual entry is corrected by a reversal naming it; nothing is edited.
-- **Transfers** — one aggregate whose outflow, inflow and optional fee legs are written in
-  the transaction that records it. A deferred database constraint refuses a transfer that
-  commits without both legs. Cancelling adds inverse entries and keeps the originals.
-- **Statements** — OFX and CSV files imported into an account through pluggable adapters.
-  A file is recognised by its hash and each line by its fingerprint, so reimports and
-  overlapping files store nothing twice. Lines are immutable and keep the bank's own fields.
-- **Reconciliation** — a person matches bank lines to entries (one to one, one to many, many
-  to one, partially, or with an explicit adjustment entry), or ignores lines with a reason.
-  Deterministic suggestions carry a score and their reasons and never confirm themselves.
-  Every reconciliation balances, is undone rather than deleted, and a closed period freezes
-  the ones it covers (ADR 0046).
-- **Balances** — always computed from the journal by value date: the book balance through a
-  date, the projected balance including later-dated entries, the reconciled balance, and the
-  last balance a bank statement reported. There is no stored balance to drift, so a backdated
-  entry moves every later balance deterministically.
+- **Accounts.** Bank (with bank code, branch and account number), cash, card clearing
+  and virtual, each in one currency. Deactivated, never deleted.
+- **An append-only journal.** One line per movement, with a direction instead of a sign,
+  a value date and a source: opening balance, manual entry, transfer leg, fee or
+  reversal. A manual entry is corrected by a reversal that names it.
+- **Balances computed, never stored.** The book balance through a date, the projected
+  balance with later-dated entries, the reconciled balance, and the last balance a bank
+  statement reported. There is nothing to drift, so a backdated entry moves every later
+  balance deterministically.
+- **Transfers.** Outflow, inflow and an optional fee are written together. Above a
+  threshold, a transfer waits for a second person. Cancelling adds inverse entries and
+  keeps the originals.
+- **Statement import.** OFX and CSV files. A file is recognised by its hash and each line
+  by its fingerprint, so reimporting or overlapping files stores nothing twice.
+- **Reconciliation.** A person matches bank lines to entries: one to one, one to many,
+  many to one, partially, or with an explicit adjustment. Suggestions come with a score
+  and their reasons, and never confirm themselves
+  ([ADR 0046](../docs/adr/0046-reconciliation-suggests-a-human-confirms.md)). Closing a
+  period freezes the reconciliations it covers.
+
+## What it leaves to others
+
+- **What is owed** belongs to Financial. A settlement that names an account becomes that
+  account's entry here.
+- **The accounting entries** belong to the Ledger.
 
 A book balance is labelled as such everywhere. It is never presented as the bank's live
-balance; the statement balance is the bank's figure on the date its file reported it.
+balance.
+
+---
+
+## API
+
+<details>
+<summary><b>Accounts, entries and transfers</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`, `POST` | `/accounts` | Accounts with their balances, or open one |
+| `GET` | `/accounts/:id` | One account |
+| `PATCH` | `/accounts/:id/status` | Deactivate or reactivate |
+| `GET` | `/accounts/:id/statement` | Entries with running balances |
+| `GET` | `/accounts/:id/timeline` | The daily balance |
+| `POST` | `/accounts/:id/entries` | A manual entry |
+| `POST` | `/entries/:id/reverse` | Reverse an entry |
+| `GET`, `POST` | `/transfers` | Transfers, or move money between accounts |
+| `POST` | `/transfers/:id/approve`, `/reject` | Decide somebody else's transfer |
+| `POST` | `/transfers/:id/cancel` | Undo a transfer with inverse entries |
+| `GET`, `PUT` | `/approval-policies` | The threshold above which a transfer waits |
+
+</details>
+
+<details>
+<summary><b>Statements and reconciliation</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/accounts/:id/statements` | Import an OFX or CSV statement |
+| `GET` | `/accounts/:id/reconciliation` | Unmatched lines, entries and suggestions |
+| `GET` | `/accounts/:id/reconciliation/metrics` | How good the suggestions have been |
+| `POST` | `/accounts/:id/reconciliations` | Match lines to entries |
+| `POST` | `/accounts/:id/reconciliations/ignore` | Ignore lines, with a reason |
+| `POST` | `/reconciliations/:id/undo` | Undo a reconciliation |
+| `POST` | `/accounts/:id/suggestions/dismiss` | Dismiss a suggestion |
+| `POST` | `/accounts/:id/reconciliation/close`, `/reopen` | Close or reopen a period |
+
+</details>
+
+<details>
+<summary><b>Approvals and operations</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`, `POST` | `/delegations` | Lend the transfer approval to another member for up to 90 days |
+| `POST` | `/delegations/:id/revoke` | End a delegation |
+| `GET` | `/audit` | The hash-chained audit log, with the chain's verdict |
+| `GET` | `/health/live`, `/health/ready` | Liveness and readiness |
+
+</details>
+
+**Roles.** `viewer` reads. `operator` records entries, transfers, imports and
+reconciliations. `admin` also reverses, cancels, undoes, opens accounts and closes
+periods.
+
+---
 
 ## Events
 
-| Event | Meaning |
+| Published | Meaning |
 |---|---|
 | `treasury.account.opened` | An account started keeping a journal |
-| `treasury.entry.recorded` | A line was appended — including every transfer leg, fee and reversal |
-| `treasury.transfer.posted` | Money moved between two accounts, both legs committed |
-| `treasury.transfer.cancelled` | A transfer was undone by inverse entries |
-| `treasury.statement.imported` | A statement file was imported; duplicates are counted, not stored |
-| `treasury.reconciliation.confirmed` | A person matched or ignored bank lines |
-| `treasury.reconciliation.undone` | A reconciliation was undone |
+| `treasury.entry.recorded` | A line was appended, including transfer legs, fees and reversals |
+| `treasury.transfer.posted`, `transfer.cancelled` | Money moved between two accounts, or that was undone |
+| `treasury.statement.imported` | A statement was imported; duplicates are counted, not stored |
+| `treasury.reconciliation.confirmed`, `reconciliation.undone` | Bank lines were matched or ignored, or that was undone |
 
-It consumes `financial.settlement.recorded` and `financial.settlement.reversed`: a settlement
-that names a treasury account becomes, or stops being, that account's journal entry, and a
-settlement the account cannot take is recorded as refused with its reason. Every command that moves money requires an `Idempotency-Key`
-header (ADR 0028), and every command is written to a per-tenant hash-chained audit log.
+| Consumed | Reaction |
+|---|---|
+| `financial.settlement.recorded`, `settlement.reversed` | A settlement naming an account becomes, or stops being, its entry; one the account cannot take is recorded as refused, with the reason |
+| `identity.tenant.created` | Provisions the workspace |
 
-## Segregation of duties, delegation and audit (Phase 68)
+---
 
-- **Pairs** (ADR 0062): the `treasury.transfer` pair: a transfer at or above the threshold set with `PUT /approval-policies` waits with no legs, and whoever asked for it never decides it (`POST /transfers/{id}/approve` or `/reject`). A refusal is `403` with the code `segregation-of-duties`.
-- **Delegation:** an approver (admin) lends `treasury:transfer:approve` to a member of the module for up to 90
-  days, through `POST /delegations`; `GET /delegations` lists them and
-  `POST /delegations/{id}/revoke` ends one. A decision through a delegation records both
-  names, and is refused when either did the work.
-- **Audit:** `GET /audit` reads the log a page at a time, filtered by actor, action, record
-  and period, with the hash chain judged on the page. Admins only.
+## Guarantees
 
-## Authorization
+Besides what [every service guarantees](../docs/service-runtime.md#guarantees-every-service-gives):
 
-| Role | Reads | Records entries, transfers, imports and reconciliations | Reverses, cancels and undoes | Opens accounts, closes and reopens periods |
-|---|---|---|---|---|
-| `treasury:admin` | yes | yes | yes | yes |
-| `treasury:operator` | yes | yes | — | — |
-| `treasury:viewer` | yes | — | — | — |
+- **A transfer never has one leg.** A deferred database constraint refuses a transfer
+  that commits without both. Concurrent transfers in both directions keep the total
+  constant.
+- **Order does not matter.** A property test shows the book balance and the daily timeline
+  come out the same whatever order backdated entries are recorded in.
+- **Every reconciliation balances**, and is undone rather than deleted.
+- **Four eyes on large transfers.** Whoever asked for one never approves it
+  ([ADR 0062](../docs/adr/0062-segregation-of-duties-is-a-declared-matrix.md)).
 
-## Running it
+---
 
-```sh
-cp .env.example .env
-npm install
+## Run it
+
+```bash
+npm install && cp .env.example .env
 npm run db:migrate
-npm run dev
+npm run dev            # http://localhost:3008
 ```
 
-`npm test` runs the domain tests, including a property test that the book balance and the
-daily timeline come out the same whatever order backdated entries are recorded in.
-`npm run test:e2e` starts PostgreSQL with Testcontainers and proves statements with running
-balances, idempotent commands, transfer cancellation, concurrent transfers in both
-directions keeping money constant, the deferred leg constraint, the append-only journal,
-statement reimports, every reconciliation shape, suggestions and their measurement, the
-period summary, period closure and tenant isolation.
+Tests, the build and the code layout are the same in every service:
+[how every service runs](../docs/service-runtime.md). The only variable specific to
+Treasury is `JOURNAL_SEAL_INTERVAL_MS`, how often the relay seals each workspace's history
+for Reporting.
+
+---
+
+## Read more
+
+- [How every service runs](../docs/service-runtime.md)
+- [Architecture](../docs/architecture.md) and the [decision records](../docs/adr/README.md)
+- [The event catalogue](../docs/events.md)

@@ -1,303 +1,227 @@
-# `identity/`
+# Identity
 
-Tenants, users, authentication, sessions, API keys, JWKS and role assignment.
+Who someone is and which workspaces they may enter: accounts, workspaces, sign-in with
+second factors, sessions, API keys, and the keys every other service uses to check a
+token.
 
-An independently deployable NestJS service with its own database, its own container
-and its own lifecycle. It is reached through Kong, never directly, and it shares no
-source with any other module (ADR 0001).
+| | |
+|---|---|
+| **Port** | 3001 |
+| **Database** | `horizon_identity`, its own, with forced row-level security |
+| **Talks to** | Every service reads its public keys. It publishes facts every module listens to, and listens to none. |
+| **Stack** | NestJS · Drizzle · PostgreSQL · Redis · RabbitMQ · Ed25519 · Argon2id · WebAuthn |
 
-**Status: reference implementation complete; phase 5 patterns extracted.** Identity
-has a working HTTP API, tenant-scoped PostgreSQL persistence, atomic Redis sessions,
-EdDSA/JWKS, API keys, encrypted personal data, an audit verifier and an outbox relay.
-The domain/application coverage gate passes above 99% of lines. Unit and real
-PostgreSQL/Redis/RabbitMQ integration suites exercise the failure paths described below.
-
-The implementation patterns and the checklist for Catalog are in
-[`docs/patterns/`](../docs/patterns/). The next business-module phase is Catalog.
-
-Operational limits remain explicit: table-backed key erasure does not destroy old
-backups of the key table; KMS is not implemented. Identity consumes no business events
-and makes no cross-module HTTP calls, so consumer prefetch/DLQ and HTTP circuit breakers
-are requirements for the first consuming/calling module. There is no API-key acceptance
-cache: credentials and issuer permissions are checked on every authentication.
+<p align="center">
+  <img src="../docs/assets/modules/identity.png" alt="Identity serves the web (sign-in, second factors, passkeys), Kong and every service (public keys to verify tokens), and Reporting (service tokens). It publishes tenant created to every module, user registered and disabled to CRM, the company's fiscal profile to Fiscal, and data subject erased to Files and Agent." width="100%">
+</p>
 
 ---
 
-## What this context owns
+## What it does
 
-- **Tenants** — the isolation unit every other module scopes its data by.
-- **Users and credentials** — Argon2id password hashes, rehashed on login when below policy.
-- **Sessions** — refresh-token families, rotated on every use, with reuse detection.
-- **Access tokens** — EdDSA (Ed25519) signing, `kid` rotation, and the public JWKS document.
-- **API keys** — `hz_<env>_<prefix>_<secret>`, prefix indexed, secret Argon2id-hashed, explicit scopes.
-- **Role assignments** — opaque `{ module, role }` pairs attached to a user.
-- **Data-subject keys** — the per-subject encryption keys whose destruction is erasure.
+- **One account, many workspaces.** A person signs in once, then picks a workspace. A
+  workspace token exists only after a verified membership is selected
+  ([ADR 0038](../docs/adr/0038-global-account-before-workspace-selection.md)).
+- **Passwords done properly.** Argon2id, rehashed on sign-in when the policy rises
+  ([ADR 0019](../docs/adr/0019-argon2id-password-hashing.md)).
+- **Second factors.** TOTP, passkeys (WebAuthn) and single-use recovery codes. A
+  workspace can require them for admins or for everyone, with a grace period. Sensitive
+  actions ask for a recent sign-in again (step-up).
+- **Short tokens, rotating sessions.** Access tokens live 15 minutes and are signed with
+  Ed25519. Refresh tokens rotate on every use, and a replayed one revokes the whole
+  family ([ADR 0018](../docs/adr/0018-eddsa-access-tokens.md),
+  [ADR 0020](../docs/adr/0020-opaque-rotating-refresh-tokens.md)).
+- **Visible sessions.** Each person sees their devices and can end any session, and an
+  admin can end another user's.
+- **Invitations.** Single-use links valid for 72 hours, mailed through SMTP. Only the
+  link's digest is stored.
+- **API keys.** `hz_<env>_<prefix>_<secret>`, with explicit scopes. The secret is shown
+  once and stored as an Argon2id hash. A key can be rotated with an overlap or revoked
+  ([ADR 0022](../docs/adr/0022-api-key-format-and-scopes.md)).
+- **Roles.** Each user holds `(module, role)` pairs. What a role allows is decided by the
+  module that receives the request, not here
+  ([ADR 0023](../docs/adr/0023-casl-static-module-scoped-roles.md)).
+- **Erasure.** Personal data is encrypted under a key per person. Destroying the key
+  erases it everywhere, backups included, and tells every module to shred its own copies
+  ([ADR 0026](../docs/adr/0026-crypto-shredding-for-erasure.md)).
+- **The company's own registration.** The workspace's legal and fiscal profile, kept in
+  dated revisions that Fiscal reads.
+- **Service tokens.** Scheduled work (Reporting's exports) gets a short token for one
+  workspace, with roles fixed in code.
 
-## What it explicitly does not own
+## What it leaves to others
 
-This list matters more than the one above — a bounded context is defined by its
-refusals.
+- **What a role means.** Each module maps its own roles to permissions.
+- **Customers and suppliers.** They are business counterparties, kept in Parties. A
+  user is someone who signs in.
+- **Business data of any kind.** Identity knows who you are, never what you sold.
 
-- **What a role means.** Identity stores `(module, role)` pairs and cannot expand them. Each module owns its own `role → permissions` map and validates the claim on arrival (ADR 0023).
-- **Customers.** A customer is a commercial counterparty and belongs to `sales/`. A user is someone who logs in. They are different concepts with different lifecycles.
-- **Any business data.** Identity knows who you are, never what you sold.
-- **Authorization decisions.** It mints claims; the module receiving the request decides.
+---
+
+## API
+
+<details>
+<summary><b>Sign-in and sessions</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/auth/signup` | Create a workspace and its owner |
+| `POST` | `/auth/login` | Check the password; answer with a workspace-selection token or a second-factor challenge |
+| `POST` | `/auth/mfa`, `/auth/mfa/passkey`, `/auth/mfa/passkey/options` | Answer the second-factor challenge |
+| `POST` | `/auth/enrollment/totp`, `/auth/enrollment/totp/confirm` | Enrol a factor when the workspace requires one |
+| `POST` | `/auth/workspaces` | The workspaces a selection token may enter |
+| `POST` | `/auth/workspace` | Enter one, and open a session |
+| `POST` | `/auth/workspace-selection` | Switch workspaces without signing in again |
+| `POST` | `/auth/refresh` | Rotate the refresh token |
+| `POST` | `/auth/step-up` | Prove a recent sign-in before a sensitive action |
+| `POST` | `/auth/logout` | End the session and revoke its token |
+| `GET` | `/auth/sessions` | My sessions and devices |
+| `DELETE` | `/auth/sessions/:sessionId` | End one of them |
+| `POST` | `/auth/sessions/revoke-others` | End all the others |
+| `GET` | `/.well-known/jwks.json` | The public keys every service verifies tokens with |
+
+</details>
+
+<details>
+<summary><b>My account and second factors</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/me` | Who I am |
+| `GET` | `/me/export` | Everything held about me |
+| `PATCH` | `/me/preferences` | My preferred language |
+| `GET` | `/me/mfa` | My factors |
+| `POST` | `/me/mfa/totp`, `/me/mfa/totp/:factorId/confirm` | Add an authenticator app |
+| `POST` | `/me/mfa/passkeys/options`, `/me/mfa/passkeys` | Add a passkey |
+| `POST` | `/me/mfa/recovery-codes` | New recovery codes |
+| `DELETE` | `/me/mfa/factors/:factorId` | Remove a factor |
+
+</details>
+
+<details>
+<summary><b>Workspace, users and invitations</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/workspace` | The workspace |
+| `PUT` | `/workspace/company` | The company's legal and fiscal registration |
+| `GET` | `/workspace/company/fiscal-profiles`, `/workspace/company/fiscal-profile/:revision` | Its dated revisions |
+| `GET`, `PUT` | `/workspace/mfa-policy` | Who must use a second factor |
+| `GET`, `POST` | `/users` | The workspace's users |
+| `GET` | `/users/:userId` | One user |
+| `PATCH` | `/users/:userId/disable` | Disable a user and end their sessions |
+| `POST` | `/users/:userId/roles` | Grant a role |
+| `GET`, `DELETE` | `/users/:userId/sessions` | Another user's sessions |
+| `GET`, `POST` | `/invitations` | Pending invitations, and invite someone |
+| `POST` | `/invitations/:invitationId/resend`, `/revoke` | Resend or withdraw one |
+| `GET` | `/invitations/lookup` | Read an invitation from its link (public) |
+| `POST` | `/invitations/accept` | Accept it (public) |
+
+</details>
+
+<details>
+<summary><b>Keys, tokens and erasure</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api-keys` | Issue a key; the secret is shown once |
+| `POST` | `/api-keys/:apiKeyId/rotate` | Rotate it with an overlap |
+| `DELETE` | `/api-keys/:apiKeyId` | Revoke it |
+| `POST` | `/auth/api-key` | Check an API key and return what it may do |
+| `POST` | `/auth/api-key/token` | Exchange an API key for a 60-second token carrying its scopes, which modules accept |
+| `POST` | `/auth/service-token` | A token for scheduled work in one workspace |
+| `POST` | `/auth/fiscal-token` | The same exchange, for Fiscal's worker reading owner profiles |
+| `GET` | `/data-subjects/:subjectId/export` | Export a person's data |
+| `DELETE` | `/data-subjects/:subjectId` | Erase a person: destroy their key and end their sessions |
+
+</details>
+
+<details>
+<summary><b>Operations</b></summary>
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/audit` | The workspace's hash-chained audit log, with the chain's verdict |
+| `GET` | `/audit/verify` | Verify the whole chain |
+| `GET` | `/health/live`, `/health/ready` | Liveness and readiness |
+
+</details>
 
 ---
 
 ## Events
 
-### Published
+Identity listens to no events: it is upstream of everything else.
 
-| Event | Meaning |
+| Published | Meaning |
 |---|---|
-| `identity.tenant.created` | A tenant now exists; downstream modules may create tenant-scoped defaults. |
-| `identity.user.registered` | A user was created within a tenant. |
-| `identity.user.disabled` | Access revoked; consumers should drop cached authorization state. |
-| `identity.api-key.revoked` | A key is no longer valid; the gateway and caches must forget it. |
-| `identity.session.reuse-detected` | A rotated refresh token was replayed. Security-relevant; the family was destroyed. |
-| `identity.data-subject.erased` | A data-subject key was destroyed. Consumers holding personal data for that subject must shred their own copies. |
-
-### Consumed
-
-This module consumes no events. It is upstream of everything else.
-
-Every published event is written to the `outbox` table inside the same transaction as
-the state change it describes, and relayed by a poller using `FOR UPDATE SKIP LOCKED`
-(ADR 0024). Delivery is at-least-once, so every consumer deduplicates against an
-`inbox` table keyed on `(source_module, event_id)`.
-
-Schemas live in `@horizon/contracts` and are versioned there (ADR 0030); this module
-does not define its own wire shapes.
+| `identity.tenant.created` | A workspace exists; modules create their defaults for it |
+| `identity.user.registered`, `user.disabled` | A user joined or lost access |
+| `identity.api-key.revoked` | A key is no longer valid |
+| `identity.session.reuse-detected` | A rotated refresh token was replayed, and its family was destroyed |
+| `identity.data-subject.erased` | A person's key was destroyed; every module shreds its own copies |
+| `identity.company.fiscal-profile-changed` | The company's fiscal registration has a new revision |
 
 ---
 
-## Endpoints
+## Guarantees
 
-OpenAPI is served at `/docs` and `/docs-json`. Protected routes verify bearer tokens
-locally; a supplied tenant header never overrides the verified tenant. The gateway
-remains the normal external entry point.
+Besides what [every service guarantees](../docs/service-runtime.md#guarantees-every-service-gives):
 
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/auth/signup` | Create tenant and owner atomically. |
-| POST | `/auth/login` | Verify email/password and issue a short-lived workspace-selection token. |
-| POST | `/auth/workspaces` | List memberships available to a valid selection token. |
-| POST | `/auth/workspace` | Select one membership and open the tenant-scoped refresh family. |
-| POST | `/auth/workspace-selection` | Issue a fresh selection token for an authenticated account switching workspaces. |
-| POST | `/auth/refresh` | Rotate, return the grace replacement, or revoke on replay. |
-| POST | `/auth/logout` | Revoke refresh family and presented access token. |
-| POST | `/auth/api-key` | Authenticate an API key and return its permitted claims. |
-| GET | `/.well-known/jwks.json` | Public Ed25519 verification keys. |
-| GET | `/me`, `/me/export` | Current user and personal-data export. |
-| GET, POST | `/users` | List/register tenant users with local permissions. |
-| GET | `/users/:userId` | Read a tenant user. |
-| PATCH | `/users/:userId/disable` | Disable and revoke sessions. |
-| POST | `/users/:userId/roles` | Assign an opaque module/role pair. |
-| POST | `/api-keys` | Issue a key; secret appears only in the issuance response. |
-| POST | `/api-keys/:apiKeyId/rotate` | Rotate with an explicit overlap. |
-| DELETE | `/api-keys/:apiKeyId` | Revoke a key. |
-| GET | `/data-subjects/:subjectId/export` | Administrative personal-data export. |
-| DELETE | `/data-subjects/:subjectId` | Destroy key material and revoke sessions. |
-| GET | `/audit/verify` | Verify the tenant audit chain; administrative access. |
-| GET | `/health/live`, `/health/ready` | Liveness and database/Redis readiness. |
-
-Only `/me` is explicitly allowed during a denylist outage. Writes and administrative
-reads fail closed. A confirmed refresh replay revokes all outstanding access tokens
-for that subject until the maximum access lifetime expires, affecting other devices too.
-
-Write endpoints accept optional `Idempotency-Key`. Same principal/tenant/endpoint/key
-and body replays the original status/body; a different body or in-flight request is
-409. Responses are encrypted in Redis for the configured TTL. Login, refresh and API-key
-authentication always re-evaluate credential state and deliberately skip this cache.
-Opting into idempotency fails closed during Redis outage. A completion failure after a
-domain commit leaves the claim pending until expiry; it does not permit immediate
-re-execution of an uncertain write.
+- **Revocation that holds.** A revoked token is refused everywhere for its remaining
+  life, through a denylist in Redis. If Redis is down, writes and administrative reads
+  fail closed; plain reads fail open, which is a documented trade-off
+  ([ADR 0021](../docs/adr/0021-redis-jti-denylist-asymmetric-failure.md)).
+- **Brute force is bounded.** Five wrong second-factor answers in 15 minutes lock it for
+  15 minutes.
+- **Searchable without plaintext.** Emails are encrypted, and found by exact match through
+  a blind index.
+- **Login is never cached.** Sign-in, refresh and API-key checks always re-read the
+  credential's state.
 
 ---
 
-## Access hardening (Phase 67, ADR 0061)
-
-- **Invitations** (`POST /invitations`, owner, with step-up).
-  - A single-use link, valid for 72 hours, mailed through the SMTP port (Mailpit
-    locally).
-  - Only the link's digest is kept, and the email only while the invitation is pending.
-  - `GET /invitations/lookup` and `POST /invitations/accept` are public. An existing
-    account accepts with its own password.
-- **Second factors** (`/me/mfa`), on the global account:
-  - TOTP (RFC 6238, SHA-1, 6 digits, 30 s, one step of drift), its secret sealed with
-    `MFA_SEAL_SECRET`, a used step never accepted again;
-  - passkeys (WebAuthn, `@simplewebauthn/server`);
-  - ten recovery codes, kept as digests, each used once.
-- **Signing in.** When the account has a factor, the password answers a challenge. A code
-  or a passkey (`/auth/mfa…`) then answers the workspace choice. Five wrong answers in 15
-  minutes lock the second factor for 15 minutes (`429`).
-- **Tokens** carry `sid` (the session), `amr` and `auth_time`.
-- **Step-up** (`POST /auth/step-up`) renews `auth_time`. Routes marked
-  `@RequireRecentAuth()` need it within 10 minutes, with a second factor when the account
-  has one:
-  - API keys;
-  - roles and new users;
-  - invitations;
-  - removing a factor;
-  - new recovery codes;
-  - the MFA policy;
-  - ending another user's sessions.
-- **The workspace MFA policy** (`/workspace/mfa-policy`) is `off`, `admins` or `everyone`,
-  with a grace period. After it, a covered person without a factor gets an enrollment token
-  instead of a session.
-- **Sessions** (`/auth/sessions`, `/users/{id}/sessions`).
-  - Each refresh family keeps its device, IP prefix, `amr`, `auth_time`, and the `jti`s it
-    issued.
-  - Ending a session denylists every live one.
-  - Identity and Catalog weigh revocation before any role, so a revoked token is a `401`
-    everywhere.
-- **The drill:** `node scripts/phase67-drill.mjs` stores its results in `docs/drills/`.
-
-## Running it locally
-
-The platform (PostgreSQL, Redis, RabbitMQ, Kong, the observability plane) is available
-through `make up` at the repository root. Run migrations before starting the HTTP service.
+## Run it
 
 ```bash
-# At the repository root: make up (also generates development signing keys).
-cd identity
-npm ci
-cp .env.example .env # fill in; the process refuses to start on invalid config
-npm run db:migrate  # owner role; never the application connection
-
-npm run typecheck    # tsc --noEmit, strict plus the three extra flags
-npm run lint         # biome check
-npm test             # unit tests: no I/O, in-memory fakes
-npm run dev          # http://localhost:3001
+make up                # at the repository root; also generates development signing keys
+npm install && cp .env.example .env
+npm run db:migrate
+npm run dev            # http://localhost:3001, OpenAPI at /docs
 ```
 
-Integration and e2e tests need a Docker socket — they start their own PostgreSQL,
-Redis and RabbitMQ via Testcontainers rather than using a shared instance (ADR 0013):
+Tests, the build and the code layout are the same in every service:
+[how every service runs](../docs/service-runtime.md). `npm run audit:verify -- <tenant>`
+checks a workspace's audit chain from the command line.
 
-```bash
-npm run test:e2e
-```
+<details>
+<summary><b>Configuration specific to Identity</b></summary>
 
-Migrations:
+| Variable | Purpose |
+|---|---|
+| `JWT_PRIVATE_KEY_PATH`, `JWT_PUBLIC_KEYS_DIR`, `JWT_ACTIVE_KID` | The signing key, the published keys (rotation overlaps by publishing both), and which one signs |
+| `ACCESS_TOKEN_TTL_SECONDS` | 15 minutes |
+| `REFRESH_TOKEN_ABSOLUTE_TTL_SECONDS`, `REFRESH_TOKEN_IDLE_TTL_SECONDS` | A session's absolute and idle lifetime |
+| `REFRESH_TOKEN_REUSE_GRACE_MS` | Two tabs refreshing at once are not mistaken for theft |
+| `WORKSPACE_SELECTION_TTL_SECONDS` | How long a selection token lasts |
+| `ARGON2_MEMORY_KIB`, `ARGON2_TIME_COST`, `ARGON2_PARALLELISM` | Password hashing cost |
+| `API_KEY_ENV` | The `<env>` segment of issued keys |
+| `DATA_SUBJECT_KEY_MODE` | Where per-person keys live |
+| `BLIND_INDEX_KEY_PATH` | The key that makes encrypted emails searchable by exact match |
+| `MFA_SEAL_SECRET` | Seals authenticator secrets |
+| `WEBAUTHN_RP_ID`, `WEB_URL` | The passkey relying party, and the portal's address for links |
+| `SMTP_URL`, `MAIL_FROM` | Where invitations are mailed from |
+| `SERVICE_CLIENTS` | The clients allowed to ask for service tokens, with their secrets' digests |
 
-```bash
-npm run db:generate  # emit SQL from the Drizzle schema
-npm run db:migrate   # apply, using DATABASE_MIGRATION_URL (owner role)
-```
+The variables every service shares are in
+[the shared configuration](../docs/service-runtime.md#configuration-every-service-shares).
 
-### Build
-
-```bash
-npm run build        # SWC → dist/, rewriting the @/* alias
-npm start
-```
-
-`tsc` typechecks but does not emit; SWC emits but does not typecheck. Both run in CI,
-and the Dockerfile runs both.
+</details>
 
 ---
 
-## Environment
+## Read more
 
-Runtime values are validated by `src/main/environment.ts`. Defaults are declared there;
-SDK telemetry configuration is read by OpenTelemetry. Consumer and cross-module HTTP
-settings below are reserved for their first actual consumer/caller; Identity currently
-has neither. `DATA_SUBJECT_KEY_MODE=kms` and `TRUST_GATEWAY_JWT=true` are rejected.
-
-| `NODE_ENV` | — |
-| `PORT` | HTTP port. Behind Kong in every environment; exposed directly only in local development. |
-| `LOG_LEVEL` | pino level. `info` in production. |
-| `DATABASE_URL` | Application role. Holds neither SUPERUSER nor BYPASSRLS, so RLS applies to it (ADR 0017). |
-| `DATABASE_MIGRATION_URL` | Owner role, used only by `db:migrate`. The application never connects with it. |
-| `DATABASE_RELAY_URL` | Optional dedicated relay connection. Omit to disable the worker; never use the application or owner role here. |
-| `DATABASE_POOL_MAX` | Bulkhead: the pool this service may consume (ADR 0027). |
-| `DATABASE_STATEMENT_TIMEOUT_MS` | No query waits without a bound. |
-| `REDIS_URL` | Denylist, idempotency records, rate counters. |
-| `RABBITMQ_URL` | — |
-| `AMQP_PREFETCH` | Bounded consumer concurrency (ADR 0027). |
-| `OUTBOX_POLL_INTERVAL_MS` | Relay poll interval; the floor on publish latency (ADR 0024). |
-| `OUTBOX_BATCH_SIZE` | Rows claimed per poll with FOR UPDATE SKIP LOCKED. |
-| `INBOX_RETENTION_DAYS` | Must exceed the maximum possible redelivery window. |
-| `IDEMPOTENCY_TTL_SECONDS` | 24 hours (ADR 0028). |
-| `HTTP_CLIENT_TIMEOUT_MS` | Every outbound HTTP call. There is no unbounded wait anywhere. |
-| `CIRCUIT_BREAKER_ERROR_THRESHOLD_PERCENT` | — |
-| `CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | How long the breaker stays open before half-open probing. |
-| `JWKS_URL` | Identity's public keys, for local token re-verification. |
-| `TRUST_GATEWAY_JWT` | When false the service re-verifies every token itself, so reaching its port directly grants nothing (ADR 0008). |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | The Collector. Nothing talks to a backend directly (ADR 0033). |
-| `OTEL_SERVICE_NAME` | — |
-| `OTEL_TRACES_SAMPLER_ARG` | Full sampling locally; errors are always sampled. |
-| `TENANT_ID_HASH_SALT` | Tenant ids are hashed before appearing in logs and metrics (ADR 0033). |
-| `JWT_PRIVATE_KEY_PATH` | Active signing key. Mounted in dev, AWS Secrets Manager in the Terraform definition. Never committed. |
-| `JWT_PUBLIC_KEYS_DIR` | Directory of public keys; every file becomes a JWKS entry, which is how rotation overlaps. |
-| `JWT_ACTIVE_KID` | Which `kid` new tokens are signed with. |
-| `ACCESS_TOKEN_TTL_SECONDS` | 15 minutes (ADR 0018). |
-| `REFRESH_TOKEN_ABSOLUTE_TTL_SECONDS` | 30 days from family creation, regardless of use. |
-| `REFRESH_TOKEN_IDLE_TTL_SECONDS` | 7 days since last use. |
-| `REFRESH_TOKEN_REUSE_GRACE_MS` | Window in which the immediately-previous token returns the same replacement, so two tabs racing a refresh is not treated as theft. |
-| `ARGON2_MEMORY_KIB` | OWASP minimum (ADR 0019). |
-| `ARGON2_TIME_COST` | — |
-| `ARGON2_PARALLELISM` | — |
-| `API_KEY_ENV` | The `<env>` segment of issued keys: dev, test or live. |
-| `DATA_SUBJECT_KEY_MODE` | `table` in dev, `kms` in the Terraform definition (ADR 0026). |
-| `BLIND_INDEX_KEY_PATH` | Service-wide HMAC key making encrypted emails searchable by exact match only. |
-
----
-
-## Conventions this module follows
-
-- **Layering** — `src/domain/`, `src/application/`, `src/infrastructure/`, `src/main/`,
-  dependencies pointing inward only. `domain/` imports no framework, no ORM and no Zod;
-  `scripts/check-boundaries.mjs` enforces it (ADR 0031, ADR 0002).
-- **Tenancy** — every business table carries `tenant_id` with forced RLS, and every
-  query runs inside a `TenantAwareTransaction` that issues `SET LOCAL
-  app.current_tenant` first. No repository can obtain a raw connection (ADR 0017).
-- **Errors** — use cases return `Either<Error, Value>` for expected failures; a global
-  filter maps error classes to RFC 9457 `application/problem+json` (ADR 0032).
-- **Tests** — every test creates its own tenant, and every aggregate has a test that
-  writes under tenant A and asserts tenant B cannot read it (ADR 0014).
-
-## Delivery and operational verification
-
-Provision `horizon_owner`, `horizon_app` and `horizon_relay` with the platform role script
-before applying migrations. Existing PostgreSQL volumes created before phase 4 need the
-relay role provisioned by a cluster administrator; rerunning `make up` does not rerun
-initialization scripts. Do not give the migration owner CREATEROLE to work around this.
-
-`DATABASE_RELAY_URL` enables the background relay. Subscribers must bind durable queues
-to `horizon.events`; a message with no matching queue remains pending. Delivery is at
-least once, including a possible duplicate after broker confirmation and before database
-commit. Monitor outbox lag and failures; the worker uses bounded batches and retry jitter.
-
-```bash
-npm run test:cov
-npm run test:e2e
-npm run build
-npm run audit:verify -- <tenant-uuid>
-```
-
-The e2e suite uses isolated containers, including a non-superuser migration owner and
-application role. It verifies RLS, concurrent mutations, inbox duplicate delivery,
-ciphertext-preserving erasure, the audit CLI, concurrent relays, unroutable publication,
-durable trace propagation, refresh CAS, idempotency and the HTTP authentication flow.
-
-## Audit log (Phase 68)
-
-`GET /audit` reads the tenant's hash-chained log a page at a time, newest first, filtered
-by actor, action, record and period. Every page carries the chain's verdict: each row is
-recomputed and checked against its neighbours, so a tampered row reads as broken. Read by
-owners and admins; the web's audit screen asks it alongside every other module.
-
-## Service tokens (Phase 69)
-
-`POST /auth/service-token` with `{ client, secret, tenantId }` issues a token for scheduled
-work in one tenant.
-- **The client:** it must be named in `SERVICE_CLIENTS` (`name:sha256(secret)`), and the
-  tenant must exist.
-- **The token:** its subject is `service:<client>`, and its roles are fixed in code:
-  - `reporting` gets `viewer` where it reads figures, and `auditor` in every module with
-    an audit log.
-- **Audit:** every issue is recorded in the tenant's chain (`service-token.issued`).
-
-The `auditor` role reads the audit log (`GET /audit`) and nothing else.
+- [How every service runs](../docs/service-runtime.md)
+- [Architecture](../docs/architecture.md) and the [decision records](../docs/adr/README.md)
+- [The event catalogue](../docs/events.md) and the [privacy notes](../docs/privacy.md)
