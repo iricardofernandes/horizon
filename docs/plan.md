@@ -2961,6 +2961,20 @@ Phase 41's single approved scenario into the roadmap's engine:
 
 ---
 
+## Phases 90 to 92 — Security and logic review
+
+**Proposed on 2026-10-02** in the [security and logic plan](security-logic-plan.md), after a
+review of the whole repository. Thirteen findings, each with its evidence, and what was
+checked and found sound.
+
+| Phase | Theme |
+|---|---|
+| 90 | A broker identity per module, webhook egress to public addresses only, dependency advisories |
+| 91 | Tax postings that follow the authority's answer, estimates Fiscal vouches for, one rule decision at a time |
+| 92 | The workspace's day, a local stack that listens only locally, the AWS path, password guessing, Kong's token checks |
+
+---
+
 ## Standing rules across all phases
 
 - The golden path (Phase 8) stays green from the moment it exists.
