@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { SCOPE_REFUSAL_MESSAGE } from '@horizon/contracts'
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { createFiscalServer } from './api'
+import { createFiscalServer, unexpectedFailure } from './api'
 import type { FiscalPrincipal } from './auth'
 import { CancellationWindowElapsed } from './cancellation'
 import { FiscalModelConflict } from './documents'
@@ -27,6 +27,7 @@ let activeHomologationCapability = false
 let activeConsumerCapability = false
 let draftFailure: Error | null = null
 let cancellationFailure: Error | null = null
+let issuanceFailure: Error | null = null
 let documentEnvironment: 'simulation' | 'homologation' = 'simulation'
 /** An estimate Fiscal issued in the token's tenant, as its store returns it (Phase 91). */
 const issuedDigest = 'e'.repeat(64)
@@ -321,6 +322,7 @@ const server = createFiscalServer({
     async issue(input) {
       if (input.tenantId !== tenantId || input.documentId !== documentId)
         throw new Error('Wrong issuance scope')
+      if (issuanceFailure) throw issuanceFailure
       return {
         commandId: randomUUID(),
         documentId,
@@ -432,6 +434,70 @@ it('restricts certificate upload to Fiscal admins and takes tenant identity from
   expect(await accepted.text()).not.toContain('test-password')
   expect((await fetch(`${base}/establishment-credentials`, { headers })).status).toBe(200)
   role = 'viewer'
+})
+
+it('logs an unexpected error with its type, place and own sentence, and tells the caller nothing', async () => {
+  const logged: unknown[][] = []
+  const original = console.error
+  console.error = (...entry: unknown[]) => void logged.push(entry)
+  try {
+    role = 'issuer'
+    cancellationFailure = new Error('Frozen Fiscal issuance evidence is unavailable')
+    const answer = await fetch(`${base}/documents/${documentId}/cancellation-requests`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer test',
+        'content-type': 'application/json',
+        'idempotency-key': 'unexpected-failure-0001',
+      },
+      body: JSON.stringify({ reason: 'A reviewed reason of enough length' }),
+    })
+    expect(answer.status).toBe(500)
+    expect(await answer.text()).not.toContain('Frozen')
+    expect(logged).toHaveLength(1)
+    expect(logged[0]?.[0]).toBe('Fiscal request failed')
+    expect(logged[0]?.[1]).toMatchObject({
+      method: 'POST',
+      path: `/documents/${documentId}/cancellation-requests`,
+      errorType: 'Error',
+      message: 'Frozen Fiscal issuance evidence is unavailable',
+    })
+  } finally {
+    console.error = original
+    cancellationFailure = null
+    role = 'viewer'
+  }
+})
+
+it('answers 409, not 500, when the issuance profile lacks the facts of a line', async () => {
+  role = 'issuer'
+  issuanceFailure = new Error('NF-e line facts are incomplete')
+  try {
+    const answer = await fetch(`${base}/documents/${documentId}/issue`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'incomplete-profile-0001' },
+    })
+    expect(answer.status).toBe(409)
+    expect(await answer.json()).toMatchObject({ code: 'ISSUANCE_PROFILE_INCOMPLETE' })
+  } finally {
+    issuanceFailure = null
+    role = 'viewer'
+  }
+})
+
+it('keeps no message of a database or library error, which may quote its input', () => {
+  class PostgresError extends Error {
+    code = '23505'
+  }
+  const kept = unexpectedFailure(
+    { method: 'GET', url: '/documents?search=Maria%20Silva' },
+    new PostgresError('duplicate key value (customer)=(Maria Silva)'),
+  )
+  expect(kept).toMatchObject({ method: 'GET', path: '/documents', code: '23505' })
+  expect(JSON.stringify(kept)).not.toContain('Maria')
+  expect(unexpectedFailure({ method: 'GET', url: '/' }, 'not an error').errorType).toBe(
+    'UnknownError',
+  )
 })
 
 it('returns an estimate it issued by its digest, to a reader of the token tenant (Phase 91)', async () => {

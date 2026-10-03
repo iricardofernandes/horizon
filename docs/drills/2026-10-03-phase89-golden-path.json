@@ -1,7 +1,7 @@
 {
   "phase": 89,
   "kind": "phase-o-golden-path",
-  "ranAt": "2026-10-03T14:59:13.598Z",
+  "ranAt": "2026-10-03T16:02:38.286Z",
   "tenantId": "01a0c5f8-798b-721e-912e-9b505406e614",
   "adoptions": {
     "goods": {
@@ -52,13 +52,13 @@
       "chargedOnTop": "0",
       "gross": "37980"
     },
-    "resultDigest": "49b8fcf60aac3682578e976b9e02546b58584e5de6add4fb1d0a44ca0844931f",
+    "resultDigest": "874371f844ed25b0b9cb998706e5d0e8a826ad377c668213edddd0493495701f",
     "keptOnTheOrder": true,
     "forgedDigestRefused": 400,
     "relayedEstimateRefused": 400
   },
   "lock": {
-    "documentId": "cecac4b8-7116-4b4d-a556-1cc193dae07b",
+    "documentId": "8a3234b3-99c1-4796-8d62-3f6461fc7d79",
     "components": [
       "ICMS 6836",
       "COFINS 2367",
@@ -67,15 +67,15 @@
       "IBS_MUN 0",
       "IBS_UF 38"
     ],
-    "resultDigest": "f31be3a2066a178320436d3b15468c63a0c62389b8a24e6a5e0971034c8c3de4",
-    "rulesDigest": "6bc1eda8ba8dcd50b91c8c8b53cb012870aa1fd6e7b980b9e95b1549afd1cbfe",
+    "resultDigest": "081ed3c2f68ececca69b6cdfc489f9c72ecac8c73e8cfde4e2f3521b2c54298f",
+    "rulesDigest": "b224a56e40700b6c47bc03dbe201c9884b6226367c14b3f842b6b1e7febf6622",
     "agreesWithTheEstimate": true
   },
   "ledger": {
     "postedBeforeAuthorization": false,
     "authorized": false,
     "expectedTotal": "9717",
-    "held": "the document could not be issued under the local simulation profile"
+    "held": "not issued: NF-e line facts are incomplete"
   },
   "nextVersion": {
     "alreadyAdopted": true,
@@ -94,7 +94,7 @@
     "decidedBySecondAdmin": true
   },
   "replay": {
-    "resultDigest": "f31be3a2066a178320436d3b15468c63a0c62389b8a24e6a5e0971034c8c3de4",
+    "resultDigest": "081ed3c2f68ececca69b6cdfc489f9c72ecac8c73e8cfde4e2f3521b2c54298f",
     "unchanged": true
   }
 }

@@ -463,6 +463,9 @@ assert.equal(postedBeforeAuthorization, false, 'the lock posted before the autho
 // The posting on authorization is proven against the database by the Ledger's e2e suite.
 const queued = await call(`/fiscal/documents/${draft.id}/issue`, { method: 'POST' })
 const authorized = queued.status === 202
+// Anything else than an authorization or that named refusal is a failure of the run.
+if (!authorized)
+  assert.equal(queued.body?.code, 'ISSUANCE_PROFILE_INCOMPLETE', JSON.stringify(queued.body))
 if (authorized)
   await until('authorization', async () => {
     const found = await ok(`/fiscal/documents/${draft.id}`)
@@ -488,7 +491,7 @@ record.ledger = {
         transactionTotal: posting.total,
         lines: posting.lines.map((line) => `${line.accountCode} ${line.side} ${line.amount}`),
       }
-    : { held: 'the document could not be issued under the local simulation profile' }),
+    : { held: `not issued: ${queued.body?.detail ?? queued.body?.code}` }),
 }
 
 // 7. The next version: the official calculator's 2026 package, with its impact.

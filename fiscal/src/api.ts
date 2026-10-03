@@ -73,10 +73,40 @@ export type FiscalServerDependencies = {
 
 export function createFiscalServer(dependencies: FiscalServerDependencies): Server {
   return createServer((request, response) => {
-    void handle(request, response, dependencies).catch(() =>
-      problem(response, 500, 'Internal Server Error', 'Fiscal request failed'),
-    )
+    void handle(request, response, dependencies).catch((error: unknown) => {
+      console.error('Fiscal request failed', unexpectedFailure(request, error))
+      problem(response, 500, 'Internal Server Error', 'Fiscal request failed')
+    })
   })
+}
+
+/**
+ * What the log keeps of an error no route expected, so a 500 can be traced to its cause.
+ * The caller still gets no detail. A database or library error may quote what it was given,
+ * so only its type, code and place are kept; a plain `Error` is one of Fiscal's own
+ * sentences, and is kept too.
+ */
+export function unexpectedFailure(
+  request: Pick<IncomingMessage, 'method' | 'url'>,
+  error: unknown,
+): Record<string, string> {
+  const known = error instanceof Error ? error : null
+  const code = (error as { code?: unknown } | null)?.code
+  // The first frame of Fiscal's own code: where it was thrown, or where it surfaced.
+  const where = known?.stack
+    ?.split('\n')
+    .slice(1)
+    .map((frame) => frame.trim())
+    .find((frame) => !frame.includes('node_modules') && !frame.includes('node:'))
+  return {
+    method: request.method ?? '',
+    // The path only: a query string may carry what the caller typed.
+    path: (request.url ?? '').split('?')[0] ?? '',
+    errorType: known?.name ?? 'UnknownError',
+    ...(typeof code === 'string' ? { code } : {}),
+    ...(known && known.constructor === Error ? { message: known.message.slice(0, 300) } : {}),
+    ...(where ? { where: where.slice(0, 200) } : {}),
+  }
 }
 
 async function handle(
@@ -684,6 +714,10 @@ async function handle(
         lifecycleProblem(response, 409, error.code, error.message)
       else if (error instanceof Error && error.message.includes('capability'))
         lifecycleProblem(response, 409, 'CAPABILITY_UNSUPPORTED', error.message)
+      // The issuance profile names no facts for this line or party: the workspace's to
+      // complete, not a failure of the service.
+      else if (error instanceof Error && error.message.endsWith('facts are incomplete'))
+        lifecycleProblem(response, 409, 'ISSUANCE_PROFILE_INCOMPLETE', error.message)
       else if (error instanceof Error && error.message.startsWith('Conflicting'))
         problem(response, 409, 'Conflict', error.message)
       else throw error
