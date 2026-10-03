@@ -1,8 +1,8 @@
 # Gateway
 
 Kong, in DB-less mode: the single public entry point to Horizon. One declarative file
-routes to every service and applies token validation, rate limits, size limits, CORS,
-correlation ids and tracing once, for all of them.
+routes to every service and applies rate limits, size limits, CORS, correlation ids and
+tracing once, for all of them. Tokens are verified by each service.
 
 | | |
 |---|---|
@@ -11,7 +11,7 @@ correlation ids and tracing once, for all of them.
 | **Stack** | Kong 3.9 OSS, DB-less · decK |
 
 <p align="center">
-  <img src="../docs/assets/modules/gateway.png" alt="Every request from the portal or an integrator enters through Kong, which validates the EdDSA token, applies rate limits, size limits, CORS and a correlation id, emits a trace span, and routes to one of the sixteen services; each service verifies the token again." width="100%">
+  <img src="../docs/assets/modules/gateway.png" alt="Every request from the portal or an integrator enters through Kong, which applies rate limits, size limits, CORS and a correlation id, emits a trace span, and routes to one of the sixteen services; each service verifies the EdDSA token itself." width="100%">
 </p>
 
 ---
@@ -19,18 +19,20 @@ correlation ids and tracing once, for all of them.
 ## What this project owns
 
 - **Routing.** Which path reaches which service, and on which upstream.
-- **Cross-cutting request policy**, applied once here instead of in every service: JWT validation against `identity/`'s JWKS, rate limiting (global,
+- **Cross-cutting request policy**, applied once here instead of in every service: rate limiting (global,
   per-consumer, per-API-key), request size limiting, correlation ids, CORS, and
   OpenTelemetry span emission.
 - **Consumer and rate-limit tiers**, declared statically.
 
 ## What it explicitly does not own
 
-- **Authorization.** The gateway validates that a token is authentic. What it permits is
-  decided by the receiving module, from its own role map (ADR 0023).
-- **Being the only check.** Services re-verify every token locally by default
-  (`TRUST_GATEWAY_JWT=false`), so reaching a service's port directly grants nothing. The
-  gateway is defence in depth and the place policy lives, not the sole gate.
+- **Authentication and authorization.** Every service verifies each token itself
+  (`TRUST_GATEWAY_JWT=false`) and decides what it permits from its own role map (ADR 0023).
+  Kong holds Identity's public keys and its `jwt` plugin runs on one route only, the
+  self-test below: every module serves public paths under its own prefix (health, signed
+  links, invitations, the MCP endpoint), so the plugin is not on the business routes.
+- **Being a check at all for tokens.** Reaching a service's port directly grants nothing,
+  because the service is the one that verifies. The gateway is where request policy lives.
 - **API key existence.** Keys are created at runtime and validated by `identity/`. Kong
   enforces the rate-limit tier attached to a key's consumer group.
 - **State.** Kong runs DB-less. There is no gateway database to run, back up or migrate.

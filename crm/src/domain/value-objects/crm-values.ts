@@ -1,6 +1,7 @@
 import { type Either, left, right } from '@/core/either'
 import { ValueObject } from '@/core/entities/value-object'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import { businessDayOf } from './business-day'
 
 /** The party roles that make a party a CRM account (ADR 0057). */
 export const ACCOUNT_ROLES = ['prospect', 'customer', 'partner'] as const
@@ -230,7 +231,7 @@ export class BusinessDate extends ValueObject<{ value: string }> {
   }
 
   static of(instant: Date): BusinessDate {
-    return new BusinessDate({ value: instant.toISOString().slice(0, 10) })
+    return new BusinessDate({ value: businessDayOf(instant) })
   }
 
   get value(): string {

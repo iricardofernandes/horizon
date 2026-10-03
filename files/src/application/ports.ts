@@ -115,3 +115,12 @@ export interface Envelope {
 export function objectKeyOf(tenantId: string, attachmentId: string): string {
   return `attachments/${tenantId}/${attachmentId}`
 }
+
+/**
+ * The key one upload writes (Phase 92): its own, under the attachment's. Two uploads of
+ * one slot would otherwise write the same object, and the one recorded could keep the data
+ * key of bytes the other had overwritten.
+ */
+export function uploadKeyOf(tenantId: string, attachmentId: string, uploadId: string): string {
+  return `${objectKeyOf(tenantId, attachmentId)}.${uploadId}`
+}

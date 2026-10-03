@@ -1,3 +1,4 @@
+import { businessDayOf } from '@horizon/contracts'
 import {
   BadRequestException,
   Body,
@@ -92,7 +93,7 @@ export class DimensionsController {
   @RequireFinancialAction('read')
   async cashFlowOutlook(@Query() query: Record<string, unknown>, @Req() request: FinancialRequest) {
     const input = parse(outlookQuery, query)
-    const to = input.to ?? new Date().toISOString().slice(0, 10)
+    const to = input.to ?? businessDayOf(new Date())
     const from = input.from ?? to
     if (from > to) throw new BadRequestException('from: must not be after to')
     return this.runtime.database.cashFlowOutlook(tenantOf(request), { from, to }, input.grain)

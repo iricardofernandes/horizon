@@ -137,7 +137,7 @@ up-apps: infra/.env infra/keys/public kong-config broker-config build-apps ## St
 	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
 		$(COMPOSE) -f infra/docker-compose.apps.yml restart kong
 	@for attempt in $$(seq 1 30); do \
-		curl -fsS "http://localhost:$${HORIZON_KONG_ADMIN_PORT:-8001}/status" >/dev/null && exit 0; \
+		docker exec horizon-kong kong health >/dev/null 2>&1 && exit 0; \
 		sleep 1; \
 	done; exit 1
 

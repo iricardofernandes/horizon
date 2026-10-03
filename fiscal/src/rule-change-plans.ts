@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { FiscalRuleDiff, fiscalRuleChangeRequestSchema } from '@horizon/contracts'
+import { businessDayOf } from '@horizon/contracts'
 import type postgres from 'postgres'
 import type { z } from 'zod'
 import { appendAudit } from './audit'
@@ -309,7 +310,7 @@ async function addWorkspaceRule(
   const { tenantId } = input
   const planned = workspaceRuleOf(tenantId, request)
   await refuseTies(tx, tenantId, planned.row)
-  const today = input.now.toISOString().slice(0, 10)
+  const today = businessDayOf(input.now)
   await tx`insert into fiscal_source_packages (
     id, tenant_id, authority, source_uri, package_digest, published_at, effective_from
   ) values (

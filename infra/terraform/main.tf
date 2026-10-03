@@ -29,7 +29,7 @@ locals {
   # Services other services call directly rather than through the gateway: every service
   # reads Identity's JWKS, and Fiscal reads owner profiles from Parties and Catalog.
   called_directly = toset(["identity", "parties", "catalog"])
-  container_names = toset(concat(keys(local.business_services), ["web", "gateway"]))
+  container_names = toset(concat(keys(local.business_services), ["web", "gateway", "probe"]))
   gateway_url     = "http://gateway.horizon.local:8000"
   s3_endpoint     = "https://s3.${var.aws_region}.amazonaws.com"
   service_environment = {
@@ -211,6 +211,11 @@ module "gateway" {
     KONG_ADMIN_LISTEN = "off"
     KONG_DNS_RESOLVER = "169.254.169.253"
     KONG_PLUGINS      = "bundled"
+    # Requests reach Kong from the load balancer and from the web, both inside the VPC, so
+    # the forwarded address is believed only from there: rate limits count each browser.
+    KONG_TRUSTED_IPS       = var.vpc_cidr
+    KONG_REAL_IP_HEADER    = "X-Forwarded-For"
+    KONG_REAL_IP_RECURSIVE = "on"
   }
   tags = local.tags
 }
@@ -235,8 +240,13 @@ module "web" {
   namespace_id                  = aws_service_discovery_private_dns_namespace.this.id
   discovery_name                = "web"
   environment = {
-    NODE_ENV             = "production"
-    HORIZON_UPSTREAM_URL = "http://gateway.horizon.local:8000"
+    NODE_ENV = "production"
+    # The name the web reads (`web/src/lib/gateway.ts`); without it the web calls localhost.
+    HORIZON_API_URL = local.gateway_url
+    # Behind the load balancer's HTTPS: cookies are Secure, and one hop is trusted for the
+    # browser's address.
+    HORIZON_COOKIE_SECURE    = "true"
+    HORIZON_WEB_TRUSTED_HOPS = "1"
   }
   secrets = lookup(var.service_secret_arns, "web", {})
   tags    = local.tags
@@ -279,6 +289,34 @@ module "service" {
     each.value.relay ? { DATABASE_RELAY_URL = module.rds.relay_database_url_secret_arns[each.key] } : {},
   )
   tags = local.tags
+}
+
+# The synthetic probe signs in and walks the golden path once a minute, through the gateway,
+# and exposes what it saw as metrics (docs/service-levels.md). Nothing calls it.
+module "probe" {
+  source                        = "./modules/ecs-service"
+  name                          = "${local.name}-probe"
+  cluster_arn                   = aws_ecs_cluster.this.arn
+  vpc_id                        = module.network.vpc_id
+  subnet_ids                    = module.network.private_subnet_ids
+  image                         = "${module.ecr.repository_urls["probe"]}:${var.image_tag}"
+  container_port                = 9464
+  cpu                           = var.task_cpu
+  memory                        = var.task_memory
+  desired_count                 = 1
+  log_group_name                = module.observability.log_group_names["probe"]
+  aws_region                    = var.aws_region
+  ingress_security_group_ids    = []
+  additional_security_group_ids = [aws_security_group.internal_callers.id]
+  namespace_id                  = aws_service_discovery_private_dns_namespace.this.id
+  discovery_name                = "probe"
+  environment = {
+    PROBE_BASE_URL         = local.gateway_url
+    PROBE_INTERVAL_SECONDS = "60"
+  }
+  # `PROBE_EMAIL` and `PROBE_PASSWORD`: the probe's own account, as secrets.
+  secrets = lookup(var.service_secret_arns, "probe", {})
+  tags    = local.tags
 }
 
 # ClamAV scans every attachment before Files serves it. Only Files may reach it.

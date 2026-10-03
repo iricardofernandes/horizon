@@ -9,7 +9,8 @@ import {
 import type { ObjectStore } from '@/application/ports'
 
 /** Keys are generated (`attachments/<tenant>/<attachment>`); anything else is refused. */
-const KEY = /^attachments\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/
+// The attachment's key, with a suffix for the upload that wrote it (Phase 92).
+const KEY = /^attachments\/[0-9a-f-]{36}\/[0-9a-f-]{36}(\.[0-9a-f-]{36})?$/
 
 function checked(key: string): string {
   if (!KEY.test(key)) throw new Error('Refusing an object key that was not generated')

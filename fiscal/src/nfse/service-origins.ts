@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { fiscalServiceOriginRequestSchema, moneySchema } from '@horizon/contracts'
+import { businessDayOf, fiscalServiceOriginRequestSchema, moneySchema } from '@horizon/contracts'
 import postgres from 'postgres'
 import { z } from 'zod'
 import { appendAudit } from '../audit'
@@ -80,7 +80,7 @@ export class FiscalServiceOrigins {
     private readonly profiles: Pick<FiscalServiceProfiles, 'read' | 'effective'>,
     private readonly registry: Pick<FiscalNfseRegistry, 'resolve'>,
     private readonly ownerForTenant: (tenantId: string) => Pick<OwnerFiscalClient, 'catalogItem'>,
-    private readonly today: () => string = () => new Date().toISOString().slice(0, 10),
+    private readonly today: () => string = () => businessDayOf(new Date()),
   ) {
     if (masterKey.length !== 32) throw new Error('Fiscal service-origin key must be 32 bytes')
     this.#db = postgres(databaseUrl, { max: 5, connection: { statement_timeout: 10_000 } })

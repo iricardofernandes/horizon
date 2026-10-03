@@ -30,7 +30,7 @@ x-service: &service
 x-env: &env
   NODE_ENV: production
   LOG_LEVEL: info
-  REDIS_URL: redis://redis:6379
+  REDIS_URL: redis://:${HORIZON_REDIS_PASSWORD:-horizon-local}@redis:6379
   # No RABBITMQ_URL here: each service connects as its own broker user (Phase 90), so one
   # left without its own address fails at boot instead of running as anybody.
   AMQP_PREFETCH: '20'
@@ -699,7 +699,7 @@ services:
     build:
       context: ../web
     container_name: horizon-web
-    ports: ['${HORIZON_WEB_PORT:-3000}:3000']
+    ports: ['${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_WEB_PORT:-3000}:3000']
     environment:
       NODE_ENV: production
       # The frontend addresses Kong, never a service directly (ADR 0008).
@@ -741,7 +741,7 @@ services:
     container_name: horizon-retention
     environment:
       RETENTION_DATABASE_URL_TEMPLATE: postgres://horizon_relay:horizon@postgres:5432/horizon_{database}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${HORIZON_REDIS_PASSWORD:-horizon-local}@redis:6379
       RETENTION_INTERVAL_SECONDS: ${HORIZON_RETENTION_INTERVAL_SECONDS:-86400}
 
 volumes:

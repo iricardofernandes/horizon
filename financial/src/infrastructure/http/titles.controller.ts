@@ -1,3 +1,4 @@
+import { businessDayOf } from '@horizon/contracts'
 import {
   BadRequestException,
   Body,
@@ -78,7 +79,7 @@ const listQuery = z.object({
 const IDEMPOTENCY_KEY = /^[\x21-\x7e]{8,255}$/
 
 function today(value: unknown): string {
-  return parse(businessDate.optional(), value) ?? new Date().toISOString().slice(0, 10)
+  return parse(businessDate.optional(), value) ?? businessDayOf(new Date())
 }
 
 function context(request: FinancialRequest): CommandContext {

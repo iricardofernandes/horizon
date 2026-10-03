@@ -1,3 +1,4 @@
+import { businessDayOf } from '@horizon/contracts'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import { ResourceNotFoundError } from '@/core/errors/errors/resource-not-found-error'
@@ -115,7 +116,7 @@ export class ReleaseProductionOrderUseCase {
     return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
       const order = await scope.production.findById(request.orderId)
       if (!order) return left(new ResourceNotFoundError('production order was not found'))
-      const on = request.on ?? this.clock.now().toISOString().slice(0, 10)
+      const on = request.on ?? businessDayOf(this.clock.now())
       const recipe = await scope.compositions.inForce(order.itemId(), on)
       if (!recipe)
         return left(new ResourceNotFoundError('a recipe for this item in force on that day'))

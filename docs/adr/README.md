@@ -109,6 +109,7 @@ editable per tenant ([0023](0023-casl-static-module-scoped-roles.md)).
 | [0025](0025-append-only-audit-log-with-hash-chain.md) | Append-only audit log with a per-tenant hash chain |
 | [0026](0026-crypto-shredding-for-erasure.md) | Crypto-shredding for LGPD/GDPR erasure |
 | [0027](0027-resilience-policy-for-outbound-calls.md) | Resilience policy for every outbound call |
+| [0077](0077-the-business-day-is-told-where-the-business-is.md) | The business day is told where the business is |
 | [0028](0028-idempotency-key-on-public-writes.md) | `Idempotency-Key` on public write endpoints |
 | [0042](0042-posted-records-are-reversed.md) | Posted records are reversed, never edited |
 

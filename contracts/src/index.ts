@@ -9,6 +9,7 @@
  * domain model, and the boundary check enforces the distinction.
  */
 
+export * from './business-day'
 export * from './common'
 export * from './envelope'
 export * from './events'

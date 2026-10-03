@@ -9,4 +9,6 @@ export const redisKeys = {
   deniedToken: (jti: string): string => `identity:denylist:jti:${segment(jti)}`,
   deniedSubject: (subject: string): string => `identity:denylist:subject:${segment(subject)}`,
   workspaceSelection: (digest: string): string => `identity:workspace-selection:${segment(digest)}`,
+  passwordAttempts: (email: string): string =>
+    `identity:password-attempts:${segment(email.trim().toLowerCase())}`,
 }

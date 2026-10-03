@@ -1,4 +1,5 @@
 import {
+  businessDayOf,
   type FiscalServiceIntake,
   fiscalServiceIntakeSchema,
   type fiscalServiceIntakeStatusSchema,
@@ -240,7 +241,7 @@ export class FiscalServiceIntakes {
     | { reason: string }
   > {
     const { projections, capabilities, profiles } = this.dependencies
-    const probe = await projections.resolveIssuer(tenantId, this.now().toISOString().slice(0, 10))
+    const probe = await projections.resolveIssuer(tenantId, businessDayOf(this.now()))
     if (!probe) return { reason: 'The issuer fiscal profile has not reached Fiscal yet' }
     const issueDate = localDate(this.now(), probe.timezone)
     const issuer = await projections.resolveIssuer(tenantId, issueDate)

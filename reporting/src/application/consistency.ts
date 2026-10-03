@@ -1,3 +1,4 @@
+import { businessDayOf } from '@horizon/contracts'
 import { uuidv7 } from 'uuidv7'
 import { z } from 'zod'
 import {
@@ -95,7 +96,7 @@ export class RunConsistencyChecksUseCase {
     bearer: string
   }): Promise<ConsistencyRun> {
     const startedAt = this.clock.now()
-    const today = startedAt.toISOString().slice(0, 10)
+    const today = businessDayOf(startedAt)
     const read = <T>(path: string, schema: z.ZodType<T>, query: Record<string, string> = {}) =>
       this.read(path, schema, query, request.bearer)
     const [roles, balances, waiting, receivables, payables, cash, stock] = await Promise.all([

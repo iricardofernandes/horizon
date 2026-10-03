@@ -27,7 +27,7 @@ export function isCompetence(value: string): boolean {
 
 /** The first day of a competence month. */
 export function competenceStart(competence: string): BusinessDate {
-  return BusinessDate.of(new Date(`${competence}-01T00:00:00.000Z`))
+  return BusinessDate.ofCalendar(new Date(`${competence}-01T00:00:00.000Z`))
 }
 
 export interface PeriodCredit {

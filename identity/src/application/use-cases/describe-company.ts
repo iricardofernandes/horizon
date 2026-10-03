@@ -1,3 +1,4 @@
+import { businessDayOf } from '@horizon/contracts'
 import { Injectable } from '@nestjs/common'
 
 import { type Either, left, right } from '@/core/either'
@@ -45,7 +46,7 @@ export class DescribeCompanyUseCase {
     if (timezone.isLeft()) return left(timezone.value)
 
     const now = this.clock.now()
-    const effectiveFrom = request.fiscalEffectiveFrom ?? now.toISOString().slice(0, 10)
+    const effectiveFrom = request.fiscalEffectiveFrom ?? businessDayOf(now)
     const parsedDate = new Date(`${effectiveFrom}T00:00:00Z`)
     if (
       !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) ||

@@ -1,6 +1,7 @@
 import { type Either, left, right } from '@/core/either'
 import { ValueObject } from '@/core/entities/value-object'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import { businessDayOf } from './business-day'
 
 const SCALE = 1_000_000n
 
@@ -161,7 +162,7 @@ export class BusinessDate extends ValueObject<{ value: string }> {
   }
 
   static of(instant: Date): BusinessDate {
-    return new BusinessDate({ value: instant.toISOString().slice(0, 10) })
+    return new BusinessDate({ value: businessDayOf(instant) })
   }
 
   get value(): string {

@@ -1,4 +1,5 @@
 import type { FiscalCalculationInput, FiscalCalculationOutcome } from '@horizon/contracts'
+import { businessDayOf } from '@horizon/contracts'
 import { z } from 'zod'
 import type { FiscalCalculations } from '../calculations'
 import { canonicalDigest } from '../canonical-json'
@@ -62,10 +63,7 @@ export class FiscalServiceReadiness {
     if (origin.establishmentId !== document.establishmentId)
       throw new Error('Fiscal capability is unsupported')
 
-    const probe = await this.projections.resolveIssuer(
-      command.tenantId,
-      this.now().toISOString().slice(0, 10),
-    )
+    const probe = await this.projections.resolveIssuer(command.tenantId, businessDayOf(this.now()))
     if (!probe) throw new Error('Issuer fiscal projection is unavailable')
     const issueDate = localDate(this.now(), probe.timezone)
     const current = await this.projections.resolveIssuer(command.tenantId, issueDate)

@@ -95,7 +95,7 @@ services:
     image: clamav/clamav:1.4@sha256:57deb108fc4c72778aa83eafbca7bb7153e28c3f57c005afd38d31f16da86f23
     container_name: horizon-clamav
     networks: [horizon]
-    ports: ['${HORIZON_CLAMD_PORT:-3310}:3310']
+    ports: ['${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_CLAMD_PORT:-3310}:3310']
     volumes:
       - clamav-signatures:/var/lib/clamav
     healthcheck:
@@ -112,8 +112,8 @@ services:
     container_name: horizon-mailpit
     networks: [horizon]
     ports:
-      - '${HORIZON_MAILPIT_SMTP_PORT:-1025}:1025'
-      - '${HORIZON_MAILPIT_UI_PORT:-8025}:8025'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_MAILPIT_SMTP_PORT:-1025}:1025'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_MAILPIT_UI_PORT:-8025}:8025'
 
   # ---------------------------------------------------------------- data
   postgres:
@@ -124,7 +124,7 @@ services:
       context: ./postgres/image
     container_name: horizon-postgres
     networks: [horizon]
-    ports: ['${HORIZON_POSTGRES_PORT:-5432}:5432']
+    ports: ['${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_POSTGRES_PORT:-5432}:5432']
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -209,8 +209,19 @@ services:
     image: redis:7-alpine
     container_name: horizon-redis
     networks: [horizon]
-    ports: ['${HORIZON_REDIS_PORT:-6379}:6379']
-    command: ['redis-server', '--appendonly', 'yes', '--save', '60', '1']
+    ports: ['${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_REDIS_PORT:-6379}:6379']
+    # A password even locally (Phase 92): a published Redis holds every denied token.
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --save
+      - '60'
+      - '1'
+      - --requirepass
+      - ${HORIZON_REDIS_PASSWORD:-horizon-local}
+    environment:
+      REDISCLI_AUTH: ${HORIZON_REDIS_PASSWORD:-horizon-local}
     volumes:
       - redis-data:/data
     healthcheck:
@@ -228,8 +239,8 @@ services:
     hostname: rabbitmq
     networks: [horizon]
     ports:
-      - '${HORIZON_RABBITMQ_PORT:-5672}:5672'
-      - '${HORIZON_RABBITMQ_UI_PORT:-15672}:15672'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_RABBITMQ_PORT:-5672}:5672'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_RABBITMQ_UI_PORT:-15672}:15672'
     # The users are not RabbitMQ's defaults: one per module, each publishing only its own
     # events (Phase 90). `make broker-config` renders them before the broker starts.
     volumes:
@@ -249,7 +260,7 @@ services:
     image: verdaccio/verdaccio:6
     container_name: horizon-verdaccio
     networks: [horizon]
-    ports: ['${HORIZON_VERDACCIO_PORT:-4873}:4873']
+    ports: ['${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_VERDACCIO_PORT:-4873}:4873']
     volumes:
       - verdaccio-storage:/verdaccio/storage
       - ./verdaccio/config.yaml:/verdaccio/conf/config.yaml:ro
@@ -273,10 +284,10 @@ services:
     networks: [horizon]
     command: ['--config=/etc/otel/config.yaml']
     ports:
-      - '${HORIZON_OTLP_GRPC_PORT:-4317}:4317'
-      - '${HORIZON_OTLP_HTTP_PORT:-4318}:4318'
-      - '${HORIZON_COLLECTOR_METRICS_PORT:-8889}:8889'
-      - '${HORIZON_COLLECTOR_HEALTH_PORT:-13133}:13133'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_OTLP_GRPC_PORT:-4317}:4317'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_OTLP_HTTP_PORT:-4318}:4318'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_COLLECTOR_METRICS_PORT:-8889}:8889'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_COLLECTOR_HEALTH_PORT:-13133}:13133'
     volumes:
       - ./observability/otel-collector.yaml:/etc/otel/config.yaml:ro
     depends_on:
@@ -291,7 +302,7 @@ services:
     container_name: horizon-jaeger
     networks: [horizon]
     ports:
-      - '${HORIZON_JAEGER_PORT:-16686}:16686'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_JAEGER_PORT:-16686}:16686'
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:16686/']
       interval: 10s
@@ -304,7 +315,7 @@ services:
     image: prom/prometheus:v3.7.3
     container_name: horizon-prometheus
     networks: [horizon]
-    ports: ['${HORIZON_PROMETHEUS_PORT:-9090}:9090']
+    ports: ['${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_PROMETHEUS_PORT:-9090}:9090']
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -325,7 +336,7 @@ services:
     image: grafana/loki:3.5.7
     container_name: horizon-loki
     networks: [horizon]
-    ports: ['${HORIZON_LOKI_PORT:-3100}:3100']
+    ports: ['${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_LOKI_PORT:-3100}:3100']
     command: ['-config.file=/etc/loki/config.yaml']
     volumes:
       - ./observability/loki.yaml:/etc/loki/config.yaml:ro
@@ -343,7 +354,7 @@ services:
     image: grafana/alloy:v1.12.1
     container_name: horizon-alloy
     networks: [horizon]
-    ports: ['${HORIZON_ALLOY_PORT:-12345}:12345']
+    ports: ['${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_ALLOY_PORT:-12345}:12345']
     command:
       - run
       - --server.http.listen-addr=0.0.0.0:12345
@@ -363,10 +374,10 @@ services:
     container_name: horizon-grafana
     networks: [horizon]
     # 3000-3005 belong to web/ and the five services, so Grafana moves out of the way.
-    ports: ['${HORIZON_GRAFANA_PORT:-3300}:3000']
+    ports: ['${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_GRAFANA_PORT:-3300}:3000']
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${HORIZON_GRAFANA_PASSWORD:-admin}
       GF_AUTH_ANONYMOUS_ENABLED: 'true'
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_USERS_DEFAULT_THEME: dark
@@ -453,8 +464,9 @@ services:
       edge:
         ipv4_address: ${HORIZON_KONG_EDGE_ADDRESS:-10.213.80.5}
     ports:
-      - '${HORIZON_KONG_PROXY_PORT:-8000}:8000'
-      - '${HORIZON_KONG_ADMIN_PORT:-8001}:8001'
+      - '${HORIZON_BIND_ADDRESS:-127.0.0.1}:${HORIZON_KONG_PROXY_PORT:-8000}:8000'
+      # The Admin API is not published (Phase 92): it stays inside the network, where
+      # Prometheus scrapes it. `docker exec horizon-kong kong health` answers from the host.
     environment:
       KONG_DATABASE: 'off'
       KONG_DECLARATIVE_CONFIG: /kong/kong.yml

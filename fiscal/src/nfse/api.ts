@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
+  businessDayOf,
   fiscalNfseRegistryReviewRequestSchema,
   fiscalNfseRegistryVersionRequestSchema,
   fiscalServiceCancellationRequestSchema,
@@ -118,7 +119,7 @@ export async function handleServiceRoute(
     if (municipality?.[1] && request.method === 'GET') {
       const competenceDate = z.iso
         .date()
-        .parse(url.searchParams.get('competenceDate') ?? new Date().toISOString().slice(0, 10))
+        .parse(url.searchParams.get('competenceDate') ?? businessDayOf(new Date()))
       json(response, 200, await service.registry.resolve(tenantId, municipality[1], competenceDate))
       return true
     }

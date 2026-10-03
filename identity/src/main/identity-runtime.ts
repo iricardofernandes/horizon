@@ -48,6 +48,7 @@ import {
   RedisSessionRegistry,
 } from '@/infrastructure/cache/redis-access'
 import { RedisApiKeyRateLimiter } from '@/infrastructure/cache/redis-api-key-rate-limiter'
+import { RedisPasswordAttempts } from '@/infrastructure/cache/redis-password-attempts'
 import { RedisRefreshTokenFamiliesRepository } from '@/infrastructure/cache/redis-refresh-token-families-repository'
 import { RedisTokenDenylist } from '@/infrastructure/cache/redis-token-denylist'
 import { RedisWorkspaceSelections } from '@/infrastructure/cache/redis-workspace-selections'
@@ -220,6 +221,10 @@ export class IdentityRuntime implements OnModuleInit, OnModuleDestroy {
       policy,
       clock,
       secondFactorGate,
+      {
+        attempts: new RedisPasswordAttempts(this.redis),
+        sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+      },
     )
     this.listSelectableWorkspaces = new ListSelectableWorkspacesUseCase(
       db.accounts,

@@ -123,6 +123,10 @@ These gaps are known, and this stack does not close them:
   endpoint, with credentials from the task role. Path-style requests still work, but AWS
   plans to retire them; moving those clients to virtual-hosted style is a one-line
   change in each.
+- **The retention job.** `tooling/retention` takes one connection template for every
+  database, with one relay password. Here each database has its own relay secret, so the
+  job needs a connection per database before it can run as a task. The synthetic probe
+  does run, as a service of its own.
 - **The local model.** Knowledge embeds with a deterministic hash unless `TEI_URL` names
   an embedding server. That server is not part of this stack.
 
@@ -139,14 +143,14 @@ Calculator before any real use.
 
 | Component | Dev values | Estimated USD/month |
 |---|---:|---:|
-| 18 Fargate tasks, 0.25 vCPU / 0.5 GB | always on | $160–175 |
+| 19 Fargate tasks, 0.25 vCPU / 0.5 GB | always on | $170–185 |
 | ClamAV, 1 vCPU / 3 GB | always on | about $40 |
 | 16 RDS PostgreSQL `db.t4g.micro` + 20 GB gp3 each | Single-AZ | $220–260 |
 | ElastiCache `cache.t4g.micro` | 1 node | $12–25 |
 | Amazon MQ RabbitMQ `mq.m7g.medium` | single instance + EBS | $85–140 |
 | 1 NAT gateway | before traffic | about $33 |
 | ALB, CloudWatch, about 65 secrets, ECR, three buckets | low traffic | $60–110 |
-| **Dev total** | | **roughly $610–780/month** |
+| **Dev total** | | **roughly $620–790/month** |
 
 The production values double the tasks at 0.5 vCPU / 1 GB, make the sixteen databases
 `db.t4g.small` Multi-AZ, add Redis failover, a three-node RabbitMQ cluster and one NAT

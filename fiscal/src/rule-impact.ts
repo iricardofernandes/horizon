@@ -1,4 +1,5 @@
 import {
+  businessDayOf,
   FISCAL_IMPACT_DOCUMENT_LIMIT,
   FISCAL_IMPACT_MONTHS_DEFAULT,
   type FiscalCalculationInput,
@@ -34,7 +35,7 @@ export async function ruleImpact(input: {
   now: Date
 }): Promise<FiscalRuleImpact> {
   const months = input.months ?? FISCAL_IMPACT_MONTHS_DEFAULT
-  const to = input.now.toISOString().slice(0, 10)
+  const to = businessDayOf(input.now)
   const start = new Date(input.now)
   start.setUTCMonth(start.getUTCMonth() - months)
   const from = start.toISOString().slice(0, 10)

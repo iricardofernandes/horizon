@@ -11,6 +11,7 @@ import { Email } from '@/domain/value-objects/email'
 import { PasswordHash } from '@/domain/value-objects/password-hash'
 import type { Clock } from '../ports/clock'
 import type { IdentityPolicy } from '../ports/identity-policy'
+import { type PasswordAttempts, penaltyMs } from '../ports/password-attempts'
 import type { WorkspaceSelections } from '../ports/workspace-selections'
 
 export interface SelectableWorkspace {
@@ -59,9 +60,31 @@ export class AuthenticateAccountUseCase {
     private readonly policy: IdentityPolicy,
     private readonly clock: Clock,
     private readonly secondFactor?: SecondFactorGate,
+    private readonly guessing?: {
+      attempts: PasswordAttempts
+      sleep(milliseconds: number): Promise<void>
+    },
   ) {}
 
+  /**
+   * Each wrong password for an account name makes the next attempt wait longer (Phase 92),
+   * whatever address it comes from; the right one clears the count.
+   */
   async execute(request: AuthenticateAccountRequest): Promise<AuthenticateAccountResponse> {
+    if (!this.guessing) return this.authenticate(request)
+    const { attempts, sleep } = this.guessing
+    const wait = penaltyMs(await attempts.failures(request.email))
+    if (wait > 0) await sleep(wait)
+    const outcome = await this.authenticate(request)
+    if (outcome.isLeft() && outcome.value instanceof InvalidCredentialsError)
+      await attempts.failed(request.email)
+    else if (outcome.isRight()) await attempts.cleared(request.email)
+    return outcome
+  }
+
+  private async authenticate(
+    request: AuthenticateAccountRequest,
+  ): Promise<AuthenticateAccountResponse> {
     const email = Email.create(request.email)
     if (email.isLeft()) {
       await this.hasher.verifyDummy()
@@ -86,7 +109,12 @@ export class AuthenticateAccountUseCase {
       legacyMemberships = await this.accounts.findLegacyMemberships(email.value)
     }
 
-    if (!account.canAuthenticate()) return left(new AccountDisabledError())
+    if (!account.canAuthenticate()) {
+      // A disabled account says so only to whoever proved all it asks for. With a second
+      // factor still unproved, it answers as a wrong password would (Phase 92).
+      const guarded = await this.secondFactor?.hasActiveFactor(account.id.toString())
+      return left(guarded ? new InvalidCredentialsError() : new AccountDisabledError())
+    }
     const now = this.clock.now()
     await this.upgradeHashIfBelowPolicy(account, request.password, now)
     account.recordSuccessfulLogin(now)

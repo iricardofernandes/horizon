@@ -1,3 +1,4 @@
+import { businessDayOf } from '@horizon/contracts'
 import { BadRequestException } from '@nestjs/common'
 import { z } from 'zod'
 import type { CommandContext, IdempotentContext } from '@/application/use-cases/commands'
@@ -10,7 +11,7 @@ const MAX_RANGE_DAYS = 366
 
 export const businessDate = z.iso.date()
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => businessDayOf(new Date())
 
 function daysBefore(date: string, days: number): string {
   const value = new Date(`${date}T00:00:00Z`)

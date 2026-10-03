@@ -1,3 +1,4 @@
+import { businessDayOf } from '@horizon/contracts'
 import {
   Body,
   Controller,
@@ -44,7 +45,7 @@ const asOf = z.object({
     .transform((value) => value === 'true'),
 })
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => businessDayOf(new Date())
 
 @Controller('items/:itemId/composition')
 @ApiTags('compositions')

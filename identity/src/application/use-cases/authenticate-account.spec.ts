@@ -3,6 +3,8 @@ import { identityContext, TEST_HASH, valid } from 'test/support/identity-context
 import { describe, expect, it, vi } from 'vitest'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { Account } from '@/domain/entities/account'
+import { AccountDisabledError } from '@/domain/errors/account-disabled-error'
+import { InvalidCredentialsError } from '@/domain/errors/invalid-credentials-error'
 import type {
   LegacyMembership,
   WorkspaceMembership,
@@ -10,6 +12,7 @@ import type {
 import { AccountsRepository } from '@/domain/repositories/accounts-repository'
 import type { Email } from '@/domain/value-objects/email'
 import { PasswordHash } from '@/domain/value-objects/password-hash'
+import { penaltyMs } from '../ports/password-attempts'
 import { WorkspaceSelections } from '../ports/workspace-selections'
 import { AuthenticateAccountUseCase } from './authenticate-account'
 import {
@@ -239,5 +242,70 @@ describe('account-first workspace authentication', () => {
 
     expect(result.isLeft()).toBe(true)
     expect(c.hasher.verifyDummy).toHaveBeenCalledOnce()
+  })
+
+  it('makes each wrong password wait longer, by account name, and clears the count on the right one (Phase 92)', async () => {
+    const c = await identityContext()
+    const accounts = new MemoryAccounts([
+      { tenantId: c.tenantId, slug: 'example', name: 'Example Workspace', user: c.user },
+    ])
+    const counts = new Map<string, number>()
+    const waited: number[] = []
+    const authenticate = new AuthenticateAccountUseCase(
+      accounts,
+      c.hasher,
+      new MemorySelections(),
+      c.policy,
+      c.clock,
+      undefined,
+      {
+        attempts: {
+          failures: async (email) => counts.get(email) ?? 0,
+          failed: async (email) => void counts.set(email, (counts.get(email) ?? 0) + 1),
+          cleared: async (email) => void counts.delete(email),
+        },
+        sleep: async (milliseconds) => void waited.push(milliseconds),
+      },
+    )
+    for (let attempt = 0; attempt < 6; attempt += 1)
+      expect(
+        (await authenticate.execute({ email: 'person@example.com', password: 'wrong' })).isLeft(),
+      ).toBe(true)
+    // Three free mistakes, then half a second, one, two.
+    expect(waited).toEqual([500, 1000, 2000])
+    // An account that does not exist is counted the same way, so the wait reveals nothing.
+    for (let attempt = 0; attempt < 4; attempt += 1)
+      await authenticate.execute({ email: 'nobody@example.com', password: 'wrong' })
+    expect(waited).toEqual([500, 1000, 2000, 500])
+    valid(await authenticate.execute({ email: 'person@example.com', password: 'correct' }))
+    expect(counts.has('person@example.com')).toBe(false)
+    expect(penaltyMs(40)).toBe(8000)
+  })
+
+  it('tells a disabled account so only when nothing is left to prove (Phase 92)', async () => {
+    const c = await identityContext()
+    const accounts = new MemoryAccounts([])
+    accounts.account = Account.create({
+      passwordHash: valid(PasswordHash.create(TEST_HASH)),
+      status: 'disabled',
+    })
+    const withFactor = (active: boolean) =>
+      new AuthenticateAccountUseCase(
+        accounts,
+        c.hasher,
+        new MemorySelections(),
+        c.policy,
+        c.clock,
+        {
+          methodsOf: async () => ['totp'],
+          hasActiveFactor: async () => active,
+          issueChallenge: async () => ({ token: 't', expiresAt: new Date() }),
+        },
+      ).execute({ email: 'person@example.com', password: 'correct' })
+    // With a second factor unproved, the right password alone learns nothing.
+    const guarded = await withFactor(true)
+    expect(guarded.isLeft() && guarded.value).toBeInstanceOf(InvalidCredentialsError)
+    const plain = await withFactor(false)
+    expect(plain.isLeft() && plain.value).toBeInstanceOf(AccountDisabledError)
   })
 })

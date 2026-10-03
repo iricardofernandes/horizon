@@ -124,6 +124,19 @@ describe('receiving the bytes', () => {
     expect(content?.bytes.equals(PDF)).toBe(true)
   })
 
+  it('keeps one object when two uploads of a slot race, and the bytes it serves are its own (Phase 92)', async () => {
+    const created = await slot()
+    const send = () =>
+      attachments.receive(tenantId, created.id, { contentType: created.contentType, bytes: PDF })
+    const [first, second] = await Promise.all([send(), send()])
+    expect(first.isRight() && second.isRight()).toBe(true)
+    // The upload that lost removed what it wrote: one object is left, the recorded one.
+    const kept = [...objects.objects.keys()]
+    expect(kept).toHaveLength(1)
+    const content = await attachments.content(tenantId, created.id)
+    expect(content?.bytes.equals(PDF)).toBe(true)
+  })
+
   it('refuses bytes that are not what was declared', async () => {
     const created = await slot()
     const wrongSize = await attachments.receive(tenantId, created.id, {

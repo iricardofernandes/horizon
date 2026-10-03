@@ -1,7 +1,7 @@
 {
   "phase": 89,
   "kind": "phase-o-golden-path",
-  "ranAt": "2026-10-03T14:21:06.716Z",
+  "ranAt": "2026-10-03T14:59:13.598Z",
   "tenantId": "01a0c5f8-798b-721e-912e-9b505406e614",
   "adoptions": {
     "goods": {
@@ -52,13 +52,13 @@
       "chargedOnTop": "0",
       "gross": "37980"
     },
-    "resultDigest": "1419656dcf36fe9d661adc959a2c1e393bfa82ef379301cb31d90ee570983a0d",
+    "resultDigest": "49b8fcf60aac3682578e976b9e02546b58584e5de6add4fb1d0a44ca0844931f",
     "keptOnTheOrder": true,
     "forgedDigestRefused": 400,
     "relayedEstimateRefused": 400
   },
   "lock": {
-    "documentId": "d7445caa-026f-4ed6-8456-638871891be0",
+    "documentId": "cecac4b8-7116-4b4d-a556-1cc193dae07b",
     "components": [
       "ICMS 6836",
       "COFINS 2367",
@@ -67,8 +67,8 @@
       "IBS_MUN 0",
       "IBS_UF 38"
     ],
-    "resultDigest": "4f8593b9f9e437e5dd7363feafedced045c9b7a49c7e28fa78bb4bc0a00fb29f",
-    "rulesDigest": "ecb44908d9b000c3fb8f9cd40eaa51cda198c061e1318abfb1af94726d8a23e9",
+    "resultDigest": "f31be3a2066a178320436d3b15468c63a0c62389b8a24e6a5e0971034c8c3de4",
+    "rulesDigest": "6bc1eda8ba8dcd50b91c8c8b53cb012870aa1fd6e7b980b9e95b1549afd1cbfe",
     "agreesWithTheEstimate": true
   },
   "ledger": {
@@ -94,7 +94,7 @@
     "decidedBySecondAdmin": true
   },
   "replay": {
-    "resultDigest": "4f8593b9f9e437e5dd7363feafedced045c9b7a49c7e28fa78bb4bc0a00fb29f",
+    "resultDigest": "f31be3a2066a178320436d3b15468c63a0c62389b8a24e6a5e0971034c8c3de4",
     "unchanged": true
   }
 }

@@ -1,3 +1,4 @@
+import { businessDayOf } from '@horizon/contracts'
 import { BadRequestException } from '@nestjs/common'
 import { z } from 'zod'
 import type { CommandContext, IdempotentContext } from '@/application/use-cases/commands'
@@ -9,7 +10,7 @@ const IDEMPOTENCY_KEY = /^[\x21-\x7e]{8,255}$/
 export const businessDate = z.iso.date()
 
 export function today(): string {
-  return new Date().toISOString().slice(0, 10)
+  return businessDayOf(new Date())
 }
 
 function daysBefore(date: string, days: number): string {

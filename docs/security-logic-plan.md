@@ -1,7 +1,8 @@
 # Security and logic review — Phases 90 to 92
 
 Status: **Phase 90 delivered on 2026-10-02** ([evidence](security-phase90-evidence.md)) and
-**Phase 91 on 2026-10-03** ([evidence](security-phase91-evidence.md)); Phase 92 not started. A review of the whole repository for
+**Phases 91 and 92 on 2026-10-03** ([91](security-phase91-evidence.md),
+[92](security-phase92-evidence.md)). Three findings of Phase 92 were delivered in part. A review of the whole repository for
 security flaws and logic errors, after Phase O closed. It lists only what was confirmed
 against the code or the running stack on 2026-10-02, each with its evidence. It also lists
 what was checked and found sound, so the next review can start where this one stopped.
@@ -123,6 +124,10 @@ its document by its party and lines rather than by an id and version.
    leave one approved and one refused. **Proof:** a concurrent e2e.
 
 ## Phase 92 — The workspace's day, the edge, and the AWS path
+
+**Delivered on 2026-10-03** ([evidence](security-phase92-evidence.md)), in part for findings
+6, 8 and 10: the day is Brasília's for every workspace, the retention job is not an AWS
+task, and Kong's `jwt` plugin stays on its self-test route, with the documentation corrected.
 
 1. **The workspace's day** (finding 6).
    - Every module that dates business facts keeps the tenant's timezone from

@@ -80,7 +80,7 @@ export interface SchedulePeriod {
 export function addMonths(date: BusinessDate, months: number): BusinessDate {
   const [year = 0, month = 1, day = 1] = date.value.split('-').map(Number)
   const moved = new Date(Date.UTC(year, month - 1 + months, day))
-  return BusinessDate.of(moved)
+  return BusinessDate.ofCalendar(moved)
 }
 
 export function isFirstOfMonth(date: BusinessDate): boolean {
@@ -177,7 +177,7 @@ export function scheduleOf(
       startsOn: period.startsOn,
       endsOn: period.endsOn,
       competence,
-      billingOn: BusinessDate.of(
+      billingOn: BusinessDate.ofCalendar(
         new Date(`${competence}-${String(terms.billingDay).padStart(2, '0')}T00:00:00Z`),
       ),
       revision: period.revision.number,

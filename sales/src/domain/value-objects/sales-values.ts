@@ -1,6 +1,7 @@
 import { type Either, left, right } from '@/core/either'
 import { ValueObject } from '@/core/entities/value-object'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import { businessDayOf } from './business-day'
 
 const SCALE = 1_000_000n
 
@@ -231,8 +232,13 @@ export class BusinessDate extends ValueObject<{ value: string }> {
       return left(new InvalidInputError(field, 'is not a real calendar date'))
     return right(new BusinessDate({ value: trimmed }))
   }
+  /** The workspace's day an instant falls on (Phase 92): today, not the UTC date. */
   static of(instant: Date): BusinessDate {
-    return new BusinessDate({ value: instant.toISOString().slice(0, 10) })
+    return new BusinessDate({ value: businessDayOf(instant) })
+  }
+  /** A date built by calendar arithmetic at UTC midnight, read back as it was built. */
+  static ofCalendar(utcMidnight: Date): BusinessDate {
+    return new BusinessDate({ value: utcMidnight.toISOString().slice(0, 10) })
   }
   get value(): string {
     return this.props.value

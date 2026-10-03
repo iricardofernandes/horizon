@@ -1,6 +1,7 @@
 import { type Either, left, right } from '@/core/either'
 import { ValueObject } from '@/core/entities/value-object'
 import { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
+import { businessDayOf } from './business-day'
 
 /**
  * Whether the warehouse has to know *which* of a thing it is holding.
@@ -101,7 +102,7 @@ export class ExpiryDate extends ValueObject<{ value: string }> {
   }
   /** Expired once the day it names is behind us, never during it. */
   hasPassed(now: Date): boolean {
-    return this.props.value < now.toISOString().slice(0, 10)
+    return this.props.value < businessDayOf(now)
   }
   isBefore(other: ExpiryDate): boolean {
     return this.props.value < other.props.value

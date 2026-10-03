@@ -65,8 +65,9 @@ test/              Testcontainers e2e suites
   ([ADR 0075](adr/0075-one-broker-identity-per-module.md)).
 - **Idempotent writes.** A command that creates something takes an `Idempotency-Key` and
   runs at most once under it ([ADR 0028](adr/0028-idempotency-key-on-public-writes.md)).
-- **Every token is verified twice.** Kong validates it, and the service verifies it again
-  against Identity's JWKS, so reaching a service's port directly grants nothing.
+- **Every service verifies every token.** Each one checks the signature against Identity's
+  JWKS itself, so reaching a service's port directly grants nothing. Kong holds the same
+  keys and checks a token only on its self-test route: it is the edge, not the gate.
 - **Bounded outbound calls.** Every call has a timeout, retries with jitter and a circuit
   breaker ([ADR 0027](adr/0027-resilience-policy-for-outbound-calls.md)).
 - **An audit log that cannot be rewritten.** Each service that records business decisions

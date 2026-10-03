@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { AttachmentDeletionReason, AttachmentRequest } from '@horizon/contracts'
 import { uuidv7 } from 'uuidv7'
 import { canonicalJson } from '@/core/audit/canonical-json'
@@ -28,7 +28,7 @@ import type {
   OutgoingEvent,
   Scanner,
 } from './ports'
-import { objectKeyOf } from './ports'
+import { uploadKeyOf } from './ports'
 
 export interface CommandContext {
   readonly tenantId: string
@@ -186,7 +186,7 @@ export class Attachments {
     })
     if (prepared.isLeft()) return left(prepared.value)
     const { attachment, ownerKey } = prepared.value
-    const objectKey = objectKeyOf(tenantId, id)
+    const objectKey = uploadKeyOf(tenantId, id, randomUUID())
     const sealed = this.envelope.seal(
       ownerKey,
       { tenantId, attachmentId: id, owner: attachment.owner },
@@ -203,7 +203,11 @@ export class Attachments {
     const moved = await this.store.inTenant(tenantId, (scope) =>
       scope.attachments.replace(attachment, next),
     )
-    if (!moved) return this.current(tenantId, id)
+    if (!moved) {
+      // Another upload of this slot was recorded first: these bytes are nobody's.
+      await this.objects.remove(objectKey).catch(() => undefined)
+      return this.current(tenantId, id)
+    }
     return right(await this.scan(tenantId, next, upload.bytes))
   }
 
