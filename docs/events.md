@@ -7,7 +7,7 @@
   CI fails if this file differs from what the current schemas produce.
 -->
 
-Every event Horizon publishes, generated from `@horizon/contracts` **v0.63.0**.
+Every event Horizon publishes, generated from `@horizon/contracts` **v0.64.0**.
 
 Events are the durable public interface between modules. Unlike an HTTP call there is no
 caller to negotiate with — an event is emitted, and any number of consumers, including
@@ -472,7 +472,7 @@ A recorded settlement was undone — a bounced payment, a wrong installment. The
 
 ### `fiscal.calculation.locked` — v1
 
-Fiscal locked the tax calculation of a document (Phase 87, ADR 0073): its components, totals and digests, never its rules. It is the only source of tax amounts for Financial and Ledger; it moves no stock and posts no receivable, which stay the operational facts' (ADR 0048).
+Fiscal locked the tax calculation of a document (Phase 87, ADR 0073): its components, totals and digests, never its rules. It is the only source of tax amounts for Financial and Ledger; it moves no stock and posts no receivable, which stay the operational facts' (ADR 0048). The Ledger holds it until the document's authorization, and posts nothing for a rejected one (Phase 91, ADR 0076).
 
 **Payload**
 
@@ -493,7 +493,7 @@ Fiscal locked the tax calculation of a document (Phase 87, ADR 0073): its compon
 | `resultDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
 ### `fiscal.consumer-document.simulation-outcome` — v1
 
-The deterministic simulator decided an NFC-e model 65 for one Sales shipment to a final consumer. The sale keeps one stock and one money effect, both from `sales.shipment.dispatched` (`correlations`); this fact never creates, repeats or reverses one. It carries no access key, QR code, XML or consumer data.
+The deterministic simulator decided an NFC-e model 65 for one Sales shipment to a final consumer. The sale keeps one stock and one money effect, both from `sales.shipment.dispatched` (`correlations`); this fact never creates, repeats or reverses one. The Ledger posts the taxes the document was locked with when it is authorized, and reverses them when it is cancelled (Phase 91). It carries no access key, QR code, XML or consumer data.
 
 **Payload**
 
@@ -523,14 +523,14 @@ One parsed SP NF-e homologation exchange was retained. This observation has no f
 | `observedAt` | string | yes | pattern `^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`. format `date-time` |
 ### `fiscal.document.production-outcome` — v1
 
-Future production authority outcome for one frozen Sales shipment. Phase 43 does not publish this event or enable production transmission; Sales uses the exact origin and document revision to maintain a fail-closed release projection.
+Future production authority outcome for one frozen Sales shipment. Phase 43 does not publish this event or enable production transmission; Sales uses the exact origin and document revision to maintain a fail-closed release projection, and the Ledger posts the locked taxes on authorization and reverses them on cancellation (Phase 91).
 
 **Payload**
 
 _No fields._
 ### `fiscal.document.simulation-authorized` — v1
 
-The deterministic simulator authorized an NF-e model 55. This simulated fact never releases a shipment or creates a stock or money effect.
+The deterministic simulator authorized an NF-e model 55. This simulated fact never releases a shipment or creates a stock or money effect; the Ledger posts the taxes the document was locked with once it is authorized (Phase 91).
 
 **Payload**
 
@@ -553,7 +553,7 @@ The deterministic simulator authorized an NF-e model 55. This simulated fact nev
 | `protocolDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
 ### `fiscal.document.simulation-cancelled` — v1
 
-The deterministic simulator accepted a cancellation linked to an authorized NF-e model 55. Original authorization evidence remains immutable.
+The deterministic simulator accepted a cancellation linked to an authorized NF-e model 55. Original authorization evidence remains immutable; the Ledger reverses the taxes it posted at the authorization (Phase 91).
 
 **Payload**
 
@@ -576,7 +576,7 @@ The deterministic simulator accepted a cancellation linked to an authorized NF-e
 | `cancellationProtocolDigest` | string | yes | pattern `^[0-9a-f]{64}$` |
 ### `fiscal.document.simulation-rejected` — v1
 
-The deterministic simulator rejected an NF-e model 55; the immutable document may be followed by a corrected revision.
+The deterministic simulator rejected an NF-e model 55; the immutable document may be followed by a corrected revision. A rejected document never posts its taxes (Phase 91).
 
 **Payload**
 

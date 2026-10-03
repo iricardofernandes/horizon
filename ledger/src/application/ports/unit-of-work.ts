@@ -3,6 +3,7 @@ import type { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { DelegationsRepository } from '@/domain/controls/delegations-repository'
 import type {
   EntryApprovalPoliciesRepository,
+  FiscalDocumentOutcomesRepository,
   JournalRepository,
   LedgerAccountsRepository,
   ManualEntriesRepository,
@@ -40,6 +41,7 @@ export interface LedgerScope {
   readonly periods: PeriodsRepository
   readonly mappings: MappingsRepository
   readonly facts: PostingFactsRepository
+  readonly documentOutcomes: FiscalDocumentOutcomesRepository
   readonly manualEntries: ManualEntriesRepository
   readonly entryPolicies: EntryApprovalPoliciesRepository
   readonly delegations: DelegationsRepository

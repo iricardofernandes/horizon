@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import {
   type EventEnvelope,
   financialPayablePosted,
@@ -8,14 +7,21 @@ import {
   financialSettlementRecorded,
   financialSettlementReversed,
   fiscalCalculationLocked,
+  fiscalConsumerDocumentOutcome,
+  fiscalDocumentAuthorized,
+  fiscalDocumentCancelled,
+  fiscalDocumentProductionOutcome,
+  fiscalDocumentRejected,
   treasuryEntryRecorded,
   treasuryTransferCancelled,
   treasuryTransferPosted,
 } from '@horizon/contracts'
+import type { DocumentOutcome } from '@/domain/repositories/ledger-repositories'
 import { type Fact, POSTED_TAXES } from '@/domain/services/posting-rules'
 import type { EventHandler } from '@/infrastructure/messaging/rabbitmq-transport'
 import type { Clock } from './ports/clock'
 import type { LedgerScope, LedgerUnitOfWork, ReceivedEvent } from './ports/unit-of-work'
+import { DocumentTaxesUseCase } from './use-cases/document-taxes'
 import { PostFactUseCase, ReverseFactUseCase } from './use-cases/post-facts'
 
 /**
@@ -31,6 +37,7 @@ export class LedgerModuleEventHandlers {
   readonly handlers: Readonly<Record<string, EventHandler>>
   private readonly post: PostFactUseCase
   private readonly reverse: ReverseFactUseCase
+  private readonly taxes: DocumentTaxesUseCase
 
   constructor(
     private readonly unitOfWork: LedgerUnitOfWork,
@@ -38,6 +45,7 @@ export class LedgerModuleEventHandlers {
   ) {
     this.post = new PostFactUseCase(clock)
     this.reverse = new ReverseFactUseCase(clock)
+    this.taxes = new DocumentTaxesUseCase(this.post, this.reverse, clock)
     this.handlers = {
       'financial.receivable.posted': (event) => this.titlePosted(event, 'receivable'),
       'financial.payable.posted': (event) => this.titlePosted(event, 'payable'),
@@ -49,14 +57,32 @@ export class LedgerModuleEventHandlers {
       'treasury.transfer.cancelled': (event) => this.transferCancelled(event),
       'treasury.entry.recorded': (event) => this.entryRecorded(event),
       'fiscal.calculation.locked': (event) => this.calculationLocked(event),
+      // The authority's answer, which a document's taxes follow (Phase 91). Only a Sales
+      // origin posts, and its documents are NF-e 55 and NFC-e 65; a linked or service
+      // document is Fiscal's own origin and posts nothing, so its answer is not read.
+      'fiscal.document.simulation-authorized': (event) =>
+        this.decided(event, fiscalDocumentAuthorized.envelope.parse(event).payload, 'authorized'),
+      'fiscal.document.simulation-rejected': (event) =>
+        this.decided(event, fiscalDocumentRejected.envelope.parse(event).payload, 'rejected'),
+      'fiscal.document.simulation-cancelled': (event) =>
+        this.decided(event, fiscalDocumentCancelled.envelope.parse(event).payload, 'cancelled'),
+      'fiscal.consumer-document.simulation-outcome': (event) => {
+        const { payload } = fiscalConsumerDocumentOutcome.envelope.parse(event)
+        return this.decided(event, payload, payload.outcome)
+      },
+      'fiscal.document.production-outcome': (event) => {
+        const { payload } = fiscalDocumentProductionOutcome.envelope.parse(event)
+        return this.decided(event, payload, payload.outcome)
+      },
     }
   }
 
   /**
-   * A sale's taxes, as Fiscal locked them (Phase 87, ADR 0073). Only a Sales origin posts: a
-   * manual simulation has no revenue to deduct them from. Homologation is the authority's test
-   * environment and posts nothing. One origin and purpose posts once, so a corrected revision
-   * of the same document never posts its taxes twice.
+   * A sale's taxes, as Fiscal locked them (Phase 87, ADR 0073), held until the authority
+   * answers for the document (Phase 91, ADR 0076). Only a Sales origin posts: a manual
+   * simulation has no revenue to deduct them from. Homologation is the authority's test
+   * environment and posts nothing. Each document is a fact of its own, so a corrected
+   * successor posts once it is authorized, and the rejected document it replaces never did.
    */
   private async calculationLocked(event: EventEnvelope): Promise<void> {
     const parsed = fiscalCalculationLocked.envelope.parse(event)
@@ -76,15 +102,26 @@ export class LedgerModuleEventHandlers {
       components.length > 0
     await this.handle(parsed, 'fiscal', async (scope) => {
       if (!posts) return null
-      return this.post.executeInScope(scope, {
+      return this.taxes.locked(scope, {
         kind: 'tax-lock',
-        id: originFactId(payload.originId, payload.purpose),
+        id: payload.documentId,
         reference: `Fiscal ${payload.documentId.slice(0, 8)}`,
         on: payload.issueDate,
         currency: payload.currency,
         components,
       })
     })
+  }
+
+  /** The authority's answer for one document, whatever its model (Phase 91). */
+  private async decided(
+    event: EventEnvelope,
+    payload: { documentId: string; observedAt: string },
+    outcome: DocumentOutcome,
+  ): Promise<void> {
+    await this.handle(event, 'fiscal', (scope) =>
+      this.taxes.decided(scope, payload.documentId, outcome, new Date(payload.observedAt)),
+    )
   }
 
   private async titlePosted(event: EventEnvelope, kind: 'receivable' | 'payable'): Promise<void> {
@@ -244,13 +281,4 @@ async function referenceOf(
 ): Promise<string> {
   const title = await scope.facts.find(direction, titleId)
   return title?.reference ?? `Settlement ${titleId.slice(0, 8)}`
-}
-
-/** One posting per Fiscal origin and purpose: a sale and its return are two facts. */
-function originFactId(originId: string, purpose: string): string {
-  const bytes = createHash('sha256').update(`tax-lock\0${originId}\0${purpose}`).digest()
-  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x50
-  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
-  const hex = bytes.subarray(0, 16).toString('hex')
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }

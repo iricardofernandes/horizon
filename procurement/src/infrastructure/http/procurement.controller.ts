@@ -1,8 +1,9 @@
-import { fiscalTaxEstimateSchema } from '@horizon/contracts'
+import { fiscalTaxEstimateReferenceSchema } from '@horizon/contracts'
 import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   Inject,
@@ -12,6 +13,7 @@ import {
   Put,
   Query,
   Req,
+  ServiceUnavailableException,
 } from '@nestjs/common'
 import { z } from 'zod'
 import { ORDER_STATUSES } from '@/domain/entities/purchase-order'
@@ -338,22 +340,35 @@ export class ProcurementController {
     @Body() body: unknown,
     @Req() request: ProcurementRequest,
   ) {
-    const estimate = fiscalTaxEstimateSchema.safeParse(body)
-    if (!estimate.success || !estimate.data.supported)
-      throw new BadRequestException('A supported Fiscal tax estimate is required')
+    const reference = fiscalTaxEstimateReferenceSchema.safeParse(body)
+    if (!reference.success)
+      throw new BadRequestException('The digest of an estimate Fiscal issued is required')
+    // Only the digest comes from the caller: the estimate is read back from Fiscal, as the
+    // caller, and kept only if Fiscal was asked about this very order (Phase 91).
+    const authorization = request.headers.authorization
+    const bearer = typeof authorization === 'string' ? authorization.slice('Bearer '.length) : ''
+    const issued = await this.runtime.fiscalEstimates.find(reference.data.resultDigest, bearer)
+    if (issued.status === 'not-issued')
+      throw new BadRequestException('Fiscal issued no estimate under this digest')
+    if (issued.status === 'forbidden')
+      throw new ForbiddenException('Reading the estimate needs read access to Fiscal')
+    if (issued.status === 'unavailable')
+      throw new ServiceUnavailableException('Fiscal could not be asked for the estimate')
+    const { estimate, request: asked } = issued.record
     return unwrap(
       await this.runtime.applyOrderTaxEstimate.execute({
         context: context(request),
         orderId: id(orderId),
+        asked,
         estimate: {
-          components: estimate.data.components.map((component) => ({
+          components: estimate.components.map((component) => ({
             code: component.code,
             amount: component.amount,
           })),
-          chargedOnTop: estimate.data.totals.chargedOnTop,
-          inputDigest: estimate.data.inputDigest,
-          rulesDigest: estimate.data.rulesDigest,
-          resultDigest: estimate.data.resultDigest,
+          chargedOnTop: estimate.totals.chargedOnTop,
+          inputDigest: estimate.inputDigest,
+          rulesDigest: estimate.rulesDigest,
+          resultDigest: estimate.resultDigest,
         },
       }),
     )

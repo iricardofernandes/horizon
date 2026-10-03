@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { fiscalCalculationLocked } from '../events/fiscal'
-import { fiscalTaxEstimateRequestSchema, fiscalTaxEstimateSchema } from './fiscal-estimate'
+import {
+  estimateRequestMatches,
+  fiscalTaxEstimateRecordSchema,
+  fiscalTaxEstimateReferenceSchema,
+  fiscalTaxEstimateRequestSchema,
+  fiscalTaxEstimateSchema,
+} from './fiscal-estimate'
 
 const id = '018f5d4e-1000-7000-8000-000000000087'
 const digest = 'a'.repeat(64)
@@ -57,6 +63,83 @@ describe('tax estimates', () => {
         detail: 'No effective active rule matches this fiscal line',
       }).supported,
     ).toBe(false)
+  })
+})
+
+describe('an estimate kept by reference (Phase 91)', () => {
+  const item = '018f5d4e-1000-7000-8000-000000000001'
+  const other = '018f5d4e-1000-7000-8000-000000000002'
+  const request = fiscalTaxEstimateRequestSchema.parse({
+    direction: 'sale',
+    establishmentId: id,
+    customerPartyId: id,
+    issueDate: '2026-10-15',
+    lines: [
+      { itemId: item, quantity: '2', unitPrice: brl('18990') },
+      { itemId: other, quantity: '1.5', unitPrice: brl('1000'), discount: brl('100') },
+    ],
+  })
+  const document = {
+    direction: 'sale' as const,
+    partyId: id,
+    lines: [
+      { itemId: other, quantity: '1.500', unitPrice: brl('1000'), discount: brl('100') },
+      { itemId: item, quantity: '2.0', unitPrice: brl('18990') },
+    ],
+  }
+
+  it('takes only a digest from the web, never the estimate itself', () => {
+    expect(fiscalTaxEstimateReferenceSchema.safeParse({ resultDigest: digest }).success).toBe(true)
+    expect(
+      fiscalTaxEstimateReferenceSchema.safeParse({ resultDigest: digest, components: [] }).success,
+    ).toBe(false)
+  })
+
+  it('reads back the request with a supported estimate only', () => {
+    const estimate = {
+      schemaVersion: 1,
+      supported: true,
+      estimatedAt: '2026-10-01T12:00:00Z',
+      components: [],
+      totals: { net: brl('1'), tax: brl('0'), chargedOnTop: brl('0'), gross: brl('1') },
+      inputDigest: digest,
+      rulesDigest: digest,
+      resultDigest: digest,
+    }
+    expect(fiscalTaxEstimateRecordSchema.safeParse({ request, estimate }).success).toBe(true)
+    expect(
+      fiscalTaxEstimateRecordSchema.safeParse({
+        request,
+        estimate: { ...estimate, supported: false },
+      }).success,
+    ).toBe(false)
+  })
+
+  it('matches the same lines in any order, whatever zeros a quantity carries', () => {
+    expect(estimateRequestMatches(request, document)).toBe(true)
+    const [first, second] = document.lines
+    if (!first || !second) throw new Error('two lines')
+    expect(
+      estimateRequestMatches(request, {
+        ...document,
+        lines: [first, { ...second, discount: brl('0') }],
+      }),
+    ).toBe(true)
+  })
+
+  it('refuses another party, direction, price, quantity, discount or line', () => {
+    const [first, second] = document.lines
+    if (!first || !second) throw new Error('two lines')
+    for (const changed of [
+      { ...document, partyId: item },
+      { ...document, direction: 'purchase' as const },
+      { ...document, lines: [first, { ...second, unitPrice: brl('18991') }] },
+      { ...document, lines: [first, { ...second, quantity: '3' }] },
+      { ...document, lines: [{ ...first, discount: undefined }, second] },
+      { ...document, lines: [first] },
+      { ...document, lines: [first, second, second] },
+    ])
+      expect(estimateRequestMatches(request, changed)).toBe(false)
   })
 })
 

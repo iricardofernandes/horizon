@@ -223,6 +223,32 @@ describe('four eyes on the rules (Phase 88)', () => {
     expect((await changes.list(tenantId)).data.map((entry) => entry.status)).toEqual(['cancelled'])
   })
 
+  it('decides one change at a time in a workspace: of two rules that tie, one is added (Phase 91)', async () => {
+    const tenantId = await workspace()
+    const first = await changes.request({
+      tenantId,
+      actorId: ANA,
+      body: ownCbs('workspace.cbs-first'),
+    })
+    const second = await changes.request({
+      tenantId,
+      actorId: ANA,
+      body: ownCbs('workspace.cbs-second'),
+    })
+    const decided = await Promise.allSettled([
+      decide(tenantId, first.id, BRUNO),
+      decide(tenantId, second.id, BRUNO),
+    ])
+    expect(decided.map((outcome) => outcome.status).sort()).toEqual(['fulfilled', 'rejected'])
+    const refused = decided.find(
+      (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
+    )
+    expect(refused?.reason).toBeInstanceOf(RuleChangeRefused)
+    expect(String(refused?.reason)).toMatch(/ties with an existing rule/)
+    const statuses = (await changes.list(tenantId)).data.map((entry) => entry.status)
+    expect(statuses.sort()).toEqual(['approved', 'pending'])
+  })
+
   it('lends the approval through a delegation, never to decide the delegator’s own request', async () => {
     const tenantId = await workspace()
     const change = await changes.request({ tenantId, actorId: ANA, body: adoption })

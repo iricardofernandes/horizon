@@ -184,8 +184,14 @@ export class FiscalInboundReconciliations {
     const orderIds = [...new Set(receipts.map((receipt) => receipt.orderId))]
     const [estimate] =
       orderIds.length === 1
-        ? await tx`select order_id, components, result_digest from fiscal_purchase_order_estimates
-            where tenant_id = ${tenantId} and order_id = ${orderIds[0] ?? ''}`
+        ? // Only an estimate Fiscal issued itself (Phase 91): an order projected before then
+          // may carry one a browser relayed, and it is compared with nothing.
+          await tx`select projected.order_id, projected.components, projected.result_digest
+            from fiscal_purchase_order_estimates projected
+            join fiscal_tax_estimates issued on issued.tenant_id = projected.tenant_id
+              and issued.result_digest = projected.result_digest
+              and issued.direction = 'purchase'
+            where projected.tenant_id = ${tenantId} and projected.order_id = ${orderIds[0] ?? ''}`
         : []
     comparison = {
       ...comparison,

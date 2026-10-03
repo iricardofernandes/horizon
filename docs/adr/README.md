@@ -171,6 +171,7 @@ editable per tenant ([0023](0023-casl-static-module-scoped-roles.md)).
 | [0072](0072-a-tax-scenario-is-supported-only-with-evidence.md) | A tax scenario is supported only with evidence |
 | [0073](0073-tax-estimates-outside-fiscal-amounts-inside-it.md) | Tax estimates outside Fiscal, amounts inside it |
 | [0074](0074-a-tax-rule-change-is-requested-and-approved-by-another-person.md) | A tax rule change is requested and approved by another person, with its diff and impact |
+| [0076](0076-taxes-follow-the-authority-and-estimates-are-kept-by-reference.md) | Taxes are posted when the authority authorizes, and an estimate is kept by reference |
 
 ### Frontend
 

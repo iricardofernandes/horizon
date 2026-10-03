@@ -58,6 +58,9 @@ locals {
     }
     agent     = { GATEWAY_URL = local.gateway_url }
     knowledge = { GATEWAY_URL = local.gateway_url }
+    # Fiscal's estimates are read back through the gateway, as the caller.
+    sales       = { GATEWAY_URL = local.gateway_url }
+    procurement = { GATEWAY_URL = local.gateway_url }
   }
   common_environment = {
     NODE_ENV                    = "production"

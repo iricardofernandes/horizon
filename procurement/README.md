@@ -30,7 +30,9 @@ committed to buy, and what actually arrived.
 - **Purchase orders.** The commitment. An order keeps its own copy of everything it says
   (supplier, descriptions, prices, tax, freight, terms), so a later price change never
   rewrites what was agreed. From approval on, it is frozen.
-- **Tax estimates on orders**, asked from Fiscal and labelled as estimates.
+- **Tax estimates on orders**, asked from Fiscal and labelled as estimates. Procurement takes
+  only the digest, reads the estimate back from Fiscal, and keeps it only if it is of the
+  order's supplier and lines ([ADR 0076](../docs/adr/0076-taxes-follow-the-authority-and-estimates-are-kept-by-reference.md)).
 - **Approval thresholds.** Above a value per currency, an order needs a second person.
   Below it, the order records that nobody was asked, so an exemption is never mistaken for
   an oversight. A currency with no policy requires approval for every order.
@@ -78,7 +80,7 @@ committed to buy, and what actually arrived.
 | `POST` | `/orders/from-quotation` | Draft an order from the selected quotation |
 | `GET` | `/orders/summary` | Orders by status and currency, which Reporting reconciles against |
 | `GET`, `PUT` | `/orders/:id` | One order, or revise a draft |
-| `PUT` | `/orders/:id/tax-estimate` | Keep Fiscal's estimate on the order |
+| `PUT` | `/orders/:id/tax-estimate` | Keep an estimate Fiscal issued, named by its digest |
 | `POST` | `/orders/:id/place` | Submit it |
 | `POST` | `/orders/:id/approve`, `/reject` | Decide somebody else's order |
 | `POST` | `/orders/:id/cancel`, `/close` | Withdraw it, or stop expecting more |

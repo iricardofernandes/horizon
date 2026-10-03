@@ -36,6 +36,7 @@ import {
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { AesGcmSecretBox } from '@/infrastructure/cryptography/aes-gcm-secret-box'
 import { SalesDatabase } from '@/infrastructure/database/drizzle/sales-database'
+import { GatewayFiscalEstimates } from '@/infrastructure/http/gateway-fiscal-estimates'
 import {
   openTelemetryBillingMetrics,
   openTelemetryShippingMetrics,
@@ -71,6 +72,7 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
   /** How old a billed period may be before a missing receivable or NFS-e is reported. */
   readonly billingGapSeconds: number
   readonly accessTokens: AccessTokenVerifier
+  readonly fiscalEstimates: GatewayFiscalEstimates
 
   constructor(config: SalesEnvironment) {
     const clock = { now: () => new Date() }
@@ -87,6 +89,7 @@ export class SalesRuntime implements OnModuleInit, OnModuleDestroy {
       config.JWKS_URL,
       config.ACCESS_TOKEN_MAX_AGE_SECONDS,
     )
+    this.fiscalEstimates = new GatewayFiscalEstimates(config.GATEWAY_URL)
     this.eventHandlers = new SalesModuleEventHandlers(this.database, clock)
     this.writeQuote = new WriteQuoteUseCase(
       this.database,

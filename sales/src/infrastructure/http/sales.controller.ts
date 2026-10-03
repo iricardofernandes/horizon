@@ -1,9 +1,10 @@
-import { fiscalTaxEstimateSchema } from '@horizon/contracts'
+import { fiscalTaxEstimateReferenceSchema } from '@horizon/contracts'
 import {
   BadRequestException,
   Body,
   ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   Inject,
   NotFoundException,
@@ -11,6 +12,7 @@ import {
   Post,
   Put,
   Req,
+  ServiceUnavailableException,
 } from '@nestjs/common'
 import { z } from 'zod'
 import { SalesRuntime } from '@/main/sales-runtime'
@@ -324,19 +326,33 @@ export class SalesController {
     request: SalesRequest,
   ) {
     const parsedId = z.uuid().safeParse(id)
-    const estimate = fiscalTaxEstimateSchema.safeParse(body)
-    if (!parsedId.success || !estimate.success || !estimate.data.supported)
-      throw new BadRequestException('A supported Fiscal tax estimate is required')
+    const reference = fiscalTaxEstimateReferenceSchema.safeParse(body)
+    if (!parsedId.success || !reference.success)
+      throw new BadRequestException('The digest of an estimate Fiscal issued is required')
+    // Only the digest comes from the caller: the estimate is read back from Fiscal, as the
+    // caller, and kept only if Fiscal was asked about this very document (Phase 91).
+    const authorization = request.headers.authorization
+    const bearer = typeof authorization === 'string' ? authorization.slice('Bearer '.length) : ''
+    const issued = await this.runtime.fiscalEstimates.find(reference.data.resultDigest, bearer)
+    if (issued.status === 'not-issued')
+      throw new BadRequestException('Fiscal issued no estimate under this digest')
+    if (issued.status === 'forbidden')
+      throw new ForbiddenException('Reading the estimate needs read access to Fiscal')
+    if (issued.status === 'unavailable')
+      throw new ServiceUnavailableException('Fiscal could not be asked for the estimate')
     const outcome = await this.runtime.database.recordTaxEstimate({
       tenantId: tenantOf(request),
       kind: kind === 'quotes' ? 'quote' : 'order',
       documentId: parsedId.data,
-      estimate: estimate.data,
+      estimate: issued.record.estimate,
+      request: issued.record.request,
       recordedBy: actorOf(request),
     })
     if (outcome === 'not-found') throw new NotFoundException('The document was not found')
     if (outcome === 'frozen')
       throw new ConflictException('The document no longer takes a new estimate')
+    if (outcome === 'mismatch')
+      throw new ConflictException('The estimate is not of this document’s customer and lines')
     return { recorded: true }
   }
 

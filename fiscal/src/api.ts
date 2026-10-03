@@ -23,6 +23,7 @@ import { supportedKind } from './document-kinds'
 import { documentListQuerySchema, type FiscalDocumentList } from './document-list'
 import { type FiscalDocuments, FiscalModelConflict } from './documents'
 import type { FiscalEstablishmentCredentials } from './establishment-credentials'
+import type { FiscalEstimateRecords } from './estimate-records'
 import type { FiscalEstimates } from './estimates'
 import { type GovernanceDependencies, handleGovernanceRoute } from './governance-api'
 import { handleInboundRoute, type InboundDependencies } from './inbound-api'
@@ -54,6 +55,7 @@ export type FiscalServerDependencies = {
   artifacts: Pick<FiscalArtifacts, 'get' | 'getV2' | 'list' | 'listV2'>
   calculations: Pick<FiscalCalculations, 'preview' | 'get'>
   estimates?: Pick<FiscalEstimates, 'estimate'>
+  estimateRecords?: Pick<FiscalEstimateRecords, 'find'>
   capabilities: Pick<FiscalCapabilities, 'listActive'>
   readiness: Pick<FiscalReadiness, 'validate'>
   issuance?: Pick<FiscalIssuance, 'issue'>
@@ -256,6 +258,21 @@ async function handle(
         problem(response, 400, 'Bad Request', 'Invalid tax estimate request')
       else throw error
     }
+    return
+  }
+
+  const issuedEstimate = /^\/estimates\/([0-9a-f]{64})$/.exec(url.pathname)
+  if (request.method === 'GET' && issuedEstimate?.[1] && dependencies.estimateRecords) {
+    // An estimate Fiscal issued, read back by its digest, so Sales and Procurement keep only
+    // what Fiscal answered and never what a browser relays (Phase 91, ADR 0076).
+    if (!requirePermission(principal, 'read', response)) return
+    const found = await dependencies.estimateRecords.find(principal.tenantId, issuedEstimate[1])
+    if (!found) {
+      problem(response, 404, 'Not Found', 'Fiscal issued no estimate under this digest')
+      return
+    }
+    response.setHeader('cache-control', 'private, no-store')
+    json(response, 200, found)
     return
   }
 

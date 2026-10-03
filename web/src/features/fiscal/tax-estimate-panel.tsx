@@ -87,7 +87,8 @@ export function TaxEstimatePanel({
       const recorded = await tracedFetch('tax-estimate.record', recordedPath, {
         method: 'PUT',
         headers: jsonHeaders(),
-        body: JSON.stringify(result),
+        // Only the digest: the owner reads the estimate back from Fiscal itself (Phase 91).
+        body: JSON.stringify({ resultDigest: result.resultDigest }),
       })
       if (!recorded.ok) return setError(await apiError(recorded, t('estimateFailed')))
       await onRecorded?.()

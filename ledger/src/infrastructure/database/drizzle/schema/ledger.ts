@@ -177,6 +177,21 @@ export const postingFacts = pgTable(
   (table) => [primaryKey({ columns: [table.tenantId, table.kind, table.factId] })],
 )
 
+/** The authority's answer for each Fiscal document, which its taxes follow (Phase 91). */
+export const fiscalDocumentOutcomes = pgTable(
+  'fiscal_document_outcomes',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    documentId: uuid('document_id').notNull(),
+    outcome: text('outcome').notNull(),
+    observedAt: instant('observed_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.documentId] })],
+)
+
 export const inbox = pgTable(
   'inbox',
   {

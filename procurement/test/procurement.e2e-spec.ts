@@ -948,13 +948,33 @@ describe("Fiscal's estimate on a purchase order (Phase 87)", () => {
       rulesDigest: 'b'.repeat(64),
       resultDigest: 'c'.repeat(64),
     }
-    const applied = value<{ total: string; tax: string }>(
-      await new ApplyOrderTaxEstimateUseCase(database, clock).execute({
+    // What Fiscal was asked, as it returns it with the estimate (Phase 91).
+    const asked = (over: { supplierPartyId?: string; quantity?: string } = {}) => ({
+      direction: 'purchase' as const,
+      establishmentId: shop.tenantId,
+      supplierPartyId: over.supplierPartyId ?? shop.supplierId,
+      supplier: { regime: 'normal' as const },
+      issueDate: '2026-09-16',
+      lines: [
+        {
+          itemId: shop.paper,
+          quantity: over.quantity ?? '2',
+          unitPrice: { amount: '18990', currency: 'BRL' },
+        },
+      ],
+    })
+    const apply = (request = asked()) =>
+      new ApplyOrderTaxEstimateUseCase(database, clock).execute({
         context: shop.context(),
         orderId: order.id,
         estimate,
-      }),
-    )
+        asked: request,
+      })
+    // An estimate of another supplier, or of other lines, is not this order's (Phase 91).
+    expect((await apply(asked({ supplierPartyId: randomUUID() }))).isLeft()).toBe(true)
+    expect((await apply(asked({ quantity: '3' }))).isLeft()).toBe(true)
+    expect((await database.orderDetail(shop.tenantId, order.id))?.taxEstimate ?? null).toBeNull()
+    const applied = value<{ total: string; tax: string }>(await apply())
     // 2 × 189,90 plus the IPI charged on top, the typed 50,00 gone.
     expect(applied).toEqual({ total: '40449', tax: '2469' })
     expect((await database.orderDetail(shop.tenantId, order.id))?.taxEstimate).toEqual(estimate)
@@ -970,11 +990,6 @@ describe("Fiscal's estimate on a purchase order (Phase 87)", () => {
     ).toBe(true)
     expect(approved?.payload.taxEstimate).toEqual(estimate)
     // An order already committed takes no new estimate.
-    const late = await new ApplyOrderTaxEstimateUseCase(database, clock).execute({
-      context: shop.context(),
-      orderId: order.id,
-      estimate,
-    })
-    expect(late.isLeft()).toBe(true)
+    expect((await apply()).isLeft()).toBe(true)
   })
 })

@@ -1,4 +1,5 @@
 import {
+  estimateRequestMatches,
   financialPayablePosted,
   financialPayableReversed,
   procurementOrderApproved,
@@ -6,6 +7,7 @@ import {
   procurementReceiptReturned,
 } from '@horizon/contracts'
 import type postgres from 'postgres'
+import { issuedEstimate } from './estimate-records'
 
 type Transaction = postgres.TransactionSql
 
@@ -37,16 +39,38 @@ export async function projectPurchaseEvent(
           values (${tenantId}, ${order.orderId}, ${line.lineId}, ${order.supplierId},
             ${line.itemId}, ${line.quantity}, ${line.unitPrice.amount}, ${line.unitPrice.currency})
           on conflict do nothing`
-      // Fiscal's own estimate, when the buyer asked for one (Phase 87).
-      if (order.taxEstimate)
+      // Fiscal's own estimate, when the buyer asked for one (Phase 87): the order names its
+      // digest, and only what Fiscal issued under it for this supplier and these very lines
+      // is kept (Phase 91). An estimate Fiscal never issued is no estimate at all.
+      const issued = order.taxEstimate
+        ? await issuedEstimate(tx, tenantId, order.taxEstimate.resultDigest)
+        : null
+      if (
+        issued &&
+        estimateRequestMatches(issued.request, {
+          direction: 'purchase',
+          partyId: order.supplierId,
+          lines: order.lines.map((line) => ({
+            itemId: line.itemId,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+          })),
+        })
+      )
         await tx`insert into fiscal_purchase_order_estimates
           (tenant_id, order_id, components, charged_on_top_minor, currency, input_digest,
             rules_digest, result_digest)
           values (${tenantId}, ${order.orderId},
-            ${tx.json(order.taxEstimate.components as postgres.JSONValue)},
-            ${order.taxEstimate.chargedOnTop.amount}, ${order.taxEstimate.chargedOnTop.currency},
-            ${order.taxEstimate.inputDigest}, ${order.taxEstimate.rulesDigest},
-            ${order.taxEstimate.resultDigest})
+            ${tx.json(
+              issued.estimate.components.map((component) => ({
+                code: component.code,
+                amount: component.amount,
+              })) as postgres.JSONValue,
+            )},
+            ${issued.estimate.totals.chargedOnTop.amount},
+            ${issued.estimate.totals.chargedOnTop.currency},
+            ${issued.estimate.inputDigest}, ${issued.estimate.rulesDigest},
+            ${issued.estimate.resultDigest})
           on conflict do nothing`
       return
     }

@@ -100,6 +100,8 @@ import {
   fiscalServiceSourceKeySchema,
   fiscalServiceSubstitutionRequestSchema,
   fiscalSupportOverviewSchema,
+  fiscalTaxEstimateRecordSchema,
+  fiscalTaxEstimateReferenceSchema,
   fiscalTaxEstimateRequestSchema,
   fiscalTaxEstimateSchema,
   fiscalTaxSupportAnswerSchema,
@@ -650,6 +652,20 @@ const staticEntries: readonly RegistryEntry[] = [
     description:
       'An estimate: components, totals and digests, or the missing dimension; never locked.',
     schema: fiscalTaxEstimateSchema,
+  },
+  {
+    id: 'http:fiscal-tax-estimate-record-v1',
+    kind: 'http',
+    description:
+      'An estimate Fiscal issued, with the request it answered, read back by its digest (Phase 91).',
+    schema: fiscalTaxEstimateRecordSchema,
+  },
+  {
+    id: 'http:fiscal-tax-estimate-reference-v1',
+    kind: 'http',
+    description:
+      'The digest of an estimate Fiscal issued, which Sales or Procurement read back and keep (Phase 91).',
+    schema: fiscalTaxEstimateReferenceSchema,
   },
   {
     id: 'http:fiscal-catalog-packages-v1',

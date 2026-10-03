@@ -307,7 +307,10 @@ export class FiscalRuleChanges {
     tenantId: string,
     changeId: string,
   ): Promise<postgres.Row> {
-    await tx`select pg_advisory_xact_lock(hashtextextended(${tenantId} || ':decide:' || ${changeId}, 0))`
+    // One decision at a time per workspace (Phase 91): each checks that its change still
+    // applies against the rules in force, and two changes decided at once would each check
+    // without the other, and both apply.
+    await tx`select pg_advisory_xact_lock(hashtextextended(${tenantId} || ':rules:decide', 0))`
     const [change] = await tx`select change.*, decision.outcome from fiscal_rule_changes change
       left join fiscal_rule_change_decisions decision
         on decision.tenant_id = change.tenant_id and decision.change_id = change.id

@@ -50,6 +50,13 @@
       "when": 1791572800000,
       "tag": "0006_tax_postings",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791659200000,
+      "tag": "0007_taxes_follow_the_authority",
+      "breakpoints": true
     }
   ]
 }

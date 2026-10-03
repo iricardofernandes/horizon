@@ -28,7 +28,40 @@ let activeConsumerCapability = false
 let draftFailure: Error | null = null
 let cancellationFailure: Error | null = null
 let documentEnvironment: 'simulation' | 'homologation' = 'simulation'
+/** An estimate Fiscal issued in the token's tenant, as its store returns it (Phase 91). */
+const issuedDigest = 'e'.repeat(64)
+const issuedEstimate = {
+  request: {
+    direction: 'sale' as const,
+    establishmentId,
+    customerPartyId: randomUUID(),
+    issueDate: '2026-10-15',
+    lines: [
+      { itemId: randomUUID(), quantity: '2', unitPrice: { amount: '18990', currency: 'BRL' } },
+    ],
+  },
+  estimate: {
+    schemaVersion: 1 as const,
+    supported: true as const,
+    estimatedAt: '2026-10-02T12:00:00.000Z',
+    components: [],
+    totals: {
+      net: { amount: '37980', currency: 'BRL' },
+      tax: { amount: '0', currency: 'BRL' },
+      chargedOnTop: { amount: '0', currency: 'BRL' },
+      gross: { amount: '37980', currency: 'BRL' },
+    },
+    inputDigest: 'a'.repeat(64),
+    rulesDigest: 'b'.repeat(64),
+    resultDigest: issuedDigest,
+  },
+}
 const server = createFiscalServer({
+  estimateRecords: {
+    async find(requestedTenant, digest) {
+      return requestedTenant === tenantId && digest === issuedDigest ? issuedEstimate : null
+    },
+  },
   verifier: {
     async verify(authorization) {
       if (authorization !== 'Bearer test') throw new Error('Invalid token')
@@ -398,6 +431,19 @@ it('restricts certificate upload to Fiscal admins and takes tenant identity from
   })
   expect(await accepted.text()).not.toContain('test-password')
   expect((await fetch(`${base}/establishment-credentials`, { headers })).status).toBe(200)
+  role = 'viewer'
+})
+
+it('returns an estimate it issued by its digest, to a reader of the token tenant (Phase 91)', async () => {
+  const headers = { authorization: 'Bearer test' }
+  role = 'viewer'
+  const found = await fetch(`${base}/estimates/${issuedDigest}`, { headers })
+  expect(found.status).toBe(200)
+  expect(found.headers.get('cache-control')).toBe('private, no-store')
+  expect(await found.json()).toEqual(issuedEstimate)
+  expect((await fetch(`${base}/estimates/${'f'.repeat(64)}`, { headers })).status).toBe(404)
+  role = 'auditor'
+  expect((await fetch(`${base}/estimates/${issuedDigest}`, { headers })).status).toBe(403)
   role = 'viewer'
 })
 

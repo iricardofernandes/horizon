@@ -1,3 +1,4 @@
+import { estimateRequestMatches, type FiscalTaxEstimateRequest } from '@horizon/contracts'
 import { type Either, left, right } from '@/core/either'
 import { ConflictError } from '@/core/errors/errors/conflict-error'
 import type { InvalidInputError } from '@/core/errors/errors/invalid-input-error'
@@ -481,11 +482,16 @@ export class ApplyOrderTaxEstimateUseCase {
     context: CommandContext
     orderId: string
     estimate: TaxEstimateDigest
+    /** What Fiscal was asked, as it returned it with the estimate (Phase 91). */
+    asked: FiscalTaxEstimateRequest
   }): Promise<Either<Failure, { total: string; tax: string }>> {
     const { context } = request
     return this.unitOfWork.inTenant(context.tenantId, async (scope) => {
       const order = await scope.orders.findForUpdate(request.orderId)
       if (!order) return left(new ResourceNotFoundError('purchase order was not found'))
+      // Fiscal vouches for the estimate; the order checks it is an estimate of itself.
+      if (!estimateRequestMatches(request.asked, { direction: 'purchase', ...order.estimated() }))
+        return left(new ConflictError('the estimate is not of this order’s supplier and lines'))
       const now = this.clock.now()
       const applied = order.applyTaxEstimate(request.estimate, now)
       if (applied.isLeft()) return left(applied.value)

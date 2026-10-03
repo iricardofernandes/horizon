@@ -137,7 +137,8 @@ export type ReversalOutcome =
  * Undo what a fact posted, because the module that reported it undid the fact.
  *
  * A fact still pending has nothing to undo, so it is marked ignored and never replayed: the
- * workspace mapping an account later must not resurrect a reversed sale.
+ * workspace mapping an account later must not resurrect a reversed sale. A tax lock still
+ * held for the authority's answer is ignored the same way (Phase 91).
  */
 export class ReverseFactUseCase {
   constructor(private readonly clock: Clock) {}
@@ -150,7 +151,7 @@ export class ReverseFactUseCase {
   ): Promise<Either<ConflictError | InvalidInputError | ResourceNotFoundError, ReversalOutcome>> {
     const known = await scope.facts.find(kind, factId)
     if (!known) return right({ status: 'nothing-to-reverse' })
-    if (known.status === 'pending' || known.status === 'ignored') {
+    if (known.status === 'pending' || known.status === 'held' || known.status === 'ignored') {
       await scope.facts.update(kind, factId, { status: 'ignored', reason: why })
       return right({ status: 'nothing-to-reverse' })
     }

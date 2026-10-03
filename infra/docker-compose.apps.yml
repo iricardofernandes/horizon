@@ -210,6 +210,8 @@ services:
     environment:
       <<: *env
       RABBITMQ_URL: amqp://sales:${HORIZON_RABBITMQ_PASSWORD_SALES:-sales-local}@rabbitmq:5672
+      # Fiscal's estimates are read back through the gateway, as the caller (Phase 91).
+      GATEWAY_URL: http://kong:8000
       PORT: '3004'
       OTEL_SERVICE_NAME: sales
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_sales
@@ -365,6 +367,8 @@ services:
     environment:
       <<: *env
       RABBITMQ_URL: amqp://procurement:${HORIZON_RABBITMQ_PASSWORD_PROCUREMENT:-procurement-local}@rabbitmq:5672
+      # Fiscal's estimates are read back through the gateway, as the caller (Phase 91).
+      GATEWAY_URL: http://kong:8000
       PORT: '3010'
       OTEL_SERVICE_NAME: procurement
       DATABASE_URL: postgres://horizon_app:horizon@postgres:5432/horizon_procurement

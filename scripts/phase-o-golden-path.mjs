@@ -384,7 +384,19 @@ const estimate = await until('Fiscal to estimate the quote', async () => {
   })
   return answer.status === 200 && answer.body.supported ? answer.body : undefined
 })
-await ok(`/sales/quotes/${quoteId}/tax-estimate`, { method: 'PUT', body: estimate })
+// Sales takes only the digest, and reads the estimate back from Fiscal itself (Phase 91):
+// an estimate nobody issued, or relayed whole, is refused.
+const forged = await call(`/sales/quotes/${quoteId}/tax-estimate`, {
+  method: 'PUT',
+  body: { resultDigest: 'f'.repeat(64) },
+})
+const relayed = await call(`/sales/quotes/${quoteId}/tax-estimate`, { method: 'PUT', body: estimate })
+assert.equal(forged.status, 400, JSON.stringify(forged.body))
+assert.equal(relayed.status, 400, JSON.stringify(relayed.body))
+await ok(`/sales/quotes/${quoteId}/tax-estimate`, {
+  method: 'PUT',
+  body: { resultDigest: estimate.resultDigest },
+})
 await ok(`/sales/quotes/${quoteId}/send`, { method: 'POST', body: {} })
 if ((await ok(`/sales/quotes/${quoteId}`)).status === 'pending-approval')
   await ok(`/sales/quotes/${quoteId}/approve`, { method: 'POST', body: {} })
@@ -401,6 +413,8 @@ record.estimate = {
   totals: Object.fromEntries(Object.entries(estimate.totals).map(([key, value]) => [key, value.amount])),
   resultDigest: estimate.resultDigest,
   keptOnTheOrder: true,
+  forgedDigestRefused: forged.status,
+  relayedEstimateRefused: relayed.status,
 }
 
 // 5. Delivery and the lock.
@@ -437,20 +451,44 @@ record.lock = {
     lockedComponents.every((c) => estimate.components.some((e) => e.code === c.code && e.amount.amount === c.amount.amount)),
 }
 
-// 6. The Ledger's postings: the taxes in the price, from the lock.
+// 6. The Ledger's postings: the taxes in the price, from the lock, once the document is
+// authorized (Phase 91). Until then the lock is held, and nothing is posted.
+const heldBack = await ledger(`/transactions?from=${today}&to=${today}&limit=200`)
+const postedBeforeAuthorization = (heldBack.data ?? []).some(
+  (row) => row.sourceType === 'tax-lock' && row.reference === `Fiscal ${draft.id.slice(0, 8)}`,
+)
+assert.equal(postedBeforeAuthorization, false, 'the lock posted before the authorization')
+// The local simulation profile issues only the items it names, and this run's item is new:
+// where the document cannot be issued, the lock stays held and the posting is not expected.
+// The posting on authorization is proven against the database by the Ledger's e2e suite.
+const queued = await call(`/fiscal/documents/${draft.id}/issue`, { method: 'POST' })
+const authorized = queued.status === 202
+if (authorized)
+  await until('authorization', async () => {
+    const found = await ok(`/fiscal/documents/${draft.id}`)
+    return found.status === 'authorized' ? found : undefined
+  })
 const POSTED = new Set(['ICMS', 'PIS', 'COFINS', 'ISS', 'ICMS_UF_DEST', 'FCP_UF_DEST'])
 const expected = lockedComponents
   .filter((c) => POSTED.has(c.code) && c.amount.amount !== '0')
   .reduce((sum, c) => sum + BigInt(c.amount.amount), 0n)
-const posting = await until('the Ledger to post the lock', async () => {
-  const listed = await ledger(`/transactions?from=${today}&to=${today}&limit=200`)
-  const found = (listed.data ?? []).find((row) => row.sourceType === 'tax-lock' && row.total === String(expected))
-  return found ? ledger(`/transactions/${found.id}`) : undefined
-}, 120_000)
+const posting = authorized
+  ? await until('the Ledger to post the lock', async () => {
+      const listed = await ledger(`/transactions?from=${today}&to=${today}&limit=200`)
+      const found = (listed.data ?? []).find((row) => row.sourceType === 'tax-lock' && row.total === String(expected))
+      return found ? ledger(`/transactions/${found.id}`) : undefined
+    }, 120_000)
+  : null
 record.ledger = {
-  transactionTotal: posting.total,
+  postedBeforeAuthorization,
+  authorized,
   expectedTotal: String(expected),
-  lines: posting.lines.map((line) => `${line.accountCode} ${line.side} ${line.amount}`),
+  ...(posting
+    ? {
+        transactionTotal: posting.total,
+        lines: posting.lines.map((line) => `${line.accountCode} ${line.side} ${line.amount}`),
+      }
+    : { held: 'the document could not be issued under the local simulation profile' }),
 }
 
 // 7. The next version: the official calculator's 2026 package, with its impact.

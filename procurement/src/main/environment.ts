@@ -13,6 +13,11 @@ const environmentSchema = z.object({
   DATABASE_STATEMENT_TIMEOUT_MS: positive.max(60_000).default(5000),
   RABBITMQ_URL: z.url().regex(/^amqps?:\/\//),
   JWKS_URL: z.url().regex(/^https?:\/\//),
+  /** Where Fiscal is read back from, with the caller's token (Phase 91). */
+  GATEWAY_URL: z
+    .url()
+    .regex(/^https?:\/\//)
+    .default('http://localhost:8000'),
   ACCESS_TOKEN_MAX_AGE_SECONDS: positive.max(900).default(900),
   AMQP_PREFETCH: positive.max(1000).default(20),
   OUTBOX_POLL_INTERVAL_MS: positive.min(100).default(1000),

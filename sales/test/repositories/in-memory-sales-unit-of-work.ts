@@ -519,6 +519,9 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
     observedAt: string
   }[] = []
 
+  /** Every estimate a use case discarded, as `kind:documentId` (Phase 91). */
+  readonly discardedEstimates: string[] = []
+
   provisionTenant(tenantId: string): Promise<void> {
     this.provisionedTenants.add(tenantId)
     return Promise.resolve()
@@ -527,6 +530,11 @@ export class InMemorySalesUnitOfWork extends SalesUnitOfWork {
   inTenant<T>(tenantId: string, work: (scope: SalesScope) => Promise<T>): Promise<T> {
     return work({
       tenantId,
+      taxEstimates: {
+        discard: async (kind, documentId) => {
+          this.discardedEstimates.push(`${kind}:${documentId}`)
+        },
+      },
       fiscalDispatchGate: {
         policyFor: async (warehouseId) => {
           const establishmentId = this.fiscalDispatchPolicies.get(`${tenantId}:${warehouseId}`)

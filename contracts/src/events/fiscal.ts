@@ -24,7 +24,7 @@ export const fiscalDocumentAuthorized = defineEvent({
   type: 'fiscal.document.simulation-authorized',
   version: 1,
   description:
-    'The deterministic simulator authorized an NF-e model 55. This simulated fact never releases a shipment or creates a stock or money effect.',
+    'The deterministic simulator authorized an NF-e model 55. This simulated fact never releases a shipment or creates a stock or money effect; the Ledger posts the taxes the document was locked with once it is authorized (Phase 91).',
   payload: z.strictObject({
     ...simulationDocumentFact,
     authorityReference: z.string().min(1).max(256),
@@ -36,7 +36,7 @@ export const fiscalDocumentRejected = defineEvent({
   type: 'fiscal.document.simulation-rejected',
   version: 1,
   description:
-    'The deterministic simulator rejected an NF-e model 55; the immutable document may be followed by a corrected revision.',
+    'The deterministic simulator rejected an NF-e model 55; the immutable document may be followed by a corrected revision. A rejected document never posts its taxes (Phase 91).',
   payload: z.strictObject({
     ...simulationDocumentFact,
     authorityReference: z.string().min(1).max(256).nullable(),
@@ -50,7 +50,7 @@ export const fiscalDocumentCancelled = defineEvent({
   type: 'fiscal.document.simulation-cancelled',
   version: 1,
   description:
-    'The deterministic simulator accepted a cancellation linked to an authorized NF-e model 55. Original authorization evidence remains immutable.',
+    'The deterministic simulator accepted a cancellation linked to an authorized NF-e model 55. Original authorization evidence remains immutable; the Ledger reverses the taxes it posted at the authorization (Phase 91).',
   payload: z.strictObject({
     ...simulationDocumentFact,
     cancellationReference: z.string().min(1).max(256),
@@ -114,7 +114,7 @@ export const fiscalDocumentProductionOutcome = defineEvent({
   type: 'fiscal.document.production-outcome',
   version: 1,
   description:
-    'Future production authority outcome for one frozen Sales shipment. Phase 43 does not publish this event or enable production transmission; Sales uses the exact origin and document revision to maintain a fail-closed release projection.',
+    'Future production authority outcome for one frozen Sales shipment. Phase 43 does not publish this event or enable production transmission; Sales uses the exact origin and document revision to maintain a fail-closed release projection, and the Ledger posts the locked taxes on authorization and reverses them on cancellation (Phase 91).',
   payload: z.discriminatedUnion('outcome', [
     productionDocumentFact.extend({
       outcome: z.literal('authorized'),
@@ -249,7 +249,7 @@ export const fiscalConsumerDocumentOutcome = defineEvent({
   type: 'fiscal.consumer-document.simulation-outcome',
   version: 1,
   description:
-    'The deterministic simulator decided an NFC-e model 65 for one Sales shipment to a final consumer. The sale keeps one stock and one money effect, both from `sales.shipment.dispatched` (`correlations`); this fact never creates, repeats or reverses one. It carries no access key, QR code, XML or consumer data.',
+    'The deterministic simulator decided an NFC-e model 65 for one Sales shipment to a final consumer. The sale keeps one stock and one money effect, both from `sales.shipment.dispatched` (`correlations`); this fact never creates, repeats or reverses one. The Ledger posts the taxes the document was locked with when it is authorized, and reverses them when it is cancelled (Phase 91). It carries no access key, QR code, XML or consumer data.',
   payload: z.discriminatedUnion('outcome', [
     z.strictObject({
       ...consumerOutcomeFact,
@@ -342,7 +342,7 @@ export const fiscalCalculationLocked = defineEvent({
   type: 'fiscal.calculation.locked',
   version: 1,
   description:
-    "Fiscal locked the tax calculation of a document (Phase 87, ADR 0073): its components, totals and digests, never its rules. It is the only source of tax amounts for Financial and Ledger; it moves no stock and posts no receivable, which stay the operational facts' (ADR 0048).",
+    "Fiscal locked the tax calculation of a document (Phase 87, ADR 0073): its components, totals and digests, never its rules. It is the only source of tax amounts for Financial and Ledger; it moves no stock and posts no receivable, which stay the operational facts' (ADR 0048). The Ledger holds it until the document's authorization, and posts nothing for a rejected one (Phase 91, ADR 0076).",
   payload: z.strictObject({
     documentId: uuidSchema,
     originModule: z.enum(['sales', 'fiscal']),

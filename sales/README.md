@@ -24,6 +24,9 @@ returns, service orders, and recurring contracts billed period by period.
 - **Tax estimates on quotes and orders.** Sales asks Fiscal for an estimate, keeps it on
   the document, and labels it as an estimate. The amount that reaches the books is the one
   Fiscal locks at delivery ([ADR 0073](../docs/adr/0073-tax-estimates-outside-fiscal-amounts-inside-it.md)).
+  Sales takes only the estimate's digest, reads it back from Fiscal, and keeps it only if it
+  is of the document's customer and lines; revising a draft removes it
+  ([ADR 0076](../docs/adr/0076-taxes-follow-the-authority-and-estimates-are-kept-by-reference.md)).
 - **Orders.** Placing an order asks Inventory to reserve the stock. The order is
   confirmed or refused by the answer, never by reading a balance. Prices are frozen at
   confirmation.
@@ -77,7 +80,7 @@ a billing run) requires an `Idempotency-Key` header and runs at most once under 
 | `POST` | `/quotes/:id/expire` | Nobody answered in time |
 | `POST` | `/quotes/:id/order` | Convert: goods into a sales order, services into a service order |
 | `GET` | `/quotes/:id/tax-estimate` | The tax estimate kept on the quote |
-| `PUT` | `/quotes/:id/tax-estimate` | Keep Fiscal's estimate on the quote |
+| `PUT` | `/quotes/:id/tax-estimate` | Keep an estimate Fiscal issued, named by its digest |
 
 </details>
 
@@ -91,7 +94,7 @@ a billing run) requires an `Idempotency-Key` header and runs at most once under 
 | `GET` | `/orders/:id` | One order |
 | `POST` | `/orders` | Place an order and start the reservation |
 | `GET` | `/orders/:id/tax-estimate` | The tax estimate kept on the order |
-| `PUT` | `/orders/:id/tax-estimate` | Keep Fiscal's estimate on the order |
+| `PUT` | `/orders/:id/tax-estimate` | Keep an estimate Fiscal issued, named by its digest |
 | `GET` | `/shipments` | Every delivery on its way out: the warehouse's board |
 | `GET` | `/orders/:id/shipments` | The deliveries of one order |
 | `GET` | `/shipments/:id` | One delivery |

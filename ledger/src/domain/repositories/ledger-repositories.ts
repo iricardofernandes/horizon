@@ -39,7 +39,11 @@ export abstract class MappingsRepository {
   abstract save(mapping: AccountMapping): Promise<void>
 }
 
-export type FactStatus = 'posted' | 'pending' | 'reversed' | 'ignored'
+/**
+ * `held` is a document's tax lock waiting for the authority's answer (Phase 91): it is
+ * neither posted nor replayed until the document is authorized.
+ */
+export type FactStatus = 'posted' | 'pending' | 'reversed' | 'ignored' | 'held'
 
 /**
  * What the ledger did with one fact another module reported.
@@ -73,6 +77,21 @@ export abstract class PostingFactsRepository {
     },
   ): Promise<void>
   abstract pending(limit: number): Promise<readonly PostingFactRecord[]>
+}
+
+export type DocumentOutcome = 'authorized' | 'rejected' | 'cancelled'
+
+/**
+ * The authority's answer for each Fiscal document (Phase 91). It only moves forward, from an
+ * authorization to a cancellation; `record` returns the answer in force after it.
+ */
+export abstract class FiscalDocumentOutcomesRepository {
+  abstract find(documentId: string): Promise<DocumentOutcome | null>
+  abstract record(
+    documentId: string,
+    outcome: DocumentOutcome,
+    observedAt: Date,
+  ): Promise<DocumentOutcome>
 }
 
 /** At or above the threshold, a manual entry in this currency waits for a second person. */

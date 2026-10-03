@@ -1,7 +1,7 @@
 # Security and logic review — Phases 90 to 92
 
-Status: **Phase 90 delivered on 2026-10-02** ([evidence](security-phase90-evidence.md));
-Phases 91 and 92 not started. A review of the whole repository for
+Status: **Phase 90 delivered on 2026-10-02** ([evidence](security-phase90-evidence.md)) and
+**Phase 91 on 2026-10-03** ([evidence](security-phase91-evidence.md)); Phase 92 not started. A review of the whole repository for
 security flaws and logic errors, after Phase O closed. It lists only what was confirmed
 against the code or the running stack on 2026-10-02, each with its evidence. It also lists
 what was checked and found sound, so the next review can start where this one stopped.
@@ -90,8 +90,11 @@ Severity is the impact if exploited, weighed by what an attacker needs first.
 
 ## Phase 91 — Taxes in the books follow the authority, and estimates Fiscal vouches for
 
-To decide with the workspace owner before starting: when the Ledger posts a document's
-taxes. The recommendation is **at authorization**, with a reversal at cancellation.
+**Delivered on 2026-10-03** ([evidence](security-phase91-evidence.md),
+[ADR 0076](adr/0076-taxes-follow-the-authority-and-estimates-are-kept-by-reference.md)). The
+workspace owner decided on 2026-10-02: the Ledger posts **at authorization**, with a
+reversal at cancellation, and estimates are kept **by reference**. An estimate is bound to
+its document by its party and lines rather than by an id and version.
 
 1. **Tax postings follow the document's outcome** (finding 3), amending ADR 0073.
    - The Ledger keeps a lock as a pending fact keyed by the **document**, not the origin.

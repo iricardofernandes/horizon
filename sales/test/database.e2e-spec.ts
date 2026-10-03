@@ -1909,19 +1909,66 @@ it("keeps Fiscal's estimate on a quote while it is open, and carries it to its o
     rulesDigest: 'b'.repeat(64),
     resultDigest: 'c'.repeat(64),
   }
-  const record = (documentId: string) =>
-    database.recordTaxEstimate({ tenantId, kind: 'quote', documentId, estimate, recordedBy: 'ana' })
+  // What Fiscal was asked, as it returns it with the estimate (Phase 91): this customer and
+  // the quote's own lines, at the price Sales gave them.
+  const [line] = await application.begin(async (tx) => {
+    await tx`select set_config('app.current_tenant', ${tenantId}, true)`
+    return tx`select unit_price::text as unit_price, currency from quote_lines
+      join quotes on quotes.id = quote_lines.quote_id where quote_id = ${quote.value.quoteId}`
+  })
+  const asked = (over: { customerPartyId?: string; quantity?: string } = {}) => ({
+    direction: 'sale' as const,
+    establishmentId: tenantId,
+    customerPartyId: over.customerPartyId ?? customerId,
+    issueDate: '2026-10-15',
+    lines: [
+      {
+        itemId: good,
+        quantity: over.quantity ?? '2',
+        unitPrice: { amount: String(line?.unit_price), currency: String(line?.currency) },
+      },
+    ],
+  })
+  const record = (documentId: string, request = asked()) =>
+    database.recordTaxEstimate({
+      tenantId,
+      kind: 'quote',
+      documentId,
+      estimate,
+      request,
+      recordedBy: 'ana',
+    })
+  // An estimate of another customer, or of other lines, is not this quote's (Phase 91).
+  expect(await record(quote.value.quoteId, asked({ customerPartyId: randomUUID() }))).toBe(
+    'mismatch',
+  )
+  expect(await record(quote.value.quoteId, asked({ quantity: '3' }))).toBe('mismatch')
+  expect(await database.findTaxEstimate(tenantId, 'quote', quote.value.quoteId)).toBeNull()
   expect(await record(quote.value.quoteId)).toBe('recorded')
   expect(await record(randomUUID())).toBe('not-found')
   expect(
     (await database.findTaxEstimate(tenantId, 'quote', quote.value.quoteId))?.estimate,
   ).toEqual(estimate)
 
+  // Revising the draft changes its lines, so the estimate it had goes, and the old request
+  // no longer matches; the same estimate asked again for the new lines is kept.
+  const revised = await new ReviseQuoteUseCase(database, clock, 15).execute({
+    context: commandOf(tenantId),
+    quoteId: quote.value.quoteId,
+    quote: { lines: [{ lineId: randomUUID(), itemId: good, quantity: '3' }] },
+  })
+  if (revised.isLeft()) throw revised.value
+  expect(await database.findTaxEstimate(tenantId, 'quote', quote.value.quoteId)).toBeNull()
+  expect(await record(quote.value.quoteId)).toBe('mismatch')
+  expect(await record(quote.value.quoteId, asked({ quantity: '3' }))).toBe('recorded')
+
   const decide = new DecideQuoteUseCase(database, clock)
   expect((await decide.send(commandOf(tenantId), quote.value.quoteId)).isRight()).toBe(true)
+  // A sent quote is what the customer was shown: it takes no new estimate (Phase 91).
+  expect(await record(quote.value.quoteId, asked({ quantity: '3' }))).toBe('frozen')
   expect((await decide.accept(commandOf(tenantId), quote.value.quoteId)).isRight()).toBe(true)
   // An accepted offer is settled: its estimate stays as it was.
-  expect(await record(quote.value.quoteId)).toBe('frozen')
+  expect(await record(quote.value.quoteId, asked({ quantity: '3' }))).toBe('frozen')
 
   const converted = await new ConvertQuoteUseCase(database, clock).execute({
     context: commandOf(tenantId),

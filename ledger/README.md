@@ -56,8 +56,10 @@ books exist to produce, each figure traceable back to the fact behind it.
 | Manual treasury entry | cash or suspense | suspense or cash |
 | Taxes locked on a sale | sales taxes, by component | taxes payable, by component |
 
-- **Taxes.** A tax lock posts the taxes contained in the price, one pair of lines per
-  component (ICMS, PIS, Cofins, ISS, ICMS DIFAL, FCP DIFAL), once per document. IPI is
+- **Taxes.** A tax lock is held until its document is authorized, then posts the taxes
+  contained in the price, one pair of lines per component (ICMS, PIS, Cofins, ISS, ICMS
+  DIFAL, FCP DIFAL), once per document. A cancellation reverses them, and a rejected
+  document never posts. IPI is
   charged on top and belongs to the receivable. The 2026 CBS/IBS is not posted, because
   its payment is waived.
 - **Transfers.** Moving money between the company's own accounts never touches profit
@@ -132,7 +134,8 @@ the chart and its mappings, and closes and reopens months.
 | `financial.settlement.recorded`, `settlement.reversed` | Posts the settlement, or its mirror |
 | `treasury.transfer.posted`, `transfer.cancelled` | Posts the transfer and its fee, or the mirror |
 | `treasury.entry.recorded` | Posts opening balances and manual entries; ignores what another fact already covers |
-| `fiscal.calculation.locked` | Posts the taxes contained in a sale's price |
+| `fiscal.calculation.locked` | Holds the taxes contained in a sale's price until the authority answers |
+| `fiscal.document.simulation-authorized`, `-rejected`, `-cancelled`, `fiscal.consumer-document.simulation-outcome`, `fiscal.document.production-outcome` | An authorization posts the held taxes, a cancellation reverses them, and a rejected document never posts ([ADR 0076](../docs/adr/0076-taxes-follow-the-authority-and-estimates-are-kept-by-reference.md)) |
 | `identity.tenant.created` | Provisions the workspace |
 
 ---

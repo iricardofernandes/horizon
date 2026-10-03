@@ -191,6 +191,8 @@ export class ReviseQuoteUseCase {
         const revised = quote.revise(change, now)
         if (revised.isLeft()) return left(revised.value)
         await scope.quotes.save(quote)
+        // The estimate it had was of the lines it had (Phase 91): it is asked again.
+        await scope.taxEstimates.discard('quote', quote.id.toString())
         await audit(scope, context, {
           action: 'quote.revised',
           subjectType: 'quote',

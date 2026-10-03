@@ -33,7 +33,11 @@ import {
   type EntrySide,
   LedgerAccount,
 } from '@/domain/entities/ledger-account'
-import type { FactStatus, PostingFactRecord } from '@/domain/repositories/ledger-repositories'
+import type {
+  DocumentOutcome,
+  FactStatus,
+  PostingFactRecord,
+} from '@/domain/repositories/ledger-repositories'
 import type { Fact } from '@/domain/services/posting-rules'
 import {
   AccountCode,
@@ -221,7 +225,7 @@ function mapMapping(row: typeof schema.accountMappings.$inferSelect): AccountMap
   )
 }
 
-const FACT_STATUSES = ['posted', 'pending', 'reversed', 'ignored'] as const
+const FACT_STATUSES = ['posted', 'pending', 'reversed', 'ignored', 'held'] as const
 
 /** Every field of a fact that is an amount in minor units, and so a bigint in the domain. */
 const FACT_AMOUNTS = ['total', 'received', 'discount', 'interest', 'penalty', 'amount', 'fee']
@@ -527,6 +531,40 @@ export function makeScope(tx: Transaction, tenantId: string): LedgerScope {
             .orderBy(asc(schema.postingFacts.receivedAt))
             .limit(limit)
         ).map(mapFact),
+    },
+    documentOutcomes: {
+      find: async (documentId) => {
+        const [row] = await tx
+          .select({ outcome: schema.fiscalDocumentOutcomes.outcome })
+          .from(schema.fiscalDocumentOutcomes)
+          .where(eq(schema.fiscalDocumentOutcomes.documentId, documentId))
+          .limit(1)
+        return row ? (row.outcome as DocumentOutcome) : null
+      },
+      // Only an authorization becomes a cancellation; any other later answer is kept as the
+      // first, because a rejection and a cancellation are final (Phase 91).
+      record: async (documentId, outcome, observedAt) => {
+        const now = new Date()
+        const insert = tx
+          .insert(schema.fiscalDocumentOutcomes)
+          .values({ tenantId, documentId, outcome, observedAt, updatedAt: now })
+        if (outcome === 'cancelled')
+          await insert.onConflictDoUpdate({
+            target: [
+              schema.fiscalDocumentOutcomes.tenantId,
+              schema.fiscalDocumentOutcomes.documentId,
+            ],
+            set: { outcome, observedAt, updatedAt: now },
+            setWhere: sql`${schema.fiscalDocumentOutcomes.outcome} = 'authorized'`,
+          })
+        else await insert.onConflictDoNothing()
+        const [row] = await tx
+          .select({ outcome: schema.fiscalDocumentOutcomes.outcome })
+          .from(schema.fiscalDocumentOutcomes)
+          .where(eq(schema.fiscalDocumentOutcomes.documentId, documentId))
+          .limit(1)
+        return (row?.outcome ?? outcome) as DocumentOutcome
+      },
     },
     audit: auditTrail(tx, tenantId),
     lockPeriod: async (period) => {

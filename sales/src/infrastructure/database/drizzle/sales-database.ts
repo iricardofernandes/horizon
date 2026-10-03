@@ -1,6 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, createHmac, randomBytes } from 'node:crypto'
-import { salesFiscalOriginFrozen } from '@horizon/contracts'
+import {
+  estimateRequestMatches,
+  type FiscalTaxEstimateRequest,
+  salesFiscalOriginFrozen,
+} from '@horizon/contracts'
 import { context, propagation, trace } from '@opentelemetry/api'
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
@@ -359,24 +363,67 @@ export class SalesDatabase extends SalesUnitOfWork {
       unknown
     >
     recordedBy: string
+    /**
+     * What Fiscal was asked, as it returned it with the estimate (Phase 91): the estimate is
+     * kept only if this is the document's customer and current lines. Absent only when a
+     * converted quote's estimate goes with it to its order.
+     */
+    request?: FiscalTaxEstimateRequest
     /** Only when a converted quote's estimate goes with it to its order. */
     carried?: boolean
-  }): Promise<'recorded' | 'not-found' | 'frozen'> {
+  }): Promise<'recorded' | 'not-found' | 'frozen' | 'mismatch'> {
     return this.inTenant(input.tenantId, async () => {
       const current = this.#transactions.getStore()
       if (!current) throw new Error('Recording an estimate requires a transaction')
       const table = input.kind === 'quote' ? schema.quotes : schema.salesOrders
+      // Locked for the rest of the transaction, so a revision cannot change the lines
+      // between the comparison and the write.
       const [row] = await current.tx
-        .select({ status: table.status })
+        .select({ status: table.status, customerId: table.customerId, currency: table.currency })
         .from(table)
         .where(eq(table.id, input.documentId))
         .limit(1)
+        .for('update')
       if (!row) return 'not-found'
+      // A sent quote is what the customer was shown: it takes no new estimate (Phase 91).
       const open =
         input.kind === 'quote'
-          ? ['draft', 'pending', 'sent'].includes(row.status)
+          ? ['draft', 'pending'].includes(row.status)
           : ['draft', 'placed'].includes(row.status)
       if (!open && !input.carried) return 'frozen'
+      if (input.request) {
+        const lines =
+          input.kind === 'quote'
+            ? await current.tx
+                .select({
+                  itemId: schema.quoteLines.itemId,
+                  quantity: schema.quoteLines.quantity,
+                  unitPrice: schema.quoteLines.unitPrice,
+                })
+                .from(schema.quoteLines)
+                .where(eq(schema.quoteLines.quoteId, input.documentId))
+            : await current.tx
+                .select({
+                  itemId: schema.salesOrderLines.itemId,
+                  quantity: schema.salesOrderLines.quantity,
+                  unitPrice: schema.salesOrderLines.unitPrice,
+                })
+                .from(schema.salesOrderLines)
+                .where(eq(schema.salesOrderLines.orderId, input.documentId))
+        const currency = row.currency
+        // A line with no price yet has nothing Fiscal could have been asked about.
+        if (!currency || lines.some((line) => line.unitPrice === null)) return 'mismatch'
+        const matches = estimateRequestMatches(input.request, {
+          direction: 'sale',
+          partyId: row.customerId,
+          lines: lines.map((line) => ({
+            itemId: line.itemId,
+            quantity: Quantity.fromMicros(line.quantity).toString(),
+            unitPrice: { amount: String(line.unitPrice), currency },
+          })),
+        })
+        if (!matches) return 'mismatch'
+      }
       const values = {
         estimate: input.estimate,
         inputDigest: input.estimate.inputDigest,
@@ -1119,6 +1166,18 @@ function makeScope(
   }
   return {
     tenantId,
+    taxEstimates: {
+      discard: async (kind, documentId) => {
+        await tx
+          .delete(schema.taxEstimates)
+          .where(
+            and(
+              eq(schema.taxEstimates.documentKind, kind),
+              eq(schema.taxEstimates.documentId, documentId),
+            ),
+          )
+      },
+    },
     fiscalDispatchGate: {
       policyFor: async (warehouseId) => {
         const [policy] = await tx

@@ -66,7 +66,8 @@ where money is decided and locks them on the document. Documents are issued agai
 
 - **The business facts.** Sales says what was delivered, Procurement what was received.
   Fiscal never creates stock or money effects.
-- **Posting the taxes** is the Ledger's, from the locked calculation.
+- **Posting the taxes** is the Ledger's, from the locked calculation, when the document
+  is authorized ([ADR 0076](../docs/adr/0076-taxes-follow-the-authority-and-estimates-are-kept-by-reference.md)).
 - **Real transmission.** Issuing for real needs each company's digital certificate and
   the authority's homologation. What is and is not supported is listed in
   [the fiscal capabilities](../docs/fiscal-capabilities.md).
@@ -105,7 +106,8 @@ where money is decided and locks them on the document. Documents are issued agai
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/estimates` | Estimate the taxes of a quote or an order |
+| `POST` | `/estimates` | Estimate the taxes of a quote or an order, and keep the estimate |
+| `GET` | `/estimates/:resultDigest` | An estimate Fiscal issued, with the request it answered |
 | `POST` | `/calculations/preview` | Calculate a scenario without locking anything |
 | `GET` | `/capabilities`, `/capabilities/v2` | What the workspace can issue, and which tax scenarios are supported |
 | `GET` | `/catalog/packages` | The tax packages in the shared catalogue |
@@ -140,7 +142,7 @@ where money is decided and locks them on the document. Documents are issued agai
 
 | Event | Meaning |
 |---|---|
-| `fiscal.calculation.locked` | The taxes of a document were locked; the Ledger posts them |
+| `fiscal.calculation.locked` | The taxes of a document were locked; the Ledger posts them once the document is authorized |
 | `fiscal.document.simulation-authorized`, `simulation-rejected`, `simulation-cancelled` | An NF-e's outcome at the simulated authority |
 | `fiscal.document.production-outcome`, `document.homologation-observed` | What a real authority answered, in production or homologation |
 | `fiscal.consumer-document.simulation-outcome` | An NFC-e's outcome |

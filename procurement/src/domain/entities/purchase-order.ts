@@ -267,6 +267,24 @@ export class PurchaseOrder extends AggregateRoot<OrderProps> {
     return right(undefined)
   }
 
+  /** The order as an estimate of it is checked: its supplier and its lines (Phase 91). */
+  estimated(): {
+    partyId: string
+    lines: { itemId: string; quantity: string; unitPrice: { amount: string; currency: string } }[]
+  } {
+    return {
+      partyId: this.props.supplier.supplierId,
+      lines: this.props.lines.map((line) => ({
+        itemId: line.itemId,
+        quantity: line.quantity.toString(),
+        unitPrice: {
+          amount: line.unitPrice.amount.toString(),
+          currency: this.props.currency.value,
+        },
+      })),
+    }
+  }
+
   /**
    * Take Fiscal's estimate of a draft (Phase 87): the taxes it charges on top of the price
    * replace the typed tax, and the order keeps the estimate's digests for the reconciliation.

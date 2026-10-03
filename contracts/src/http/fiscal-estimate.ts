@@ -65,25 +65,27 @@ export const fiscalTaxComponentSummarySchema = z.object({
 /** Components charged on top of the price (IPI, ICMS-ST, FCP-ST); the rest are inside it. */
 export const FISCAL_TAXES_CHARGED_ON_TOP = ['IPI', 'ICMS_ST', 'FCP_ST'] as const
 
-export const fiscalTaxEstimateSchema = z.discriminatedUnion('supported', [
-  z.object({
-    schemaVersion: z.literal(1),
-    supported: z.literal(true),
-    estimatedAt: instantSchema,
-    components: z.array(fiscalTaxComponentSummarySchema).max(64),
-    totals: z.object({
-      net: moneySchema,
-      /** Every levied component, inside the price or on top of it. */
-      tax: moneySchema,
-      /** What the buyer is charged beyond the price: the taxes charged on top. */
-      chargedOnTop: moneySchema,
-      /** The net plus what is charged on top. */
-      gross: moneySchema,
-    }),
-    inputDigest: digestSchema,
-    rulesDigest: digestSchema,
-    resultDigest: digestSchema,
+const supportedEstimateSchema = z.object({
+  schemaVersion: z.literal(1),
+  supported: z.literal(true),
+  estimatedAt: instantSchema,
+  components: z.array(fiscalTaxComponentSummarySchema).max(64),
+  totals: z.object({
+    net: moneySchema,
+    /** Every levied component, inside the price or on top of it. */
+    tax: moneySchema,
+    /** What the buyer is charged beyond the price: the taxes charged on top. */
+    chargedOnTop: moneySchema,
+    /** The net plus what is charged on top. */
+    gross: moneySchema,
   }),
+  inputDigest: digestSchema,
+  rulesDigest: digestSchema,
+  resultDigest: digestSchema,
+})
+
+export const fiscalTaxEstimateSchema = z.discriminatedUnion('supported', [
+  supportedEstimateSchema,
   z.object({
     schemaVersion: z.literal(1),
     supported: z.literal(false),
@@ -93,6 +95,64 @@ export const fiscalTaxEstimateSchema = z.discriminatedUnion('supported', [
     missingDimension: z.string().min(1).max(200).optional(),
   }),
 ])
+
+/**
+ * An estimate Fiscal issued, as it returns it by its result digest (Phase 91): the request it
+ * answered, and what it answered. Sales and Procurement keep an estimate only once Fiscal has
+ * returned it, and only when the request is their document's.
+ */
+export const fiscalTaxEstimateRecordSchema = z.object({
+  request: fiscalTaxEstimateRequestSchema,
+  estimate: supportedEstimateSchema,
+})
+
+/** What the web sends Sales or Procurement to keep an estimate: its digest, never its body. */
+export const fiscalTaxEstimateReferenceSchema = z.strictObject({ resultDigest: digestSchema })
+
+/** A Sales or Procurement document, as far as an estimate of it can be checked. */
+export interface EstimatedDocument {
+  readonly direction: 'sale' | 'purchase'
+  readonly partyId: string
+  readonly lines: readonly {
+    readonly itemId: string
+    readonly quantity: string
+    readonly unitPrice: { readonly amount: string; readonly currency: string }
+    readonly discount?: { readonly amount: string; readonly currency: string } | undefined
+  }[]
+}
+
+/**
+ * Whether Fiscal was asked about this very document: its direction, its party, and the same
+ * lines in any order, each with its item, quantity, unit price and discount. Quantities
+ * compare as numbers, so `2` and `2.000` are one, and a zero discount is no discount.
+ */
+export function estimateRequestMatches(
+  request: FiscalTaxEstimateRequest,
+  document: EstimatedDocument,
+): boolean {
+  if (request.direction !== document.direction) return false
+  const partyId = request.direction === 'sale' ? request.customerPartyId : request.supplierPartyId
+  if (partyId !== document.partyId) return false
+  const keyOf = (line: EstimatedDocument['lines'][number]) =>
+    [
+      line.itemId,
+      canonicalQuantity(line.quantity),
+      `${BigInt(line.unitPrice.amount)} ${line.unitPrice.currency}`,
+      line.discount && BigInt(line.discount.amount) !== 0n
+        ? `${BigInt(line.discount.amount)} ${line.discount.currency}`
+        : 'no discount',
+    ].join('|')
+  const asked = request.lines.map(keyOf).sort()
+  const held = document.lines.map(keyOf).sort()
+  return asked.length === held.length && asked.every((key, index) => key === held[index])
+}
+
+function canonicalQuantity(quantity: string): string {
+  const [whole = '0', fraction = ''] = quantity.split('.')
+  const digits = whole.replace(/^0+(?=\d)/, '')
+  const decimals = fraction.replace(/0+$/, '')
+  return decimals ? `${digits}.${decimals}` : digits
+}
 
 /** What a Sales or Procurement record keeps of an estimate: components, amounts, digests. */
 export const fiscalTaxEstimateDigestSchema = z.object({
@@ -107,3 +167,5 @@ export type FiscalTaxEstimateRequest = z.infer<typeof fiscalTaxEstimateRequestSc
 export type FiscalTaxEstimate = z.infer<typeof fiscalTaxEstimateSchema>
 export type FiscalTaxComponentSummary = z.infer<typeof fiscalTaxComponentSummarySchema>
 export type FiscalTaxEstimateDigest = z.infer<typeof fiscalTaxEstimateDigestSchema>
+export type FiscalTaxEstimateRecord = z.infer<typeof fiscalTaxEstimateRecordSchema>
+export type FiscalTaxEstimateReference = z.infer<typeof fiscalTaxEstimateReferenceSchema>

@@ -11,6 +11,7 @@ import {
   salesFiscalOriginRecorded,
 } from '@horizon/contracts'
 import type { FiscalCalculations } from './calculations'
+import type { FiscalEstimateRecords } from './estimate-records'
 import { decimal, multiply, roundHalfAwayFromZero } from './exact-decimal'
 import { jurisdictionOfAddress } from './nfe55/jurisdiction'
 import { PHASE41_SCENARIO_ID } from './phase41-approved-scenario'
@@ -24,7 +25,8 @@ import { SUPPORT_MATRIX } from './tax-support-api'
  * Tax estimates (Phase 87, ADR 0073): Fiscal's calculation of a commercial draft, never
  * locked and never transmitted. A sale is derived exactly as readiness derives a shipment, so
  * the estimate and the later lock agree; a purchase takes the supplier's regime from the
- * caller, because Fiscal never infers a treatment it was not given.
+ * caller, because Fiscal never infers a treatment it was not given. Every supported estimate
+ * is kept with its request (Phase 91), so its digest alone can be read back.
  */
 export class FiscalEstimates {
   constructor(
@@ -35,6 +37,7 @@ export class FiscalEstimates {
     private readonly calculations: Pick<FiscalCalculations, 'preview'>,
     private readonly supportMatrix: FiscalTaxSupportMatrix = SUPPORT_MATRIX,
     private readonly now: () => Date = () => new Date(),
+    private readonly records: Pick<FiscalEstimateRecords, 'keep'> | null = null,
   ) {}
 
   /** Timed and counted with the other calculations (Phase 89). */
@@ -72,7 +75,9 @@ export class FiscalEstimates {
     const support = scenarioSupport(this.supportMatrix, input, outcome)
     if (!support.supported)
       return refused('UNSUPPORTED_SCENARIO', support.detail, support.missingDimension)
-    return summary(outcome, estimatedAt)
+    const estimate = summary(outcome, estimatedAt)
+    if (estimate.supported) await this.records?.keep(tenantId, request, estimate)
+    return estimate
   }
 
   private async input(

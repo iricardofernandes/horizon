@@ -19,6 +19,7 @@ import { FiscalDocumentLinksReader } from './document-links'
 import { FiscalDocumentList } from './document-list'
 import { FiscalDocuments } from './documents'
 import { FiscalEstablishmentCredentials } from './establishment-credentials'
+import { FiscalEstimateRecords } from './estimate-records'
 import { FiscalEstimates } from './estimates'
 import { FiscalInboundImports } from './inbound-imports'
 import { FiscalInboundReconciliations } from './inbound-reconciliations'
@@ -266,7 +267,14 @@ const support = new FiscalSupport(config.DATABASE_URL)
 const auditLog = new FiscalAuditLog(config.DATABASE_URL)
 // Gauges sum the tenants this worker serves; no metric names a tenant (ADR 0055).
 const stopSupportGauges = startSupportGauges(support, Object.keys(keys))
-const estimates = new FiscalEstimates(projections, calculations)
+const estimateRecords = new FiscalEstimateRecords(config.DATABASE_URL)
+const estimates = new FiscalEstimates(
+  projections,
+  calculations,
+  undefined,
+  undefined,
+  estimateRecords,
+)
 const ruleChanges = new FiscalRuleChanges(
   config.DATABASE_URL,
   Buffer.from(config.FISCAL_ARTIFACT_KEY_HEX, 'hex'),
@@ -274,6 +282,7 @@ const ruleChanges = new FiscalRuleChanges(
 )
 const server = createFiscalServer({
   estimates,
+  estimateRecords,
   verifier,
   documents,
   manualOrigins,
@@ -370,6 +379,7 @@ async function stop(): Promise<void> {
   await Promise.all([
     ingress.close(),
     projections.close(),
+    estimateRecords.close(),
     documents.close(),
     manualOrigins.close(),
     artifacts.close(),

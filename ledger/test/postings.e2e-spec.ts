@@ -594,7 +594,7 @@ describe('the database itself', () => {
   })
 })
 
-describe("a sale's taxes, as Fiscal locked them (Phase 87)", () => {
+describe("a sale's taxes, as Fiscal locked them, follow the authority (Phases 87 and 91)", () => {
   const locked = (over: Record<string, unknown> = {}) => ({
     documentId: randomUUID(),
     originModule: 'sales',
@@ -617,15 +617,65 @@ describe("a sale's taxes, as Fiscal locked them (Phase 87)", () => {
     ...over,
   })
 
-  it('posts the taxes in the price per component, once per origin, and reverses a return', async () => {
+  /** The simulator's answer for an NF-e 55, as Fiscal publishes it. */
+  const answered = (
+    lock: { documentId: string; originId: string },
+    outcome: 'authorized' | 'rejected' | 'cancelled',
+  ) => {
+    const fact = {
+      documentId: lock.documentId,
+      rootDocumentId: lock.documentId,
+      revision: 1,
+      originModule: 'sales',
+      originDocumentType: 'shipment',
+      originId: lock.originId,
+      originPurpose: 'original',
+      model: '55',
+      environment: 'simulation',
+      simulated: true,
+      adapterVersion: 'simulator-1',
+      statusDigest: 'd'.repeat(64),
+      observedAt: '2026-10-15T12:00:00.000Z',
+    }
+    if (outcome === 'authorized')
+      return [
+        'fiscal.document.simulation-authorized',
+        { ...fact, authorityReference: 'SIM-1', protocolDigest: 'e'.repeat(64) },
+      ] as const
+    if (outcome === 'rejected')
+      return [
+        'fiscal.document.simulation-rejected',
+        {
+          ...fact,
+          authorityReference: null,
+          rejectionCode: '539',
+          rejectionReason: 'Duplicidade de NF-e',
+          responseDigest: 'f'.repeat(64),
+        },
+      ] as const
+    return [
+      'fiscal.document.simulation-cancelled',
+      { ...fact, cancellationReference: 'SIM-C1', cancellationProtocolDigest: '1'.repeat(64) },
+    ] as const
+  }
+  const answer = (
+    tenantId: string,
+    lock: { documentId: string; originId: string },
+    outcome: 'authorized' | 'rejected' | 'cancelled',
+  ) => {
+    const [eventType, payload] = answered(lock, outcome)
+    return deliver(tenantId, eventType, payload)
+  }
+
+  it('holds a lock until the document is authorized, then posts the taxes in the price once', async () => {
     const space = await workspace()
     const sale = locked()
     await deliver(space.tenantId, 'fiscal.calculation.locked', sale)
-    // A redelivery, or a corrected revision of the same document, posts nothing more.
-    await deliver(space.tenantId, 'fiscal.calculation.locked', {
-      ...sale,
-      documentId: randomUUID(),
-    })
+    expect(await journalOf(space)).toEqual([])
+    await answer(space.tenantId, sale, 'authorized')
+    // A redelivered lock or answer posts nothing more.
+    await deliver(space.tenantId, 'fiscal.calculation.locked', sale)
+    await answer(space.tenantId, sale, 'authorized')
     const journal = await journalOf(space)
     expect(journal).toHaveLength(1)
     expect(journal[0]?.lines).toEqual([
@@ -634,15 +684,80 @@ describe("a sale's taxes, as Fiscal locked them (Phase 87)", () => {
       '4.05 debit 514',
       '2.02 credit 514',
     ])
-    await deliver(
-      space.tenantId,
-      'fiscal.calculation.locked',
-      locked({
-        originId: sale.originId,
-        purpose: 'return',
-        components: [{ group: 'legacy', code: 'ICMS', amount: '-6836', outcome: 'levied' }],
-      }),
-    )
+  })
+
+  it('never posts a rejected document, and posts its correction once, with its own amounts', async () => {
+    const space = await workspace()
+    const rejected = locked()
+    await deliver(space.tenantId, 'fiscal.calculation.locked', rejected)
+    await answer(space.tenantId, rejected, 'rejected')
+    // The correction is a document of its own, from a new intent with a new origin id.
+    const corrected = locked({
+      components: [{ group: 'legacy', code: 'ICMS', amount: '7000', outcome: 'levied' }],
+    })
+    await deliver(space.tenantId, 'fiscal.calculation.locked', corrected)
+    await answer(space.tenantId, corrected, 'authorized')
+    const journal = await journalOf(space)
+    expect(journal).toHaveLength(1)
+    expect(journal[0]?.lines).toEqual(['4.05 debit 7000', '2.02 credit 7000'])
+  })
+
+  it('reverses the taxes of an authorized document when it is cancelled, so they net to zero', async () => {
+    const space = await workspace()
+    const sale = locked()
+    await deliver(space.tenantId, 'fiscal.calculation.locked', sale)
+    await answer(space.tenantId, sale, 'authorized')
+    await answer(space.tenantId, sale, 'cancelled')
+    const journal = await journalOf(space)
+    expect(journal.map((entry) => entry.status)).toEqual(['reversed', 'posted'])
+    const trial = await database.trialBalance(space.tenantId, FULL_YEAR)
+    expect(trial.totalDebits).toBe(trial.totalCredits)
+    expect(trial.rows.find((row) => row.code === '2.02')?.closing ?? '0').toBe('0')
+  })
+
+  it('takes the answer before the lock: posts an authorized one, and never a cancelled one', async () => {
+    const space = await workspace()
+    const early = locked()
+    await answer(space.tenantId, early, 'authorized')
+    await deliver(space.tenantId, 'fiscal.calculation.locked', early)
+    const gone = locked()
+    await answer(space.tenantId, gone, 'authorized')
+    await answer(space.tenantId, gone, 'cancelled')
+    await deliver(space.tenantId, 'fiscal.calculation.locked', gone)
+    // An authorization after the cancellation is refused by the database as by the code.
+    await answer(space.tenantId, gone, 'authorized')
+    const journal = await journalOf(space)
+    expect(journal).toHaveLength(1)
+    expect(journal[0]?.reference).toBe(`Fiscal ${early.documentId.slice(0, 8)}`)
+  })
+
+  it("posts a consumer document's taxes on its authorization, and reverses a return's", async () => {
+    const space = await workspace()
+    const sale = locked({ model: '65' })
+    await deliver(space.tenantId, 'fiscal.calculation.locked', sale)
+    await deliver(space.tenantId, 'fiscal.consumer-document.simulation-outcome', {
+      documentId: sale.documentId,
+      rootDocumentId: sale.documentId,
+      revision: 1,
+      source: { module: 'sales', documentType: 'shipment', id: randomUUID() },
+      correlations: [],
+      model: '65',
+      environment: 'simulation',
+      simulated: true,
+      adapterVersion: 'simulator-1',
+      statusDigest: 'd'.repeat(64),
+      observedAt: '2026-10-15T12:00:00.000Z',
+      outcome: 'authorized',
+      authorityReference: 'SIM-65',
+      protocolDigest: 'e'.repeat(64),
+    })
+    const giveBack = locked({
+      originId: sale.originId,
+      purpose: 'return',
+      components: [{ group: 'legacy', code: 'ICMS', amount: '-6836', outcome: 'levied' }],
+    })
+    await deliver(space.tenantId, 'fiscal.calculation.locked', giveBack)
+    await answer(space.tenantId, giveBack, 'authorized')
     const trial = await database.trialBalance(space.tenantId, FULL_YEAR)
     expect(trial.totalDebits).toBe(trial.totalCredits)
     expect(trial.rows.find((row) => row.code === '2.02')?.closing).toBe('514')
@@ -650,17 +765,24 @@ describe("a sale's taxes, as Fiscal locked them (Phase 87)", () => {
 
   it('posts nothing for a manual simulation, a homologation drill or a sale with no tax in its price', async () => {
     const space = await workspace()
-    await deliver(space.tenantId, 'fiscal.calculation.locked', locked({ originModule: 'fiscal' }))
-    await deliver(
-      space.tenantId,
-      'fiscal.calculation.locked',
+    for (const lock of [
+      locked({ originModule: 'fiscal' }),
       locked({ environment: 'homologation' }),
-    )
-    await deliver(
-      space.tenantId,
-      'fiscal.calculation.locked',
       locked({ components: [{ group: 'ibsCbs', code: 'CBS', amount: '342', outcome: 'levied' }] }),
-    )
+    ]) {
+      await deliver(space.tenantId, 'fiscal.calculation.locked', lock)
+      await answer(space.tenantId, lock, 'authorized')
+    }
     expect(await journalOf(space)).toEqual([])
+  })
+
+  it('keeps an answer only moving forward, whoever writes it', async () => {
+    const space = await workspace()
+    const sale = locked()
+    await answer(space.tenantId, sale, 'rejected')
+    await expect(
+      administrator`update fiscal_document_outcomes set outcome = 'authorized'
+        where tenant_id = ${space.tenantId} and document_id = ${sale.documentId}`,
+    ).rejects.toThrow(/cannot become authorized/)
   })
 })

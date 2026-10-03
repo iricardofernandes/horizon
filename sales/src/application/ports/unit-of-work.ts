@@ -64,8 +64,15 @@ export interface CommandReceipt {
   readonly fingerprint: string
 }
 
+/** Fiscal's estimates kept on quotes and orders, as far as a use case touches them. */
+export interface TaxEstimatesRepository {
+  /** An estimate is of the lines it was asked for: when they change, it goes (Phase 91). */
+  discard(kind: 'quote' | 'order', documentId: string): Promise<void>
+}
+
 export interface SalesScope {
   readonly tenantId: string
+  readonly taxEstimates: TaxEstimatesRepository
   readonly orders: SalesOrdersRepository
   readonly catalogItems: CatalogItemsRepository
   readonly events: SalesEventsRepository

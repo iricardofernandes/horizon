@@ -30,12 +30,14 @@ import {
 } from '@/application/use-cases/receive-goods'
 import { AccessTokenVerifier } from '@/infrastructure/cryptography/access-token-verifier'
 import { ProcurementDatabase } from '@/infrastructure/database/drizzle/procurement-database'
+import { GatewayFiscalEstimates } from '@/infrastructure/http/gateway-fiscal-estimates'
 import type { ProcurementEnvironment } from './environment'
 
 /** Explicit composition: every dependency is visible in one place. */
 export class ProcurementRuntime implements OnModuleInit, OnModuleDestroy {
   readonly database: ProcurementDatabase
   readonly accessTokens: AccessTokenVerifier
+  readonly fiscalEstimates: GatewayFiscalEstimates
   readonly grantDelegation: GrantDelegationUseCase
   readonly revokeDelegation: RevokeDelegationUseCase
   readonly listDelegations: ListDelegationsUseCase
@@ -80,6 +82,7 @@ export class ProcurementRuntime implements OnModuleInit, OnModuleDestroy {
     this.draftOrderFromQuotation = new DraftOrderFromQuotationUseCase(this.database, clock)
     this.reviseOrder = new ReviseOrderUseCase(this.database, clock)
     this.applyOrderTaxEstimate = new ApplyOrderTaxEstimateUseCase(this.database, clock)
+    this.fiscalEstimates = new GatewayFiscalEstimates(config.GATEWAY_URL)
     this.decideOrder = new DecideOrderUseCase(this.database, clock)
     this.receiveGoods = new ReceiveGoodsUseCase(this.database, clock)
     this.returnGoods = new ReturnGoodsUseCase(this.database, clock)

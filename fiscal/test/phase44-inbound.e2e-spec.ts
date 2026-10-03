@@ -15,6 +15,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import { EncryptedFiscalArtifactStore, LocalObjectStore } from '../src/artifact-store'
 import { type AuditRow, verifyAuditRows } from '../src/audit'
 import { FiscalAuditLog } from '../src/audit-log'
+import { FiscalEstimateRecords } from '../src/estimate-records'
 import { FiscalInboundImports } from '../src/inbound-imports'
 import {
   FiscalInboundReconciliations,
@@ -48,6 +49,7 @@ let ingress: FiscalIngress
 let projections: FiscalProjections
 let imports: FiscalInboundImports
 let reconciliations: FiscalInboundReconciliations
+let estimateRecords: FiscalEstimateRecords
 
 type Tenant = {
   tenantId: string
@@ -98,6 +100,7 @@ beforeAll(async () => {
     digest: SCHEMA_DIGEST,
   })
   reconciliations = new FiscalInboundReconciliations(url, masterKey, projections)
+  estimateRecords = new FiscalEstimateRecords(url)
 }, 180_000)
 
 afterAll(async () => {
@@ -106,6 +109,7 @@ afterAll(async () => {
     projections?.close(),
     imports?.close(),
     reconciliations?.close(),
+    estimateRecords?.close(),
     admin?.end(),
   ])
   await container?.stop()
@@ -533,21 +537,58 @@ async function seedTenant(buyer: string): Promise<Tenant> {
   return { tenantId, supplierId, grainId, sackId, buyer }
 }
 
-it('compares the taxes the supplier charged with the estimate its order kept (Phase 87)', async () => {
-  const tenant = await seedTenant(BUYER_A)
+/** An estimate Fiscal issued for a purchase, kept as its API keeps every estimate (Phase 91). */
+async function issueEstimate(
+  tenant: Tenant,
+  lines: Array<{ itemId: string; quantity: string }>,
+  supplierPartyId = tenant.supplierId,
+): Promise<string> {
+  const money = (amount: string) => ({ amount, currency: 'BRL' })
+  const resultDigest = randomBytes(32).toString('hex')
+  await estimateRecords.keep(
+    tenant.tenantId,
+    {
+      direction: 'purchase',
+      establishmentId: tenant.tenantId,
+      supplierPartyId,
+      supplier: { regime: 'normal' },
+      issueDate: '2026-09-20',
+      lines: lines.map((line) => ({ ...line, unitPrice: money('1000') })),
+    },
+    {
+      schemaVersion: 1,
+      supported: true,
+      estimatedAt: '2026-09-20T12:00:00.000Z',
+      components: [
+        { group: 'legacy', code: 'ICMS', amount: money('720'), outcome: 'levied' },
+        { group: 'legacy', code: 'PIS', amount: money('99'), outcome: 'levied' },
+      ],
+      totals: {
+        net: money('6000'),
+        tax: money('819'),
+        chargedOnTop: money('0'),
+        gross: money('6000'),
+      },
+      inputDigest: 'a'.repeat(64),
+      rulesDigest: 'b'.repeat(64),
+      resultDigest,
+    },
+  )
+  return resultDigest
+}
+
+/** An order of six sacks of grain, carrying `resultDigest`, received and reconciled. */
+async function reconciledWithEstimate(tenant: Tenant, invoiceNumber: number, resultDigest: string) {
+  const money = (amount: string) => ({ amount, currency: 'BRL' })
   const orderLine = randomUUID()
   const orderId = randomUUID()
-  const money = (amount: string) => ({ amount, currency: 'BRL' })
-  const resultDigest = 'c'.repeat(64)
+  // What the order says Fiscal estimated: a digest, and components Fiscal never reads.
   await approveOrder(
     tenant,
     orderId,
     [{ lineId: orderLine, itemId: tenant.grainId, quantity: '6' }],
     {
-      components: [
-        { code: 'ICMS', amount: money('720') },
-        { code: 'PIS', amount: money('99') },
-      ],
+      components: [{ code: 'ICMS', amount: money('1') }],
       chargedOnTop: money('0'),
       inputDigest: 'a'.repeat(64),
       rulesDigest: 'b'.repeat(64),
@@ -558,11 +599,18 @@ it('compares the taxes the supplier charged with the estimate its order kept (Ph
   await receive(tenant, orderId, receiptId, [
     { lineId: orderLine, itemId: tenant.grainId, quantity: '6', unitPrice: '1000' },
   ])
-  // The test supplier's XML states no legacy tax: the difference is the whole estimate.
-  const importId = await importInvoice(tenant, 301, '6', '10.00')
+  const importId = await importInvoice(tenant, invoiceNumber, '6', '10.00')
   const reconciliation = await commit(tenant, importId, [
     { lineNumber: 1, receiptId, receiptLineId: orderLine, quantity: '6' },
   ])
+  return { orderId, reconciliation }
+}
+
+it('compares the taxes the supplier charged with the estimate Fiscal issued for the order (Phases 87 and 91)', async () => {
+  const tenant = await seedTenant(BUYER_A)
+  const resultDigest = await issueEstimate(tenant, [{ itemId: tenant.grainId, quantity: '6' }])
+  // The test supplier's XML states no legacy tax: the difference is the whole estimate.
+  const { orderId, reconciliation } = await reconciledWithEstimate(tenant, 301, resultDigest)
   // The estimate never binds the supplier: the value reconciles, the taxes are shown apart.
   expect(reconciliation.decision).toBe('matched')
   expect(reconciliation.comparison.clean).toBe(true)
@@ -576,6 +624,28 @@ it('compares the taxes the supplier charged with the estimate its order kept (Ph
     ],
     clean: false,
   })
+})
+
+it('compares nothing with an estimate Fiscal never issued, or issued for another purchase (Phase 91)', async () => {
+  const tenant = await seedTenant(BUYER_A)
+  const notCompared = {
+    compared: false,
+    reason: 'The purchase order carries no tax estimate',
+    components: [],
+    clean: true,
+  }
+  const forged = await reconciledWithEstimate(tenant, 302, randomBytes(32).toString('hex'))
+  expect(forged.reconciliation.comparison.taxes).toEqual(notCompared)
+  const otherSupplier = await issueEstimate(
+    tenant,
+    [{ itemId: tenant.grainId, quantity: '6' }],
+    randomUUID(),
+  )
+  const elsewhere = await reconciledWithEstimate(tenant, 303, otherSupplier)
+  expect(elsewhere.reconciliation.comparison.taxes).toEqual(notCompared)
+  const otherLines = await issueEstimate(tenant, [{ itemId: tenant.grainId, quantity: '7' }])
+  const changed = await reconciledWithEstimate(tenant, 304, otherLines)
+  expect(changed.reconciliation.comparison.taxes).toEqual(notCompared)
 })
 
 function invoice(tenant: Tenant, number: number, quantity: string, unitPrice: string) {
