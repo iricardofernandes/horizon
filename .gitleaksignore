@@ -28,3 +28,8 @@
 # allow only these two already-published historical findings.
 ddadc1a72358e2f4236c219f625279f1fdb4c38a:fiscal/test/ingress.e2e-spec.ts:generic-api-key:683
 ddadc1a72358e2f4236c219f625279f1fdb4c38a:fiscal/test/ingress.e2e-spec.ts:generic-api-key:700
+
+# The Fiscal API test for an unexpected failure committed a literal idempotency marker.
+# It is a request deduplication value, not a credential. The current test generates a
+# UUID instead; allow only this already-published historical finding.
+3db21b7e705817765b52c26903267291c7ded9d4:fiscal/src/api.spec.ts:generic-api-key:451

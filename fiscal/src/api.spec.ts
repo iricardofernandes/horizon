@@ -448,7 +448,7 @@ it('logs an unexpected error with its type, place and own sentence, and tells th
       headers: {
         authorization: 'Bearer test',
         'content-type': 'application/json',
-        'idempotency-key': 'unexpected-failure-0001',
+        'idempotency-key': randomUUID(),
       },
       body: JSON.stringify({ reason: 'A reviewed reason of enough length' }),
     })
