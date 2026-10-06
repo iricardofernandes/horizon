@@ -8,7 +8,7 @@ and Kong.
 |---|---|
 | **Port** | 3000 |
 | **Talks to** | Kong only, through its own server-side routes |
-| **Stack** | Next.js (App Router) · React · TypeScript · Base UI · Radix Colors · Phosphor icons · OpenTelemetry |
+| **Stack** | Next.js (App Router) · React · TypeScript · Base UI · Phosphor icons · OpenTelemetry |
 
 <p align="center">
   <img src="../docs/assets/modules/web.png" alt="The browser talks only to the portal's own server routes, which keep the session in HttpOnly cookies and call Kong, which routes to every service. Browser spans go to the OpenTelemetry Collector, so one trace runs from the click to the database." width="100%">
@@ -109,14 +109,17 @@ secret may carry that prefix.
 <details>
 <summary><b>Design system</b></summary>
 
-- **Type:** the self-hosted variable Inter font.
+- **Type:** the self-hosted variable DM Sans font, with tabular figures.
 - **Icons:** Phosphor, and no other set.
 - **Components:** primitives composed from Base UI in `src/components/ui`. Screens use
   those components, never raw styled buttons, inputs, dialogs or menus.
-- **Colour:** Radix Colors through semantic aliases in `src/app/styles.css`: Sage
-  neutrals, Jade for accent and success, Amber for warnings, Red for errors.
+- **Colour:** semantic tokens in the `:root` block of `src/app/styles.css`: hue-free
+  grays, one blue accent that only means action, and green, amber and red that only mean
+  a state.
+- **Surfaces:** lit along the top edge and shaded along the bottom one; six radii, by role.
 
-The rationale is [ADR 0039](../docs/adr/0039-frontend-design-system-foundation.md).
+The rationale is [ADR 0078](../docs/adr/0078-neutral-surfaces-one-accent-and-lit-edges.md),
+on the foundation of [ADR 0039](../docs/adr/0039-frontend-design-system-foundation.md).
 
 </details>
 

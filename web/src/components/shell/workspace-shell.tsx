@@ -35,12 +35,9 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
               aria-label={t('workspaceLabel', { name: workspaceName })}
               className="workspace-control"
               href="/workspaces"
+              title={t('switchWorkspace')}
             >
               <span className="brand-mark">{workspaceName.slice(0, 1).toUpperCase()}</span>
-              <span className="workspace-control-copy">
-                <strong>{workspaceName}</strong>
-                <small>{t('switchWorkspace')}</small>
-              </span>
             </a>
             <WorkspaceNavigation groups={visibleNavigation(roles, hostedDemo)} />
           </aside>

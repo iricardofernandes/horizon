@@ -39,14 +39,14 @@ export function WorkspaceTopbar({
       <div className="topbar-leading">
         <Button
           aria-controls="workspace-sidebar"
+          aria-expanded={!collapsed}
           aria-label={control}
-          aria-pressed={collapsed}
           className="sidebar-toggle"
           onClick={onToggleSidebar}
           title={control}
           type="button"
         >
-          <SidebarSimple aria-hidden="true" size={18} weight="bold" />
+          <SidebarSimple aria-hidden="true" size={18} weight={collapsed ? 'regular' : 'fill'} />
         </Button>
         <div>
           <p className="topbar-kicker">{workspaceName}</p>

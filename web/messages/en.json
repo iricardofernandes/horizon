@@ -1316,9 +1316,9 @@
     "becameServiceOrder": "The services of this offer became service order {id}."
   },
   "shell": {
-    "collapseSidebar": "Collapse sidebar",
+    "collapseSidebar": "Hide sidebar",
     "demoNotice": "Public demo profile: live session and Catalog on Neon. The asynchronous order choreography remains available in the full local stack.",
-    "expandSidebar": "Expand sidebar",
+    "expandSidebar": "Show sidebar",
     "language": "Language",
     "loadingUser": "Loading…",
     "navigationLabel": "Workspace navigation",

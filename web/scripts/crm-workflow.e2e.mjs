@@ -24,6 +24,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 
+/** A screen is listed in its module's panel on the rail: open the module, then follow the link. */
+async function openScreen(page, module, name, exact = false) {
+  await page.getByRole('button', { name: module, exact: true }).click()
+  await page.getByRole('link', { name, exact }).click()
+}
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const appUrl = process.env.HORIZON_WEB_URL ?? 'http://localhost:3000'
 const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
@@ -74,7 +80,7 @@ try {
   await setLanguage(page, 'Português (Brasil)')
 
   // --- settings: a pipeline, its stages, a source and a loss reason ----------------------------
-  await page.getByRole('link', { name: 'Configurações do CRM' }).click()
+  await openScreen(page, 'CRM', 'Configurações do CRM')
   await page.getByRole('heading', { name: 'Configurações do CRM', exact: true }).waitFor()
   await page.getByLabel('Nome do funil').fill(names.pipeline)
   await page.getByLabel('Primeira etapa').fill('Qualificação')
@@ -90,7 +96,7 @@ try {
   evidence.steps.push({ step: 'settings', pipeline: names.pipeline })
 
   // --- accounts: a prospect without a document, a contact, a call -----------------------------
-  await page.getByRole('link', { name: 'Contas', exact: true }).click()
+  await openScreen(page, 'CRM', 'Contas', true)
   await page.getByRole('heading', { name: 'Contas', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Novo prospect' }).click()
   const register = page.getByRole('dialog', { name: 'Novo prospect' })
@@ -123,7 +129,7 @@ try {
   evidence.steps.push({ step: 'account', prospect: names.prospect, contact: names.contact })
 
   // --- pipeline: an opportunity, dragged and moved with the keyboard --------------------------
-  await page.getByRole('link', { name: 'Funil de vendas' }).click()
+  await openScreen(page, 'CRM', 'Funil de vendas')
   await page.getByRole('heading', { name: 'Funil de vendas', exact: true }).waitFor()
   await chooseOption(page, page.getByRole('combobox', { name: 'Funil', exact: true }), names.pipeline)
   await page.getByRole('button', { name: 'Nova oportunidade' }).click()
@@ -170,13 +176,13 @@ try {
   await dialog.locator('.crm-timeline').getByText('Tarefa · Enviar proposta').waitFor()
   await dialog.getByRole('button', { name: 'Fechar janela' }).click()
 
-  await page.getByRole('link', { name: 'Minha agenda' }).click()
+  await openScreen(page, 'CRM', 'Minha agenda')
   await page.getByRole('heading', { name: 'Minha agenda', exact: true }).waitFor()
   await page.getByRole('link', { name: 'Enviar proposta' }).first().waitFor()
   evidence.steps.push({ step: 'agenda', task: 'Enviar proposta' })
 
   // --- convert into a quote, accepted in Sales -----------------------------------------------
-  await page.getByRole('link', { name: 'Funil de vendas' }).click()
+  await openScreen(page, 'CRM', 'Funil de vendas')
   await chooseOption(page, page.getByRole('combobox', { name: 'Funil', exact: true }), names.pipeline)
   await oppCard().click()
   await dialog.getByRole('button', { name: 'Converter em orçamento' }).click()
@@ -213,7 +219,7 @@ try {
   evidence.steps.push({ step: 'conversion', quoteId, status: attribution.status, attribution: accepted.attribution })
 
   // --- forecast and metrics --------------------------------------------------------------------
-  await page.getByRole('link', { name: 'Previsão e métricas' }).click()
+  await openScreen(page, 'CRM', 'Previsão e métricas')
   await page.getByRole('heading', { name: 'Previsão e métricas', exact: true }).waitFor()
   await chooseOption(page, page.getByRole('combobox', { name: 'Métricas de' }), names.pipeline)
   await page.getByRole('button', { name: 'Atualizar' }).click()
@@ -233,7 +239,7 @@ try {
     ['Forecast and metrics', 'Forecast and metrics'],
     ['CRM settings', 'CRM settings'],
   ]) {
-    await page.getByRole('link', { name: link, exact: true }).click()
+    await openScreen(page, 'CRM', link, true)
     await page.getByRole('heading', { name: heading, exact: true }).waitFor()
   }
   await page.goto(`${appUrl}/app/crm/pipeline?open=${opportunityId}`, { waitUntil: 'domcontentloaded' })
