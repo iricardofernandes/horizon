@@ -35,6 +35,8 @@ The frontend's visual language is:
 - **Lit edges instead of drop shadows.** A surface is lit along its top edge and shaded
   along its bottom one (`--shadow-edge`); controls add a one-pixel ring
   (`--shadow-control`). Only a popup or a dialog casts a real shadow (`--shadow-raised`).
+  A field or a checkbox keeps a one-pixel border that reaches 3:1 against the surface
+  (`--color-border-control`), because its edge is what says where to type.
 - **Six radii, by role.** `--radius-xs` 6, `--radius-sm` 8, `--radius-control` 12,
   `--radius-card` 16, `--radius-xl` 24 and `--radius-pill`. Buttons and tabs are pills,
   fields are controls, panels are cards.

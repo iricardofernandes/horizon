@@ -804,7 +804,10 @@
     "from": {
       "purchase-order": "De um pedido de compra",
       "purchase-receipt": "De uma entrega",
-      "sales-order": "De um pedido de venda"
+      "sales-contract-period": "De um período de contrato",
+      "sales-order": "De um pedido de venda",
+      "sales-service-delivery": "De um serviço prestado",
+      "sales-shipment": "De uma expedição"
     },
     "installment": "Parcela",
     "installmentActions": "Ações da parcela",
@@ -1039,7 +1042,10 @@
     "from": {
       "purchase-order": "De um pedido de compra",
       "purchase-receipt": "De uma entrega",
-      "sales-order": "De um pedido de venda"
+      "sales-contract-period": "De um período de contrato",
+      "sales-order": "De um pedido de venda",
+      "sales-service-delivery": "De um serviço prestado",
+      "sales-shipment": "De uma expedição"
     },
     "installment": "Parcela",
     "installmentActions": "Ações da parcela",
@@ -1329,7 +1335,7 @@
     "switchWorkspace": "Trocar de área de trabalho",
     "unavailableNotice": "A área de trabalho não pôde ser carregada. Verifique se os serviços da aplicação estão no ar.",
     "workspace": "Área de trabalho",
-    "workspaceLabel": "Área de trabalho {name}",
+    "workspaceLabel": "Trocar de área de trabalho ({name})",
     "userMenu": "Conta de {name}",
     "profileSettings": "Perfil",
     "accountMenu": "Conta"

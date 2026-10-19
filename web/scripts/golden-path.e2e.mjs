@@ -94,7 +94,7 @@ try {
   await page.getByRole('button', { name: /Horizon Demo/ }).click()
   await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: /^(Bom dia|Boa tarde|Boa noite)$/ }).waitFor()
-  await page.getByRole('link', { name: 'Área de trabalho Horizon Demo' }).waitFor()
+  await page.getByRole('link', { name: 'Trocar de área de trabalho (Horizon Demo)' }).waitFor()
 
   // The language is the reader's own setting, behind their avatar; switching it keeps them
   // on the same resource and reaches the whole shell.
@@ -112,12 +112,12 @@ try {
   await openScreen(page, 'Overview', 'Overview', true)
   await page.getByRole('heading', { name: /^Good (morning|afternoon|evening)$/ }).waitFor()
 
-  await page.getByRole('link', { name: 'Horizon Demo workspace' }).click()
+  await page.getByRole('link', { name: 'Switch workspace (Horizon Demo)' }).click()
   await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Horizon Demo/ }).click()
   await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: /^Good (morning|afternoon|evening)$/ }).waitFor()
-  await page.getByRole('link', { name: 'Horizon Demo workspace' }).waitFor()
+  await page.getByRole('link', { name: 'Switch workspace (Horizon Demo)' }).waitFor()
 
   await openScreen(page, 'Catalog', 'Items')
   await page.waitForURL(`${appUrl}/app/catalog/items`, { waitUntil: 'domcontentloaded' })

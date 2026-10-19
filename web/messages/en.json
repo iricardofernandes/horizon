@@ -804,7 +804,10 @@
     "from": {
       "purchase-order": "From a purchase order",
       "purchase-receipt": "From a delivery",
-      "sales-order": "From a sales order"
+      "sales-contract-period": "From a contract period",
+      "sales-order": "From a sales order",
+      "sales-service-delivery": "From a delivered service",
+      "sales-shipment": "From a shipment"
     },
     "installment": "Installment",
     "installmentActions": "Installment actions",
@@ -1039,7 +1042,10 @@
     "from": {
       "purchase-order": "From a purchase order",
       "purchase-receipt": "From a delivery",
-      "sales-order": "From a sales order"
+      "sales-contract-period": "From a contract period",
+      "sales-order": "From a sales order",
+      "sales-service-delivery": "From a delivered service",
+      "sales-shipment": "From a shipment"
     },
     "installment": "Installment",
     "installmentActions": "Installment actions",
@@ -1329,7 +1335,7 @@
     "switchWorkspace": "Switch workspace",
     "unavailableNotice": "The workspace could not be loaded. Check that the application services are running.",
     "workspace": "Workspace",
-    "workspaceLabel": "{name} workspace",
+    "workspaceLabel": "Switch workspace ({name})",
     "userMenu": "{name}'s account",
     "profileSettings": "Profile",
     "accountMenu": "Account"
