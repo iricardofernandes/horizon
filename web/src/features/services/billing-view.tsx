@@ -120,7 +120,7 @@ export function BillingView({
             </Button>
           ) : null}
         </div>
-        {error ? <Notice copy={error} /> : null}
+        {error ? <Notice tone="danger" copy={error} /> : null}
         {preview ? (
           <Outcomes data={data} items={preview.items} title={t('billing.previewTitle')} />
         ) : null}

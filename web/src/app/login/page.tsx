@@ -20,7 +20,8 @@ export default function LoginPage() {
     event.preventDefault()
     setBusy(true)
     setError('')
-    const data = new FormData(event.currentTarget)
+    const form = event.currentTarget
+    const data = new FormData(form)
     const response = await tracedFetch('session.login', '/api/session', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -32,6 +33,8 @@ export default function LoginPage() {
     setBusy(false)
     if (!response?.ok) {
       setError(t(response?.status === 429 ? 'tooMany' : 'error'))
+      // The pair failed, not one field; the password is the one to type again.
+      form.querySelector<HTMLInputElement>('input[name="password"]')?.focus()
       return
     }
     const answer = (await response.json().catch(() => ({}))) as {
@@ -74,11 +77,12 @@ export default function LoginPage() {
         ) : (
           <form className="login-card" onSubmit={submit}>
             <div>
-              <p className="eyebrow">{t('welcome')}</p>
               <h2>{t('title')}</h2>
               <p className="muted">{t('subtitle')}</p>
             </div>
             <TextField
+              aria-describedby={error ? 'login-error' : undefined}
+              aria-invalid={error ? true : undefined}
               autoComplete="email"
               defaultValue="demo@horizon.local"
               label={t('email')}
@@ -87,6 +91,8 @@ export default function LoginPage() {
               type="email"
             />
             <TextField
+              aria-describedby={error ? 'login-error' : undefined}
+              aria-invalid={error ? true : undefined}
               autoComplete="current-password"
               label={t('password')}
               name="password"
@@ -94,7 +100,7 @@ export default function LoginPage() {
               type="password"
             />
             {error ? (
-              <p className="form-error" role="alert">
+              <p className="form-error" id="login-error" role="alert">
                 {error}
               </p>
             ) : null}

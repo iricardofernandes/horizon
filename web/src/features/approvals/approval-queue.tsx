@@ -124,7 +124,7 @@ function QueueRow({
       </td>
       <td>{item.summary}</td>
       <td>
-        {error ? <Notice copy={error} /> : null}
+        {error ? <Notice tone="danger" copy={error} /> : null}
         {rejecting ? (
           <form
             className="receivable-inline-form"

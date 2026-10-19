@@ -114,7 +114,7 @@ export function RequisitionDialog({
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {failed ? <Notice copy={t('detailUnavailable')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('detailUnavailable')} /> : null}
           {!failed && !detail ? <LoadingState /> : null}
           {detail && comparison ? (
             <Body
@@ -275,7 +275,7 @@ function Body({
         </div>
       )}
 
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
 
       <div className="dialog-actions">
         {detail.status === 'draft' && abilities.canWrite ? (

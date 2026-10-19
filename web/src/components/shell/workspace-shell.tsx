@@ -50,7 +50,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             <div className="content">
               {hostedDemo ? <Notice copy={t('demoNotice')} /> : null}
               {notice ? <Notice copy={notice} /> : null}
-              {failed ? <Notice copy={t('unavailableNotice')} /> : null}
+              {failed ? <Notice tone="danger" copy={t('unavailableNotice')} /> : null}
               <ShellContent
                 permitted={!entry || isEntryVisible(entry, roles, hostedDemo)}
                 ready={Boolean(session)}

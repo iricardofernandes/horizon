@@ -84,7 +84,7 @@ export function ChangeDialog({
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {failed ? <Notice copy={t('changeUnavailable')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('changeUnavailable')} /> : null}
           {!failed && !change ? <LoadingState /> : null}
           {change ? (
             <>
@@ -107,7 +107,7 @@ export function ChangeDialog({
               {change.status === 'pending' && !actions?.decide && abilities.canDecide ? (
                 <p className="document-note">{t('ownRequest')}</p>
               ) : null}
-              {error ? <Notice copy={error} /> : null}
+              {error ? <Notice tone="danger" copy={error} /> : null}
             </>
           ) : null}
         </Dialog.Popup>

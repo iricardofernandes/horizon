@@ -136,7 +136,7 @@ export function AuditView() {
   return (
     <section className="audit-screen">
       <PageHeading copy={t('copy')} eyebrow={t('eyebrow')} title={t('title')} />
-      {failed ? <Notice copy={t('failed')} /> : null}
+      {failed ? <Notice tone="danger" copy={t('failed')} /> : null}
       {answer && answer.readable.length === 0 ? <Notice copy={t('noneReadable')} /> : null}
       {silent.length > 0 ? (
         <Notice

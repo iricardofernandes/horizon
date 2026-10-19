@@ -383,7 +383,7 @@ function PackageDiffDialog({ pack, onClose }: { pack: CatalogPackage; onClose: (
           </Dialog.Close>
           <Dialog.Title>{t('packageDiffTitle', { authority: pack.authority })}</Dialog.Title>
           <p className="document-note">{t('packageDiffNote')}</p>
-          {failed ? <Notice copy={t('diffUnavailable')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('diffUnavailable')} /> : null}
           {!failed && !diff ? <LoadingState /> : null}
           {diff ? <DiffView diff={diff} showUnchanged /> : null}
         </Dialog.Popup>

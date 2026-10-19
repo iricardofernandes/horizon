@@ -45,7 +45,7 @@ export function JobsView() {
   return (
     <section>
       <PageHeading copy={t('copy')} eyebrow={t('eyebrow')} title={t('title')} />
-      {failed ? <Notice copy={t('failed')} /> : null}
+      {failed ? <Notice tone="danger" copy={t('failed')} /> : null}
       {silent.length > 0 ? (
         <Notice
           copy={t('silent', {

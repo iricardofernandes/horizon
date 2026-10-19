@@ -96,7 +96,7 @@ export function OpportunityDialog({
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {failed ? <Notice copy={t('opportunity.unavailable')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('opportunity.unavailable')} /> : null}
           {!failed && !loaded ? <LoadingState /> : null}
           {loaded ? (
             <>

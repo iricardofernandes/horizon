@@ -93,7 +93,7 @@ try {
   await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Horizon Demo/ }).click()
   await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('heading', { name: 'Boa tarde' }).waitFor()
+  await page.getByRole('heading', { name: /^(Bom dia|Boa tarde|Boa noite)$/ }).waitFor()
   await page.getByRole('link', { name: 'Área de trabalho Horizon Demo' }).waitFor()
 
   // The language is the reader's own setting, behind their avatar; switching it keeps them
@@ -110,13 +110,13 @@ try {
     'the document language did not follow the switcher',
   )
   await openScreen(page, 'Overview', 'Overview', true)
-  await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
+  await page.getByRole('heading', { name: /^Good (morning|afternoon|evening)$/ }).waitFor()
 
   await page.getByRole('link', { name: 'Horizon Demo workspace' }).click()
   await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Horizon Demo/ }).click()
   await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
+  await page.getByRole('heading', { name: /^Good (morning|afternoon|evening)$/ }).waitFor()
   await page.getByRole('link', { name: 'Horizon Demo workspace' }).waitFor()
 
   await openScreen(page, 'Catalog', 'Items')

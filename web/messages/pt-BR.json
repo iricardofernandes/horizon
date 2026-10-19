@@ -201,7 +201,7 @@
     "priceListCreated": "Tabela de preços criada com sucesso.",
     "priceListNamePlaceholder": "Varejo",
     "priceUpdated": "O preço de {name} foi atualizado com sucesso.",
-    "pricedItems": "{count} itens precificados",
+    "pricedItems": "{count, plural, one {# item precificado} other {# itens precificados}}",
     "prices": "Tabelas de preços",
     "saving": "Salvando…",
     "search": "Buscar no catálogo",
@@ -290,9 +290,10 @@
     "never": "Nunca",
     "notSet": "Não definido",
     "pending": "Pendente",
-    "screenUnavailable": "Esta tela não pôde ser carregada. Verifique se os serviços da aplicação estão no ar.",
+    "screenUnavailable": "Não foi possível carregar esta tela. Tente de novo em instantes.",
     "exportList": "Exportar CSV",
-    "exportListHint": "Baixar esta lista em CSV, com o seu próprio acesso, até 50.000 linhas"
+    "exportListHint": "Baixar esta lista em CSV, com o seu próprio acesso, até 50.000 linhas",
+    "retry": "Tentar de novo"
   },
   "customers": {
     "activeCustomers": "Clientes ativos",
@@ -355,7 +356,7 @@
     "viewAttempts": "Tentativas"
   },
   "inventory": {
-    "activeWarehouses": "{count} ativos",
+    "activeWarehouses": "{count, plural, one {# ativo} other {# ativos}}",
     "allLocations": "Todos os locais",
     "allLocationsCopy": "Estoque consolidado",
     "allWarehouses": "Todos os depósitos",
@@ -391,7 +392,7 @@
     "search": "Buscar estoque",
     "searchPlaceholder": "Buscar item ou SKU…",
     "stockBalances": "Saldos de estoque",
-    "stockedItems": "{count} itens em estoque",
+    "stockedItems": "{count, plural, one {# item em estoque} other {# itens em estoque}}",
     "title": "Estoque",
     "unavailableItems": "Itens indisponíveis",
     "unitCost": "Custo unitário",
@@ -450,7 +451,7 @@
     "origin": "Vem de",
     "outflow": "Saídas",
     "overdueNote": "{amount} venceu antes deste intervalo e continua em aberto.",
-    "pendingWarning": "{count} fatos ainda não puderam ser contabilizados; os livros ficam incompletos até que sejam.",
+    "pendingWarning": "{count, plural, one {# fato ainda não pôde ser contabilizado; os livros ficam incompletos até que seja.} other {# fatos ainda não puderam ser contabilizados; os livros ficam incompletos até que sejam.}}",
     "period": "Período",
     "postedOn": "Data",
     "profit": "Lucro do período",
@@ -499,7 +500,6 @@
     "submitting": "Entrando…",
     "subtitle": "Suas áreas de trabalho aparecem depois que você entrar.",
     "title": "Entrar no Horizon",
-    "welcome": "Bem-vindo de volta",
     "secondFactor": {
       "eyebrow": "Segundo fator",
       "title": "Confirme que é você",
@@ -619,7 +619,7 @@
     "eyebrow": "Área de vendas",
     "fulfillment": "Expedição",
     "history": "Histórico de pedidos",
-    "historyCopy": "{count} mais recentes",
+    "historyCopy": "{count, plural, one {# mais recente} other {# mais recentes}}",
     "item": "Item {index}",
     "itemFallback": "Item {id}",
     "lines": "Linhas",
@@ -647,7 +647,7 @@
   "overview": {
     "acrossWarehouses": "Em todos os depósitos",
     "activeItems": "Itens ativos",
-    "confirmedOrders": "{count} confirmados",
+    "confirmedOrders": "{count, plural, one {# confirmado} other {# confirmados}}",
     "copy": "Este é o formato da sua operação agora.",
     "flowCallbackCopy": "Webhooks notifica o seu sistema",
     "flowCallbackTitle": "Retorno assinado",
@@ -661,12 +661,13 @@
     "onHandUnits": "Unidades em mãos",
     "orders": "Pedidos",
     "readyToSell": "Prontos para venda",
-    "recentDeliveries": "{count} entregas recentes",
+    "recentDeliveries": "{count, plural, one {# entrega recente} other {# entregas recentes}}",
     "recentOrders": "Pedidos recentes",
     "rhythm": "Ritmo operacional",
     "rhythmCopy": "O fluxo por trás de cada pedido",
-    "title": "Boa tarde",
-    "webhookHealth": "Saúde dos webhooks"
+    "title": "{period, select, morning {Bom dia} afternoon {Boa tarde} other {Boa noite}}",
+    "webhookHealth": "Saúde dos webhooks",
+    "openDeliveries": "Ver entregas"
   },
   "parties": {
     "contactOptional": "Opcional para prospects e parceiros; obrigatório para clientes, fornecedores e transportadoras.",
@@ -914,7 +915,7 @@
     "decide": "Decidir",
     "decidedBy": "Decidido por",
     "deliveries": "Entregas",
-    "deliveriesCount": "{count} entregas",
+    "deliveriesCount": "{count, plural, one {# entrega} other {# entregas}}",
     "detailUnavailable": "Não foi possível carregar este documento.",
     "document": "Documento",
     "expectedOn": "Previsto",
@@ -925,13 +926,13 @@
     "issuedOn": "Emitido",
     "leadTime": "Prazo de entrega",
     "line": "Item",
-    "linesCount": "{count} itens",
+    "linesCount": "{count, plural, one {# item} other {# itens}}",
     "neededBy": "Necessário até",
     "neededOn": "Necessário até {date}",
     "noDeliveries": "Nada chegou contra este pedido ainda.",
     "noQuotations": "Nenhum fornecedor respondeu a esta requisição ainda.",
     "offer": "Proposta",
-    "offersCount": "{count} propostas",
+    "offersCount": "{count, plural, one {# proposta} other {# propostas}}",
     "openOrder": "Abrir o pedido de compra {id}",
     "openRequisition": "Abrir a requisição {id}",
     "orderTitle": "Pedido de compra {id}",
@@ -1266,7 +1267,7 @@
     "inboxEmpty": "Nada aguarda você",
     "inboxEmptyCopy": "Um desconto que você pediu é decidido por outra pessoa.",
     "item": "Item {index}",
-    "itemsCount": "{count} itens",
+    "itemsCount": "{count, plural, one {# item} other {# itens}}",
     "line": "Linha",
     "lineTotal": "Total da linha",
     "negotiation": "Como chegou até aqui",
@@ -1480,7 +1481,7 @@
     "awaitingSummary": "{from} → {to} · {amount}"
   },
   "webhooks": {
-    "activeCount": "{count} ativos",
+    "activeCount": "{count, plural, one {# ativa} other {# ativas}}",
     "addEndpoint": "Adicionar endpoint",
     "addEndpointCopy": "Escolha um ou mais tipos de evento",
     "copy": "Entregue eventos de pedidos aos sistemas que dependem deles.",
@@ -1561,12 +1562,14 @@
   },
   "workspaces": {
     "eyebrow": "Escolha onde trabalhar",
-    "loadError": "Suas áreas de trabalho não puderam ser carregadas. Entre novamente.",
+    "loadError": "Não foi possível carregar suas áreas de trabalho. Tente de novo ou entre com outra conta.",
     "loading": "Carregando áreas de trabalho…",
-    "selectError": "Esta área de trabalho está indisponível. Entre novamente.",
+    "selectError": "Não foi possível abrir esta área de trabalho. Tente de novo ou entre com outra conta.",
     "subtitle": "Suas permissões e seus dados ficam isolados em cada área de trabalho.",
     "title": "Suas áreas de trabalho",
-    "useAnotherAccount": "Usar outra conta"
+    "useAnotherAccount": "Usar outra conta",
+    "empty": "Esta conta ainda não tem acesso a nenhuma área de trabalho. Peça um convite a quem administra a sua empresa, ou entre com outra conta.",
+    "retry": "Tentar de novo"
   },
   "inventoryPhase": {
     "operations": "Operações de estoque",
@@ -1914,7 +1917,7 @@
       "quantity": "Quantidade",
       "lineTotal": "Total da linha",
       "proposal": "Proposta",
-      "proposed": "{count} linha(s) de recebimento por {basis}",
+      "proposed": "{count, plural, one {# linha de recebimento} other {# linhas de recebimento}} por {basis}",
       "basis": {
         "mapping": "mapeamento lembrado",
         "ncm": "NCM",
@@ -2462,7 +2465,7 @@
       "erasedText": "Texto apagado",
       "task": "Tarefa",
       "note": "Nota",
-      "revisions": "{count} revisões"
+      "revisions": "{count, plural, one {# revisão} other {# revisões}}"
     },
     "activityKind": {
       "call": "Ligação",
@@ -2736,7 +2739,7 @@
     "noModule": "Você não administra nenhum módulo que importe dados.",
     "counts": "{total} linhas: {written} gravadas, {failed} com falha, {remaining} restantes, {cancelled} canceladas.",
     "countsMismatch": "As contagens não fecham com o total do arquivo; recarregue a importação.",
-    "confirm": "Importar {count} linhas válidas",
+    "confirm": "{count, plural, one {Importar # linha válida} other {Importar # linhas válidas}}",
     "cancel": "Cancelar importação",
     "downloadFailures": "Baixar falhas",
     "another": "Nova importação",
@@ -3219,7 +3222,7 @@
     "nothing": "nada",
     "unread": "não lido",
     "difference": "{key}: módulo {owner}, ledger {ledger}",
-    "pendingPostings": "{count} lançamentos pendentes no Ledger",
+    "pendingPostings": "{count, plural, one {# lançamento pendente} other {# lançamentos pendentes}} no Ledger",
     "noRuns": "Nenhuma checagem rodou ainda.",
     "triggers": {
       "scheduled": "execução diária",

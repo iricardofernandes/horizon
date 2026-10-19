@@ -148,7 +148,7 @@ function ThresholdForm({
 
   return (
     <form onSubmit={submit}>
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
       <div className="form-grid four-columns">
         <SelectField
           label={t('module')}

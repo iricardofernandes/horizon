@@ -229,7 +229,7 @@ function ReconciliationPanel({
   return (
     <section className="panel table-panel">
       <PanelHeading copy={t('reconcileCopy')} title={t('reconcileTitle')} />
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
       {canReconcile ? (
         <div className="dialog-actions">
           <Button disabled={busy} onClick={() => void reconcile()} type="button" variant="primary">

@@ -123,7 +123,7 @@ export function ReconciliationView({
           ) : null}
         </div>
       )}
-      {failed ? <Notice copy={t('unavailable')} /> : null}
+      {failed ? <Notice tone="danger" copy={t('unavailable')} /> : null}
       {!failed && accounts.length && !workspace ? <LoadingState /> : null}
       {workspace ? (
         <>

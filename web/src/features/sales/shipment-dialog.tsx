@@ -81,7 +81,7 @@ export function ShipmentDialog({
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {failed ? <Notice copy={t('detailUnavailable')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('detailUnavailable')} /> : null}
           {!failed && !detail ? <LoadingState /> : null}
           {detail ? (
             <Body
@@ -186,7 +186,7 @@ function Body({
       {detail.closureReason ? (
         <p className="document-note">{t('closedFor', { reason: detail.closureReason })}</p>
       ) : null}
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
 
       {abilities.canWrite ? <Steps busy={busy} detail={detail} onCommand={onCommand} /> : null}
     </>

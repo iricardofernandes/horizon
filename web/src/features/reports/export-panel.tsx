@@ -94,7 +94,7 @@ export function ExportPanel({
   return (
     <section className="panel table-panel">
       <PanelHeading copy={t('exportCopy')} title={t('exportTitle')} />
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
       <div className="form-grid four-columns">
         <SelectField
           label={t('format')}
@@ -190,7 +190,7 @@ function FileList({
 
   return (
     <>
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
       <div className="dialog-actions">
         <Button onClick={() => void onReload()} type="button" variant="ghost">
           {t('refresh')}

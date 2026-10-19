@@ -94,7 +94,7 @@ export function TitleDetailDialog({ id, data, abilities, onClose, onChanged, set
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {failed ? <Notice copy={t('detailUnavailable')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('detailUnavailable')} /> : null}
           {!failed && !detail ? <LoadingState /> : null}
           {detail ? (
             <DetailBody

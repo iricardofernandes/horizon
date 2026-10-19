@@ -141,7 +141,7 @@ function GrantForm({
 
   return (
     <form className="delegation-form" onSubmit={submit}>
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
       <div className="form-grid four-columns">
         <SelectField
           label={t('module')}
@@ -216,7 +216,7 @@ function DelegationTable({
   if (!rows.length) return <p className="catalog-page-copy">{t('noDelegations')}</p>
   return (
     <>
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
       <div className="table-scroll">
         <table>
           <thead>

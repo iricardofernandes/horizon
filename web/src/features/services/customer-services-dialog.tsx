@@ -68,7 +68,7 @@ export function CustomerServicesDialog({ customerId, name }: { customerId: strin
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {failed ? <Notice copy={t('detailUnavailable')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('detailUnavailable')} /> : null}
           {!failed && !found ? <LoadingState /> : null}
           {found ? <Lists found={found} /> : null}
         </Dialog.Popup>

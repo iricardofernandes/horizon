@@ -99,7 +99,7 @@ export function AccountStatement({
           />
         </label>
       </div>
-      {failed ? <Notice copy={t('statementUnavailable')} /> : null}
+      {failed ? <Notice tone="danger" copy={t('statementUnavailable')} /> : null}
       {!failed && !statement ? <LoadingState /> : null}
       {statement ? (
         <>

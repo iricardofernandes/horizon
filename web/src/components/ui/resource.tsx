@@ -1,7 +1,8 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { LoadingState, Notice } from '@/components/ui/state'
 import type { LoaderState } from '@/lib/use-loader'
 
@@ -14,8 +15,28 @@ export function Resource<T>({
   children: (data: T) => ReactNode
 }) {
   const t = useTranslations('common')
+  const [retrying, setRetrying] = useState(false)
+
+  async function retry() {
+    setRetrying(true)
+    await state.reload()
+    setRetrying(false)
+  }
+
   if (state.loading) return <LoadingState />
-  if (state.failed) return <Notice copy={t('screenUnavailable')} />
+  if (state.failed) {
+    return (
+      <Notice
+        action={
+          <Button disabled={retrying} focusableWhenDisabled onClick={() => void retry()}>
+            {t('retry')}
+          </Button>
+        }
+        copy={t('screenUnavailable')}
+        tone="danger"
+      />
+    )
+  }
   if (!state.data) return null
   return <>{children(state.data)}</>
 }
