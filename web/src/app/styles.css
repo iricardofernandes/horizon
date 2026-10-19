@@ -55,9 +55,9 @@
   --radius-pill: 9999px;
   --motion-fast: 150ms;
   --motion-exit: 100ms;
-  --motion-layout: 200ms;
   /* What is left of a panel's entrance when the reader asks for less motion. */
   --motion-fade: 150ms;
+  --ease-press: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --font-sans: "DM Sans Variable", "DM Sans", system-ui, sans-serif;
   font-family: var(--font-sans);
   font-optical-sizing: auto;
@@ -232,14 +232,18 @@ select:focus-visible,
   transition-duration: var(--motion-fast);
   transition-timing-function: ease-out;
 }
-.ui-input:hover,
-.ui-select-trigger:hover {
-  border-color: var(--color-border-hover);
+@media (hover: hover) and (pointer: fine) {
+  .ui-input:hover,
+  .ui-select-trigger:hover {
+    border-color: var(--color-border-hover);
+  }
 }
 .ui-input:focus,
 .ui-select-trigger[data-popup-open] {
   border-color: var(--color-accent-focus);
   box-shadow: var(--shadow-focus);
+  /* Focus arrives by Tab as often as by pointer: it shows at once and only fades on leaving. */
+  transition: none;
 }
 .ui-select-trigger {
   display: flex;
@@ -335,13 +339,15 @@ select:focus-visible,
   white-space: nowrap;
   user-select: none;
   cursor: pointer;
-  transition-property: background-color, box-shadow, color, scale;
-  transition-duration: var(--motion-fast);
-  transition-timing-function: ease-out;
+  transition:
+    background-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    scale var(--motion-fast) var(--ease-press);
 }
-/* A press is felt: the control gives a little under the pointer. */
+/* A press is felt, not seen: the control gives a little under the pointer. */
 .ui-button:active:not([data-disabled]) {
-  scale: 0.96;
+  scale: 0.97;
 }
 .ui-button-primary {
   min-height: 40px;
@@ -353,8 +359,10 @@ select:focus-visible,
   font-size: 14px;
   font-weight: 500;
 }
-.ui-button-primary:hover:not([data-disabled]) {
-  background: var(--color-accent-solid-hover);
+@media (hover: hover) and (pointer: fine) {
+  .ui-button-primary:hover:not([data-disabled]) {
+    background: var(--color-accent-solid-hover);
+  }
 }
 .ui-button-secondary,
 .ui-button-danger {
@@ -367,16 +375,20 @@ select:focus-visible,
   font-size: 14px;
   font-weight: 500;
 }
-.ui-button-secondary:hover:not([data-disabled]) {
-  background: var(--color-surface-hover);
+@media (hover: hover) and (pointer: fine) {
+  .ui-button-secondary:hover:not([data-disabled]) {
+    background: var(--color-surface-hover);
+  }
 }
 .ui-button-danger {
   background: var(--color-danger-bg);
   box-shadow: none;
   color: var(--color-danger-text);
 }
-.ui-button-danger:hover:not([data-disabled]) {
-  box-shadow: inset 0 0 0 1px currentColor;
+@media (hover: hover) and (pointer: fine) {
+  .ui-button-danger:hover:not([data-disabled]) {
+    box-shadow: inset 0 0 0 1px currentColor;
+  }
 }
 .ui-button[data-disabled] {
   opacity: 0.55;
@@ -391,9 +403,11 @@ select:focus-visible,
   font-size: 13px;
   font-weight: 500;
 }
-.ui-button-ghost:hover:not([data-disabled]) {
-  background: var(--color-bg-subtle);
-  color: var(--color-text);
+@media (hover: hover) and (pointer: fine) {
+  .ui-button-ghost:hover:not([data-disabled]) {
+    background: var(--color-bg-subtle);
+    color: var(--color-text);
+  }
 }
 .wide {
   width: 100%;
@@ -477,9 +491,11 @@ select:focus-visible,
   text-align: left;
   cursor: pointer;
 }
-.ui-button-workspace:hover:not([data-disabled]) {
-  border-color: var(--color-border-hover);
-  background: var(--color-accent-subtle);
+@media (hover: hover) and (pointer: fine) {
+  .ui-button-workspace:hover:not([data-disabled]) {
+    border-color: var(--color-border-hover);
+    background: var(--color-accent-subtle);
+  }
 }
 .ui-button-workspace[data-disabled] {
   cursor: wait;
@@ -538,10 +554,11 @@ select:focus-visible,
   border-radius: var(--radius-control);
   color: var(--color-text);
   text-decoration: none;
-  transition: background-color var(--motion-fast) ease;
 }
-.workspace-control:hover {
-  background: var(--color-bg-subtle);
+@media (hover: hover) and (pointer: fine) {
+  .workspace-control:hover {
+    background: var(--color-bg-subtle);
+  }
 }
 /*
  * The rail: one glyph per module, and the module's screens in a panel beside it.
@@ -593,15 +610,12 @@ select:focus-visible,
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  transition-property: background-color, box-shadow, color;
-  transition-duration: var(--motion-fast);
-  transition-timing-function: ease;
 }
 .rail-trigger[data-popup-open] {
   background: var(--color-bg-subtle);
   color: var(--color-text);
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .rail-trigger:hover {
     background: var(--color-bg-subtle);
     color: var(--color-text);
@@ -626,7 +640,8 @@ select:focus-visible,
   transition-duration: var(--motion-fast);
   transition-timing-function: cubic-bezier(0.645, 0.045, 0.355, 1);
 }
-.rail-positioner[data-instant] {
+.rail-positioner[data-instant],
+.rail-positioner[data-keyboard] {
   transition: none;
 }
 .rail-popup {
@@ -670,6 +685,11 @@ select:focus-visible,
 .rail-content[data-ending-style] {
   opacity: 0;
 }
+/* Opened from the keys, the panel is there at once: a key is pressed far too often to wait. */
+.rail-positioner[data-keyboard] .rail-popup,
+.rail-positioner[data-keyboard] .rail-content {
+  transition: none;
+}
 .rail-heading {
   margin: 4px 8px 6px;
   color: var(--color-text-muted);
@@ -694,13 +714,12 @@ select:focus-visible,
   font-size: 14px;
   text-decoration: none;
   white-space: nowrap;
-  transition: background-color var(--motion-fast) ease;
 }
 .rail-link svg {
   flex: none;
   color: var(--color-icon);
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .rail-link:hover {
     background: var(--color-bg);
   }
@@ -742,30 +761,24 @@ select:focus-visible,
   background: transparent;
   color: var(--color-text-muted);
 }
-.sidebar-toggle:hover:not([data-disabled]) {
-  background: var(--color-bg);
-  color: var(--color-text);
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-toggle:hover:not([data-disabled]) {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
 }
 @media (min-width: 761px) {
   /*
-   * Hiding the rail hands its column to the work. It is something on screen changing
-   * size, so it eases in and out, and it stays a transition so a second press turns it
-   * round from wherever it is. A hidden rail is out of the tab order as well as out of sight.
+   * Hiding the rail hands its column to the work, at once: easing a 56px column would lay
+   * out the whole page on every frame to move very little. A hidden rail is out of the tab
+   * order as well as out of sight.
    */
-  .workspace-shell {
-    transition-property: grid-template-columns, gap;
-    transition-duration: var(--motion-layout);
-    transition-timing-function: cubic-bezier(0.645, 0.045, 0.355, 1);
-  }
   .workspace-shell.sidebar-collapsed {
     grid-template-columns: 0 minmax(0, 1fr);
     gap: 0;
   }
   .sidebar {
     overflow: hidden;
-    transition:
-      opacity var(--motion-fast) ease,
-      visibility var(--motion-layout);
   }
   .sidebar-collapsed .sidebar {
     visibility: hidden;
@@ -1009,12 +1022,11 @@ tbody tr:last-child td {
   font-weight: 500;
   letter-spacing: inherit;
   cursor: pointer;
-  transition-property: background-color, box-shadow, color;
-  transition-duration: var(--motion-fast);
-  transition-timing-function: ease-out;
 }
-.ui-tab:hover {
-  color: var(--color-text);
+@media (hover: hover) and (pointer: fine) {
+  .ui-tab:hover {
+    color: var(--color-text);
+  }
 }
 .ui-tab[data-active] {
   background: var(--color-surface-raised);
@@ -1245,9 +1257,13 @@ tbody tr:last-child td {
   color: var(--color-danger-text);
   transform: translateY(-50%);
 }
-.warehouse-option:hover:not([data-disabled]),
 .warehouse-option.active {
   background: var(--color-accent-subtle);
+}
+@media (hover: hover) and (pointer: fine) {
+  .warehouse-option:hover:not([data-disabled]) {
+    background: var(--color-accent-subtle);
+  }
 }
 .warehouse-option > span:nth-child(2) {
   display: grid;
@@ -1492,9 +1508,11 @@ tbody tr:last-child td {
   color: var(--color-text-muted);
   cursor: pointer;
 }
-.ui-dialog-close:hover {
-  background: var(--color-bg-subtle);
-  color: var(--color-text);
+@media (hover: hover) and (pointer: fine) {
+  .ui-dialog-close:hover {
+    background: var(--color-bg-subtle);
+    color: var(--color-text);
+  }
 }
 .dialog-form {
   display: grid;
@@ -2801,11 +2819,13 @@ tbody tr.reconciliation-selected td {
   text-align: left;
   cursor: pointer;
 }
-.board-card:hover {
-  border-color: var(--color-border-hover);
+@media (hover: hover) and (pointer: fine) {
+  .board-card:hover {
+    border-color: var(--color-border-hover);
+  }
 }
 .board-card:focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: 2px solid var(--color-accent-focus);
   outline-offset: 2px;
 }
 .board-card-title {
@@ -3278,11 +3298,6 @@ tbody tr.reconciliation-selected td {
   color: var(--color-text-muted);
   font-size: 0.875rem;
 }
-.crm-board .board-column {
-  transition:
-    border-color 120ms ease,
-    background-color 120ms ease;
-}
 .crm-board .crm-drop-target {
   border-color: var(--color-accent-border);
   background: var(--color-accent-subtle);
@@ -3308,8 +3323,10 @@ tbody tr.reconciliation-selected td {
   text-align: left;
   cursor: pointer;
 }
-.crm-link-button:hover {
-  text-decoration: underline;
+@media (hover: hover) and (pointer: fine) {
+  .crm-link-button:hover {
+    text-decoration: underline;
+  }
 }
 .crm-link-button:focus-visible {
   outline: 2px solid var(--color-accent-focus);
@@ -3592,12 +3609,11 @@ tbody tr.reconciliation-selected td {
   background: transparent;
   text-align: left;
   cursor: pointer;
-  transition: background-color var(--motion-fast) ease;
 }
 .bell-item-button:focus-visible {
   background: var(--color-bg);
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .bell-item-button:hover {
     background: var(--color-bg);
   }
@@ -4042,8 +4058,10 @@ tbody tr.audit-broken td {
   background: var(--color-bg);
   font-size: 14px;
 }
-.palette-trigger:hover:not([data-disabled]) {
-  background: var(--color-bg-subtle);
+@media (hover: hover) and (pointer: fine) {
+  .palette-trigger:hover:not([data-disabled]) {
+    background: var(--color-bg-subtle);
+  }
 }
 .avatar-trigger {
   display: grid;
@@ -4059,7 +4077,7 @@ tbody tr.audit-broken td {
 .avatar-trigger[data-popup-open] .avatar {
   box-shadow: 0 0 0 3px var(--color-bg-subtle);
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .avatar-trigger:hover .avatar {
     box-shadow: 0 0 0 3px var(--color-bg-subtle);
   }
@@ -4170,20 +4188,25 @@ tbody tr.audit-broken td {
     0 10px 24px -8px rgb(0 0 0 / 36%);
   color: var(--color-surface);
   cursor: pointer;
-  transition-property: background-color, scale;
-  transition-duration: var(--motion-fast);
-  transition-timing-function: ease-out;
+  transition:
+    background-color var(--motion-fast) ease,
+    scale var(--motion-fast) var(--ease-press);
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .assistant-fab:hover {
     background: color-mix(in srgb, var(--color-text) 84%, white);
   }
 }
 .assistant-fab:active {
-  scale: 0.96;
+  scale: 0.97;
 }
 .assistant-dock-positioner {
   z-index: 26;
+}
+/* The larger the panel, the nearer its full size it starts. */
+.assistant-dock[data-starting-style],
+.assistant-dock[data-ending-style] {
+  scale: 0.98;
 }
 .assistant-dock {
   display: flex;
@@ -4315,7 +4338,6 @@ tbody tr.audit-broken td {
   :root {
     --motion-fast: 0.01ms;
     --motion-exit: 0.01ms;
-    --motion-layout: 0.01ms;
   }
   .ui-button:active:not([data-disabled]),
   .assistant-fab:active {

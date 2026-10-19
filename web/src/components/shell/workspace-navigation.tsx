@@ -4,7 +4,7 @@ import { NavigationMenu } from '@base-ui/react/navigation-menu'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { entryForPath, groupForPath, type NavigationGroup } from '@/lib/navigation'
 
 /** Below this width the rail lies along the bottom edge, and its panel opens upward. */
@@ -71,12 +71,16 @@ export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGro
   const bottom = useBottomRail()
   const currentGroup = groupForPath(groups, pathname)
   const currentEntry = entryForPath(pathname)
+  // Whether the reader is moving through the rail with keys, so its panel opens without motion.
+  const [byKeyboard, setByKeyboard] = useState(false)
 
   return (
     <NavigationMenu.Root
       aria-label={shell('navigationLabel')}
       className="rail"
       closeDelay={120}
+      onKeyDown={() => setByKeyboard(true)}
+      onPointerMove={() => setByKeyboard(false)}
       orientation={bottom ? 'horizontal' : 'vertical'}
     >
       <NavigationMenu.List className="rail-list" ref={watchOverflowEdges}>
@@ -128,6 +132,7 @@ export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGro
           align="start"
           className="rail-positioner"
           collisionPadding={12}
+          data-keyboard={byKeyboard || undefined}
           side={bottom ? 'top' : 'right'}
           sideOffset={bottom ? 12 : 14}
         >

@@ -41,9 +41,12 @@ The frontend's visual language is:
 - **DM Sans, self-hosted**, at weights 400, 500 and 600, with tabular figures everywhere
   and a slight negative tracking. Labels are sentence case; nothing is set in capitals.
 - **State in two channels.** A badge carries a dot as well as a colour.
-- **Motion that answers the hand.** A button gives to 96% while pressed; hover and focus
-  change in 150 ms; transitions name the properties they change. `prefers-reduced-motion`
-  turns both off through one token (`--motion-fast`).
+- **Motion that answers the hand.** A button gives to 97% while pressed; hover changes in
+  150 ms, and only where there is a pointer that hovers; transitions name the properties
+  they change. What follows the pointer or the keys is instant: focus, a highlight moving
+  down a list, the active tab, a drop target, the rail's panel opened from the keyboard.
+  `prefers-reduced-motion` turns the movement off through the `--motion-*` tokens; panels
+  still fade.
 - **Modules on a rail.** The sidebar is one glyph per module; a module's screens open in
   a panel beside it on hover, focus or click (Base UI's navigation menu, so the keyboard and
   a touch reach the same panel). Forty screens do not fit a column a reader can scan; eleven
