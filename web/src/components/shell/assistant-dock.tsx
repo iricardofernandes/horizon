@@ -95,14 +95,21 @@ export function AssistantDock() {
               </Popover.Close>
             </header>
 
-            <div aria-busy={thread.busy} className="assistant-dock-body">
-              {failed ? <p role="alert">{t('refused.failed')}</p> : null}
+            <div aria-busy={thread.busy} className="assistant-dock-body" role="log">
+              {failed ? (
+                <div className="assistant-dock-failed" role="alert">
+                  <span>{t('statusFailed')}</span>
+                  <Button onClick={() => void refresh()} type="button">
+                    {t('retry')}
+                  </Button>
+                </div>
+              ) : null}
               {status && readiness !== 'ready' && readiness ? (
                 <p className="assistant-dock-readiness" role="status">
                   {t(`readiness.${readiness}`, { provider: status.provider })}
                 </p>
               ) : null}
-              {thread.turns.length === 0 ? <p className="muted">{t('empty')}</p> : null}
+              {ready && thread.turns.length === 0 ? <p className="muted">{t('empty')}</p> : null}
               {thread.turns.map((turn) => (
                 <TurnView key={`${turn.askedAt}-${turn.question}`} turn={turn} />
               ))}

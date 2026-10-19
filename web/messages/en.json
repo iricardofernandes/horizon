@@ -603,7 +603,7 @@
       "assistant": "Assistant",
       "assistantSettings": "Assistant",
       "fiscalRules": "Rules",
-      "profile": "My profile"
+      "profile": "Profile"
     }
   },
   "orders": {
@@ -1332,7 +1332,8 @@
     "workspace": "Workspace",
     "workspaceLabel": "{name} workspace",
     "userMenu": "{name}'s account",
-    "profileSettings": "Profile settings"
+    "profileSettings": "Profile",
+    "accountMenu": "Account"
   },
   "status": {
     "abandoned": "abandoned",
@@ -2885,7 +2886,8 @@
       "payable": "Payable",
       "service-order": "Service order",
       "opportunity": "Opportunity"
-    }
+    },
+    "shortcutHint": "Search (Ctrl K)"
   },
   "notifications": {
     "bell": "Notifications",
@@ -3329,7 +3331,9 @@
     },
     "dock": "Open the assistant",
     "closeDock": "Close the assistant",
-    "openFull": "Open on its own screen"
+    "openFull": "Open on its own screen",
+    "statusFailed": "We couldn't check whether the assistant is available.",
+    "retry": "Try again"
   },
   "assistantSettings": {
     "eyebrow": "Administration",

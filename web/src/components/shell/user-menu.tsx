@@ -27,7 +27,10 @@ export function UserMenu({ session }: { session: SessionUser | null }) {
 
   return (
     <Menu.Root>
-      <Menu.Trigger aria-label={t('userMenu', { name })} className="avatar-trigger">
+      <Menu.Trigger
+        aria-label={session ? t('userMenu', { name: session.name }) : t('accountMenu')}
+        className="avatar-trigger"
+      >
         <span aria-hidden="true" className="avatar">
           {session?.name?.slice(0, 1).toUpperCase() ?? 'H'}
         </span>

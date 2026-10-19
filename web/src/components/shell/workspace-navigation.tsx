@@ -25,6 +25,39 @@ function useBottomRail(): boolean {
 }
 
 /**
+ * Marks which ends of a scrolling list hide more of it, so the stylesheet can fade them.
+ *
+ * Eleven modules outgrow a phone's width and a short window's height; a list cut at an
+ * edge reads as complete unless that edge says otherwise. The modules arrive with the
+ * session, after the list is drawn, so new items are watched as well as the list's size.
+ * The axis is whichever one the list scrolls along.
+ */
+function watchOverflowEdges(list: HTMLElement | null) {
+  if (!list) return
+  function mark() {
+    if (!list) return
+    const horizontal = list.scrollWidth > list.clientWidth
+    const start = horizontal ? list.scrollLeft : list.scrollTop
+    const room = horizontal
+      ? list.scrollWidth - list.clientWidth
+      : list.scrollHeight - list.clientHeight
+    list.toggleAttribute('data-overflow-start', start > 1)
+    list.toggleAttribute('data-overflow-end', start < room - 1)
+  }
+  mark()
+  const resize = new ResizeObserver(mark)
+  resize.observe(list)
+  const items = new MutationObserver(mark)
+  items.observe(list, { childList: true })
+  list.addEventListener('scroll', mark, { passive: true })
+  return () => {
+    resize.disconnect()
+    items.disconnect()
+    list.removeEventListener('scroll', mark)
+  }
+}
+
+/**
  * The modules as a rail of glyphs; a module's screens open beside it.
  *
  * Forty screens do not fit a column a reader can scan, and eleven modules do. The rail
@@ -46,7 +79,7 @@ export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGro
       closeDelay={120}
       orientation={bottom ? 'horizontal' : 'vertical'}
     >
-      <NavigationMenu.List className="rail-list">
+      <NavigationMenu.List className="rail-list" ref={watchOverflowEdges}>
         {groups.map((group) => {
           const GroupIcon = group.icon
           const current = group === currentGroup
@@ -54,6 +87,7 @@ export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGro
           return (
             <NavigationMenu.Item key={group.labelKey} value={group.labelKey}>
               <NavigationMenu.Trigger
+                aria-current={current ? 'true' : undefined}
                 aria-label={label}
                 className={current ? 'rail-trigger active' : 'rail-trigger'}
               >
@@ -97,7 +131,8 @@ export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGro
           side={bottom ? 'top' : 'right'}
           sideOffset={bottom ? 12 : 14}
         >
-          <NavigationMenu.Popup aria-label={shell('navigationLabel')} className="rail-popup">
+          {/* The rail is already the navigation landmark; its panel is part of it, not a second one. */}
+          <NavigationMenu.Popup className="rail-popup" render={<div />}>
             <NavigationMenu.Viewport className="rail-viewport" />
           </NavigationMenu.Popup>
         </NavigationMenu.Positioner>

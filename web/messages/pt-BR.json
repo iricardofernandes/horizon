@@ -603,7 +603,7 @@
       "assistant": "Assistente",
       "assistantSettings": "Assistente",
       "fiscalRules": "Regras",
-      "profile": "Meu perfil"
+      "profile": "Perfil"
     }
   },
   "orders": {
@@ -1332,7 +1332,8 @@
     "workspace": "Área de trabalho",
     "workspaceLabel": "Área de trabalho {name}",
     "userMenu": "Conta de {name}",
-    "profileSettings": "Configurações do perfil"
+    "profileSettings": "Perfil",
+    "accountMenu": "Conta"
   },
   "status": {
     "abandoned": "abandonada",
@@ -2885,7 +2886,8 @@
       "payable": "Conta a pagar",
       "service-order": "Ordem de serviço",
       "opportunity": "Oportunidade"
-    }
+    },
+    "shortcutHint": "Buscar (Ctrl K)"
   },
   "notifications": {
     "bell": "Notificações",
@@ -3329,7 +3331,9 @@
     },
     "dock": "Abrir o assistente",
     "closeDock": "Fechar o assistente",
-    "openFull": "Abrir em tela própria"
+    "openFull": "Abrir em tela própria",
+    "statusFailed": "Não foi possível verificar se o assistente está disponível.",
+    "retry": "Tentar de novo"
   },
   "assistantSettings": {
     "eyebrow": "Administração",

@@ -99,7 +99,7 @@ try {
   // The language is the reader's own setting, behind their avatar; switching it keeps them
   // on the same resource and reaches the whole shell.
   await page.getByRole('button', { name: /^Conta de / }).click()
-  await page.getByRole('menuitem', { name: 'Configurações do perfil' }).click()
+  await page.getByRole('menuitem', { name: 'Perfil' }).click()
   await page.waitForURL(`${appUrl}/app/settings/profile`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('combobox', { name: 'Idioma' }).click()
   await page.getByRole('option', { name: 'English' }).click()

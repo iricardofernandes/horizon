@@ -11,7 +11,7 @@
   --color-surface-raised: #fdfdfd;
   --color-surface-hover: #f6f6f6;
   --color-text: #1b1b1b;
-  --color-text-muted: #686868;
+  --color-text-muted: #626262;
   --color-icon: #8f8f8f;
   --color-border: #e2e2e2;
   --color-border-control: #bdbdbd;
@@ -33,12 +33,14 @@
   --color-danger-bg: #fde6e1;
   --color-danger-border: #f3b0a3;
   --color-danger-text: #c22a12;
-  --color-danger-solid: #ff381c;
+  --color-danger-solid: #d92d16;
   --color-warning-bg: #f6ebcf;
   --color-warning-border: #e0c47c;
   --color-warning-text: #7d5200;
   --color-warning-solid: #c98a00;
   --color-scrim: rgb(0 0 0 / 32%);
+  /* The surface, let through: bars that stay put while the page scrolls under them. */
+  --color-surface-frosted: rgb(253 253 253 / 86%);
   /* A surface is lit along its top edge and shaded along its bottom one. */
   --shadow-edge: inset 0 1px 0 0 #ffffff, inset 0 -1px 0 0 rgb(0 0 0 / 4%);
   --shadow-card: var(--shadow-edge);
@@ -54,6 +56,8 @@
   --motion-fast: 150ms;
   --motion-exit: 100ms;
   --motion-layout: 200ms;
+  /* What is left of a panel's entrance when the reader asks for less motion. */
+  --motion-fade: 150ms;
   --font-sans: "DM Sans Variable", "DM Sans", system-ui, sans-serif;
   font-family: var(--font-sans);
   font-optical-sizing: auto;
@@ -235,7 +239,6 @@ select:focus-visible,
 .ui-input:focus,
 .ui-select-trigger[data-popup-open] {
   border-color: var(--color-accent-focus);
-  outline: 2px solid transparent;
   box-shadow: var(--shadow-focus);
 }
 .ui-select-trigger {
@@ -561,6 +564,23 @@ select:focus-visible,
   overflow-y: auto;
   list-style: none;
   scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+/* More modules past an edge: that edge fades, so the list reads as one that goes on. */
+.rail-list[data-overflow-start] {
+  mask-image: linear-gradient(to bottom, transparent, #000 32px);
+}
+.rail-list[data-overflow-end] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+.rail-list[data-overflow-start][data-overflow-end] {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 32px,
+    #000 calc(100% - 32px),
+    transparent
+  );
 }
 .rail-trigger {
   display: grid;
@@ -577,10 +597,19 @@ select:focus-visible,
   transition-duration: var(--motion-fast);
   transition-timing-function: ease;
 }
-.rail-trigger:hover,
 .rail-trigger[data-popup-open] {
   background: var(--color-bg-subtle);
   color: var(--color-text);
+}
+@media (hover: hover) {
+  .rail-trigger:hover {
+    background: var(--color-bg-subtle);
+    color: var(--color-text);
+  }
+}
+/* The list scrolls, so a ring outside the glyph would be cut at its edges. */
+.rail-trigger:focus-visible {
+  outline-offset: -2px;
 }
 .rail-trigger.active {
   background: var(--color-surface-raised);
@@ -588,7 +617,8 @@ select:focus-visible,
   color: var(--color-accent-solid);
 }
 .rail-positioner {
-  z-index: 20;
+  /* Above the assistant's button and its chat, which sit where the panel opens on a phone. */
+  z-index: 27;
   width: var(--positioner-width);
   height: var(--positioner-height);
   max-width: var(--available-width);
@@ -604,6 +634,9 @@ select:focus-visible,
   width: var(--popup-width);
   height: var(--popup-height);
   border-radius: var(--radius-card);
+  /* Shadows are dropped in forced colors; this outline is drawn there instead. */
+  outline: 1px solid transparent;
+  outline-offset: -1px;
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-raised), var(--shadow-edge);
   transform-origin: var(--transform-origin);
@@ -618,7 +651,7 @@ select:focus-visible,
 }
 .rail-popup[data-ending-style] {
   transition-duration: var(--motion-exit);
-  transition-timing-function: ease;
+  transition-timing-function: ease-out;
 }
 .rail-viewport {
   position: relative;
@@ -667,8 +700,10 @@ select:focus-visible,
   flex: none;
   color: var(--color-icon);
 }
-.rail-link:hover {
-  background: var(--color-bg);
+@media (hover: hover) {
+  .rail-link:hover {
+    background: var(--color-bg);
+  }
 }
 .rail-link[data-active] {
   background: var(--color-bg-subtle);
@@ -696,7 +731,7 @@ select:focus-visible,
   padding: 8px clamp(18px, 3vw, 40px) 8px 12px;
   border-bottom: 1px solid var(--color-border);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  background: rgb(253 253 253 / 86%);
+  background: var(--color-surface-frosted);
   backdrop-filter: blur(14px);
 }
 .sidebar-toggle {
@@ -2096,7 +2131,7 @@ tbody tr:last-child td {
     border: 1px solid var(--color-border);
     border-bottom: 0;
     border-radius: var(--radius-card) var(--radius-card) 0 0;
-    background: rgb(253 253 253 / 86%);
+    background: var(--color-surface-frosted);
     backdrop-filter: blur(14px);
   }
   .workspace-control,
@@ -2112,8 +2147,35 @@ tbody tr:last-child td {
     overflow-x: auto;
     overflow-y: hidden;
   }
+  .rail-list[data-overflow-start] {
+    mask-image: linear-gradient(to right, transparent, #000 32px);
+  }
+  .rail-list[data-overflow-end] {
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  }
+  .rail-list[data-overflow-start][data-overflow-end] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 32px,
+      #000 calc(100% - 32px),
+      transparent
+    );
+  }
   .rail-list > li {
     flex: none;
+  }
+  /*
+   * Eleven glyphs fit from 560px up. Narrower, the rail shows five and a half, so the half
+   * glyph at the edge says the list goes on.
+   */
+  @media (max-width: 560px) {
+    .rail-list > li {
+      flex-basis: calc((100% - 5 * 4px) / 5.5);
+    }
+    .rail-trigger {
+      width: 100%;
+    }
   }
   .topbar {
     min-height: 66px;
@@ -2128,8 +2190,17 @@ tbody tr:last-child td {
     border-radius: 0;
     box-shadow: none;
   }
+  /* The rail and the assistant's button sit over the last 136px of the screen. */
   .content {
-    padding: 28px 16px 95px;
+    padding: 28px 16px 152px;
+  }
+  html {
+    scroll-padding-block-end: 152px;
+  }
+  /* Below 16px, Safari on a phone zooms the page into the field being typed in. */
+  .ui-input,
+  .ui-select-trigger {
+    font-size: 16px;
   }
   .page-heading-with-actions,
   .catalog-toolbar {
@@ -3478,7 +3549,9 @@ tbody tr.reconciliation-selected td {
   max-height: 460px;
   padding: 12px;
   overflow-y: auto;
-  border-radius: var(--radius-card);
+  overscroll-behavior: contain;
+  /* The items' radius plus the padding around them. */
+  border-radius: calc(var(--radius-sm) + 12px);
 }
 .bell-heading {
   display: flex;
@@ -3521,9 +3594,13 @@ tbody tr.reconciliation-selected td {
   cursor: pointer;
   transition: background-color var(--motion-fast) ease;
 }
-.bell-item-button:hover,
 .bell-item-button:focus-visible {
   background: var(--color-bg);
+}
+@media (hover: hover) {
+  .bell-item-button:hover {
+    background: var(--color-bg);
+  }
 }
 .bell-item.unread .bell-item-button span {
   font-weight: 500;
@@ -3979,9 +4056,13 @@ tbody tr.audit-broken td {
   background: transparent;
   cursor: pointer;
 }
-.avatar-trigger:hover .avatar,
 .avatar-trigger[data-popup-open] .avatar {
   box-shadow: 0 0 0 3px var(--color-bg-subtle);
+}
+@media (hover: hover) {
+  .avatar-trigger:hover .avatar {
+    box-shadow: 0 0 0 3px var(--color-bg-subtle);
+  }
 }
 .ui-menu-positioner,
 .bell-positioner {
@@ -3991,7 +4072,9 @@ tbody tr.audit-broken td {
 .ui-menu-popup,
 .bell-popup,
 .assistant-dock {
-  outline: 0;
+  /* Shadows are dropped in forced colors; this outline is drawn there instead. */
+  outline: 1px solid transparent;
+  outline-offset: -1px;
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-raised), var(--shadow-edge);
   transform-origin: var(--transform-origin);
@@ -4012,7 +4095,7 @@ tbody tr.audit-broken td {
 .bell-popup[data-ending-style],
 .assistant-dock[data-ending-style] {
   transition-duration: var(--motion-exit);
-  transition-timing-function: ease;
+  transition-timing-function: ease-out;
 }
 .ui-menu-popup {
   min-width: 232px;
@@ -4035,6 +4118,11 @@ tbody tr.audit-broken td {
 }
 .ui-menu-item[data-highlighted] {
   background: var(--color-bg);
+}
+/* Arrow keys move the highlight, not always the browser's focus ring: draw it here. */
+.ui-menu-item[data-highlighted]:focus-visible {
+  outline: 2px solid var(--color-accent-focus);
+  outline-offset: -2px;
 }
 .ui-menu-separator {
   height: 1px;
@@ -4066,7 +4154,7 @@ tbody tr.audit-broken td {
 .assistant-fab {
   position: fixed;
   z-index: 25;
-  right: 24px;
+  inset-inline-end: 24px;
   bottom: 24px;
   display: grid;
   place-items: center;
@@ -4086,8 +4174,10 @@ tbody tr.audit-broken td {
   transition-duration: var(--motion-fast);
   transition-timing-function: ease-out;
 }
-.assistant-fab:hover {
-  background: color-mix(in srgb, var(--color-text) 84%, white);
+@media (hover: hover) {
+  .assistant-fab:hover {
+    background: color-mix(in srgb, var(--color-text) 84%, white);
+  }
 }
 .assistant-fab:active {
   scale: 0.96;
@@ -4099,7 +4189,8 @@ tbody tr.audit-broken td {
   display: flex;
   flex-direction: column;
   width: min(400px, calc(100vw - 24px));
-  height: min(600px, calc(100dvh - 120px));
+  /* Never taller than the room above the button, or the header would leave the screen. */
+  height: min(600px, var(--available-height));
   overflow: hidden;
   border-radius: var(--radius-xl);
 }
@@ -4107,7 +4198,8 @@ tbody tr.audit-broken td {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 10px 10px 10px 18px;
+  padding-block: 10px;
+  padding-inline: 18px 10px;
   border-bottom: 1px solid var(--color-border);
 }
 .assistant-dock-header .icon-action {
@@ -4130,6 +4222,7 @@ tbody tr.audit-broken td {
   min-height: 0;
   padding: 16px 18px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   font-size: 14px;
 }
 .assistant-dock-body > * {
@@ -4145,6 +4238,11 @@ tbody tr.audit-broken td {
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 500;
+}
+.assistant-dock-failed {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
 }
 .assistant-dock-readiness {
   padding: 10px 12px;
@@ -4201,7 +4299,7 @@ tbody tr.audit-broken td {
   margin: 0;
   font-weight: 500;
   overflow-wrap: anywhere;
-  text-align: right;
+  text-align: end;
 }
 @media (max-width: 760px) {
   .palette-trigger {
@@ -4209,7 +4307,7 @@ tbody tr.audit-broken td {
   }
   /* The rail lies along the bottom edge here, so the assistant sits above it. */
   .assistant-fab {
-    right: 16px;
+    inset-inline-end: 16px;
     bottom: 84px;
   }
 }
@@ -4221,6 +4319,24 @@ tbody tr.audit-broken td {
   }
   .ui-button:active:not([data-disabled]),
   .assistant-fab:active {
+    scale: 1;
+  }
+  /* Panels still fade, so they do not snap in and out; only the movement goes. */
+  .rail-popup,
+  .ui-menu-popup,
+  .bell-popup,
+  .assistant-dock {
+    transition-property: opacity;
+    transition-duration: var(--motion-fade);
+  }
+  .rail-popup[data-starting-style],
+  .rail-popup[data-ending-style],
+  .ui-menu-popup[data-starting-style],
+  .ui-menu-popup[data-ending-style],
+  .bell-popup[data-starting-style],
+  .bell-popup[data-ending-style],
+  .assistant-dock[data-starting-style],
+  .assistant-dock[data-ending-style] {
     scale: 1;
   }
 }
