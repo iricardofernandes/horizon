@@ -602,7 +602,8 @@
       "agent": "Agent",
       "assistant": "Assistant",
       "assistantSettings": "Assistant",
-      "fiscalRules": "Rules"
+      "fiscalRules": "Rules",
+      "profile": "My profile"
     }
   },
   "orders": {
@@ -1330,7 +1331,8 @@
     "unavailableNotice": "The workspace could not be loaded. Check that the application services are running.",
     "workspace": "Workspace",
     "workspaceLabel": "{name} workspace",
-    "assistant": "Assistant"
+    "userMenu": "{name}'s account",
+    "profileSettings": "Profile settings"
   },
   "status": {
     "abandoned": "abandoned",
@@ -2854,7 +2856,6 @@
   },
   "palette": {
     "open": "Search",
-    "shortcut": "Ctrl K",
     "title": "Command palette",
     "input": "Search screens, actions, records and documents",
     "placeholder": "Type to search screens, actions, records or documents…",
@@ -3325,7 +3326,10 @@
       "unavailable": "No model provider is configured.",
       "budget-spent": "This month's assistant budget is spent.",
       "failed": "The assistant could not answer now."
-    }
+    },
+    "dock": "Open the assistant",
+    "closeDock": "Close the assistant",
+    "openFull": "Open on its own screen"
   },
   "assistantSettings": {
     "eyebrow": "Administration",
@@ -3360,5 +3364,19 @@
     "use": "Use",
     "accept": "Use the suggestion {value}",
     "reject": "Dismiss the suggestion {value}"
+  },
+  "profile": {
+    "eyebrow": "Your account",
+    "title": "Profile",
+    "copy": "Your details on this account and the language you read Horizon in.",
+    "identityTitle": "Who you are",
+    "identityCopy": "Your name and email are the same across all your workspaces.",
+    "name": "Name",
+    "email": "Email",
+    "languageTitle": "Language",
+    "languageCopy": "The choice is kept on your account and follows you to other devices.",
+    "securityTitle": "Security",
+    "securityCopy": "Second factors, recovery codes and open sessions.",
+    "securityLink": "Open security"
   }
 }

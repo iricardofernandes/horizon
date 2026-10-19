@@ -90,7 +90,7 @@ export function NotificationBell() {
         ) : null}
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Positioner align="end" sideOffset={8}>
+        <Popover.Positioner align="end" className="bell-positioner" sideOffset={8}>
           <Popover.Popup className="bell-popup">
             <div className="bell-heading">
               <Popover.Title>{t('title')}</Popover.Title>

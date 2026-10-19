@@ -96,15 +96,21 @@ try {
   await page.getByRole('heading', { name: 'Boa tarde' }).waitFor()
   await page.getByRole('link', { name: 'Área de trabalho Horizon Demo' }).waitFor()
 
-  // Switching language keeps the reader on the same resource and reaches the whole shell.
+  // The language is the reader's own setting, behind their avatar; switching it keeps them
+  // on the same resource and reaches the whole shell.
+  await page.getByRole('button', { name: /^Conta de / }).click()
+  await page.getByRole('menuitem', { name: 'Configurações do perfil' }).click()
+  await page.waitForURL(`${appUrl}/app/settings/profile`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('combobox', { name: 'Idioma' }).click()
   await page.getByRole('option', { name: 'English' }).click()
-  await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
+  await page.getByRole('heading', { name: 'Profile', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Overview', exact: true }).waitFor()
   assert(
     (await page.locator('html').getAttribute('lang')) === 'en',
     'the document language did not follow the switcher',
   )
+  await openScreen(page, 'Overview', 'Overview', true)
+  await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
 
   await page.getByRole('link', { name: 'Horizon Demo workspace' }).click()
   await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })

@@ -373,12 +373,18 @@ function cnpj() {
   return digits.join('')
 }
 
+/** The language is a profile setting: change it there, then come back to where the reader was. */
 async function setLanguage(page, label) {
+  const from = page.url()
+  await page.goto(`${appUrl}/app/settings/profile`, { waitUntil: 'domcontentloaded' })
   const switcher = page.getByRole('combobox', { name: /^(Idioma|Language)$/ })
-  if ((await switcher.textContent())?.includes(label)) return
-  await switcher.click()
-  await page.getByRole('option', { name: label }).click()
-  await page.waitForTimeout(500)
+  await switcher.waitFor()
+  if (!(await switcher.textContent())?.includes(label)) {
+    await switcher.click()
+    await page.getByRole('option', { name: label }).click()
+    await page.waitForTimeout(500)
+  }
+  await page.goto(from, { waitUntil: 'domcontentloaded' })
 }
 
 async function chooseOption(page, combobox, label) {

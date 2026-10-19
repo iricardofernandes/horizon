@@ -51,6 +51,12 @@ The frontend's visual language is:
   The panel is opened many times a day, so it moves little and leaves in 100 ms; between
   two modules it is one panel that travels. Below 760 px the rail lies along the bottom
   edge and the panel opens upward.
+- **A top bar of three things.** Search, what is new, and the person. The language, the
+  profile and the way out wait behind the avatar; the language is a setting on the
+  person's profile (ADR 0044 still holds: changing it keeps the reader where they are).
+  The assistant is a button in the corner of every screen that opens a chat over it,
+  because a question comes up in the middle of other work; its own screen keeps the
+  earlier conversations.
 
 Tokens live in the `:root` block of `web/src/app/styles.css`. A feature rule reads a
 semantic alias and never a literal colour or a palette step; no palette package is imported.

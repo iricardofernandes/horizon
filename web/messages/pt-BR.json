@@ -602,7 +602,8 @@
       "agent": "Agente",
       "assistant": "Assistente",
       "assistantSettings": "Assistente",
-      "fiscalRules": "Regras"
+      "fiscalRules": "Regras",
+      "profile": "Meu perfil"
     }
   },
   "orders": {
@@ -1330,7 +1331,8 @@
     "unavailableNotice": "A área de trabalho não pôde ser carregada. Verifique se os serviços da aplicação estão no ar.",
     "workspace": "Área de trabalho",
     "workspaceLabel": "Área de trabalho {name}",
-    "assistant": "Assistente"
+    "userMenu": "Conta de {name}",
+    "profileSettings": "Configurações do perfil"
   },
   "status": {
     "abandoned": "abandonada",
@@ -2854,7 +2856,6 @@
   },
   "palette": {
     "open": "Buscar",
-    "shortcut": "Ctrl K",
     "title": "Paleta de comandos",
     "input": "Buscar telas, ações, registros e documentos",
     "placeholder": "Digite para buscar telas, ações, registros ou documentos…",
@@ -3325,7 +3326,10 @@
       "unavailable": "Nenhum provedor de modelo está configurado.",
       "budget-spent": "O orçamento do mês do assistente acabou.",
       "failed": "Não foi possível responder agora."
-    }
+    },
+    "dock": "Abrir o assistente",
+    "closeDock": "Fechar o assistente",
+    "openFull": "Abrir em tela própria"
   },
   "assistantSettings": {
     "eyebrow": "Administração",
@@ -3360,5 +3364,19 @@
     "use": "Usar",
     "accept": "Usar a sugestão {value}",
     "reject": "Dispensar a sugestão {value}"
+  },
+  "profile": {
+    "eyebrow": "Sua conta",
+    "title": "Perfil",
+    "copy": "Seus dados nesta conta e o idioma em que você lê o Horizon.",
+    "identityTitle": "Quem você é",
+    "identityCopy": "Seu nome e e-mail valem para todas as suas áreas de trabalho.",
+    "name": "Nome",
+    "email": "E-mail",
+    "languageTitle": "Idioma",
+    "languageCopy": "A escolha fica na sua conta e acompanha você em outros dispositivos.",
+    "securityTitle": "Segurança",
+    "securityCopy": "Segundo fator, códigos de recuperação e sessões abertas.",
+    "securityLink": "Abrir segurança"
   }
 }

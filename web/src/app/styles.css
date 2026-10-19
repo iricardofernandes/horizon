@@ -77,8 +77,10 @@ body {
 }
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
+  letter-spacing: inherit;
 }
 button,
 a {
@@ -750,10 +752,6 @@ select:focus-visible,
   align-items: center;
   gap: 10px;
 }
-.user-identity {
-  display: grid;
-  font-size: 12px;
-}
 .company-readout {
   display: grid;
   gap: 14px;
@@ -769,16 +767,11 @@ select:focus-visible,
   font-weight: 600;
 }
 .language-switcher {
-  gap: 7px;
-  width: auto;
-  min-height: 36px;
-  padding: 0 10px;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 600;
+  gap: 8px;
+  width: min(280px, 100%);
 }
-.user-menu small {
-  color: var(--color-text-muted);
+.language-switcher .ui-select-value {
+  flex: 1;
 }
 .avatar {
   display: grid;
@@ -789,9 +782,7 @@ select:focus-visible,
   background: var(--color-accent-subtle);
   color: var(--color-accent-text-strong);
   font-weight: 600;
-}
-.signout-button {
-  margin-left: 4px;
+  transition: box-shadow var(--motion-fast) ease;
 }
 .content {
   width: min(1500px, 100%);
@@ -2137,10 +2128,6 @@ tbody tr:last-child td {
     border-radius: 0;
     box-shadow: none;
   }
-  .user-menu small,
-  .signout-button span {
-    display: none;
-  }
   .content {
     padding: 28px 16px 95px;
   }
@@ -3409,18 +3396,9 @@ tbody tr.reconciliation-selected td {
   }
 }
 /* Command palette, bell, saved views and job centre (Phase 66). */
-.palette-trigger kbd {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  padding: 0 4px;
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
 /* On a phone the top bar keeps only icons: the palette, the bell, the language and sign-out. */
 @media (max-width: 760px) {
-  .palette-trigger span,
-  .palette-trigger kbd,
-  .user-identity {
+  .palette-trigger span {
     display: none;
   }
   .user-menu {
@@ -3498,13 +3476,9 @@ tbody tr.reconciliation-selected td {
 .bell-popup {
   width: min(380px, 92vw);
   max-height: 460px;
-  overflow-y: auto;
   padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface-raised);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 14%);
-  z-index: 50;
+  overflow-y: auto;
+  border-radius: var(--radius-card);
 }
 .bell-heading {
   display: flex;
@@ -3523,20 +3497,33 @@ tbody tr.reconciliation-selected td {
   padding: 0;
   list-style: none;
 }
+/*
+ * The notifications are fetched when the panel opens, so they arrive a moment after it.
+ * They fade in where they land rather than popping; the panel is the one thing that moves.
+ */
+.bell-item {
+  transition: opacity var(--motion-fast) ease;
+}
+@starting-style {
+  .bell-item {
+    opacity: 0;
+  }
+}
 .bell-item-button {
   display: grid;
   gap: 2px;
   width: 100%;
   padding: 8px;
   border: 0;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: transparent;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--motion-fast) ease;
 }
 .bell-item-button:hover,
 .bell-item-button:focus-visible {
-  background: var(--color-success-bg);
+  background: var(--color-bg);
 }
 .bell-item.unread .bell-item-button span {
   font-weight: 500;
@@ -3904,11 +3891,6 @@ tbody tr.audit-broken td {
     grid-template-columns: minmax(0, 1fr);
   }
   /* Room in the top bar for the assistant: its label, the palette's hint and the email go. */
-  .topbar-assistant-label,
-  .palette-trigger kbd,
-  .user-identity small {
-    display: none;
-  }
 }
 /* Suggestions (Phase 77): a value with its reason, used or dismissed, never saved alone. */
 .suggestion-chips {
@@ -3971,13 +3953,274 @@ tbody tr.audit-broken td {
   color: var(--color-text-muted);
 }
 
+/*
+ * The top bar: search, what is new, and the person. Everything used once in a while waits
+ * behind the avatar, and the assistant waits in the corner of every screen.
+ */
+.palette-trigger {
+  justify-content: flex-start;
+  min-width: 240px;
+  min-height: 40px;
+  padding: 0 14px;
+  background: var(--color-bg);
+  font-size: 14px;
+}
+.palette-trigger:hover:not([data-disabled]) {
+  background: var(--color-bg-subtle);
+}
+.avatar-trigger {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.avatar-trigger:hover .avatar,
+.avatar-trigger[data-popup-open] .avatar {
+  box-shadow: 0 0 0 3px var(--color-bg-subtle);
+}
+.ui-menu-positioner,
+.bell-positioner {
+  z-index: 40;
+  outline: 0;
+}
+.ui-menu-popup,
+.bell-popup,
+.assistant-dock {
+  outline: 0;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-raised), var(--shadow-edge);
+  transform-origin: var(--transform-origin);
+  transition-property: opacity, scale;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+}
+.ui-menu-popup[data-starting-style],
+.ui-menu-popup[data-ending-style],
+.bell-popup[data-starting-style],
+.bell-popup[data-ending-style],
+.assistant-dock[data-starting-style],
+.assistant-dock[data-ending-style] {
+  opacity: 0;
+  scale: 0.97;
+}
+.ui-menu-popup[data-ending-style],
+.bell-popup[data-ending-style],
+.assistant-dock[data-ending-style] {
+  transition-duration: var(--motion-exit);
+  transition-timing-function: ease;
+}
+.ui-menu-popup {
+  min-width: 232px;
+  padding: 6px;
+  /* The items' radius plus the padding around them. */
+  border-radius: calc(var(--radius-sm) + 6px);
+}
+.ui-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  outline: 0;
+  color: var(--color-text);
+  font-size: 14px;
+  text-decoration: none;
+  cursor: default;
+}
+.ui-menu-item[data-highlighted] {
+  background: var(--color-bg);
+}
+.ui-menu-separator {
+  height: 1px;
+  margin: 6px -6px;
+  background: var(--color-border);
+}
+.user-menu-identity {
+  display: grid;
+  gap: 2px;
+  max-width: 260px;
+  padding: 8px 10px 4px;
+}
+.user-menu-identity strong,
+.user-menu-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-menu-identity strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.user-menu-identity small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+/* The assistant, docked: a question asked over the screen the reader is on. */
+.assistant-fab {
+  position: fixed;
+  z-index: 25;
+  right: 24px;
+  bottom: 24px;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 18%),
+    0 0 0 1px rgb(0 0 0 / 6%),
+    0 10px 24px -8px rgb(0 0 0 / 36%);
+  color: var(--color-surface);
+  cursor: pointer;
+  transition-property: background-color, scale;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: ease-out;
+}
+.assistant-fab:hover {
+  background: color-mix(in srgb, var(--color-text) 84%, white);
+}
+.assistant-fab:active {
+  scale: 0.96;
+}
+.assistant-dock-positioner {
+  z-index: 26;
+}
+.assistant-dock {
+  display: flex;
+  flex-direction: column;
+  width: min(400px, calc(100vw - 24px));
+  height: min(600px, calc(100dvh - 120px));
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+}
+.assistant-dock-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 10px 10px 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+.assistant-dock-header .icon-action {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+}
+.assistant-dock-title {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.assistant-dock-body {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  padding: 16px 18px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+.assistant-dock-body > * {
+  margin-block: 0;
+}
+.assistant-dock-body .assistant-sources {
+  padding: 12px;
+  border: 0;
+  background: var(--color-bg);
+  box-shadow: none;
+}
+.assistant-dock-body .assistant-sources h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.assistant-dock-readiness {
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+.assistant-dock-form {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-hover);
+}
+.assistant-dock-form textarea {
+  padding: 10px 12px;
+  resize: none;
+}
+.assistant-dock-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.assistant-dock-footer small {
+  font-size: 12px;
+}
+
+/* Profile */
+.profile-view {
+  display: grid;
+  gap: 18px;
+  max-width: 760px;
+}
+.profile-view .page-heading {
+  margin-bottom: 12px;
+}
+.profile-facts {
+  display: grid;
+  margin: 0;
+}
+.profile-fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 14px;
+}
+.profile-facts dt {
+  color: var(--color-text-muted);
+}
+.profile-facts dd {
+  margin: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+@media (max-width: 760px) {
+  .palette-trigger {
+    min-width: 0;
+  }
+  /* The rail lies along the bottom edge here, so the assistant sits above it. */
+  .assistant-fab {
+    right: 16px;
+    bottom: 84px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-fast: 0.01ms;
     --motion-exit: 0.01ms;
     --motion-layout: 0.01ms;
   }
-  .ui-button:active:not([data-disabled]) {
+  .ui-button:active:not([data-disabled]),
+  .assistant-fab:active {
     scale: 1;
   }
 }

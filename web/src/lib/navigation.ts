@@ -42,6 +42,7 @@ import {
   TrendUp,
   Truck,
   UploadSimple,
+  UserCircle,
   UsersThree,
   Van,
   Warehouse,
@@ -446,6 +447,14 @@ export const navigation: readonly NavigationGroup[] = [
         // ones the user administers (Phase 64).
         module: null,
         demo: false,
+      },
+      {
+        href: '/app/settings/profile',
+        labelKey: 'profile',
+        icon: UserCircle,
+        // Everyone's own name, email and language (ADR 0044).
+        module: null,
+        demo: true,
       },
       {
         href: '/app/settings/security',

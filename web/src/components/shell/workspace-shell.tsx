@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { type ReactNode, useCallback, useState } from 'react'
+import { AssistantDock } from '@/components/shell/assistant-dock'
 import { NoticeProvider, SessionProvider } from '@/components/shell/workspace-context'
 import { WorkspaceNavigation } from '@/components/shell/workspace-navigation'
 import { WorkspaceTopbar } from '@/components/shell/workspace-topbar'
@@ -63,6 +64,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
               </ShellContent>
             </div>
           </main>
+          {session && !hostedDemo && pathname !== '/app/assistant' ? <AssistantDock /> : null}
         </div>
       </NoticeProvider>
     </SessionProvider>
