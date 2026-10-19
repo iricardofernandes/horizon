@@ -49,7 +49,9 @@ The frontend's visual language is:
   still fade.
 - **Modules on a rail.** The sidebar is one glyph per module; a module's screens open in
   a panel beside it on hover, focus or click (Base UI's navigation menu, so the keyboard and
-  a touch reach the same panel). Forty screens do not fit a column a reader can scan; eleven
+  a touch reach the same panel). A hover is a glance and closes when the pointer leaves; a
+  press keeps the panel open until the glyph is pressed again, the reader presses
+  elsewhere, leaves with Escape or follows a link. Forty screens do not fit a column a reader can scan; eleven
   modules do. The registry of ADR 0045 is unchanged apart from each group naming its glyph.
   The panel is opened many times a day, so it moves little and leaves in 100 ms; between
   two modules it is one panel that travels. Below 760 px the rail lies along the bottom

@@ -73,6 +73,28 @@ export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGro
   const currentEntry = entryForPath(pathname)
   // Whether the reader is moving through the rail with keys, so its panel opens without motion.
   const [byKeyboard, setByKeyboard] = useState(false)
+  // The module whose panel is open, and whether a press opened it. A hover opens a panel
+  // for a glance and the pointer leaving closes it; a press keeps it open until the reader
+  // presses its glyph again, presses elsewhere, leaves with Escape or follows a link.
+  const [open, setOpen] = useState<string | null>(null)
+  const [pinned, setPinned] = useState(false)
+
+  function press(module: string) {
+    const closing = pinned && open === module
+    setPinned(!closing)
+    setOpen(closing ? null : module)
+  }
+
+  function change(next: string | null, details: NavigationMenu.Root.ChangeEventDetails) {
+    // A press is settled by `press`; a pinned panel outlives the pointer leaving it.
+    const leftPinned = pinned && next === null && details.reason === 'trigger-hover'
+    if (details.reason === 'trigger-press' || leftPinned) {
+      details.cancel()
+      return
+    }
+    if (next === null) setPinned(false)
+    setOpen(next)
+  }
 
   return (
     <NavigationMenu.Root
@@ -81,7 +103,9 @@ export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGro
       closeDelay={120}
       onKeyDown={() => setByKeyboard(true)}
       onPointerMove={() => setByKeyboard(false)}
+      onValueChange={change}
       orientation={bottom ? 'horizontal' : 'vertical'}
+      value={open}
     >
       <NavigationMenu.List className="rail-list" ref={watchOverflowEdges}>
         {groups.map((group) => {
@@ -94,6 +118,7 @@ export function WorkspaceNavigation({ groups }: { groups: readonly NavigationGro
                 aria-current={current ? 'true' : undefined}
                 aria-label={label}
                 className={current ? 'rail-trigger active' : 'rail-trigger'}
+                onClick={() => press(group.labelKey)}
               >
                 <GroupIcon aria-hidden="true" size={20} weight={current ? 'fill' : 'regular'} />
               </NavigationMenu.Trigger>
