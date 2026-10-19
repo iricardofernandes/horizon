@@ -118,14 +118,6 @@ try {
   await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
   await page.getByRole('link', { name: 'Horizon Demo workspace' }).waitFor()
-  await page.getByRole('button', { name: 'Hide sidebar' }).click()
-  assert(
-    await page.locator('.workspace-shell').evaluate((element) =>
-      element.classList.contains('sidebar-collapsed'),
-    ),
-    'the desktop sidebar did not hide',
-  )
-  await page.getByRole('button', { name: 'Show sidebar' }).click()
 
   await openScreen(page, 'Catalog', 'Items')
   await page.waitForURL(`${appUrl}/app/catalog/items`, { waitUntil: 'domcontentloaded' })

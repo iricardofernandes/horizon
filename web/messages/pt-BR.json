@@ -1317,9 +1317,7 @@
     "becameServiceOrder": "Os serviços desta oferta viraram a ordem de serviço {id}."
   },
   "shell": {
-    "collapseSidebar": "Ocultar menu lateral",
     "demoNotice": "Perfil de demonstração pública: sessão e Catálogo ao vivo na Neon. A coreografia assíncrona de pedidos continua disponível no ambiente local completo.",
-    "expandSidebar": "Mostrar menu lateral",
     "language": "Idioma",
     "loadingUser": "Carregando…",
     "navigationLabel": "Navegação da área de trabalho",

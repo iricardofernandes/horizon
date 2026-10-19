@@ -747,43 +747,12 @@ select:focus-visible,
   align-items: center;
   justify-content: space-between;
   min-height: 64px;
-  padding: 8px clamp(18px, 3vw, 40px) 8px 12px;
+  /* The same inset as the content, so the title sits over the page's left edge. */
+  padding: 8px clamp(22px, 4vw, 58px);
   border-bottom: 1px solid var(--color-border);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   background: var(--color-surface-frosted);
   backdrop-filter: blur(14px);
-}
-.sidebar-toggle {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--color-text-muted);
-}
-@media (hover: hover) and (pointer: fine) {
-  .sidebar-toggle:hover:not([data-disabled]) {
-    background: var(--color-bg);
-    color: var(--color-text);
-  }
-}
-@media (min-width: 761px) {
-  /*
-   * Hiding the rail hands its column to the work, at once: easing a 56px column would lay
-   * out the whole page on every frame to move very little. A hidden rail is out of the tab
-   * order as well as out of sight.
-   */
-  .workspace-shell.sidebar-collapsed {
-    grid-template-columns: 0 minmax(0, 1fr);
-    gap: 0;
-  }
-  .sidebar {
-    overflow: hidden;
-  }
-  .sidebar-collapsed .sidebar {
-    visibility: hidden;
-    opacity: 0;
-  }
 }
 .topbar-leading {
   display: flex;
@@ -2152,8 +2121,7 @@ tbody tr:last-child td {
     background: var(--color-surface-frosted);
     backdrop-filter: blur(14px);
   }
-  .workspace-control,
-  .sidebar-toggle {
+  .workspace-control {
     display: none;
   }
   .rail {

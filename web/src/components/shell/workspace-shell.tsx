@@ -19,9 +19,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { session, failed } = useWorkspaceSession()
   const [notice, setNotice] = useState('')
-  const [collapsed, setCollapsed] = useState(false)
   const publish = useCallback((value: string) => setNotice(value), [])
-  const toggleSidebar = useCallback(() => setCollapsed((value) => !value), [])
 
   const workspaceName = session?.workspace?.name ?? t('workspace')
   const entry = entryForPath(pathname)
@@ -30,8 +28,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   return (
     <SessionProvider value={session}>
       <NoticeProvider value={publish}>
-        <div className={collapsed ? 'workspace-shell sidebar-collapsed' : 'workspace-shell'}>
-          <aside className="sidebar" id="workspace-sidebar">
+        <div className="workspace-shell">
+          <aside className="sidebar">
             <a
               aria-label={t('workspaceLabel', { name: workspaceName })}
               className="workspace-control"
@@ -45,8 +43,6 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
 
           <main className="workspace-main">
             <WorkspaceTopbar
-              collapsed={collapsed}
-              onToggleSidebar={toggleSidebar}
               session={session}
               title={navigationLabels(`items.${entry?.labelKey ?? 'overview'}`)}
               workspaceName={workspaceName}
