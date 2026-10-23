@@ -122,7 +122,7 @@ export function DocumentsView() {
         {loading ? (
           <LoadingState />
         ) : failed ? (
-          <Notice copy={t('documents.unavailable')} />
+          <Notice tone="danger" copy={t('documents.unavailable')} />
         ) : (
           <div className="table-scroll">
             <table>

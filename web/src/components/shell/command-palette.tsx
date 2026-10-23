@@ -183,10 +183,14 @@ export function CommandPalette() {
 
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
-      <Dialog.Trigger aria-label={t('open')} className="ui-button ui-button-ghost palette-trigger">
+      <Dialog.Trigger
+        aria-keyshortcuts="Control+K Meta+K"
+        aria-label={t('open')}
+        className="ui-button ui-button-ghost palette-trigger"
+        title={t('shortcutHint')}
+      >
         <MagnifyingGlass aria-hidden="true" size={16} />
         <span>{t('open')}</span>
-        <kbd>{t('shortcut')}</kbd>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="ui-dialog-backdrop" />

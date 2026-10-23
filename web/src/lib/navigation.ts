@@ -11,11 +11,16 @@ import {
   ChartBar,
   CheckSquareOffset,
   ClipboardText,
+  Code,
+  CurrencyCircleDollar,
   FileArrowDown,
   FileText,
   Gear,
   GearSix,
   HandCoins,
+  Handshake,
+  House,
+  IdentificationCard,
   Invoice,
   Kanban,
   Key,
@@ -30,11 +35,14 @@ import {
   Scales,
   SealCheck,
   ShieldCheck,
+  ShoppingBag,
   ShoppingCart,
   Sparkle,
+  Storefront,
   TrendUp,
   Truck,
   UploadSimple,
+  UserCircle,
   UsersThree,
   Van,
   Warehouse,
@@ -59,11 +67,17 @@ export type NavigationEntry = {
   demo: boolean
 }
 
-export type NavigationGroup = { labelKey: string; entries: readonly NavigationEntry[] }
+export type NavigationGroup = {
+  labelKey: string
+  /** The glyph the module is known by on the rail, where its name is not written. */
+  icon: Icon
+  entries: readonly NavigationEntry[]
+}
 
 export const navigation: readonly NavigationGroup[] = [
   {
     labelKey: 'overview',
+    icon: House,
     entries: [
       { href: '/app', labelKey: 'overview', icon: ChartBar, module: null, demo: true },
       {
@@ -87,6 +101,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'registrations',
+    icon: IdentificationCard,
     entries: [
       {
         href: '/app/registrations/parties',
@@ -99,6 +114,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'catalog',
+    icon: Package,
     entries: [
       {
         href: '/app/catalog/items',
@@ -111,6 +127,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'crm',
+    icon: Handshake,
     entries: [
       { href: '/app/crm/pipeline', labelKey: 'pipeline', icon: Kanban, module: 'crm', demo: false },
       {
@@ -145,6 +162,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'sales',
+    icon: Storefront,
     entries: [
       {
         href: '/app/sales/customers',
@@ -206,6 +224,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'finance',
+    icon: CurrencyCircleDollar,
     entries: [
       {
         href: '/app/finance/receivables',
@@ -246,6 +265,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'purchasing',
+    icon: ShoppingBag,
     entries: [
       {
         href: '/app/purchasing/requisitions',
@@ -272,6 +292,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'inventory',
+    icon: Warehouse,
     entries: [
       {
         href: '/app/inventory/balances',
@@ -319,6 +340,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'fiscal',
+    icon: Receipt,
     entries: [
       {
         href: '/app/fiscal/documents',
@@ -366,6 +388,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'developers',
+    icon: Code,
     entries: [
       {
         href: '/app/developers/api-keys',
@@ -400,6 +423,7 @@ export const navigation: readonly NavigationGroup[] = [
   },
   {
     labelKey: 'administration',
+    icon: GearSix,
     entries: [
       {
         href: '/app/administration/people',
@@ -423,6 +447,14 @@ export const navigation: readonly NavigationGroup[] = [
         // ones the user administers (Phase 64).
         module: null,
         demo: false,
+      },
+      {
+        href: '/app/settings/profile',
+        labelKey: 'profile',
+        icon: UserCircle,
+        // Everyone's own name, email and language (ADR 0044).
+        module: null,
+        demo: true,
       },
       {
         href: '/app/settings/security',
@@ -502,6 +534,7 @@ export function visibleNavigation(
   return navigation
     .map((group) => ({
       labelKey: group.labelKey,
+      icon: group.icon,
       entries: group.entries.filter((entry) => isEntryVisible(entry, roles, hostedDemo)),
     }))
     .filter((group) => group.entries.length > 0)
@@ -512,4 +545,13 @@ export function entryForPath(pathname: string): NavigationEntry | undefined {
   return [...navigationEntries]
     .sort((left, right) => right.href.length - left.href.length)
     .find((entry) => pathname === entry.href || pathname.startsWith(`${entry.href}/`))
+}
+
+/** The group a pathname belongs to: the module the rail marks as where the reader is. */
+export function groupForPath(
+  groups: readonly NavigationGroup[],
+  pathname: string,
+): NavigationGroup | undefined {
+  const entry = entryForPath(pathname)
+  return entry && groups.find((group) => group.entries.some((item) => item.href === entry.href))
 }

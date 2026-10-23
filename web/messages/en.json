@@ -201,7 +201,7 @@
     "priceListCreated": "Price list created successfully.",
     "priceListNamePlaceholder": "Retail",
     "priceUpdated": "Price for {name} updated successfully.",
-    "pricedItems": "{count} priced items",
+    "pricedItems": "{count, plural, one {# priced item} other {# priced items}}",
     "prices": "Price lists",
     "saving": "Saving…",
     "search": "Search catalog",
@@ -290,9 +290,10 @@
     "never": "Never",
     "notSet": "Not set",
     "pending": "Pending",
-    "screenUnavailable": "This screen could not be loaded. Check that the application services are running.",
+    "screenUnavailable": "This screen could not be loaded. Try again in a moment.",
     "exportList": "Export CSV",
-    "exportListHint": "Download this list as CSV, with your own access, up to 50,000 rows"
+    "exportListHint": "Download this list as CSV, with your own access, up to 50,000 rows",
+    "retry": "Try again"
   },
   "customers": {
     "activeCustomers": "Active customers",
@@ -355,7 +356,7 @@
     "viewAttempts": "Attempts"
   },
   "inventory": {
-    "activeWarehouses": "{count} active",
+    "activeWarehouses": "{count, plural, other {# active}}",
     "allLocations": "All locations",
     "allLocationsCopy": "Consolidated stock",
     "allWarehouses": "All warehouse locations",
@@ -391,7 +392,7 @@
     "search": "Search stock",
     "searchPlaceholder": "Search item or SKU…",
     "stockBalances": "Stock balances",
-    "stockedItems": "{count} stocked items",
+    "stockedItems": "{count, plural, one {# stocked item} other {# stocked items}}",
     "title": "Inventory",
     "unavailableItems": "Unavailable items",
     "unitCost": "Unit cost",
@@ -450,7 +451,7 @@
     "origin": "Comes from",
     "outflow": "Out",
     "overdueNote": "{amount} fell due before this range and is still unpaid.",
-    "pendingWarning": "{count} facts could not be posted yet; the books are incomplete until they are.",
+    "pendingWarning": "{count, plural, one {# fact could not be posted yet; the books are incomplete until it is.} other {# facts could not be posted yet; the books are incomplete until they are.}}",
     "period": "Period",
     "postedOn": "Date",
     "profit": "Profit for the period",
@@ -499,7 +500,6 @@
     "submitting": "Signing in…",
     "subtitle": "Your workspaces will appear after you sign in.",
     "title": "Sign in to Horizon",
-    "welcome": "Welcome back",
     "secondFactor": {
       "eyebrow": "Second factor",
       "title": "Confirm it is you",
@@ -602,7 +602,8 @@
       "agent": "Agent",
       "assistant": "Assistant",
       "assistantSettings": "Assistant",
-      "fiscalRules": "Rules"
+      "fiscalRules": "Rules",
+      "profile": "Profile"
     }
   },
   "orders": {
@@ -618,7 +619,7 @@
     "eyebrow": "Sales workspace",
     "fulfillment": "Fulfilment",
     "history": "Order history",
-    "historyCopy": "{count} most recent",
+    "historyCopy": "{count, plural, other {# most recent}}",
     "item": "Item {index}",
     "itemFallback": "Item {id}",
     "lines": "Lines",
@@ -646,7 +647,7 @@
   "overview": {
     "acrossWarehouses": "Across all warehouses",
     "activeItems": "Active items",
-    "confirmedOrders": "{count} confirmed",
+    "confirmedOrders": "{count, plural, other {# confirmed}}",
     "copy": "Here is the shape of your operation right now.",
     "flowCallbackCopy": "Webhooks notifies your system",
     "flowCallbackTitle": "Callback signed",
@@ -660,12 +661,13 @@
     "onHandUnits": "On-hand units",
     "orders": "Orders",
     "readyToSell": "Ready to sell",
-    "recentDeliveries": "{count} recent deliveries",
+    "recentDeliveries": "{count, plural, one {# recent delivery} other {# recent deliveries}}",
     "recentOrders": "Recent orders",
     "rhythm": "Operational rhythm",
     "rhythmCopy": "The flow behind every order",
-    "title": "Good afternoon",
-    "webhookHealth": "Webhook health"
+    "title": "{period, select, morning {Good morning} afternoon {Good afternoon} other {Good evening}}",
+    "webhookHealth": "Webhook health",
+    "openDeliveries": "See deliveries"
   },
   "parties": {
     "contactOptional": "Optional for prospects and partners; required for customers, suppliers and carriers.",
@@ -802,7 +804,10 @@
     "from": {
       "purchase-order": "From a purchase order",
       "purchase-receipt": "From a delivery",
-      "sales-order": "From a sales order"
+      "sales-contract-period": "From a contract period",
+      "sales-order": "From a sales order",
+      "sales-service-delivery": "From a delivered service",
+      "sales-shipment": "From a shipment"
     },
     "installment": "Installment",
     "installmentActions": "Installment actions",
@@ -913,7 +918,7 @@
     "decide": "Decide",
     "decidedBy": "Decided by",
     "deliveries": "Deliveries",
-    "deliveriesCount": "{count} deliveries",
+    "deliveriesCount": "{count, plural, one {# delivery} other {# deliveries}}",
     "detailUnavailable": "This document could not be loaded.",
     "document": "Document",
     "expectedOn": "Expected",
@@ -924,13 +929,13 @@
     "issuedOn": "Issued",
     "leadTime": "Lead time",
     "line": "Line",
-    "linesCount": "{count} lines",
+    "linesCount": "{count, plural, one {# line} other {# lines}}",
     "neededBy": "Needed by",
     "neededOn": "Needed by {date}",
     "noDeliveries": "Nothing has arrived against this order yet.",
     "noQuotations": "No supplier has answered this requisition yet.",
     "offer": "Offer",
-    "offersCount": "{count} offers",
+    "offersCount": "{count, plural, one {# offer} other {# offers}}",
     "openOrder": "Open purchase order {id}",
     "openRequisition": "Open requisition {id}",
     "orderTitle": "Purchase order {id}",
@@ -1037,7 +1042,10 @@
     "from": {
       "purchase-order": "From a purchase order",
       "purchase-receipt": "From a delivery",
-      "sales-order": "From a sales order"
+      "sales-contract-period": "From a contract period",
+      "sales-order": "From a sales order",
+      "sales-service-delivery": "From a delivered service",
+      "sales-shipment": "From a shipment"
     },
     "installment": "Installment",
     "installmentActions": "Installment actions",
@@ -1265,7 +1273,7 @@
     "inboxEmpty": "Nothing is waiting for you",
     "inboxEmptyCopy": "A discount you asked for is decided by somebody else.",
     "item": "Item {index}",
-    "itemsCount": "{count} items",
+    "itemsCount": "{count, plural, one {# item} other {# items}}",
     "line": "Line",
     "lineTotal": "Line total",
     "negotiation": "How it got here",
@@ -1316,9 +1324,7 @@
     "becameServiceOrder": "The services of this offer became service order {id}."
   },
   "shell": {
-    "collapseSidebar": "Collapse sidebar",
     "demoNotice": "Public demo profile: live session and Catalog on Neon. The asynchronous order choreography remains available in the full local stack.",
-    "expandSidebar": "Expand sidebar",
     "language": "Language",
     "loadingUser": "Loading…",
     "navigationLabel": "Workspace navigation",
@@ -1329,8 +1335,10 @@
     "switchWorkspace": "Switch workspace",
     "unavailableNotice": "The workspace could not be loaded. Check that the application services are running.",
     "workspace": "Workspace",
-    "workspaceLabel": "{name} workspace",
-    "assistant": "Assistant"
+    "workspaceLabel": "Switch workspace ({name})",
+    "userMenu": "{name}'s account",
+    "profileSettings": "Profile",
+    "accountMenu": "Account"
   },
   "status": {
     "abandoned": "abandoned",
@@ -1479,7 +1487,7 @@
     "awaitingSummary": "{from} → {to} · {amount}"
   },
   "webhooks": {
-    "activeCount": "{count} active",
+    "activeCount": "{count, plural, other {# active}}",
     "addEndpoint": "Add endpoint",
     "addEndpointCopy": "Select one or more event types",
     "copy": "Deliver order events to the systems that depend on them.",
@@ -1560,12 +1568,14 @@
   },
   "workspaces": {
     "eyebrow": "Choose where to work",
-    "loadError": "Your workspaces could not be loaded. Please sign in again.",
+    "loadError": "Your workspaces could not be loaded. Try again, or sign in with another account.",
     "loading": "Loading workspaces…",
-    "selectError": "This workspace is unavailable. Please sign in again.",
+    "selectError": "This workspace could not be opened. Try again, or sign in with another account.",
     "subtitle": "Your permissions and data are isolated in each workspace.",
     "title": "Your workspaces",
-    "useAnotherAccount": "Use another account"
+    "useAnotherAccount": "Use another account",
+    "empty": "This account has no workspace yet. Ask whoever runs your company for an invitation, or sign in with another account.",
+    "retry": "Try again"
   },
   "inventoryPhase": {
     "operations": "Stock operations",
@@ -1913,7 +1923,7 @@
       "quantity": "Quantity",
       "lineTotal": "Line total",
       "proposal": "Proposal",
-      "proposed": "{count} receipt line(s) by {basis}",
+      "proposed": "{count, plural, one {# receipt line} other {# receipt lines}} by {basis}",
       "basis": {
         "mapping": "remembered mapping",
         "ncm": "NCM",
@@ -2461,7 +2471,7 @@
       "erasedText": "Erased text",
       "task": "Task",
       "note": "Note",
-      "revisions": "{count} revisions"
+      "revisions": "{count, plural, one {# revision} other {# revisions}}"
     },
     "activityKind": {
       "call": "Call",
@@ -2735,7 +2745,7 @@
     "noModule": "You administer no module that imports data.",
     "counts": "{total} rows: {written} written, {failed} failed, {remaining} remaining, {cancelled} cancelled.",
     "countsMismatch": "The counts do not add up to the file's total; reload the import.",
-    "confirm": "Import {count} valid rows",
+    "confirm": "{count, plural, one {Import # valid row} other {Import # valid rows}}",
     "cancel": "Cancel import",
     "downloadFailures": "Download failures",
     "another": "New import",
@@ -2854,7 +2864,6 @@
   },
   "palette": {
     "open": "Search",
-    "shortcut": "Ctrl K",
     "title": "Command palette",
     "input": "Search screens, actions, records and documents",
     "placeholder": "Type to search screens, actions, records or documents…",
@@ -2884,7 +2893,8 @@
       "payable": "Payable",
       "service-order": "Service order",
       "opportunity": "Opportunity"
-    }
+    },
+    "shortcutHint": "Search (Ctrl K)"
   },
   "notifications": {
     "bell": "Notifications",
@@ -3218,7 +3228,7 @@
     "nothing": "nothing",
     "unread": "not read",
     "difference": "{key}: module {owner}, ledger {ledger}",
-    "pendingPostings": "{count} postings pending in the Ledger",
+    "pendingPostings": "{count, plural, one {# posting pending} other {# postings pending}} in the Ledger",
     "noRuns": "No check has run yet.",
     "triggers": {
       "scheduled": "daily run",
@@ -3325,7 +3335,12 @@
       "unavailable": "No model provider is configured.",
       "budget-spent": "This month's assistant budget is spent.",
       "failed": "The assistant could not answer now."
-    }
+    },
+    "dock": "Open the assistant",
+    "closeDock": "Close the assistant",
+    "openFull": "Open on its own screen",
+    "statusFailed": "We couldn't check whether the assistant is available.",
+    "retry": "Try again"
   },
   "assistantSettings": {
     "eyebrow": "Administration",
@@ -3360,5 +3375,19 @@
     "use": "Use",
     "accept": "Use the suggestion {value}",
     "reject": "Dismiss the suggestion {value}"
+  },
+  "profile": {
+    "eyebrow": "Your account",
+    "title": "Profile",
+    "copy": "Your details on this account and the language you read Horizon in.",
+    "identityTitle": "Who you are",
+    "identityCopy": "Your name and email are the same across all your workspaces.",
+    "name": "Name",
+    "email": "Email",
+    "languageTitle": "Language",
+    "languageCopy": "The choice is kept on your account and follows you to other devices.",
+    "securityTitle": "Security",
+    "securityCopy": "Second factors, recovery codes and open sessions.",
+    "securityLink": "Open security"
   }
 }

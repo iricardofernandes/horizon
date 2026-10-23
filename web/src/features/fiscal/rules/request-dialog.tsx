@@ -121,7 +121,7 @@ export function RequestDialog({
               name="impactMonths"
               type="number"
             />
-            {error ? <Notice copy={error} /> : null}
+            {error ? <Notice tone="danger" copy={error} /> : null}
             <Button disabled={busy} type="submit">
               {t('submitRequest')}
             </Button>

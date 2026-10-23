@@ -23,6 +23,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 
+/** A screen is listed in its module's panel on the rail: open the module, then follow the link. */
+async function openScreen(page, module, name, exact = false) {
+  await page.getByRole('button', { name: module, exact: true }).click()
+  await page.getByRole('link', { name, exact }).click()
+}
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const appUrl = process.env.HORIZON_WEB_URL ?? 'http://localhost:3000'
 const apiUrl = process.env.HORIZON_API_URL ?? 'http://localhost:8000'
@@ -64,7 +70,7 @@ try {
   await setLanguage(page, 'Português (Brasil)')
 
   // --- a service order, from opening to acceptance -------------------------------------------
-  await page.getByRole('link', { name: 'Ordens de serviço' }).click()
+  await openScreen(page, 'Vendas', 'Ordens de serviço')
   await page.getByRole('heading', { name: 'Ordens de serviço', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Nova ordem de serviço' }).click()
   const newOrder = page.getByRole('dialog', { name: 'Nova ordem de serviço' })
@@ -112,7 +118,7 @@ try {
   evidence.steps.push({ step: 'nfse-link', opened: true })
 
   // --- a contract, billed from the billing screen and credited ---------------------------------
-  await page.getByRole('link', { name: 'Contratos', exact: true }).click()
+  await openScreen(page, 'Vendas', 'Contratos', true)
   await page.getByRole('heading', { name: 'Contratos', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Novo contrato' }).click()
   const newContract = page.getByRole('dialog', { name: 'Novo contrato' })
@@ -136,7 +142,7 @@ try {
   await contract.getByText('a faturar').first().waitFor()
   await contract.getByRole('button', { name: 'Fechar janela' }).click()
 
-  await page.getByRole('link', { name: 'Faturamento de contratos' }).click()
+  await openScreen(page, 'Vendas', 'Faturamento de contratos')
   await page.getByRole('heading', { name: 'Faturamento de contratos', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Ver prévia' }).click()
   const previewRow = page.locator('tr', { hasText: contractRef })
@@ -146,7 +152,7 @@ try {
   await page.locator('.billing-run tr', { hasText: contractRef }).getByText('faturado').waitFor()
   evidence.steps.push({ step: 'billing-run', contractId })
 
-  await page.getByRole('link', { name: 'Contratos', exact: true }).click()
+  await openScreen(page, 'Vendas', 'Contratos', true)
   await page.getByRole('button', { name: `Abrir contrato ${contractRef}` }).click()
   await eventually(page, async () => {
     await contract.getByRole('button', { name: 'Fechar janela' }).click()
@@ -175,7 +181,7 @@ try {
   await contract.getByRole('button', { name: 'Fechar janela' }).click()
 
   // --- the customer's services -------------------------------------------------------------------
-  await page.getByRole('link', { name: 'Clientes' }).click()
+  await openScreen(page, 'Vendas', 'Clientes')
   await page.getByRole('button', { name: `Serviços e contratos de ${fixture.customerName}` }).click()
   const services = page.getByRole('dialog', { name: `Serviços de ${fixture.customerName}` })
   await services.getByText(orderRef).waitFor()
@@ -185,10 +191,10 @@ try {
 
   // --- the same screens in English -----------------------------------------------------------
   await setLanguage(page, 'English')
-  await page.getByRole('link', { name: 'Service orders' }).click()
+  await openScreen(page, 'Sales', 'Service orders')
   await page.getByRole('heading', { name: 'Service orders', exact: true }).waitFor()
   await page.getByRole('region', { name: 'Accepted' }).waitFor()
-  await page.getByRole('link', { name: 'Contracts', exact: true }).click()
+  await openScreen(page, 'Sales', 'Contracts', true)
   await page.getByRole('heading', { name: 'Contracts', exact: true }).waitFor()
   await page.getByRole('button', { name: `Open contract ${contractRef}` }).click()
   const english = page.getByRole('dialog', { name: `Contract ${contractRef}` })
@@ -197,7 +203,7 @@ try {
   await english.getByRole('tab', { name: 'Schedule' }).click()
   await english.getByText('credited').first().waitFor()
   await english.getByRole('button', { name: 'Close dialog' }).click()
-  await page.getByRole('link', { name: 'Contract billing' }).click()
+  await openScreen(page, 'Sales', 'Contract billing')
   await page.getByRole('heading', { name: 'Contract billing', exact: true }).waitFor()
   await page.getByRole('heading', { name: 'Recent runs' }).waitFor()
   evidence.steps.push({ step: 'english', screens: ['Service orders', 'Contracts', 'Contract billing'] })
@@ -367,12 +373,18 @@ function cnpj() {
   return digits.join('')
 }
 
+/** The language is a profile setting: change it there, then come back to where the reader was. */
 async function setLanguage(page, label) {
+  const from = page.url()
+  await page.goto(`${appUrl}/app/settings/profile`, { waitUntil: 'domcontentloaded' })
   const switcher = page.getByRole('combobox', { name: /^(Idioma|Language)$/ })
-  if ((await switcher.textContent())?.includes(label)) return
-  await switcher.click()
-  await page.getByRole('option', { name: label }).click()
-  await page.waitForTimeout(500)
+  await switcher.waitFor()
+  if (!(await switcher.textContent())?.includes(label)) {
+    await switcher.click()
+    await page.getByRole('option', { name: label }).click()
+    await page.waitForTimeout(500)
+  }
+  await page.goto(from, { waitUntil: 'domcontentloaded' })
 }
 
 async function chooseOption(page, combobox, label) {

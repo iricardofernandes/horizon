@@ -1,6 +1,7 @@
 # 39. Frontend design system foundation
 
-- Status: accepted
+- Status: accepted. The type and colour choices are superseded by
+  [ADR 0078](0078-neutral-surfaces-one-accent-and-lit-edges.md); Base UI and Phosphor stand.
 - Date: 2026-09-15
 
 ## Context

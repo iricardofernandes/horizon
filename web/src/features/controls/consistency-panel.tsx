@@ -62,7 +62,7 @@ export function ConsistencyPanel({ canRun }: { canRun: boolean }) {
   return (
     <section className="panel table-panel">
       <PanelHeading copy={t('consistencyCopy')} title={t('consistencyTitle')} />
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
       {canRun ? (
         <div className="dialog-actions">
           <Button disabled={busy} onClick={() => void run()} type="button" variant="primary">

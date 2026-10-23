@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { entryForPath, visibleNavigation } from './navigation'
+import { entryForPath, groupForPath, navigation, visibleNavigation } from './navigation'
 
 describe('the CRM navigation group', () => {
   it('appears for any CRM role and not without one (ADR 0045)', () => {
@@ -53,5 +53,28 @@ describe('the Phase 70 screens', () => {
         .flatMap((group) => group.entries)
         .some((entry) => entry.labelKey === 'controls'),
     ).toBe(false)
+  })
+})
+
+describe('the module rail', () => {
+  it('gives every module a glyph, since the rail writes no names', () => {
+    expect(navigation.every((group) => Boolean(group.icon))).toBe(true)
+    expect(
+      visibleNavigation([{ module: 'sales', role: 'viewer' }], false).every((group) =>
+        Boolean(group.icon),
+      ),
+    ).toBe(true)
+  })
+
+  it('marks the module a screen belongs to, and a screen nested under one', () => {
+    expect(groupForPath(navigation, '/app/sales/orders')?.labelKey).toBe('sales')
+    expect(groupForPath(navigation, '/app/settings/security')?.labelKey).toBe('administration')
+    expect(groupForPath(navigation, '/app/crm/pipeline/anything')?.labelKey).toBe('crm')
+  })
+
+  it('marks no module for a module the reader cannot see, or a path outside the registry', () => {
+    const visible = visibleNavigation([{ module: 'sales', role: 'viewer' }], false)
+    expect(groupForPath(visible, '/app/fiscal/documents')).toBeUndefined()
+    expect(groupForPath(navigation, '/workspaces')).toBeUndefined()
   })
 })

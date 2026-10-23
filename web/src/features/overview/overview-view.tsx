@@ -7,6 +7,14 @@ import type { Delivery } from '@/features/developers/deliveries-view'
 import type { Warehouse } from '@/features/inventory/inventory-view'
 import { type Order, OrderTable } from '@/features/sales/orders-view'
 
+/** The part of the day a greeting names, by the reader's own clock. */
+function periodOf(now: Date): 'morning' | 'afternoon' | 'evening' {
+  const hour = now.getHours()
+  if (hour >= 5 && hour < 12) return 'morning'
+  if (hour >= 12 && hour < 18) return 'afternoon'
+  return 'evening'
+}
+
 export function OverviewView({
   items,
   orders,
@@ -20,6 +28,7 @@ export function OverviewView({
 }) {
   const t = useTranslations('overview')
   const format = useFormatter()
+  const needsReview = deliveries.some((row) => row.status === 'dead-letter')
   const stock = warehouses
     .flatMap((warehouse) => warehouse.balances)
     .reduce((sum, row) => sum + Number(row.onHand), 0)
@@ -31,7 +40,7 @@ export function OverviewView({
           day: 'numeric',
           month: 'long',
         })}
-        title={t('title')}
+        title={t('title', { period: periodOf(new Date()) })}
         copy={t('copy')}
       />
       <div className="stat-grid">
@@ -54,36 +63,39 @@ export function OverviewView({
         />
         <Stat
           label={t('webhookHealth')}
-          value={
-            deliveries.some((row) => row.status === 'dead-letter') ? t('needsReview') : t('healthy')
-          }
+          value={needsReview ? t('needsReview') : t('healthy')}
           note={t('recentDeliveries', { count: deliveries.length })}
+          link={
+            needsReview
+              ? { href: '/app/developers/deliveries', label: t('openDeliveries') }
+              : undefined
+          }
         />
       </div>
       <div className="split-grid">
         <section className="panel">
-          <PanelHeading title={t('recentOrders')} copy={t('liveFromSales')} />{' '}
+          <PanelHeading title={t('recentOrders')} copy={t('liveFromSales')} />
           <OrderTable orders={orders.slice(0, 5)} />
         </section>
         <section className="panel quiet-panel">
           <PanelHeading title={t('rhythm')} copy={t('rhythmCopy')} />
           <ol className="flow-list">
             <li>
-              <span>01</span>
+              <span aria-hidden="true">01</span>
               <div className="flow-copy">
                 <strong>{t('flowOrderTitle')}</strong>
                 <small>{t('flowOrderCopy')}</small>
               </div>
             </li>
             <li>
-              <span>02</span>
+              <span aria-hidden="true">02</span>
               <div className="flow-copy">
                 <strong>{t('flowStockTitle')}</strong>
                 <small>{t('flowStockCopy')}</small>
               </div>
             </li>
             <li>
-              <span>03</span>
+              <span aria-hidden="true">03</span>
               <div className="flow-copy">
                 <strong>{t('flowCallbackTitle')}</strong>
                 <small>{t('flowCallbackCopy')}</small>

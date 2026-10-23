@@ -96,7 +96,7 @@ export function QuoteDialog({
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {failed ? <Notice copy={t('detailUnavailable')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('detailUnavailable')} /> : null}
           {!failed && !detail ? <LoadingState /> : null}
           {detail ? (
             <Body
@@ -199,7 +199,7 @@ function Body({
       <h3 className="document-section-title">{t('negotiation')}</h3>
       <History detail={detail} quotes={data.quotes} />
 
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
 
       {abilities.canWrite && !revising ? (
         <Decisions

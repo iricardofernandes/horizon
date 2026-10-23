@@ -259,7 +259,7 @@ stack was chosen. Five of them shape everything else:
 | [`docs/tax-engine-plan.md`](docs/tax-engine-plan.md) | The tax rules engine |
 | [`docs/roadmap.md`](docs/roadmap.md) | Declared future scope, and why each piece waits |
 | [`docs/architecture.md`](docs/architecture.md) | The choices a reviewer would question, and what each costs |
-| [`docs/adr/`](docs/adr/) | 77 decision records |
+| [`docs/adr/`](docs/adr/) | 78 decision records |
 | [`docs/events.md`](docs/events.md) | The event catalogue, generated from the schemas |
 | [`docs/service-levels.md`](docs/service-levels.md) | SLIs, objectives and the alerts that guard them |
 | [`docs/recovery-runbook.md`](docs/recovery-runbook.md) | Backups, restores and the drills that time them |

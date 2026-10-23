@@ -103,7 +103,7 @@ export function ImportDialog({
           {loading ? (
             <LoadingState />
           ) : !detail ? (
-            <Notice copy={t('inbound.unavailable')} />
+            <Notice tone="danger" copy={t('inbound.unavailable')} />
           ) : (
             <>
               <ImportSummaryPanel detail={detail} />

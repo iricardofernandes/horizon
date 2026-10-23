@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { type ReactNode, useCallback, useState } from 'react'
+import { AssistantDock } from '@/components/shell/assistant-dock'
 import { NoticeProvider, SessionProvider } from '@/components/shell/workspace-context'
 import { WorkspaceNavigation } from '@/components/shell/workspace-navigation'
 import { WorkspaceTopbar } from '@/components/shell/workspace-topbar'
@@ -18,9 +19,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { session, failed } = useWorkspaceSession()
   const [notice, setNotice] = useState('')
-  const [collapsed, setCollapsed] = useState(false)
   const publish = useCallback((value: string) => setNotice(value), [])
-  const toggleSidebar = useCallback(() => setCollapsed((value) => !value), [])
 
   const workspaceName = session?.workspace?.name ?? t('workspace')
   const entry = entryForPath(pathname)
@@ -29,26 +28,21 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   return (
     <SessionProvider value={session}>
       <NoticeProvider value={publish}>
-        <div className={collapsed ? 'workspace-shell sidebar-collapsed' : 'workspace-shell'}>
-          <aside className="sidebar" id="workspace-sidebar">
+        <div className="workspace-shell">
+          <aside className="sidebar">
             <a
               aria-label={t('workspaceLabel', { name: workspaceName })}
               className="workspace-control"
               href="/workspaces"
+              title={t('switchWorkspace')}
             >
               <span className="brand-mark">{workspaceName.slice(0, 1).toUpperCase()}</span>
-              <span className="workspace-control-copy">
-                <strong>{workspaceName}</strong>
-                <small>{t('switchWorkspace')}</small>
-              </span>
             </a>
             <WorkspaceNavigation groups={visibleNavigation(roles, hostedDemo)} />
           </aside>
 
           <main className="workspace-main">
             <WorkspaceTopbar
-              collapsed={collapsed}
-              onToggleSidebar={toggleSidebar}
               session={session}
               title={navigationLabels(`items.${entry?.labelKey ?? 'overview'}`)}
               workspaceName={workspaceName}
@@ -56,7 +50,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             <div className="content">
               {hostedDemo ? <Notice copy={t('demoNotice')} /> : null}
               {notice ? <Notice copy={notice} /> : null}
-              {failed ? <Notice copy={t('unavailableNotice')} /> : null}
+              {failed ? <Notice tone="danger" copy={t('unavailableNotice')} /> : null}
               <ShellContent
                 permitted={!entry || isEntryVisible(entry, roles, hostedDemo)}
                 ready={Boolean(session)}
@@ -66,6 +60,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
               </ShellContent>
             </div>
           </main>
+          {session && !hostedDemo && pathname !== '/app/assistant' ? <AssistantDock /> : null}
         </div>
       </NoticeProvider>
     </SessionProvider>

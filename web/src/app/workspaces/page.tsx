@@ -3,7 +3,7 @@
 import { ArrowRight, DotsThree } from '@phosphor-icons/react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { tracedFetch } from '@/lib/telemetry'
 
@@ -12,19 +12,24 @@ type Workspace = { tenantId: string; slug: string; name: string }
 export default function WorkspacesPage() {
   const t = useTranslations('workspaces')
   const router = useRouter()
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  // Null until the list arrives; an empty list is an answer, not a wait.
+  const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoadFailed(false)
     tracedFetch('session.workspaces', '/api/session/workspace')
       .then(async (response) => {
         if (!response.ok) return router.replace('/login')
         const body = (await response.json()) as { workspaces: Workspace[] }
         setWorkspaces(body.workspaces)
       })
-      .catch(() => setError(t('loadError')))
-  }, [router, t])
+      .catch(() => setLoadFailed(true))
+  }, [router])
+
+  useEffect(load, [load])
 
   async function select(workspace: Workspace) {
     setBusy(workspace.tenantId)
@@ -70,8 +75,16 @@ export default function WorkspacesPage() {
             {error}
           </p>
         ) : null}
+        {loadFailed ? (
+          <div className="form-error workspace-load-error" role="alert">
+            <span>{t('loadError')}</span>
+            <Button onClick={load} type="button">
+              {t('retry')}
+            </Button>
+          </div>
+        ) : null}
         <div className="workspace-options" aria-live="polite">
-          {workspaces.length ? (
+          {workspaces?.length ? (
             workspaces.map((workspace) => (
               <Button
                 disabled={Boolean(busy)}
@@ -97,7 +110,9 @@ export default function WorkspacesPage() {
                 </span>
               </Button>
             ))
-          ) : (
+          ) : workspaces ? (
+            <p className="muted">{t('empty')}</p>
+          ) : loadFailed ? null : (
             <p className="muted">{t('loading')}</p>
           )}
         </div>

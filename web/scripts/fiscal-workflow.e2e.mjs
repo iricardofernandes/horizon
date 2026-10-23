@@ -19,6 +19,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 
+/** A screen is listed in its module's panel on the rail: open the module, then follow the link. */
+async function openScreen(page, module, name, exact = false) {
+  await page.getByRole('button', { name: module, exact: true }).click()
+  await page.getByRole('link', { name, exact }).click()
+}
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const appUrl = process.env.HORIZON_WEB_URL ?? 'http://localhost:3000'
 const email = process.env.HORIZON_FISCAL_OPERATOR_EMAIL ?? 'fiscal.operator@horizon.local'
@@ -63,7 +69,7 @@ try {
   await setLanguage(page, 'Português (Brasil)')
 
   // --- the worklist and one authorized NF-e ----------------------------------------------
-  await page.getByRole('link', { name: 'Documentos emitidos' }).click()
+  await openScreen(page, 'Fiscal', 'Documentos emitidos')
   await page.getByRole('heading', { name: 'Documentos emitidos', exact: true }).waitFor()
   await chooseOption(page, page.getByRole('combobox', { name: 'Modelo' }), 'NF-e 55')
   await chooseOption(
@@ -106,7 +112,7 @@ try {
   await dialog.getByRole('button', { name: 'Fechar janela' }).click()
 
   // --- supplier XML through the form ------------------------------------------------------
-  await page.getByRole('link', { name: 'XML de entrada' }).click()
+  await openScreen(page, 'Fiscal', 'XML de entrada')
   await page.getByRole('heading', { name: 'XML de entrada', exact: true }).waitFor()
   await page.getByLabel('Arquivo XML').setInputFiles({
     name: 'fornecedor.xml',
@@ -124,7 +130,7 @@ try {
   await importDialog.getByRole('button', { name: 'Fechar janela' }).click()
 
   // --- rule preview -------------------------------------------------------------------------
-  await page.getByRole('link', { name: 'Prévia de regras' }).click()
+  await openScreen(page, 'Fiscal', 'Prévia de regras')
   await page.getByRole('heading', { name: 'Prévia de regras', exact: true }).waitFor()
   await chooseOption(page, page.getByRole('combobox', { name: 'Operação' }), 'NFS-e')
   await page.getByLabel('Código de tributação nacional').fill('010101')
@@ -138,7 +144,7 @@ try {
   evidence.steps.push({ step: 'preview', explains: ['ISS', 'CBS', 'IBS'].filter((tax) => previewText.includes(tax)) })
 
   // --- support ------------------------------------------------------------------------------
-  await page.getByRole('link', { name: 'Suporte' }).click()
+  await openScreen(page, 'Fiscal', 'Suporte')
   await page.getByRole('heading', { name: 'Suporte', exact: true }).waitFor()
   await page.getByText('Este workspace emite só em simulação. Nenhum documento aqui tem valor fiscal.').waitFor()
   await page.getByRole('cell', { name: 'nfse-national-simulator-v1' }).waitFor()
@@ -148,7 +154,7 @@ try {
   evidence.steps.push({ step: 'support', campinas: 'unsupported' })
 
   // --- Phase 49: a service's fiscal profile, and a proposal that names its services --------
-  await page.getByRole('link', { name: 'Perfis de serviço' }).click()
+  await openScreen(page, 'Fiscal', 'Perfis de serviço')
   await page.getByRole('heading', { name: 'Perfis de serviço', exact: true }).waitFor()
   const serviceRow = page.getByRole('button', { name: /^Abrir o perfil fiscal de Implantação assistida/ })
   await serviceRow.first().click()
@@ -165,7 +171,7 @@ try {
   evidence.steps.push({ step: 'service-profile', revisions: revisionsBefore + 1 })
   await profileDialog.getByRole('button', { name: 'Fechar janela' }).click()
 
-  await page.getByRole('link', { name: 'Orçamentos' }).click()
+  await openScreen(page, 'Vendas', 'Orçamentos')
   await page.getByRole('button', { name: 'Novo orçamento' }).first().click()
   const quoteDialog = page.getByRole('dialog', { name: 'Criar orçamento' })
   await quoteDialog.waitFor()
@@ -187,7 +193,7 @@ try {
 
   // --- the same reading in English ----------------------------------------------------------
   await setLanguage(page, 'English')
-  await page.getByRole('link', { name: 'Issued documents' }).click()
+  await openScreen(page, 'Fiscal', 'Issued documents')
   await page.getByRole('heading', { name: 'Issued documents', exact: true }).waitFor()
   // The newest documents may all be NFS-e by now; the model filter finds an NF-e.
   await chooseOption(page, page.getByRole('combobox', { name: 'Model' }), 'NF-e 55')
@@ -294,12 +300,18 @@ async function acceptedServiceProposal() {
   throw new Error('No priced Catalog service to propose')
 }
 
+/** The language is a profile setting: change it there, then come back to where the reader was. */
 async function setLanguage(page, label) {
+  const from = page.url()
+  await page.goto(`${appUrl}/app/settings/profile`, { waitUntil: 'domcontentloaded' })
   const switcher = page.getByRole('combobox', { name: /^(Idioma|Language)$/ })
-  if ((await switcher.textContent())?.includes(label)) return
-  await switcher.click()
-  await page.getByRole('option', { name: label }).click()
-  await page.waitForTimeout(500)
+  await switcher.waitFor()
+  if (!(await switcher.textContent())?.includes(label)) {
+    await switcher.click()
+    await page.getByRole('option', { name: label }).click()
+    await page.waitForTimeout(500)
+  }
+  await page.goto(from, { waitUntil: 'domcontentloaded' })
 }
 
 async function chooseOption(page, combobox, label) {

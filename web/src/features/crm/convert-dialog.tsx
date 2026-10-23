@@ -193,7 +193,7 @@ function ConvertBody({
         </Link>
       </div>
     )
-  if (itemsFailed) return <Notice copy={t('convert.itemsUnavailable')} />
+  if (itemsFailed) return <Notice tone="danger" copy={t('convert.itemsUnavailable')} />
   if (!items) return <LoadingState />
   return (
     <form className="dialog-form" onSubmit={onSubmit}>

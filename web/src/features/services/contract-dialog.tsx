@@ -117,12 +117,12 @@ export function ContractDialog({
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {failed ? <Notice copy={t('detailUnavailable')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('detailUnavailable')} /> : null}
           {!failed && !detail ? <LoadingState /> : null}
           {detail ? (
             <>
               <Heading detail={detail} />
-              {error ? <Notice copy={error} /> : null}
+              {error ? <Notice tone="danger" copy={error} /> : null}
               <Tabs.Root defaultValue="summary">
                 <Tabs.List aria-label={t('contracts.sections')} className="ui-tabs-list">
                   <Tabs.Tab className="ui-tab" value="summary">

@@ -137,7 +137,7 @@ export function DocumentDialog({
           {loading ? (
             <LoadingState />
           ) : !detail ? (
-            <Notice copy={t('dialog.unavailable')} />
+            <Notice tone="danger" copy={t('dialog.unavailable')} />
           ) : (
             <DetailTabs detail={detail} summary={summary} />
           )}

@@ -52,7 +52,7 @@ export function AccountDrillDialog({
           <Dialog.Close aria-label={common('closeDialog')} className="ui-dialog-close">
             <X aria-hidden="true" size={18} />
           </Dialog.Close>
-          {failed ? <Notice copy={t('drillFailed')} /> : null}
+          {failed ? <Notice tone="danger" copy={t('drillFailed')} /> : null}
           {!failed && !ledger ? <LoadingState /> : null}
           {ledger ? <DrillBody ledger={ledger} /> : null}
         </Dialog.Popup>

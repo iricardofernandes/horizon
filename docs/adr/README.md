@@ -178,9 +178,10 @@ editable per tenant ([0023](0023-casl-static-module-scoped-roles.md)).
 
 | # | Decision |
 |---|---|
-| [0039](0039-frontend-design-system-foundation.md) | Inter, Phosphor, Base UI and Radix Colors as the frontend foundation |
+| [0039](0039-frontend-design-system-foundation.md) | Phosphor and Base UI as the frontend foundation (type and colour superseded by 0078) |
 | [0044](0044-localization-stops-at-the-presentation-boundary.md) | Localization stops at the presentation boundary |
 | [0045](0045-routed-shell-with-permission-navigation-registry.md) | A routed frontend shell with a permission-driven navigation registry |
+| [0078](0078-neutral-surfaces-one-accent-and-lit-edges.md) | Neutral surfaces, one accent, and edges that catch the light |
 
 ### Testing, observability and operations
 

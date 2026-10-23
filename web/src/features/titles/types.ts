@@ -20,7 +20,16 @@ export type ApprovalState = 'none' | 'pending' | 'approved' | 'rejected' | 'not-
 
 export type Origin =
   | { type: 'manual' }
-  | { type: 'sales-order' | 'purchase-order' | 'purchase-receipt'; documentId: string }
+  | {
+      type:
+        | 'sales-order'
+        | 'purchase-order'
+        | 'purchase-receipt'
+        | 'sales-shipment'
+        | 'sales-service-delivery'
+        | 'sales-contract-period'
+      documentId: string
+    }
 
 export type TitleStatus = 'draft' | 'posted' | 'cancelled' | 'reversed'
 export type SettlementState = 'open' | 'partially-settled' | 'settled'

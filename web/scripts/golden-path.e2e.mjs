@@ -2,6 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { access } from 'node:fs/promises'
 import { chromium } from 'playwright-core'
 
+/** A screen is listed in its module's panel on the rail: open the module, then follow the link. */
+async function openScreen(page, module, name, exact = false) {
+  await page.getByRole('button', { name: module, exact: true }).click()
+  await page.getByRole('link', { name, exact }).click()
+}
+
 const appUrl = process.env.HORIZON_WEB_URL ?? 'http://localhost:3000'
 const jaegerUrl = process.env.HORIZON_JAEGER_URL ?? 'http://localhost:16686'
 const password = process.env.HORIZON_DEMO_PASSWORD ?? 'Horizon-demo-2026!'
@@ -87,35 +93,33 @@ try {
   await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Horizon Demo/ }).click()
   await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('heading', { name: 'Boa tarde' }).waitFor()
-  await page.getByRole('link', { name: 'Área de trabalho Horizon Demo' }).waitFor()
+  await page.getByRole('heading', { name: /^(Bom dia|Boa tarde|Boa noite)$/ }).waitFor()
+  await page.getByRole('link', { name: 'Trocar de área de trabalho (Horizon Demo)' }).waitFor()
 
-  // Switching language keeps the reader on the same resource and reaches the whole shell.
+  // The language is the reader's own setting, behind their avatar; switching it keeps them
+  // on the same resource and reaches the whole shell.
+  await page.getByRole('button', { name: /^Conta de / }).click()
+  await page.getByRole('menuitem', { name: 'Perfil' }).click()
+  await page.waitForURL(`${appUrl}/app/settings/profile`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('combobox', { name: 'Idioma' }).click()
   await page.getByRole('option', { name: 'English' }).click()
-  await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
-  await page.getByRole('link', { name: 'Overview' }).waitFor()
+  await page.getByRole('heading', { name: 'Profile', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Overview', exact: true }).waitFor()
   assert(
     (await page.locator('html').getAttribute('lang')) === 'en',
     'the document language did not follow the switcher',
   )
+  await openScreen(page, 'Overview', 'Overview', true)
+  await page.getByRole('heading', { name: /^Good (morning|afternoon|evening)$/ }).waitFor()
 
-  await page.getByRole('link', { name: 'Horizon Demo workspace' }).click()
+  await page.getByRole('link', { name: 'Switch workspace (Horizon Demo)' }).click()
   await page.waitForURL(`${appUrl}/workspaces`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Horizon Demo/ }).click()
   await page.waitForURL(`${appUrl}/app`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('heading', { name: 'Good afternoon' }).waitFor()
-  await page.getByRole('link', { name: 'Horizon Demo workspace' }).waitFor()
-  await page.getByRole('button', { name: 'Collapse sidebar' }).click()
-  assert(
-    await page.locator('.workspace-shell').evaluate((element) =>
-      element.classList.contains('sidebar-collapsed'),
-    ),
-    'the desktop sidebar did not collapse',
-  )
-  await page.getByRole('button', { name: 'Expand sidebar' }).click()
+  await page.getByRole('heading', { name: /^Good (morning|afternoon|evening)$/ }).waitFor()
+  await page.getByRole('link', { name: 'Switch workspace (Horizon Demo)' }).waitFor()
 
-  await page.getByRole('link', { name: 'Items' }).click()
+  await openScreen(page, 'Catalog', 'Items')
   await page.waitForURL(`${appUrl}/app/catalog/items`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Catalog', exact: true }).waitFor()
   await page.getByRole('button', { name: 'New item' }).click()
@@ -130,7 +134,7 @@ try {
   await page.getByRole('dialog', { name: 'Create price list' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('link', { name: 'Customers' }).click()
+  await openScreen(page, 'Sales', 'Customers')
   await page.waitForURL(`${appUrl}/app/sales/customers`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Customers', exact: true }).waitFor()
   const existingCustomer = await page.evaluate(async () => {
@@ -162,7 +166,7 @@ try {
   await page.getByRole('button', { name: 'Cancel' }).click()
 
   // A customer is a party with the customer role (ADR 0040): the registry shows it with its roles.
-  await page.getByRole('link', { name: 'Parties' }).click()
+  await openScreen(page, 'Registrations', 'Parties')
   await page.waitForURL(`${appUrl}/app/registrations/parties`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Parties', exact: true }).waitFor()
   await page
@@ -175,7 +179,7 @@ try {
 
   // An offer is negotiated in versions: made, sent, answered with a new version, and
   // accepted — one document all the way through, with every version still in the record.
-  await page.getByRole('link', { name: 'Quotes' }).click()
+  await openScreen(page, 'Sales', 'Quotes')
   await page.waitForURL(`${appUrl}/app/sales/quotes`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Quotes', exact: true }).waitFor()
   await page.getByRole('button', { name: 'New quote' }).click()
@@ -199,12 +203,12 @@ try {
   await quoteDialog.getByRole('button', { name: 'Close dialog' }).click()
 
   // Nobody is waiting on this reader: a discount you asked for is decided by somebody else.
-  await page.getByRole('link', { name: 'Quote approvals' }).click()
+  await openScreen(page, 'Sales', 'Quote approvals')
   await page.waitForURL(`${appUrl}/app/sales/approvals`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Quote approvals', exact: true }).waitFor()
   await page.getByText('Nothing is waiting for you').waitFor()
 
-  await page.getByRole('link', { name: 'Balances', exact: true }).click()
+  await openScreen(page, 'Inventory', 'Balances', true)
   await page.waitForURL(`${appUrl}/app/inventory/balances`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Inventory', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Receive stock' }).click()
@@ -214,7 +218,7 @@ try {
   await page.getByRole('dialog', { name: 'Create warehouse' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('link', { name: 'Orders', exact: true }).click()
+  await openScreen(page, 'Sales', 'Orders', true)
   await page.waitForURL(`${appUrl}/app/sales/orders`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Orders', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Add line' }).click()
@@ -232,7 +236,7 @@ try {
   // closes the box and sends it, and it is that delivery — not the order — that makes the
   // money owed; each line starts at what the order still owes.
   const orderNumber = `SO-${placedOrderId.slice(-8).toUpperCase()}`
-  await page.getByRole('link', { name: 'Deliveries' }).click()
+  await openScreen(page, 'Sales', 'Deliveries')
   await page.waitForURL(`${appUrl}/app/sales/deliveries`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Deliveries', exact: true }).waitFor()
   await page.getByRole('button', { name: 'New delivery' }).click()
@@ -264,7 +268,7 @@ try {
   await shipmentDialog.getByRole('button', { name: 'Close dialog' }).click()
 
   // A delivery that took everything leaves the order with nothing left to send.
-  await page.getByRole('link', { name: 'Orders', exact: true }).click()
+  await openScreen(page, 'Sales', 'Orders', true)
   await page.waitForURL(`${appUrl}/app/sales/orders`, { waitUntil: 'domcontentloaded' })
   // Newest first, and two orders written in the same minute share the first eight
   // characters of a time-ordered id, so the row wanted is the first of them.
@@ -281,12 +285,12 @@ try {
   // Purchasing: the demo's requisition became an order and part of it arrived. The board
   // shows where the work got to, and the order shows what is still expected — which is the
   // same figure the payable and the stock were derived from.
-  await page.getByRole('link', { name: 'Requisitions' }).click()
+  await openScreen(page, 'Purchasing', 'Requisitions')
   await page.waitForURL(`${appUrl}/app/purchasing/requisitions`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Requisitions', exact: true }).waitFor()
   await page.getByRole('region', { name: 'Ordered' }).getByRole('button').first().waitFor()
 
-  await page.getByRole('link', { name: 'Purchase orders' }).click()
+  await openScreen(page, 'Purchasing', 'Purchase orders')
   await page.waitForURL(`${appUrl}/app/purchasing/orders`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Purchase orders', exact: true }).waitFor()
   await page.getByRole('region', { name: 'Approved' }).getByRole('button').first().click()
@@ -299,12 +303,12 @@ try {
   await orderDialog.getByRole('button', { name: 'Close dialog' }).click()
 
   // Nobody is waiting on this reader: the demo's approvals were decided by somebody else.
-  await page.getByRole('link', { name: 'Approvals', exact: true }).click()
+  await openScreen(page, 'Purchasing', 'Approvals', true)
   await page.waitForURL(`${appUrl}/app/purchasing/approvals`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Approvals', exact: true }).waitFor()
   await page.getByText('Nothing is waiting for you').waitFor()
 
-  await page.getByRole('link', { name: 'Receivables' }).click()
+  await openScreen(page, 'Finance', 'Receivables')
   await page.waitForURL(`${appUrl}/app/finance/receivables`, { waitUntil: 'domcontentloaded' })
 
   await page.getByRole('heading', { name: 'Accounts receivable', exact: true }).waitFor()
@@ -346,7 +350,7 @@ try {
 
   // The books were written by the events those steps published, without anyone typing an
   // entry. The trial balance is the assertion: it balances, or the ledger is wrong.
-  await page.getByRole('link', { name: 'The books' }).click()
+  await openScreen(page, 'Finance', 'The books')
   await page.waitForURL(`${appUrl}/app/finance/ledger`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'The books', exact: true }).waitFor()
   await page.getByRole('tab', { name: 'Trial balance' }).click()
@@ -359,7 +363,7 @@ try {
   await ledgerDialog.getByText('Receivable', { exact: true }).first().waitFor()
   await ledgerDialog.getByText('Settlement', { exact: true }).first().waitFor()
   await ledgerDialog.getByRole('button', { name: 'Close dialog' }).click()
-  await page.getByRole('link', { name: 'Receivables' }).click()
+  await openScreen(page, 'Finance', 'Receivables')
   await page.waitForURL(`${appUrl}/app/finance/receivables`, { waitUntil: 'domcontentloaded' })
 
   // A supplier invoice waits for a second person: whoever requests approval cannot give it.
@@ -376,7 +380,7 @@ try {
   )
   // 409 on a rerun: the party already plays the role.
   assert([204, 409].includes(supplierGrant), `granting the supplier role returned ${supplierGrant}`)
-  await page.getByRole('link', { name: 'Payables' }).click()
+  await openScreen(page, 'Finance', 'Payables')
   await page.waitForURL(`${appUrl}/app/finance/payables`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Accounts payable', exact: true }).waitFor()
   await waitUntil(
@@ -435,7 +439,7 @@ try {
   })
   assert(treasuryAccounts?.length === 2, 'the golden treasury accounts could not be opened')
   const totalBefore = treasuryAccounts.reduce((sum, account) => sum + BigInt(account.bookBalance), 0n)
-  await page.getByRole('link', { name: 'Accounts and balances' }).click()
+  await openScreen(page, 'Finance', 'Accounts and balances')
   await page.waitForURL(`${appUrl}/app/finance/treasury`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Accounts and balances', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Show the statement of Golden checking' }).click()
@@ -469,7 +473,7 @@ try {
     mimeType: 'text/csv',
     buffer: Buffer.from(`Data;Histórico;Valor\n${bankDate};${bankDescription};-12,34\n`),
   }
-  await page.getByRole('link', { name: 'Bank reconciliation' }).click()
+  await openScreen(page, 'Finance', 'Bank reconciliation')
   await page.waitForURL(`${appUrl}/app/finance/reconciliation`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Bank reconciliation', exact: true }).waitFor()
   await chooseOption(page, page.getByRole('combobox', { name: 'Account' }), 'Golden checking')
@@ -492,7 +496,7 @@ try {
   }, bankDescription)
   assert(reconciledLine === 'matched', `the imported bank line is ${reconciledLine}, not matched`)
 
-  await page.getByRole('link', { name: 'Webhooks' }).click()
+  await openScreen(page, 'Developers', 'Webhooks')
   await page.waitForURL(`${appUrl}/app/developers/webhooks`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Webhooks', exact: true }).waitFor()
   const endpoint = `https://example.com/horizon-phase10/${randomUUID()}`
@@ -512,11 +516,11 @@ try {
   }, endpoint)
   assert(removed, 'the temporary webhook subscription could not be cleaned up')
 
-  await page.getByRole('link', { name: 'Delivery logs' }).click()
+  await openScreen(page, 'Developers', 'Delivery logs')
   await page.waitForURL(`${appUrl}/app/developers/deliveries`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'Delivery logs', exact: true }).waitFor()
 
-  await page.getByRole('link', { name: 'People and access' }).click()
+  await openScreen(page, 'Administration', 'People and access')
   await page.waitForURL(`${appUrl}/app/administration/people`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'People & access', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Invite someone' }).click()
@@ -526,14 +530,14 @@ try {
   await page.getByRole('dialog', { name: /^Roles for / }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('link', { name: 'API keys' }).click()
+  await openScreen(page, 'Developers', 'API keys')
   await page.waitForURL(`${appUrl}/app/developers/api-keys`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('heading', { name: 'API keys', exact: true }).waitFor()
   await page.getByRole('button', { name: 'New API key' }).click()
   await page.getByRole('dialog', { name: 'Create API key' }).waitFor()
   await page.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('link', { name: 'Classifications' }).click()
+  await openScreen(page, 'Administration', 'Classifications')
   await page.waitForURL(`${appUrl}/app/administration/classifications`, {
     waitUntil: 'domcontentloaded',
   })
@@ -545,7 +549,7 @@ try {
   await termDialog.getByText('Total: 99%').waitFor()
   await termDialog.getByRole('button', { name: 'Close dialog' }).click()
 
-  await page.getByRole('link', { name: 'Workspace', exact: true }).click()
+  await openScreen(page, 'Administration', 'Workspace', true)
   await page.waitForURL(`${appUrl}/app/administration/workspace`, {
     waitUntil: 'domcontentloaded',
   })
@@ -556,31 +560,31 @@ try {
   await page.getByRole('heading', { name: 'Orders', exact: true }).waitFor()
 
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const screen of [
-    ['Items', 'Catalog'],
-    ['Customers', 'Customers'],
-    ['Parties', 'Parties'],
-    ['Quotes', 'Quotes'],
-    ['Quote approvals', 'Quote approvals'],
-    ['Balances', 'Inventory'],
-    ['Orders', 'Orders'],
-    ['Deliveries', 'Deliveries'],
-    ['Webhooks', 'Webhooks'],
-    ['Delivery logs', 'Delivery logs'],
-    ['People and access', 'People & access'],
-    ['API keys', 'API keys'],
-    ['Classifications', 'Classifications'],
-    ['Receivables', 'Accounts receivable'],
-    ['Payables', 'Accounts payable'],
-    ['Accounts and balances', 'Accounts and balances'],
-    ['Bank reconciliation', 'Bank reconciliation'],
+  for (const [module, link, heading] of [
+    ['Catalog', 'Items', 'Catalog'],
+    ['Sales', 'Customers', 'Customers'],
+    ['Registrations', 'Parties', 'Parties'],
+    ['Sales', 'Quotes', 'Quotes'],
+    ['Sales', 'Quote approvals', 'Quote approvals'],
+    ['Inventory', 'Balances', 'Inventory'],
+    ['Sales', 'Orders', 'Orders'],
+    ['Sales', 'Deliveries', 'Deliveries'],
+    ['Developers', 'Webhooks', 'Webhooks'],
+    ['Developers', 'Delivery logs', 'Delivery logs'],
+    ['Administration', 'People and access', 'People & access'],
+    ['Developers', 'API keys', 'API keys'],
+    ['Administration', 'Classifications', 'Classifications'],
+    ['Finance', 'Receivables', 'Accounts receivable'],
+    ['Finance', 'Payables', 'Accounts payable'],
+    ['Finance', 'Accounts and balances', 'Accounts and balances'],
+    ['Finance', 'Bank reconciliation', 'Bank reconciliation'],
   ]) {
-    await page.getByRole('link', { name: screen[0], exact: true }).click()
-    await page.getByRole('heading', { name: screen[1], exact: true }).waitFor()
+    await openScreen(page, module, link, true)
+    await page.getByRole('heading', { name: heading, exact: true }).waitFor()
     const documentOverflows = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     )
-    assert(!documentOverflows, `${screen[0]} overflows the 390px document viewport`)
+    assert(!documentOverflows, `${link} overflows the 390px document viewport`)
   }
   assert(pageErrors.length === 0, `browser errors: ${pageErrors.join('; ')}`)
 

@@ -115,7 +115,7 @@ export function TaxEstimatePanel({
           })}
         />
       ) : null}
-      {error ? <Notice copy={error} /> : null}
+      {error ? <Notice tone="danger" copy={error} /> : null}
       {canEstimate && request ? (
         <Button disabled={busy} onClick={() => void ask()} variant="secondary">
           {t('estimateTaxes')}
