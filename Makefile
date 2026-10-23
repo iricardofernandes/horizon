@@ -122,13 +122,17 @@ up: infra/.env infra/keys/public kong-config broker-config ## Start the local pl
 # A dozen `npm ci` at once fail at random (ETXTBSY, SIGBUS): images build a few at a time.
 HORIZON_BUILD_BATCH ?= 4
 
+# Compose 5 always builds through Bake, which refuses `network: host` unless it is allowed
+# explicitly, and `compose build` has no flag for that: print the Bake file and run it.
+BAKE_APPS = env HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
+	sh -c '$(COMPOSE) -f infra/docker-compose.apps.yml "$$@" | docker buildx bake -f - --allow=network.host' bake
+
 .PHONY: build-apps
 build-apps: infra/.env ## Build Horizon's images, HORIZON_BUILD_BATCH at a time
 	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
 		$(COMPOSE) -f infra/docker-compose.apps.yml config --format json \
 		| node -e 'let s="";process.stdin.on("data",(c)=>s+=c).on("end",()=>{const {services}=JSON.parse(s);console.log(Object.keys(services).filter((name)=>services[name].build).sort().join("\n"))})' \
-		| HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
-			xargs -n $(HORIZON_BUILD_BATCH) $(COMPOSE) -f infra/docker-compose.apps.yml build
+		| xargs -n $(HORIZON_BUILD_BATCH) $(BAKE_APPS) build --print
 
 .PHONY: up-apps
 up-apps: infra/.env infra/keys/public kong-config broker-config build-apps ## Start the platform plus Horizon's own services
@@ -143,8 +147,9 @@ up-apps: infra/.env infra/keys/public kong-config broker-config build-apps ## St
 
 .PHONY: up-fiscal
 up-fiscal: infra/.env infra/keys/public kong-config broker-config ## Start the optional Fiscal API, worker and artifact store
+	@$(BAKE_APPS) --profile fiscal build --print fiscal
 	@HORIZON_RUNTIME_UID=$(HORIZON_RUNTIME_UID) HORIZON_RUNTIME_GID=$(HORIZON_RUNTIME_GID) \
-		$(COMPOSE) -f infra/docker-compose.apps.yml --profile fiscal up -d --build --wait fiscal
+		$(COMPOSE) -f infra/docker-compose.apps.yml --profile fiscal up -d --wait fiscal
 	@$(COMPOSE) -f infra/docker-compose.apps.yml restart kong
 
 .PHONY: up-ai
